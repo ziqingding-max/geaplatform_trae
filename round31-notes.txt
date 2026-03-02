@@ -1,0 +1,53 @@
+Round 31 Investigation Notes
+=============================
+
+Issue 1: Employment Cost discrepancy
+- Thomas Brown payroll totalEmploymentCost = GBP 7,949.78
+- Invoice shows EUR 9,280.02 because customer (EuroSoft Solutions) settles in EUR
+- GBP 7,949.78 × 1.167330 (GBP→EUR rate) = EUR 9,280.02
+- This is CORRECT behavior. The invoice is in EUR, not GBP.
+- The invoice item shows localAmount = 7,949.78 GBP and amount = 9,280.02 EUR
+- Need to make this clearer in the UI (show local amount alongside converted amount)
+
+Issue 2: Service fee currency mismatch
+- Countries_config has service fees in USD (standardRateCurrency = USD)
+- Customer settles in EUR
+- Code already handles this: getServiceFeeRate() converts from rateCurrency to settlementCurrency
+- But need to verify USD→EUR exchange rate exists
+- If not, need to create it or warn
+
+Issue 3: Payroll run summary fields
+- totalGross, totalDeductions, totalNet, totalEmployerCost
+- Used in: Payroll.tsx (display in list + detail), PayrollManagement.tsx (mock data)
+- Also computed in server/routers/payroll.ts when updating payroll run
+- These are for operations manager reference only
+- NOT referenced by invoice generation (which uses individual payroll items)
+
+Issue 4: Rename payroll summary fields
+- User wants clearer naming to avoid confusion with invoice Employment Cost
+- Current: totalGross, totalDeductions, totalNet, totalEmployerCost
+- These are payroll-level aggregates across all employees in a country run
+- Invoice Employment Cost = individual employee's totalEmploymentCost from payroll item
+- Suggestion: Keep field names but improve UI labels
+
+Issue 5: Invoice batch actions
+- Send for Review: draft → pending_review
+- Mark Sent: pending_review → sent
+- Mark Paid: sent/overdue → paid (needs paidAmount)
+- Cancel: pending_review → cancelled
+- Valid transitions defined in batchUpdateStatus
+
+Issue 6: Invoice history
+- Need to add a History tab for: paid, cancelled, void, credit_note invoices
+- Active tab shows: draft, pending_review, sent, overdue
+
+Issue 7: Mark Paid with payment validation
+- Schema already has paidAmount field
+- Need: require paidAmount input
+- If paidAmount == total → normal paid
+- If paidAmount < total → partial payment, warn finance manager
+- If paidAmount > total → overpayment, suggest credit note
+
+Issue 8: Invoice sorting
+- Currently: invoiceMonth desc, createdAt desc
+- User wants: createdAt desc only (latest created first)

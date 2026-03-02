@@ -1,0 +1,304 @@
+/**
+ * Portal Leave Router
+ *
+ * All queries are SCOPED to ctx.portalUser.customerId via employee join.
+ * Portal users can view and submit leave records.
+ */
+
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import { sql, eq, and, count } from "drizzle-orm";
+import {
+  protectedPortalProcedure,
+  portalHrProcedure,
+  portalRouter,
+} from "../portalTrpc";
+import { getDb } from "../../db";
+import {
+  leaveRecords,
+  leaveBalances,
+  leaveTypes,
+  employees,
+  publicHolidays,
+} from "../../../drizzle/schema";
+
+export const portalLeaveRouter = portalRouter({
+  /**
+   * List leave records — scoped to customerId via employee join
+   */
+  list: protectedPortalProcedure
+    .input(
+      z.object({
+        page: z.number().min(1).default(1),
+        pageSize: z.number().min(1).max(100).default(20),
+        status: z.string().optional(),
+        employeeId: z.number().optional(),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) return { items: [], total: 0 };
+      const cid = ctx.portalUser.customerId;
+
+      const conditions = [eq(employees.customerId, cid)];
+
+      if (input.status) {
+        conditions.push(eq(leaveRecords.status, input.status as any));
+      }
+      if (input.employeeId) {
+        conditions.push(eq(leaveRecords.employeeId, input.employeeId));
+      }
+
+      const where = and(...conditions);
+
+      const [totalResult] = await db
+        .select({ count: count() })
+        .from(leaveRecords)
+        .innerJoin(employees, eq(leaveRecords.employeeId, employees.id))
+        .where(where);
+
+      const items = await db
+        .select({
+          id: leaveRecords.id,
+          employeeId: leaveRecords.employeeId,
+          leaveTypeId: leaveRecords.leaveTypeId,
+          startDate: leaveRecords.startDate,
+          endDate: leaveRecords.endDate,
+          days: leaveRecords.days,
+          status: leaveRecords.status,
+          reason: leaveRecords.reason,
+          clientApprovedBy: leaveRecords.clientApprovedBy,
+          clientApprovedAt: leaveRecords.clientApprovedAt,
+          clientRejectionReason: leaveRecords.clientRejectionReason,
+          adminApprovedBy: leaveRecords.adminApprovedBy,
+          adminApprovedAt: leaveRecords.adminApprovedAt,
+          adminRejectionReason: leaveRecords.adminRejectionReason,
+          createdAt: leaveRecords.createdAt,
+          // Employee info
+          employeeFirstName: employees.firstName,
+          employeeLastName: employees.lastName,
+          // Leave type info
+          leaveTypeName: leaveTypes.leaveTypeName,
+        })
+        .from(leaveRecords)
+        .innerJoin(employees, eq(leaveRecords.employeeId, employees.id))
+        .leftJoin(leaveTypes, eq(leaveRecords.leaveTypeId, leaveTypes.id))
+        .where(where)
+        .orderBy(sql`${leaveRecords.updatedAt} DESC`)
+        .limit(input.pageSize)
+        .offset((input.page - 1) * input.pageSize);
+
+      return { items, total: totalResult?.count ?? 0 };
+    }),
+
+  /**
+   * Get leave balances for an employee — scoped to customerId
+   */
+  balances: protectedPortalProcedure
+    .input(z.object({ employeeId: z.number() }))
+    .query(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const cid = ctx.portalUser.customerId;
+
+      // Verify employee belongs to this customer
+      const [emp] = await db
+        .select({ id: employees.id })
+        .from(employees)
+        .where(and(eq(employees.id, input.employeeId), eq(employees.customerId, cid)));
+
+      if (!emp) return [];
+
+      const balances = await db
+        .select({
+          id: leaveBalances.id,
+          leaveTypeId: leaveBalances.leaveTypeId,
+          year: leaveBalances.year,
+          totalEntitlement: leaveBalances.totalEntitlement,
+          used: leaveBalances.used,
+          remaining: leaveBalances.remaining,
+          leaveTypeName: leaveTypes.leaveTypeName,
+        })
+        .from(leaveBalances)
+        .leftJoin(leaveTypes, eq(leaveBalances.leaveTypeId, leaveTypes.id))
+        .where(eq(leaveBalances.employeeId, input.employeeId));
+
+      return balances;
+    }),
+
+  /**
+   * Submit leave record — only HR managers and admins
+   */
+  create: portalHrProcedure
+    .input(
+      z.object({
+        employeeId: z.number(),
+        leaveTypeId: z.number(),
+        startDate: z.string(),
+        endDate: z.string(),
+        days: z.string(),
+        reason: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const cid = ctx.portalUser.customerId;
+
+      // CRITICAL: Verify employee belongs to this customer
+      const [emp] = await db
+        .select({ id: employees.id })
+        .from(employees)
+        .where(and(eq(employees.id, input.employeeId), eq(employees.customerId, cid)));
+
+      if (!emp) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
+      }
+
+      const result = await db.insert(leaveRecords).values({
+        employeeId: input.employeeId,
+        leaveTypeId: input.leaveTypeId,
+        startDate: input.startDate as any,
+        endDate: input.endDate as any,
+        days: input.days,
+        status: "submitted",
+        reason: input.reason || null,
+      });
+
+      return { success: true, leaveRecordId: result[0].insertId };
+    }),
+
+  /**
+   * Delete leave record — only if status is 'submitted'
+   */
+  delete: portalHrProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const cid = ctx.portalUser.customerId;
+
+      // Verify leave record belongs to an employee of this customer
+      const records = await db
+        .select({ id: leaveRecords.id, status: leaveRecords.status })
+        .from(leaveRecords)
+        .innerJoin(employees, eq(leaveRecords.employeeId, employees.id))
+        .where(and(eq(leaveRecords.id, input.id), eq(employees.customerId, cid)));
+
+      if (records.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Leave record not found" });
+      }
+
+      if (records[0].status !== "submitted") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Leave record is locked and cannot be deleted" });
+      }
+
+      await db.delete(leaveRecords).where(eq(leaveRecords.id, input.id));
+      return { success: true };
+    }),
+
+  /**
+   * Client approve leave record — HR manager / admin approves a submitted leave
+   */
+  approve: portalHrProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const cid = ctx.portalUser.customerId;
+
+      const records = await db
+        .select({ id: leaveRecords.id, status: leaveRecords.status })
+        .from(leaveRecords)
+        .innerJoin(employees, eq(leaveRecords.employeeId, employees.id))
+        .where(and(eq(leaveRecords.id, input.id), eq(employees.customerId, cid)));
+
+      if (records.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Leave record not found" });
+      }
+
+      if (records[0].status !== "submitted") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only submitted leave records can be approved" });
+      }
+
+      await db.update(leaveRecords).set({
+        status: "client_approved",
+        clientApprovedBy: ctx.portalUser.contactId,
+        clientApprovedAt: new Date(),
+      }).where(eq(leaveRecords.id, input.id));
+
+      return { success: true };
+    }),
+
+  /**
+   * Client reject leave record
+   */
+  reject: portalHrProcedure
+    .input(z.object({
+      id: z.number(),
+      reason: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const cid = ctx.portalUser.customerId;
+
+      const records = await db
+        .select({ id: leaveRecords.id, status: leaveRecords.status })
+        .from(leaveRecords)
+        .innerJoin(employees, eq(leaveRecords.employeeId, employees.id))
+        .where(and(eq(leaveRecords.id, input.id), eq(employees.customerId, cid)));
+
+      if (records.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Leave record not found" });
+      }
+
+      if (records[0].status !== "submitted") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Only submitted leave records can be rejected" });
+      }
+
+      await db.update(leaveRecords).set({
+        status: "client_rejected",
+        clientApprovedBy: ctx.portalUser.contactId,
+        clientApprovedAt: new Date(),
+        clientRejectionReason: input.reason || null,
+      }).where(eq(leaveRecords.id, input.id));
+
+      return { success: true };
+    }),
+
+  /**
+   * Get public holidays for countries where this customer has active employees
+   */
+  publicHolidays: protectedPortalProcedure
+    .input(z.object({ year: z.number().default(2026) }))
+    .query(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const cid = ctx.portalUser.customerId;
+
+      // Get countries where this customer has active employees
+      const activeCountries = await db
+        .select({ country: employees.country })
+        .from(employees)
+        .where(and(eq(employees.customerId, cid), eq(employees.status, "active")))
+        .groupBy(employees.country);
+
+      if (activeCountries.length === 0) return [];
+
+      const countryCodes = activeCountries.map((c) => c.country);
+
+      const holidays = await db
+        .select()
+        .from(publicHolidays)
+        .where(
+          and(
+            sql`${publicHolidays.countryCode} IN (${sql.join(countryCodes.map(c => sql`${c}`), sql`, `)})`,
+            eq(publicHolidays.year, input.year)
+          )
+        )
+        .orderBy(publicHolidays.holidayDate);
+
+      return holidays;
+    }),
+});
