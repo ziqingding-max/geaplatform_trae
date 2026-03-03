@@ -1,0 +1,340 @@
+
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
+import { router } from "../_core/trpc";
+import { customerManagerProcedure, userProcedure } from "../procedures";
+import {
+  createContractor,
+  getContractorById,
+  listContractors,
+  updateContractor,
+  listContractorMilestones,
+  createContractorMilestone,
+  updateContractorMilestone,
+  deleteContractorMilestone,
+  listContractorAdjustments,
+  createContractorAdjustment,
+  updateContractorAdjustment,
+  deleteContractorAdjustment,
+  getContractorInvoiceById,
+  listContractorInvoices,
+  logAuditAction,
+  getDb
+} from "../db";
+import { users } from "../../drizzle/schema";
+import { eq } from "drizzle-orm";
+import { ContractorInvoiceGenerationService } from "../services/contractorInvoiceGenerationService";
+
+export const contractorsRouter = router({
+  getApprovers: userProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+    return await db
+      .select({ id: users.id, name: users.name, email: users.email })
+      .from(users)
+      .where(eq(users.isActive, true));
+  }),
+
+  list: userProcedure
+    .input(
+      z.object({
+        customerId: z.number().optional(),
+        status: z.string().optional(),
+        search: z.string().optional(),
+        limit: z.number().default(50),
+        offset: z.number().default(0),
+      })
+    )
+    .query(async ({ input }) => {
+      return await listContractors(
+        {
+          customerId: input.customerId,
+          status: input.status,
+          search: input.search,
+        },
+        input.limit,
+        input.offset
+      );
+    }),
+
+  get: userProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      return await getContractorById(input.id);
+    }),
+
+  create: customerManagerProcedure
+    .input(
+      z.object({
+        customerId: z.number(),
+        firstName: z.string().min(1),
+        lastName: z.string().min(1),
+        email: z.string().email(),
+        phone: z.string().optional(),
+        dateOfBirth: z.string().optional(),
+        nationality: z.string().optional(),
+        idNumber: z.string().optional(),
+        idType: z.string().optional(),
+        address: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        country: z.string(),
+        postalCode: z.string().optional(),
+        department: z.string().optional(),
+        jobTitle: z.string(),
+        startDate: z.string(),
+        endDate: z.string().optional(),
+        
+        // Financials
+        currency: z.string().default("USD"),
+        paymentFrequency: z.enum(["monthly", "semi_monthly", "milestone"]).default("monthly"),
+        rateType: z.enum(["fixed_monthly", "hourly", "daily", "milestone_only"]).default("fixed_monthly"),
+        rateAmount: z.string().optional(),
+        
+        defaultApproverId: z.number().optional(),
+        bankDetails: z.string().optional(), // JSON string
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      // 1. Validate dates
+      if (input.endDate && new Date(input.endDate) <= new Date(input.startDate)) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "End date must be after start date." });
+      }
+
+      // 2. Generate Contractor Code
+      const randomCode = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+      const contractorCode = `CTR-${new Date().getFullYear()}${randomCode}`;
+
+      // 3. Create Contractor
+      const result = await createContractor({
+        ...input,
+        contractorCode,
+        status: "active", // Default to active or pending_review? Let's say active for now as per simple flow
+        bankDetails: input.bankDetails ? JSON.parse(input.bankDetails) : undefined, // Parse if it was sent as string, but schema expects string in DB? Wait, DB is json mode text.
+        // Drizzle text({ mode: 'json' }) expects the value to be passed as object when inserting if we use $inferInsert? 
+        // No, Drizzle ORM handles the stringification if defined as mode: 'json'.
+        // Let's check schema: bankDetails: text("bankDetails", { mode: "json" })
+        // So we should pass an object.
+        // But Zod input says string (JSON string from frontend). So we parse it.
+      } as any); 
+      // Cast to any because of complex JSON type mapping in Drizzle vs Zod
+
+      const newContractor = result[0];
+
+      await logAuditAction({
+        userId: ctx.user.id, userName: ctx.user.name || null,
+        action: "create",
+        entityType: "contractor",
+        entityId: newContractor.id,
+        changes: JSON.stringify(input),
+      });
+
+      return newContractor;
+    }),
+
+  update: customerManagerProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        data: z.object({
+          firstName: z.string().optional(),
+          lastName: z.string().optional(),
+          email: z.string().optional(),
+          phone: z.string().optional(),
+          dateOfBirth: z.string().optional(),
+          nationality: z.string().optional(),
+          idNumber: z.string().optional(),
+          idType: z.string().optional(),
+          address: z.string().optional(),
+          city: z.string().optional(),
+          state: z.string().optional(),
+          country: z.string().optional(),
+          postalCode: z.string().optional(),
+          department: z.string().optional(),
+          jobTitle: z.string().optional(),
+          startDate: z.string().optional(),
+          endDate: z.string().optional(),
+          status: z.enum(["pending_review", "active", "terminated"]).optional(),
+          
+          currency: z.string().optional(),
+          paymentFrequency: z.enum(["monthly", "semi_monthly", "milestone"]).optional(),
+          rateType: z.enum(["fixed_monthly", "hourly", "daily", "milestone_only"]).optional(),
+          rateAmount: z.string().optional(),
+          
+          defaultApproverId: z.number().optional(),
+          bankDetails: z.string().optional(),
+          notes: z.string().optional(),
+        }),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const updateData: any = { ...input.data };
+      if (input.data.bankDetails) {
+        updateData.bankDetails = JSON.parse(input.data.bankDetails);
+      }
+
+      await updateContractor(input.id, updateData);
+
+      await logAuditAction({
+        userId: ctx.user.id, userName: ctx.user.name || null,
+        action: "update",
+        entityType: "contractor",
+        entityId: input.id,
+        changes: JSON.stringify(input.data),
+      });
+
+      return { success: true };
+    }),
+
+  terminate: customerManagerProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      await updateContractor(input.id, { status: "terminated", endDate: new Date().toISOString().split('T')[0] });
+      
+      await logAuditAction({
+        userId: ctx.user.id, userName: ctx.user.name || null,
+        action: "terminate",
+        entityType: "contractor",
+        entityId: input.id,
+      });
+      return { success: true };
+    }),
+
+  // ── Milestones Sub-Router ──
+  milestones: router({
+    list: userProcedure
+      .input(z.object({ contractorId: z.number() }))
+      .query(async ({ input }) => {
+        return await listContractorMilestones(input.contractorId);
+      }),
+
+    create: customerManagerProcedure
+      .input(z.object({
+        contractorId: z.number(),
+        title: z.string().min(1),
+        description: z.string().optional(),
+        amount: z.string(),
+        currency: z.string(),
+        dueDate: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const result = await createContractorMilestone({
+          ...input,
+          status: "pending",
+        });
+        
+        await logAuditAction({
+            userId: ctx.user.id, userName: ctx.user.name || null,
+            action: "create",
+            entityType: "contractor_milestone",
+            changes: JSON.stringify(input),
+        });
+        return result;
+      }),
+
+    update: customerManagerProcedure
+      .input(z.object({
+        id: z.number(),
+        data: z.object({
+          title: z.string().optional(),
+          description: z.string().optional(),
+          amount: z.string().optional(),
+          dueDate: z.string().optional(),
+          status: z.enum(["pending", "in_progress", "submitted", "approved", "paid", "cancelled"]).optional(),
+        })
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const updateData: any = { ...input.data };
+        if (input.data.status === "approved") {
+          updateData.approvedBy = ctx.user.id;
+          updateData.approvedAt = new Date();
+        }
+        await updateContractorMilestone(input.id, updateData);
+        return { success: true };
+      }),
+
+    delete: customerManagerProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteContractorMilestone(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ── Adjustments Sub-Router ──
+  adjustments: router({
+    list: userProcedure
+      .input(z.object({ contractorId: z.number() }))
+      .query(async ({ input }) => {
+        return await listContractorAdjustments(input.contractorId);
+      }),
+
+    create: customerManagerProcedure
+      .input(z.object({
+        contractorId: z.number(),
+        type: z.enum(["bonus", "expense", "deduction"]),
+        description: z.string().min(1),
+        amount: z.string(),
+        currency: z.string(),
+        date: z.string(),
+        attachmentUrl: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const result = await createContractorAdjustment({
+          ...input,
+          status: "pending",
+        });
+        return result;
+      }),
+
+    update: customerManagerProcedure
+      .input(z.object({
+        id: z.number(),
+        data: z.object({
+          type: z.enum(["bonus", "expense", "deduction"]).optional(),
+          description: z.string().optional(),
+          amount: z.string().optional(),
+          date: z.string().optional(),
+          status: z.enum(["pending", "approved", "rejected", "invoiced"]).optional(),
+        })
+      }))
+      .mutation(async ({ input }) => {
+        await updateContractorAdjustment(input.id, input.data);
+        return { success: true };
+      }),
+
+    delete: customerManagerProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteContractorAdjustment(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ── Invoices Sub-Router ──
+  invoices: router({
+    list: userProcedure
+      .input(z.object({ contractorId: z.number() }))
+      .query(async ({ input }) => {
+        return await listContractorInvoices(input.contractorId);
+      }),
+
+    get: userProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        return await getContractorInvoiceById(input.id);
+      }),
+
+    generate: customerManagerProcedure
+      .input(z.object({
+        targetDate: z.string().optional(), // YYYY-MM-DD
+      }))
+      .mutation(async ({ input }) => {
+        const date = input.targetDate ? new Date(input.targetDate) : new Date();
+        const result = await ContractorInvoiceGenerationService.processAll(date);
+        return result;
+      }),
+  }),
+
+});

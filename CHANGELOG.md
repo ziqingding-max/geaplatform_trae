@@ -4,6 +4,23 @@
 
 ---
 
+## [3.5.0] — 2026-03-04
+
+### Added
+
+- **Notification Center (Enterprise)**: 全渠道通知中心，支持 Email（带 PDF 附件）和 In-App 站内信。覆盖发票逾期、薪酬生成、员工入职等关键业务节点。
+- **Worker Portal (Beta)**: 新增员工/承包商自助门户 `/worker/login`，支持个人资料管理、合同查看、工资单/发票下载。
+- **Contractor Management**: 完整的承包商全生命周期管理，支持自动化合同扫描与每日开票（Daily 01:00）。
+- **Country Guide Toolkit**: 126 国合规指南 PDF 在线查看与下载。
+- **Cost Simulator**: 门户端雇佣成本估算器，帮助客户快速计算 Total Employment Cost。
+
+### Changed
+
+- **Cron Job 增强**: 新增每日 01:00 承包商发票生成任务；优化发票逾期检测与通知触发逻辑。
+- **UI/UX**: 顶部导航栏新增通知铃铛图标；Settings 页面新增通知偏好设置。
+
+---
+
 ## [3.4.0] — 2026-03-03
 
 ### Added

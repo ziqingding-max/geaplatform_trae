@@ -24,12 +24,14 @@ import {
   CalendarClock, Clock, Play, Save, Loader2, CheckCircle2,
   ArrowLeftRight, Plus, Trash2, RefreshCw, Download,
   UserCog, ShieldCheck, User, AlertTriangle,
-  Landmark, ClipboardList, Globe,
+  Landmark, ClipboardList, Globe, Bell, Mail,
 } from "lucide-react";
 import { toast } from "sonner";
 import BillingEntitiesSection from "./BillingEntities";
 import AuditLogsSection from "./AuditLogs";
 import CountriesContent from "@/components/pages/CountriesContent";
+import NotificationSettingsSection from "@/components/pages/NotificationSettingsSection";
+import { useI18n } from "@/contexts/i18n";
 
 export default function Settings() {
   const { t } = useI18n();
@@ -61,6 +63,11 @@ export default function Settings() {
               <Landmark className="w-3.5 h-3.5" />{t("settings.tabs.billingEntities")}
             </TabsTrigger>
             {isAdmin && (
+              <TabsTrigger value="notifications" className="gap-1.5">
+                <Bell className="w-3.5 h-3.5" />Notifications
+              </TabsTrigger>
+            )}
+            {isAdmin && (
               <TabsTrigger value="users" className="gap-1.5">
                 <UserCog className="w-3.5 h-3.5" />{t("settings.tabs.userManagement")}
               </TabsTrigger>
@@ -87,6 +94,12 @@ export default function Settings() {
           <TabsContent value="billing-entities" className="mt-6">
             <BillingEntitiesSection embedded />
           </TabsContent>
+
+          {isAdmin && (
+            <TabsContent value="notifications" className="mt-6">
+              <NotificationSettingsSection />
+            </TabsContent>
+          )}
 
           {isAdmin && (
             <TabsContent value="users" className="mt-6">
@@ -606,7 +619,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Copy, UserPlus, Send, KeyRound } from "lucide-react";
 import { ALL_ROLES } from "@shared/roles";
 
-import { useI18n } from "@/contexts/i18n";
 function UserManagementSection() {
   const { t } = useI18n();
   const [editUser, setEditUser] = useState<any>(null);

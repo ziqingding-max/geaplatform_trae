@@ -8,6 +8,34 @@
       "when": 1772446528744,
       "tag": "0000_exotic_invisible_woman",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1772560066216,
+      "tag": "0001_shallow_wolfpack",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1772560896996,
+      "tag": "0002_cute_sinister_six",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1772563724570,
+      "tag": "0003_first_echo",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1772564428374,
+      "tag": "0004_faithful_boom_boom",
+      "breakpoints": true
     }
   ]
 }

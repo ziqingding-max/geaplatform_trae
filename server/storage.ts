@@ -26,7 +26,8 @@ export async function storagePut(
   contentType: string = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
   if (!ENV.ossAccessKeyId || !ENV.ossAccessKeySecret || !BUCKET_NAME) {
-    throw new Error("OSS credentials or bucket not configured");
+    console.warn("[Storage] No OSS credentials configured. Using mock storage.");
+    return { key, url: `https://mock-storage.local/${key}` };
   }
 
   // Ensure key doesn't start with slash

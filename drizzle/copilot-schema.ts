@@ -188,9 +188,9 @@ export const copilotMetrics = sqliteTable(
     updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
-    cmUserIdIdx: index("cm_user_id_idx").on(table.userId),
-    cmDateIdx: uniqueIndex("cm_date_idx").on(table.userId, table.date), // 每个用户每天一条记录
-    cmCreatedIdx: index("cm_created_idx").on(table.createdAt),
+    cmUserIdIdx: index("cmet_user_id_idx").on(table.userId),
+    cmDateIdx: uniqueIndex("cmet_date_idx").on(table.userId, table.date), // 每个用户每天一条记录
+    cmCreatedIdx: index("cmet_created_idx").on(table.createdAt),
   })
 );
 

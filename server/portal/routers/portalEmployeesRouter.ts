@@ -18,6 +18,7 @@ import {
 } from "../portalTrpc";
 import { getDb, createEmployee, createEmployeeDocument } from "../../db";
 import { storagePut } from "../../storage";
+import { notificationService } from "../../services/notificationService";
 import {
   employees,
   employeeContracts,
@@ -26,6 +27,7 @@ import {
   leaveTypes,
   countriesConfig,
   onboardingInvites,
+  customers,
 } from "../../../drizzle/schema";
 
 // Fields visible to portal users — explicitly listed to prevent data leaks
@@ -254,6 +256,19 @@ export const portalEmployeesRouter = portalRouter({
         requiresVisa: input.requiresVisa,
         status: "pending_review",
       });
+
+      // Submit notification for new employee request
+      const [customer] = await db.select({ companyName: customers.companyName }).from(customers).where(eq(customers.id, cid));
+      
+      notificationService.send({
+        type: "new_employee_request",
+        data: {
+          customerName: customer?.companyName || "Unknown Customer",
+          employeeName: `${input.firstName} ${input.lastName}`,
+          serviceType: input.serviceType,
+          startDate: input.startDate
+        }
+      }).catch(err => console.error("Failed to send new employee notification:", err));
 
       return { success: true, employeeId: result[0].insertId };
     }),
