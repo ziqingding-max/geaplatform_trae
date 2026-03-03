@@ -4,7 +4,7 @@
 
 > **管理后台**: [admin.geahr.com](https://admin.geahr.com)
 > **客户门户**: [app.geahr.com](https://app.geahr.com)
-> **代码仓库**: [github.com/ziqingding1122-max/gea-eor-saas-admin](https://github.com/ziqingding1122-max/gea-eor-saas-admin)
+> **代码仓库**: [github.com/ziqingding1122-max/geaplatform_trae](https://github.com/ziqingding1122-max/geaplatform_trae)
 
 ---
 

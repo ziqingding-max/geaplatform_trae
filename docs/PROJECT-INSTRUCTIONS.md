@@ -9,7 +9,7 @@
 ```
 GEA EOR SaaS 系统的技术背景信息：
 项目使用 Manus 的 web-db-user 脚手架创建，托管在 Manus 服务器上（AWS 新加坡节点）
-代码仓库地址：https://github.com/ziqingding1122-max/gea-eor-saas-admin.git
+代码仓库地址：https://github.com/ziqingding1122-max/geaplatform_trae.git
 部署方式：使用 Manus 自带的发布功能进行部署，不需要额外的服务器配置
 正式环境地址：admin.geahr.com（管理后台）/ app.geahr.com（客户门户）
 所有生产环境变更必须遵循 hotfix-governance Skill 的规范
