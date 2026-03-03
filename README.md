@@ -4,7 +4,7 @@
 
 > **管理后台**: [admin.geahr.com](https://admin.geahr.com)
 > **客户门户**: [app.geahr.com](https://app.geahr.com)
-> **代码仓库**: [github.com/ziqingding1122-max/geaplatform_trae](https://github.com/ziqingding1122-max/geaplatform_trae)
+> **代码仓库**: [github.com/ziqingding-max/geaplatform_trae](https://github.com/ziqingding-max/geaplatform_trae)
 
 ---
 
@@ -240,8 +240,8 @@ gea-eor-saas-admin/
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/ziqingding1122-max/gea-eor-saas-admin.git
-cd gea-eor-saas-admin
+git clone https://github.com/ziqingding-max/geaplatform_trae.git
+cd geaplatform_trae
 
 # 2. 安装依赖
 pnpm install
