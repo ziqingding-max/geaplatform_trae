@@ -3,8 +3,15 @@ import { z } from "zod";
 import { getDb } from "../db";
 import { countryGuideChapters } from "../../drizzle/schema";
 import { eq, and, asc } from "drizzle-orm";
+import { generateCountryGuideDraft } from "../services/knowledgeAiService";
 
 export const countryGuideRouter = router({
+  generateContent: protectedProcedure
+    .input(z.object({ countryCode: z.string(), topic: z.string() }))
+    .mutation(async ({ input }) => {
+      return await generateCountryGuideDraft(input);
+    }),
+
   listChapters: protectedProcedure
     .input(z.object({ countryCode: z.string() }))
     .query(async ({ input }) => {
@@ -20,6 +27,19 @@ export const countryGuideRouter = router({
             eq(countryGuideChapters.status, "published")
           )
         )
+        .orderBy(asc(countryGuideChapters.sortOrder));
+    }),
+
+  listAllChapters: protectedProcedure
+    .input(z.object({ countryCode: z.string() }))
+    .query(async ({ input }) => {
+      const db = getDb();
+      if (!db) throw new Error("Database connection failed");
+      
+      return await db
+        .select()
+        .from(countryGuideChapters)
+        .where(eq(countryGuideChapters.countryCode, input.countryCode))
         .orderBy(asc(countryGuideChapters.sortOrder));
     }),
 

@@ -1,6 +1,6 @@
 
 import { getDb } from "../db";
-import { notifications, systemSettings, users, customerContacts } from "../../drizzle/schema";
+import { notifications, systemSettings, users, customerContacts, workerUsers } from "../../drizzle/schema";
 import { eq, and, like, inArray, or } from "drizzle-orm";
 // import { sendEmail } from "../_core/notification"; // Removed: use internal sendRawEmail
 import { generateInvoicePdf } from "./invoicePdfService";
@@ -36,7 +36,7 @@ export const notificationService = {
       console.log(`[Notification] Processing ${event.type} for customer ${event.customerId || 'N/A'}`);
 
       // 2. Resolve recipients
-      const recipients = await this.resolveRecipients(config.recipients, event.customerId);
+      const recipients = await this.resolveRecipients(config.recipients, event.customerId, event.data.workerId);
       if (recipients.length === 0) {
         console.warn(`[Notification] No recipients found for ${event.type}`);
         return;
@@ -126,7 +126,7 @@ export const notificationService = {
     return DEFAULT_RULES[type] || null;
   },
 
-  async resolveRecipients(recipientRules: string[], customerId?: number) {
+  async resolveRecipients(recipientRules: string[], customerId?: number, workerId?: number) {
     const db = getDb();
     if (!db) return [];
 
@@ -135,14 +135,30 @@ export const notificationService = {
       email: string;
       name: string;
       role: string;
-      portal: "admin" | "client";
+      portal: "admin" | "client" | "worker";
       language: string;
     }> = [];
 
     for (const rule of recipientRules) {
       const [portal, role] = rule.split(":"); // e.g. "client:finance"
 
-      if (portal === "admin") {
+      if (portal === "worker" && workerId) {
+        // Find worker user
+        const worker = await db.query.workerUsers.findFirst({
+          where: eq(workerUsers.id, workerId)
+        });
+
+        if (worker) {
+          targets.push({
+            id: worker.id,
+            email: worker.email,
+            name: worker.email, // TODO: Join with contractors table to get name
+            role: "user",
+            portal: "worker",
+            language: "en"
+          });
+        }
+      } else if (portal === "admin") {
         // Find admin users with this role
         const adminUsers = await db.query.users.findMany({
           where: and(

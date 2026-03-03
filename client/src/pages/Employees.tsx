@@ -157,6 +157,37 @@ function EmployeeList() {
     { enabled: !!formData.nationality && !!formData.country }
   );
 
+  // Cost Estimation Logic
+  const [estimationBreakdown, setEstimationBreakdown] = useState<any[]>([]);
+  const calculateMutation = trpc.calculation.calculateContributions.useMutation({
+    onSuccess: (data) => {
+      setFormData(prev => ({ ...prev, estimatedEmployerCost: data.totalEmployer }));
+      setEstimationBreakdown(data.items);
+    },
+    onError: (err) => {
+      console.error("Estimation failed", err);
+      // Optional: clear breakdown or show error
+      setEstimationBreakdown([]);
+    }
+  });
+
+  // Debounced calculation effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (formData.country && formData.baseSalary && !isNaN(parseFloat(formData.baseSalary))) {
+        calculateMutation.mutate({
+          countryCode: formData.country,
+          salary: parseFloat(formData.baseSalary),
+          year: new Date().getFullYear(),
+        });
+      } else {
+        setEstimationBreakdown([]);
+      }
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timer);
+  }, [formData.country, formData.baseSalary]);
+
   useEffect(() => {
     if (formData.serviceType === "aor") {
       // AOR service does not require visa check
@@ -380,8 +411,32 @@ function EmployeeList() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>{t("employees.create.form.estimatedEmployerCostMonthly")}</Label>
-                      <Input type="number" step="0.01" value={formData.estimatedEmployerCost} onChange={(e) => setFormData({ ...formData, estimatedEmployerCost: e.target.value })} placeholder="0.00" />
+                      <div className="relative">
+                        <Input 
+                          type="number" 
+                          step="0.01" 
+                          value={formData.estimatedEmployerCost} 
+                          onChange={(e) => setFormData({ ...formData, estimatedEmployerCost: e.target.value })} 
+                          placeholder="0.00" 
+                        />
+                        {calculateMutation.isPending && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                          </div>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">{t("employees.create.form.estimatedEmployerCostMonthlyDescription")}</p>
+                      {estimationBreakdown.length > 0 && (
+                        <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1">
+                          <p className="font-semibold text-muted-foreground">Employer Cost Breakdown:</p>
+                          {estimationBreakdown.map((item, idx) => (
+                            <div key={idx} className="flex justify-between">
+                              <span>{item.itemNameEn}:</span>
+                              <span className="font-mono">{item.employerContribution}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label>{t("employees.create.form.totalEmploymentCost")} <span className="text-xs text-muted-foreground font-normal">{t("employees.create.form.calculated")}</span></Label>

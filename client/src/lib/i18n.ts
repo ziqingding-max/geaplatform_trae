@@ -1303,6 +1303,14 @@ const translations: Record<Locale, Record<string, string>> = {
     "portal_settings.team.update_role_success_toast": "User role updated",
     "portal_settings.team.you_badge": "You",
     "portal_settings.title": "Settings",
+    
+    // Country Guide Admin
+    "country_guide_admin.title": "Country Guides",
+    "country_guide_admin.subtitle": "Manage country-specific knowledge base content",
+    "country_guide_admin.editor_title": "Guide Editor",
+    "country_guide_admin.editor_subtitle": "Edit chapters and content",
+    "country_guide_admin.add_chapter": "Add Chapter",
+    "country_guide_admin.edit_chapter": "Edit Chapter",
   },
   zh: {
     // Navigation
@@ -2579,6 +2587,14 @@ const translations: Record<Locale, Record<string, string>> = {
     "portal_settings.team.update_role_success_toast": "用户角色已更新",
     "portal_settings.team.you_badge": "您",
     "portal_settings.title": "设置",
+    
+    // Country Guide Admin
+    "country_guide_admin.title": "国家指南",
+    "country_guide_admin.subtitle": "管理特定国家/地区的知识库内容",
+    "country_guide_admin.editor_title": "指南编辑器",
+    "country_guide_admin.editor_subtitle": "编辑章节和内容",
+    "country_guide_admin.add_chapter": "添加章节",
+    "country_guide_admin.edit_chapter": "编辑章节",
   },
 };
 

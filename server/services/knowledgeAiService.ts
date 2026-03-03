@@ -190,3 +190,55 @@ export async function generateKnowledgeDraftWithAI(params: {
     return fallback;
   }
 }
+
+export async function generateCountryGuideDraft(params: {
+  countryCode: string;
+  topic: string;
+}): Promise<{ contentEn: string; contentZh: string }> {
+  try {
+    const prompt = {
+      goal: "Write a comprehensive country guide chapter",
+      constraints: {
+        audience: "B2B clients, HR managers, international expansion teams",
+        style: "professional, authoritative, clear, practical",
+        format: "markdown",
+      },
+      input: {
+        country: params.countryCode,
+        topic: params.topic,
+      },
+      output_schema: {
+        contentEn: "string markdown (English)",
+        contentZh: "string markdown (Chinese Simplified)",
+      },
+    };
+
+    const result = await executeTaskLLM("knowledge_generate_guide", {
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a global employment and compliance expert. Write a detailed guide chapter for the specified country and topic. Return strict JSON only.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify(prompt),
+        },
+      ],
+      responseFormat: { type: "json_object" },
+      maxTokens: 2000,
+    });
+
+    const raw = result.choices?.[0]?.message?.content;
+    const text = typeof raw === "string" ? raw : "";
+    const parsed = JSON.parse(text || "{}");
+
+    return {
+      contentEn: parsed.contentEn || "",
+      contentZh: parsed.contentZh || "",
+    };
+  } catch (error) {
+    console.error("AI Generation Failed:", error);
+    throw new Error("Failed to generate content via AI");
+  }
+}

@@ -9,6 +9,8 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { portalAppRouter } from "../portal/portalRouter";
 import { createPortalContext } from "../portal/portalTrpc";
+import { appWorkerRouter } from "../worker/workerRouter";
+import { createWorkerContext } from "../worker/workerTrpc";
 import { serveStatic } from "./serve-static";
 import { generateInvoicePdf } from "../services/invoicePdfService";
 import { authenticateAdminRequest } from "./adminAuth";
@@ -199,6 +201,15 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
     createExpressMiddleware({
       router: portalAppRouter,
       createContext: createPortalContext,
+    })
+  );
+
+  // tRPC API — Worker Portal (independent JWT auth)
+  app.use(
+    "/api/worker",
+    createExpressMiddleware({
+      router: appWorkerRouter,
+      createContext: createWorkerContext,
     })
   );
   // development mode uses Vite, production mode uses static files
