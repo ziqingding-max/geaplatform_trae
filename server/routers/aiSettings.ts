@@ -6,7 +6,20 @@ import { getDb } from "../db";
 import { aiProviderConfigs, aiTaskExecutions, aiTaskPolicies } from "../../drizzle/schema";
 
 const providerEnum = z.enum(["manus_forge", "openai", "qwen", "google"]);
-const taskEnum = z.enum(["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit"]);
+const taskEnum = z.enum([
+  "knowledge_summarize", 
+  "source_authority_review", 
+  "vendor_bill_parse", 
+  "invoice_audit",
+  "copilot_chat",
+  "copilot_data_analysis",
+  "copilot_file_analysis", 
+  "copilot_report_generation",
+  "copilot_insights_extraction",
+  "copilot_payroll_analysis",
+  "copilot_leave_analysis",
+  "copilot_financial_analysis"
+]);
 
 export const aiSettingsRouter = router({
   listProviders: userProcedure.query(async () => {

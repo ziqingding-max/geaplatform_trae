@@ -26,6 +26,7 @@ import { pdfParsingRouter } from "./routers/pdfParsing";
 import { salesRouter } from "./routers/sales";
 import { knowledgeBaseAdminRouter } from "./routers/knowledgeBaseAdmin";
 import { aiSettingsRouter } from "./routers/aiSettings";
+import { copilotRouter } from "./routers/copilot";
 
 export const appRouter = router({
   system: systemRouter,
@@ -63,6 +64,7 @@ export const appRouter = router({
   sales: salesRouter,
   knowledgeBaseAdmin: knowledgeBaseAdminRouter,
   aiSettings: aiSettingsRouter,
+  copilot: copilotRouter,
 });
 
 export type AppRouter = typeof appRouter;

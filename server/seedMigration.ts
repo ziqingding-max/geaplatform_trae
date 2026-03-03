@@ -3,11 +3,13 @@ import 'dotenv/config';
 import { getDb } from './db';
 import { 
   customers, employees, invoices, invoiceItems, 
-  billingEntities 
+  billingEntities, countriesConfig, leaveTypes, publicHolidays 
 } from '../drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 // @ts-ignore
 import seedData from '../data/seed-migration-data.json';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
 
 // Types based on JSON structure
 interface SeedCustomer {
@@ -59,12 +61,114 @@ interface SeedData {
   deposit_refunds: SeedInvoice[];
 }
 
+async function readJsonFile(relativePath: string) {
+  try {
+    const path = join(process.cwd(), 'data', relativePath);
+    const content = await readFile(path, 'utf-8');
+    return JSON.parse(content);
+  } catch (e) {
+    console.warn(`[Seed] Could not read ${relativePath}. Skipping system data seed.`);
+    return null;
+  }
+}
+
+function parseDates(obj: any, dateFields: string[]) {
+  const newObj = { ...obj };
+  for (const field of dateFields) {
+    if (newObj[field]) {
+      newObj[field] = new Date(newObj[field]);
+    }
+  }
+  return newObj;
+}
+
+async function seedSystemData(db: any) {
+  console.log('[Seed] Checking system data (Countries, Holidays)...');
+  
+  // 1. Countries
+  const countries = await readJsonFile('data-exports/baseline/countries_config.json');
+  if (countries) {
+    let count = 0;
+    for (const country of countries) {
+      const { id, ...data } = country;
+      const formatted = parseDates(data, ['createdAt', 'updatedAt']);
+      
+      await db.insert(countriesConfig)
+        .values(formatted)
+        .onConflictDoUpdate({
+          target: countriesConfig.countryCode,
+          set: {
+            countryName: formatted.countryName,
+            localCurrency: formatted.localCurrency,
+            payrollCycle: formatted.payrollCycle,
+            standardEorRate: formatted.standardEorRate,
+            isActive: formatted.isActive,
+            updatedAt: new Date(),
+          },
+        });
+      count++;
+    }
+    console.log(`[Seed] Processed ${count} countries`);
+  }
+
+  // 2. Leave Types
+  const ltData = await readJsonFile('data-exports/baseline/leave_types.json');
+  if (ltData) {
+    let count = 0;
+    for (const lt of ltData) {
+      const { id, ...data } = lt;
+      const formatted = parseDates(data, ['createdAt', 'updatedAt']);
+      
+      const existing = await db.query.leaveTypes.findFirst({
+        where: and(
+          eq(leaveTypes.countryCode, formatted.countryCode),
+          eq(leaveTypes.leaveTypeName, formatted.leaveTypeName)
+        ),
+      });
+
+      if (!existing) {
+        await db.insert(leaveTypes).values(formatted);
+        count++;
+      }
+    }
+    console.log(`[Seed] Added ${count} new leave types`);
+  }
+
+  // 3. Holidays
+  const holidays = await readJsonFile('data-exports/baseline/public_holidays.json');
+  if (holidays) {
+    let count = 0;
+    for (const h of holidays) {
+      const { id, ...data } = h;
+      const formatted = parseDates(data, ['createdAt', 'updatedAt']);
+      
+      const existing = await db.query.publicHolidays.findFirst({
+        where: and(
+          eq(publicHolidays.countryCode, formatted.countryCode),
+          eq(publicHolidays.year, formatted.year),
+          eq(publicHolidays.holidayDate, formatted.holidayDate),
+          eq(publicHolidays.holidayName, formatted.holidayName)
+        ),
+      });
+
+      if (!existing) {
+        await db.insert(publicHolidays).values(formatted);
+        count++;
+      }
+    }
+    console.log(`[Seed] Added ${count} new holidays`);
+  }
+}
+
 export async function seedMigration() {
   const db = await getDb();
   if (!db) {
     console.warn('[Seed] Database connection failed, skipping migration seed');
     return;
   }
+
+  // Seed System Data first
+  await seedSystemData(db);
 
   const data = seedData as unknown as SeedData;
 

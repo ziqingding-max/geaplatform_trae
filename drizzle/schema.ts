@@ -1502,3 +1502,37 @@ export const aiTaskExecutions = sqliteTable(
 
 export type AITaskExecution = typeof aiTaskExecutions.$inferSelect;
 export type InsertAITaskExecution = typeof aiTaskExecutions.$inferInsert;
+
+// ============================================================================
+// 16. COPILOT ASSISTANT — AI-Powered Enterprise Assistant
+// ============================================================================
+// Re-export all Copilot-related tables and types from copilot-schema.ts
+// This maintains consistency with the project's import patterns
+// ============================================================================
+
+export {
+  // Tables
+  copilotUserConfigs,
+  copilotConversations,
+  copilotMessages,
+  copilotFileAnalyses,
+  copilotPredictions,
+  copilotShortcuts,
+  copilotMetrics,
+  
+  // Types
+  type CopilotUserConfig,
+  type CopilotConversation,
+  type CopilotMessage,
+  type CopilotFileAnalysis,
+  type CopilotPrediction,
+  type CopilotShortcut,
+  type CopilotMetric,
+  type InsertCopilotUserConfig,
+  type InsertCopilotConversation,
+  type InsertCopilotMessage,
+  type InsertCopilotFileAnalysis,
+  type InsertCopilotPrediction,
+  type InsertCopilotShortcut,
+  type InsertCopilotMetric,
+} from "./copilot-schema";

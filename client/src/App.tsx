@@ -14,6 +14,8 @@ import Employees from "./pages/Employees";
 // import Countries from "./pages/Countries"; // Moved to Settings tab
 import Settings from "./pages/Settings";
 import Customers from "./pages/Customers";
+import CustomerDetail from "./pages/admin/customers/CustomerDetail";
+import CustomerPortal from "./pages/portal/CustomerPortal";
 import Payroll from "./pages/Payroll";
 import Invoices from "./pages/Invoices";
 import Adjustments from "./pages/Adjustments";
@@ -41,6 +43,7 @@ import superjson from "superjson";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { Loader2 } from "lucide-react";
 import { isPortalDomain, getPortalBasePath } from "@/lib/portalBasePath";
+import { CopilotSmartAssistant } from "@/components/CopilotSmartAssistant";
 
 const PortalLogin = lazy(() => import("./pages/portal/PortalLogin"));
 const PortalRegister = lazy(() => import("./pages/portal/PortalRegister"));
@@ -132,7 +135,7 @@ function AdminRouter() {
       <Route path="/" component={Dashboard} />
       <Route path="/sales-crm" component={SalesCRM} />
       <Route path="/customers" component={Customers} />
-      <Route path="/customers/:id" component={Customers} />
+      <Route path="/customers/:id" component={CustomerDetail} />
       <Route path="/employees" component={Employees} />
       <Route path="/employees/:id" component={Employees} />
       <Route path="/payroll" component={Payroll} />
@@ -200,6 +203,7 @@ function App() {
         <TooltipProvider>
           <Toaster position="top-right" richColors closeButton expand visibleToasts={8} gap={8} />
           <Router />
+          <CopilotSmartAssistant />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
