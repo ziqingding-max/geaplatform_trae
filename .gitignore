@@ -1,0 +1,12 @@
+node_modules
+
+# Ignore untracked folders
+.trae/
+.vercel/
+temp/
+backups/
+.DS_Store
+dist/
+build/
+.env
+
