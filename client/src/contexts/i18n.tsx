@@ -112,42 +112,43 @@ const translations: Record<Language, Record<string, string>> = {
     "ai_settings.task_policy.description": "Define primary and fallback provider routes for each AI task.",
 
     // Sales CRM
-    "sales.title": "Sales CRM",
-    "sales.subtitle": "Manage your sales pipeline and convert leads to customers",
-    "sales.newLead": "New Lead",
-    "sales.editLead": "Edit Lead",
-    "sales.companyName": "Company Name",
-    "sales.contactName": "Contact Name",
-    "sales.contactEmail": "Contact Email",
-    "sales.contactPhone": "Contact Phone",
-    "sales.source": "Source",
-    "sales.assignedTo": "Assigned To",
-    "sales.estimatedEmployees": "Est. Employees",
-    "sales.estimatedRevenue": "Est. Monthly Revenue",
-    "sales.expectedCloseDate": "Expected Close Date",
-    "sales.intendedServices": "Intended Services",
-    "sales.targetCountries": "Target Countries",
-    "sales.lostReason": "Lost Reason",
-    "sales.convertToCustomer": "Create Customer",
-    "sales.convertConfirm": "This will create a customer record from this lead. The lead will remain at MSA Signed stage until the first employee starts onboarding. Continue?",
-    "sales.convertSuccess": "Customer created successfully! Please introduce the customer manager and arrange a kickoff meeting.",
-    "sales.closeWon": "Close Won",
-    "sales.closeWonConfirm": "Mark this deal as Closed Won? The customer has employee(s) at onboarding or later stage.",
-    "sales.closeWonSuccess": "Deal marked as Closed Won!",
-    "sales.activities": "Activities",
-    "sales.addActivity": "Add Activity",
-    "sales.noActivities": "No activities yet",
-    "sales.pipeline": "Pipeline",
-    "sales.allLeads": "All Leads",
-    "sales.status.discovery": "Discovery",
-    "sales.status.leads": "Leads",
-    "sales.status.quotation_sent": "Quotation Sent",
-    "sales.status.msa_sent": "MSA Sent",
-    "sales.status.msa_signed": "MSA Signed",
-    "sales.status.closed_won": "Closed Won",
-    "sales.status.closed_lost": "Closed Lost",
-    "sales.activityType.call": "Call",
-    "sales.activityType.email": "Email",
+    // Sales CRM (deleted duplicate block)
+    // "sales.title": "Sales CRM",
+    // "sales.subtitle": "Manage your sales pipeline and convert leads to customers",
+    // "sales.newLead": "New Lead",
+    // "sales.editLead": "Edit Lead",
+    // "sales.companyName": "Company Name",
+    // "sales.contactName": "Contact Name",
+    // "sales.contactEmail": "Contact Email",
+    // "sales.contactPhone": "Contact Phone",
+    // "sales.source": "Source",
+    // "sales.assignedTo": "Assigned To",
+    // "sales.estimatedEmployees": "Est. Employees",
+    // "sales.estimatedRevenue": "Est. Monthly Revenue",
+    // "sales.expectedCloseDate": "Expected Close Date",
+    // "sales.intendedServices": "Intended Services",
+    // "sales.targetCountries": "Target Countries",
+    // "sales.lostReason": "Lost Reason",
+    // "sales.convertToCustomer": "Create Customer",
+    // "sales.convertConfirm": "This will create a customer record from this lead. The lead will remain at MSA Signed stage until the first employee starts onboarding. Continue?",
+    // "sales.convertSuccess": "Customer created successfully! Please introduce the customer manager and arrange a kickoff meeting.",
+    // "sales.closeWon": "Close Won",
+    // "sales.closeWonConfirm": "Mark this deal as Closed Won? The customer has employee(s) at onboarding or later stage.",
+    // "sales.closeWonSuccess": "Deal marked as Closed Won!",
+    // "sales.activities": "Activities",
+    // "sales.addActivity": "Add Activity",
+    // "sales.noActivities": "No activities yet",
+    // "sales.pipeline": "Pipeline",
+    // "sales.allLeads": "All Leads",
+    // "sales.status.discovery": "Discovery",
+    // "sales.status.leads": "Leads",
+    // "sales.status.quotation_sent": "Quotation Sent",
+    // "sales.status.msa_sent": "MSA Sent",
+    // "sales.status.msa_signed": "MSA Signed",
+    // "sales.status.closed_won": "Closed Won",
+    // "sales.status.closed_lost": "Closed Lost",
+    // "sales.activityType.call": "Call",
+    // "sales.activityType.email": "Email",
     "sales.activityType.meeting": "Meeting",
     "sales.activityType.note": "Note",
     "sales.activityType.proposal": "Proposal",
@@ -477,22 +478,23 @@ const translations: Record<Language, Record<string, string>> = {
     "adjustments.table.header.actions": "Actions",
     "adjustments.table.header.amount": "Amount",
     "adjustments.table.header.category": "Category",
-    "adjustments.table.header.effectiveMonth": "Effective Month",
-    "adjustments.table.header.employee": "Employee",
-    "adjustments.table.header.receipt": "Receipt",
-    "adjustments.table.header.status": "Status",
-    "adjustments.table.header.type": "Type",
-    "adjustments.tabs.active": "Active",
-    "adjustments.tabs.history": "History",
-    "adjustments.title": "Adjustments",
-    "adjustments.toast.approveSuccess": "Adjustment approved",
-    "adjustments.toast.deleteSuccess": "Adjustment deleted",
-    "adjustments.toast.fileTooLarge": "File size must be under 20MB",
-    "adjustments.toast.rejectSuccess": "Adjustment rejected",
-    "adjustments.toast.requiredFields": "Employee and amount are required",
-    "adjustments.toast.submitSuccess": "Adjustment submitted",
-    "adjustments.toast.updateSuccess": "Adjustment updated",
-    "adjustments.toast.uploadFailed": "Receipt upload failed: {error}",
+    // Adjustments (deleted duplicate block)
+    // "adjustments.table.header.effectiveMonth": "Effective Month",
+    // "adjustments.table.header.employee": "Employee",
+    // "adjustments.table.header.receipt": "Receipt",
+    // "adjustments.table.header.status": "Status",
+    // "adjustments.table.header.type": "Type",
+    // "adjustments.tabs.active": "Active",
+    // "adjustments.tabs.history": "History",
+    // "adjustments.title": "Adjustments",
+    // "adjustments.toast.approveSuccess": "Adjustment approved",
+    // "adjustments.toast.deleteSuccess": "Adjustment deleted",
+    // "adjustments.toast.fileTooLarge": "File size must be under 20MB",
+    // "adjustments.toast.rejectSuccess": "Adjustment rejected",
+    // "adjustments.toast.requiredFields": "Employee and amount are required",
+    // "adjustments.toast.submitSuccess": "Adjustment submitted",
+    // "adjustments.toast.updateSuccess": "Adjustment updated",
+    // "adjustments.toast.uploadFailed": "Receipt upload failed: {error}",
 
     // Adminlogin
     "adminLogin.error.loginFailed": "Login failed. Please try again.",
@@ -1139,47 +1141,47 @@ const translations: Record<Language, Record<string, string>> = {
     "invoices.payment.underpayment": "Underpayment",
     "invoices.payment.overpayment": "Overpayment",
 
-    // Leave
-    "leave.button.add": "Add Leave",
-    "leave.button.adminApprove": "Admin Approve",
-    "leave.button.adminReject": "Admin Reject",
-    "leave.button.close": "Close",
-    "leave.button.export": "Export CSV",
-    "leave.button.submitRequest": "Submit Request",
-    "leave.button.updateChanges": "Update Changes",
-    "leave.button.viewDetails": "View details",
-    "leave.dialog.title.details": "Leave Record Details",
-    "leave.dialog.title.edit": "Edit Leave Record",
-    "leave.dialog.title.submitNew": "Submit New Leave Request",
-    "leave.emptyState.noRecords": "No leave records found",
-    "leave.filters.allCountries": "All Countries",
-    "leave.filters.allCustomers": "All Customers",
-    "leave.filters.allMonths": "All Months",
-    "leave.filters.allStatus": "All Status",
-    "leave.form.label.employee": "Employee",
-    "leave.form.label.endDate": "End Date",
-    "leave.form.label.halfDay": "Half-day leave",
-    "leave.form.label.leaveType": "Leave Type",
-    "leave.form.label.reason": "Reason",
-    "leave.form.label.startDate": "Start Date",
-    "leave.form.label.totalDays": "Total Days",
-    "leave.showingRecords": "Showing {leaves.length} of {data.total} leave records",
-    "leave.table.header.actions": "Actions",
-    "leave.table.header.days": "Days",
-    "leave.table.header.employee": "Employee",
-    "leave.table.header.leaveType": "Leave Type",
-    "leave.table.header.period": "Period",
-    "leave.table.header.status": "Status",
-    "leave.tabs.active": "Active",
-    "leave.tabs.archive": "Archive",
-    "leave.title": "Leave Management",
-    "leave.toast.approved": "Leave approved",
-    "leave.toast.deleted": "Leave record deleted",
-    "leave.toast.error.endDate": "End date cannot be earlier than start date",
-    "leave.toast.error.requiredFields": "Please fill in all required fields",
-    "leave.toast.rejected": "Leave rejected",
-    "leave.toast.submitted": "Leave request submitted",
-    "leave.toast.updated": "Leave record updated",
+    // Leave (deleted duplicate block)
+    // "leave.button.add": "Add Leave",
+    // "leave.button.adminApprove": "Admin Approve",
+    // "leave.button.adminReject": "Admin Reject",
+    // "leave.button.close": "Close",
+    // "leave.button.export": "Export CSV",
+    // "leave.button.submitRequest": "Submit Request",
+    // "leave.button.updateChanges": "Update Changes",
+    // "leave.button.viewDetails": "View details",
+    // "leave.dialog.title.details": "Leave Record Details",
+    // "leave.dialog.title.edit": "Edit Leave Record",
+    // "leave.dialog.title.submitNew": "Submit New Leave Request",
+    // "leave.emptyState.noRecords": "No leave records found",
+    // "leave.filters.allCountries": "All Countries",
+    // "leave.filters.allCustomers": "All Customers",
+    // "leave.filters.allMonths": "All Months",
+    // "leave.filters.allStatus": "All Status",
+    // "leave.form.label.employee": "Employee",
+    // "leave.form.label.endDate": "End Date",
+    // "leave.form.label.halfDay": "Half-day leave",
+    // "leave.form.label.leaveType": "Leave Type",
+    // "leave.form.label.reason": "Reason",
+    // "leave.form.label.startDate": "Start Date",
+    // "leave.form.label.totalDays": "Total Days",
+    // "leave.showingRecords": "Showing {leaves.length} of {data.total} leave records",
+    // "leave.table.header.actions": "Actions",
+    // "leave.table.header.days": "Days",
+    // "leave.table.header.employee": "Employee",
+    // "leave.table.header.leaveType": "Leave Type",
+    // "leave.table.header.period": "Period",
+    // "leave.table.header.status": "Status",
+    // "leave.tabs.active": "Active",
+    // "leave.tabs.archive": "Archive",
+    // "leave.title": "Leave Management",
+    // "leave.toast.approved": "Leave approved",
+    // "leave.toast.deleted": "Leave record deleted",
+    // "leave.toast.error.endDate": "End date cannot be earlier than start date",
+    // "leave.toast.error.requiredFields": "Please fill in all required fields",
+    // "leave.toast.rejected": "Leave rejected",
+    // "leave.toast.submitted": "Leave request submitted",
+    // "leave.toast.updated": "Leave record updated",
 
     // Notfound
     "notFound.button.goHome": "Go Home",
@@ -1703,51 +1705,51 @@ const translations: Record<Language, Record<string, string>> = {
     "vendors.toast.update.success": "Vendor updated successfully",
 
     // Leave (Admin)
-    "leave.status.submitted": "Submitted",
-    "leave.status.client_approved": "Client Approved",
-    "leave.status.client_rejected": "Client Rejected",
-    "leave.status.admin_approved": "Admin Approved",
-    "leave.status.admin_rejected": "Admin Rejected",
-    "leave.status.locked": "Locked",
-    "leave.header.description": "Manage employee leave records",
-    "leave.actions.export": "Export CSV",
-    "leave.tabs.history": "History",
-    "leave.filters.allCustomers": "All Customers",
-    "leave.filters.allCountries": "All Countries",
-    "leave.filters.allMonths": "All Months",
-    "leave.filters.allStatus": "All Statuses",
-    "leave.table.header.employee": "Employee",
-    "leave.table.header.leaveType": "Leave Type",
-    "leave.table.header.period": "Period",
-    "leave.table.header.days": "Days",
-    "leave.table.header.status": "Status",
-    "leave.table.header.actions": "Actions",
-    "leave.form.label.startDate": "Start Date",
-    "leave.form.label.endDate": "End Date",
-    "leave.form.label.reason": "Reason",
-    "leave.validation.endDateBeforeStartDate": "End date cannot be earlier than start date",
-    "leave.dialog.title.details": "Leave Details",
-    "leave.button.close": "Close",
-    "leave.toast.submitted": "Leave request submitted successfully",
-    "leave.toast.updated": "Leave request updated successfully",
-    "leave.toast.deleted": "Leave request deleted successfully",
-    "leave.toast.approved": "Leave request approved successfully",
-    "leave.toast.rejected": "Leave request rejected successfully",
-    "leave.toast.error.requiredFields": "Please fill in all required fields",
-    "leave.confirm.delete": "Are you sure you want to delete this leave record?",
-    "leave.dialog.title.new": "Submit Leave Record",
-    "leave.dialog.title.edit": "Edit Leave Record",
-    "leave.form.label.leaveType": "Leave Type",
-    "leave.form.label.totalDays": "Total Days (auto-calculated)",
-    "leave.form.label.halfDay": "Half-day (deduct 0.5 day)",
-    "leave.form.placeholder.employee": "Search employee by name...",
-    "leave.form.placeholder.selectLeaveType": "Select leave type",
-    "leave.form.placeholder.selectEmployeeFirst": "Select employee first",
-    "leave.button.new": "New Leave Record",
-    "leave.button.submitting": "Submitting...",
-    "leave.button.saving": "Saving...",
-    "leave.emptyState.noRecords": "No leave records found.",
-    "leave.tabs.active": "Active",
+    // "leave.status.submitted": "Submitted", // Duplicate
+    // "leave.status.client_approved": "Client Approved", // Duplicate
+    // "leave.status.client_rejected": "Client Rejected", // Duplicate
+    // "leave.status.admin_approved": "Admin Approved", // Duplicate
+    // "leave.status.admin_rejected": "Admin Rejected", // Duplicate
+    // "leave.status.locked": "Locked", // Duplicate
+    // "leave.header.description": "Manage employee leave records", // Duplicate
+    // "leave.actions.export": "Export CSV", // Duplicate
+    // "leave.tabs.history": "History", // Duplicate
+    // "leave.filters.allCustomers": "All Customers", // Duplicate
+    // "leave.filters.allCountries": "All Countries", // Duplicate
+    // "leave.filters.allMonths": "All Months", // Duplicate
+    // "leave.filters.allStatus": "All Statuses", // Duplicate
+    // "leave.table.header.employee": "Employee", // Duplicate
+    // "leave.table.header.leaveType": "Leave Type", // Duplicate
+    // "leave.table.header.period": "Period", // Duplicate
+    // "leave.table.header.days": "Days", // Duplicate
+    // "leave.table.header.status": "Status", // Duplicate
+    // "leave.table.header.actions": "Actions", // Duplicate
+    // "leave.form.label.startDate": "Start Date", // Duplicate
+    // "leave.form.label.endDate": "End Date", // Duplicate
+    // "leave.form.label.reason": "Reason", // Duplicate
+    // "leave.validation.endDateBeforeStartDate": "End date cannot be earlier than start date", // Duplicate
+    // "leave.dialog.title.details": "Leave Details", // Duplicate
+    // "leave.button.close": "Close", // Duplicate
+    // "leave.toast.submitted": "Leave request submitted successfully", // Duplicate
+    // "leave.toast.updated": "Leave request updated successfully", // Duplicate
+    // "leave.toast.deleted": "Leave request deleted successfully", // Duplicate
+    // "leave.toast.approved": "Leave request approved successfully", // Duplicate
+    // "leave.toast.rejected": "Leave request rejected successfully", // Duplicate
+    // "leave.toast.error.requiredFields": "Please fill in all required fields", // Duplicate
+    // "leave.confirm.delete": "Are you sure you want to delete this leave record?", // Duplicate
+    // "leave.dialog.title.new": "Submit Leave Record", // Duplicate
+    // "leave.dialog.title.edit": "Edit Leave Record", // Duplicate
+    // "leave.form.label.leaveType": "Leave Type", // Duplicate
+    // "leave.form.label.totalDays": "Total Days (auto-calculated)", // Duplicate
+    // "leave.form.label.halfDay": "Half-day (deduct 0.5 day)", // Duplicate
+    // "leave.form.placeholder.employee": "Search employee by name...", // Duplicate
+    // "leave.form.placeholder.selectLeaveType": "Select leave type", // Duplicate
+    // "leave.form.placeholder.selectEmployeeFirst": "Select employee first", // Duplicate
+    // "leave.button.new": "New Leave Record", // Duplicate
+    // "leave.button.submitting": "Submitting...", // Duplicate
+    // "leave.button.saving": "Saving...", // Duplicate
+    // "leave.emptyState.noRecords": "No leave records found.", // Duplicate
+    // "leave.tabs.active": "Active", // Duplicate
 
     // Portal Leave
     "portal_leave.title": "Leave Management",
@@ -1814,68 +1816,68 @@ const translations: Record<Language, Record<string, string>> = {
     "portal_leave.reject_dialog.placeholder_reason": "Provide a reason for rejection...",
 
     // Adjustments (Admin)
-    "adjustments.title": "Adjustments",
-    "adjustments.subtitle": "Manage bonuses, allowances, reimbursements, and deductions",
-    "adjustments.status.submitted": "Submitted",
-    "adjustments.status.client_approved": "Client Approved",
-    "adjustments.status.client_rejected": "Client Rejected",
-    "adjustments.status.admin_approved": "Admin Approved",
-    "adjustments.status.admin_rejected": "Admin Rejected",
-    "adjustments.status.locked": "Locked",
-    "adjustments.type.bonus": "Bonus",
-    "adjustments.type.allowance": "Allowance",
-    "adjustments.type.reimbursement": "Reimbursement",
-    "adjustments.type.deduction": "Deduction",
-    "adjustments.type.other": "Other",
-    "adjustments.category.housing": "Housing",
-    "adjustments.category.transport": "Transport",
-    "adjustments.category.meals": "Meals",
-    "adjustments.category.performance_bonus": "Performance Bonus",
-    "adjustments.category.year_end_bonus": "Year-End Bonus",
-    "adjustments.category.overtime": "Overtime",
-    "adjustments.category.travel_reimbursement": "Travel Reimbursement",
-    "adjustments.category.equipment_reimbursement": "Equipment Reimbursement",
-    "adjustments.category.absence_deduction": "Absence Deduction",
-    "adjustments.category.other": "Other",
-    "adjustments.category.none": "None",
-    "adjustments.toast.submitSuccess": "Adjustment submitted successfully",
-    "adjustments.toast.updateSuccess": "Adjustment updated successfully",
-    "adjustments.toast.deleteSuccess": "Adjustment deleted successfully",
-    "adjustments.toast.approveSuccess": "Adjustment approved successfully",
-    "adjustments.toast.rejectSuccess": "Adjustment rejected successfully",
-    "adjustments.toast.fileTooLarge": "File too large (max 20MB)",
-    "adjustments.toast.requiredFields": "Please fill in all required fields",
-    "adjustments.form.label.employee": "Employee",
-    "adjustments.form.label.type": "Type",
-    "adjustments.form.label.category": "Category",
-    "adjustments.form.label.amount": "Amount",
-    "adjustments.form.label.effectiveMonth": "Effective Month",
-    "adjustments.form.label.description": "Description",
-    "adjustments.table.header.receipt": "Receipt",
-    "adjustments.table.header.actions": "Actions",
-    "adjustments.table.empty": "No adjustments found",
-    "adjustments.tabs.active": "Active",
-    "adjustments.tabs.history": "History",
-    "adjustments.filters.customerPlaceholder": "Customer",
-    "adjustments.filters.countryPlaceholder": "Country",
-    "adjustments.filters.statusPlaceholder": "Status",
-    "adjustments.filters.allCustomers": "All Customers",
-    "adjustments.filters.allCountries": "All Countries",
-    "adjustments.filters.allTypes": "All Types",
-    "adjustments.filters.allStatuses": "All Statuses",
-    "adjustments.dialog.title.new": "Submit Adjustment",
-    "adjustments.dialog.title.edit": "Edit Adjustment",
-    "adjustments.dialog.title.details": "Adjustment Details",
-    "adjustments.button.new": "New Adjustment",
-    "adjustments.button.close": "Close",
-    "adjustments.receipt.label": "Receipt / Proof",
-    "adjustments.receipt.existing": "Existing receipt attached",
-    "adjustments.receipt.view": "View",
-    "adjustments.receipt.replace": "Replace File",
-    "adjustments.receipt.upload_new": "Upload New Receipt",
-    "adjustments.receipt.upload": "Upload Receipt",
-    "adjustments.receipt.hint": "Supports PDF, images, ZIP, Office documents. Max 20MB.",
-    "adjustments.confirm.delete": "Are you sure you want to delete this adjustment?",
+    // "adjustments.title": "Adjustments", // Duplicate
+    // "adjustments.subtitle": "Manage bonuses, allowances, reimbursements, and deductions", // Duplicate
+    // "adjustments.status.submitted": "Submitted", // Duplicate
+    // "adjustments.status.client_approved": "Client Approved", // Duplicate
+    // "adjustments.status.client_rejected": "Client Rejected", // Duplicate
+    // "adjustments.status.admin_approved": "Admin Approved", // Duplicate
+    // "adjustments.status.admin_rejected": "Admin Rejected", // Duplicate
+    // "adjustments.status.locked": "Locked", // Duplicate
+    // "adjustments.type.bonus": "Bonus", // Duplicate
+    // "adjustments.type.allowance": "Allowance", // Duplicate
+    // "adjustments.type.reimbursement": "Reimbursement", // Duplicate
+    // "adjustments.type.deduction": "Deduction", // Duplicate
+    // "adjustments.type.other": "Other", // Duplicate
+    // "adjustments.category.housing": "Housing", // Duplicate
+    // "adjustments.category.transport": "Transport", // Duplicate
+    // "adjustments.category.meals": "Meals", // Duplicate
+    // "adjustments.category.performance_bonus": "Performance Bonus", // Duplicate
+    // "adjustments.category.year_end_bonus": "Year-End Bonus", // Duplicate
+    // "adjustments.category.overtime": "Overtime", // Duplicate
+    // "adjustments.category.travel_reimbursement": "Travel Reimbursement", // Duplicate
+    // "adjustments.category.equipment_reimbursement": "Equipment Reimbursement", // Duplicate
+    // "adjustments.category.absence_deduction": "Absence Deduction", // Duplicate
+    // "adjustments.category.other": "Other", // Duplicate
+    // "adjustments.category.none": "None", // Duplicate
+    // "adjustments.toast.submitSuccess": "Adjustment submitted successfully", // Duplicate
+    // "adjustments.toast.updateSuccess": "Adjustment updated successfully", // Duplicate
+    // "adjustments.toast.deleteSuccess": "Adjustment deleted successfully", // Duplicate
+    // "adjustments.toast.approveSuccess": "Adjustment approved successfully", // Duplicate
+    // "adjustments.toast.rejectSuccess": "Adjustment rejected successfully", // Duplicate
+    // "adjustments.toast.fileTooLarge": "File too large (max 20MB)", // Duplicate
+    // "adjustments.toast.requiredFields": "Please fill in all required fields", // Duplicate
+    // "adjustments.form.label.employee": "Employee", // Duplicate
+    // "adjustments.form.label.type": "Type", // Duplicate
+    // "adjustments.form.label.category": "Category", // Duplicate
+    // "adjustments.form.label.amount": "Amount", // Duplicate
+    // "adjustments.form.label.effectiveMonth": "Effective Month", // Duplicate
+    // "adjustments.form.label.description": "Description", // Duplicate
+    // "adjustments.table.header.receipt": "Receipt", // Duplicate
+    // "adjustments.table.header.actions": "Actions", // Duplicate
+    // "adjustments.table.empty": "No adjustments found", // Duplicate
+    // "adjustments.tabs.active": "Active", // Duplicate
+    // "adjustments.tabs.history": "History", // Duplicate
+    // "adjustments.filters.customerPlaceholder": "Customer", // Duplicate
+    // "adjustments.filters.countryPlaceholder": "Country", // Duplicate
+    // "adjustments.filters.statusPlaceholder": "Status", // Duplicate
+    // "adjustments.filters.allCustomers": "All Customers", // Duplicate
+    // "adjustments.filters.allCountries": "All Countries", // Duplicate
+    // "adjustments.filters.allTypes": "All Types", // Duplicate
+    // "adjustments.filters.allStatuses": "All Statuses", // Duplicate
+    // "adjustments.dialog.title.new": "Submit Adjustment", // Duplicate
+    // "adjustments.dialog.title.edit": "Edit Adjustment", // Duplicate
+    // "adjustments.dialog.title.details": "Adjustment Details", // Duplicate
+    // "adjustments.button.new": "New Adjustment", // Duplicate
+    // "adjustments.button.close": "Close", // Duplicate
+    // "adjustments.receipt.label": "Receipt / Proof", // Duplicate
+    // "adjustments.receipt.existing": "Existing receipt attached", // Duplicate
+    // "adjustments.receipt.view": "View", // Duplicate
+    // "adjustments.receipt.replace": "Replace File", // Duplicate
+    // "adjustments.receipt.upload_new": "Upload New Receipt", // Duplicate
+    // "adjustments.receipt.upload": "Upload Receipt", // Duplicate
+    // "adjustments.receipt.hint": "Supports PDF, images, ZIP, Office documents. Max 20MB.", // Duplicate
+    // "adjustments.confirm.delete": "Are you sure you want to delete this adjustment?", // Duplicate
 
     // Portal Adjustments
     "portal_adjustments.header.title": "Adjustments",
@@ -1912,101 +1914,101 @@ const translations: Record<Language, Record<string, string>> = {
     "portal_adjustments.button.new": "New Adjustment",
     "portal_adjustments.empty.title": "No adjustments found",
     "portal_adjustments.empty.hint": "Create a new adjustment to get started.",
-    "status.pending_review": "Pending Review",
-    "status.documents_incomplete": "Documents Incomplete",
-    "status.onboarding": "Onboarding",
-    "status.contract_signed": "Contract Signed",
-    "status.on_leave": "On Leave",
-    "status.offboarding": "Offboarding",
-    "status.terminated": "Terminated",
-    "status.approved": "Approved",
-    "status.rejected": "Rejected",
-    "common.required": "Required",
-    "common.cancel": "Cancel",
-    "common.notSpecified": "Not Specified",
-    "common.city": "City",
-    "common.stateProvince": "State / Province",
-    "common.postalCode": "Postal Code",
-    "common.date": "Date",
+    // "status.pending_review": "Pending Review",
+    // "status.documents_incomplete": "Documents Incomplete",
+    // "status.onboarding": "Onboarding",
+    // "status.contract_signed": "Contract Signed",
+    // "status.on_leave": "On Leave",
+    // "status.offboarding": "Offboarding",
+    // "status.terminated": "Terminated",
+    // "status.approved": "Approved",
+    // "status.rejected": "Rejected",
+    // "common.required": "Required",
+    // "common.cancel": "Cancel",
+    // "common.notSpecified": "Not Specified",
+    // "common.city": "City",
+    // "common.stateProvince": "State / Province",
+    // "common.postalCode": "Postal Code",
+    // "common.date": "Date",
 
     // Document Types
-    "employees.documentType.resume": "Resume / CV",
-    "employees.documentType.passport": "Passport",
-    "employees.documentType.national_id": "National ID",
-    "employees.documentType.work_permit": "Work Permit",
-    "employees.documentType.visa": "Visa Document",
-    "employees.documentType.contract": "Employment Contract",
-    "employees.documentType.education": "Education Certificate",
-    "employees.documentType.payslip": "Payslip",
-    "employees.documentType.reimbursement_receipt": "Reimbursement Receipt",
-    "employees.documentType.other": "Other",
+    // "employees.documentType.resume": "Resume / CV",
+    // "employees.documentType.passport": "Passport",
+    // "employees.documentType.national_id": "National ID",
+    // "employees.documentType.work_permit": "Work Permit",
+    // "employees.documentType.visa": "Visa Document",
+    // "employees.documentType.contract": "Employment Contract",
+    // "employees.documentType.education": "Education Certificate",
+    // "employees.documentType.payslip": "Payslip",
+    // "employees.documentType.reimbursement_receipt": "Reimbursement Receipt",
+    // "employees.documentType.other": "Other",
 
     // Visa Status (Snake Case)
-    "employees.visaStatus.not_required": "Not Required",
-    "employees.visaStatus.pending_application": "Pending Application",
-    "employees.visaStatus.application_submitted": "Application Submitted",
-    "employees.visaStatus.approved": "Approved",
-    "employees.visaStatus.rejected": "Rejected",
-    "employees.visaStatus.expired": "Expired",
+    // "employees.visaStatus.not_required": "Not Required",
+    // "employees.visaStatus.pending_application": "Pending Application",
+    // "employees.visaStatus.application_submitted": "Application Submitted",
+    // "employees.visaStatus.approved": "Approved",
+    // "employees.visaStatus.rejected": "Rejected",
+    // "employees.visaStatus.expired": "Expired",
 
     // Workflow Actions
-    "employees.actions.startOnboarding": "Start Onboarding",
-    "employees.actions.markDocumentsIncomplete": "Documents Incomplete",
-    "employees.actions.reject": "Reject",
-    "employees.actions.documentsComplete": "Documents Complete → Review",
-    "employees.actions.markContractSigned": "Mark Contract Signed",
-    "employees.actions.rollbackToReview": "Rollback to Review",
-    "employees.actions.activateNow": "Activate Now",
-    "employees.actions.rollbackToOnboarding": "Rollback to Onboarding",
-    "employees.actions.startOffboarding": "Start Offboarding",
-    "employees.actions.putOnLeave": "Put On Leave",
-    "employees.actions.returnToActive": "Return to Active",
-    "employees.actions.terminate": "Terminate",
-    "employees.actions.rollbackToActive": "Rollback to Active",
-    "employees.actions.reactivate": "Reactivate",
+    // "employees.actions.startOnboarding": "Start Onboarding",
+    // "employees.actions.markDocumentsIncomplete": "Documents Incomplete",
+    // "employees.actions.reject": "Reject",
+    // "employees.actions.documentsComplete": "Documents Complete → Review",
+    // "employees.actions.markContractSigned": "Mark Contract Signed",
+    // "employees.actions.rollbackToReview": "Rollback to Review",
+    // "employees.actions.activateNow": "Activate Now",
+    // "employees.actions.rollbackToOnboarding": "Rollback to Onboarding",
+    // "employees.actions.startOffboarding": "Start Offboarding",
+    // "employees.actions.putOnLeave": "Put On Leave",
+    // "employees.actions.returnToActive": "Return to Active",
+    // "employees.actions.terminate": "Terminate",
+    // "employees.actions.rollbackToActive": "Rollback to Active",
+    // "employees.actions.reactivate": "Reactivate",
 
     // Vendors
-    "vendors.title": "Vendors",
-    "vendors.description": "Manage your external service providers and partners",
-    "vendors.list.add_button": "Add Vendor",
-    "vendors.list.filter.type.all": "All Types",
-    "vendors.list.filter.type.client_related": "Client Related",
-    "vendors.list.filter.type.operational": "Operational",
-    "vendors.list.filter.status.active": "Active",
-    "vendors.list.filter.status.inactive": "Inactive",
-    "vendors.table.header.vendor": "Vendor",
-    "vendors.table.header.country": "Country",
-    "vendors.table.header.contact": "Contact",
-    "vendors.table.header.status": "Status",
-    "vendors.table.empty.title": "No vendors found",
-    "vendors.create.title": "Create New Vendor",
-    "vendors.detail.edit_button": "Edit Vendor",
-    "vendors.detail.field.email": "Email",
-    "vendors.detail.field.phone": "Phone",
-    "vendors.detail.field.vendor_type": "Vendor Type",
-    "vendors.detail.field.payment_terms": "Payment Terms",
-    "vendors.form.company_name.label": "Company Name",
-    "vendors.form.legal_name.label": "Legal Name",
-    "vendors.form.tax_id.label": "Tax ID",
-    "vendors.form.contact_name.label": "Contact Name",
-    "vendors.form.contact_email.label": "Contact Email",
-    "vendors.form.contact_phone.label": "Contact Phone",
-    "vendors.form.country.label": "Country",
-    "vendors.form.address.label": "Address",
-    "vendors.form.city.label": "City",
-    "vendors.form.state_province.label": "State / Province",
-    "vendors.form.postal_code.label": "Postal Code",
-    "vendors.form.vendor_type.label": "Vendor Type",
-    "vendors.form.vendor_type.client_related": "Client Related",
-    "vendors.form.vendor_type.operational": "Operational",
-    "vendors.form.service_type.label": "Service Type",
-    "vendors.form.default_currency.label": "Default Currency",
-    "vendors.form.payment_terms.label": "Payment Terms (Days)",
-    "vendors.form.bank_details.label": "Bank Details",
-    "vendors.form.notes.label": "Notes",
-    "vendors.toast.create.success": "Vendor created successfully",
-    "vendors.toast.create.error": "Failed to create vendor",
-    "vendors.toast.update.success": "Vendor updated successfully",
+    // "vendors.title": "Vendors",
+    // "vendors.description": "Manage your external service providers and partners",
+    // "vendors.list.add_button": "Add Vendor",
+    // "vendors.list.filter.type.all": "All Types",
+    // "vendors.list.filter.type.client_related": "Client Related",
+    // "vendors.list.filter.type.operational": "Operational",
+    // "vendors.list.filter.status.active": "Active",
+    // "vendors.list.filter.status.inactive": "Inactive",
+    // "vendors.table.header.vendor": "Vendor",
+    // "vendors.table.header.country": "Country",
+    // "vendors.table.header.contact": "Contact",
+    // "vendors.table.header.status": "Status",
+    // "vendors.table.empty.title": "No vendors found",
+    // "vendors.create.title": "Create New Vendor",
+    // "vendors.detail.edit_button": "Edit Vendor",
+    // "vendors.detail.field.email": "Email",
+    // "vendors.detail.field.phone": "Phone",
+    // "vendors.detail.field.vendor_type": "Vendor Type",
+    // "vendors.detail.field.payment_terms": "Payment Terms",
+    // "vendors.form.company_name.label": "Company Name",
+    // "vendors.form.legal_name.label": "Legal Name",
+    // "vendors.form.tax_id.label": "Tax ID",
+    // "vendors.form.contact_name.label": "Contact Name",
+    // "vendors.form.contact_email.label": "Contact Email",
+    // "vendors.form.contact_phone.label": "Contact Phone",
+    // "vendors.form.country.label": "Country",
+    // "vendors.form.address.label": "Address",
+    // "vendors.form.city.label": "City",
+    // "vendors.form.state_province.label": "State / Province",
+    // "vendors.form.postal_code.label": "Postal Code",
+    // "vendors.form.vendor_type.label": "Vendor Type",
+    // "vendors.form.vendor_type.client_related": "Client Related",
+    // "vendors.form.vendor_type.operational": "Operational",
+    // "vendors.form.service_type.label": "Service Type",
+    // "vendors.form.default_currency.label": "Default Currency",
+    // "vendors.form.payment_terms.label": "Payment Terms (Days)",
+    // "vendors.form.bank_details.label": "Bank Details",
+    // "vendors.form.notes.label": "Notes",
+    // "vendors.toast.create.success": "Vendor created successfully",
+    // "vendors.toast.create.error": "Failed to create vendor",
+    // "vendors.toast.update.success": "Vendor updated successfully",
 
     // Sales CRM
     "sales.title": "Sales Pipeline",
@@ -2233,51 +2235,52 @@ const translations: Record<Language, Record<string, string>> = {
     "ai_settings.task_policy.description": "为每类AI任务设置主路由与回退路由。",
 
     // Sales CRM
-    "sales.title": "销售 CRM",
-    "sales.subtitle": "管理销售管道，将线索转化为客户",
-    "sales.newLead": "新建线索",
-    "sales.editLead": "编辑线索",
-    "sales.companyName": "公司名称",
-    "sales.contactName": "联系人姓名",
-    "sales.contactEmail": "联系人邮箱",
-    "sales.contactPhone": "联系人电话",
-    "sales.source": "来源",
-    "sales.assignedTo": "负责人",
-    "sales.estimatedEmployees": "预估员工数",
-    "sales.estimatedRevenue": "预估月收入",
-    "sales.expectedCloseDate": "预计成交日期",
-    "sales.intendedServices": "意向服务",
-    "sales.targetCountries": "目标国家",
-    "sales.lostReason": "丢失原因",
-    "sales.convertToCustomer": "创建客户",
-    "sales.convertConfirm": "此操作将从该线索创建客户记录。线索将保持在 MSA 已签约 阶段，直到第一个员工开始入职。是否继续？",
-    "sales.convertSuccess": "客户创建成功！请介绍客户经理给客户，并安排启动会议。",
-    "sales.closeWon": "标记赢单",
-    "sales.closeWonConfirm": "确认将此交易标记为赢单？该客户已有员工进入入职或更后阶段。",
-    "sales.closeWonSuccess": "交易已标记为赢单！",
-    "sales.activities": "跟进记录",
-    "sales.addActivity": "添加跟进",
-    "sales.noActivities": "暂无跟进记录",
-    "sales.pipeline": "销售管道",
-    "sales.allLeads": "全部线索",
-    "sales.status.discovery": "探索",
-    "sales.status.leads": "线索",
-    "sales.status.quotation_sent": "已发报价",
-    "sales.status.msa_sent": "已发MSA",
-    "sales.status.msa_signed": "MSA已签约",
-    "sales.status.closed_won": "赢单",
-    "sales.status.closed_lost": "丢单",
-    "sales.activityType.call": "电话",
-    "sales.activityType.email": "邮件",
-    "sales.activityType.meeting": "会议",
-    "sales.activityType.note": "备注",
-    "sales.activityType.proposal": "方案",
-    "sales.activityType.follow_up": "跟进",
-    "sales.activityType.other": "其他",
-    "sales.viewCustomer": "查看客户",
-    "sales.deleteConfirm": "确定要删除此线索吗？",
-    "sales.msaSignedTodo": "下一步：介绍客户经理给客户，安排启动会议，创建客户门户，配置价格表和联系人。",
-    "sales.awaitingOnboarding": "等待员工进入入职阶段后方可标记为赢单。",
+    // Sales CRM (deleted duplicate block)
+    // "sales.title": "销售 CRM",
+    // "sales.subtitle": "管理销售管道，将线索转化为客户",
+    // "sales.newLead": "新建线索",
+    // "sales.editLead": "编辑线索",
+    // "sales.companyName": "公司名称",
+    // "sales.contactName": "联系人姓名",
+    // "sales.contactEmail": "联系人邮箱",
+    // "sales.contactPhone": "联系人电话",
+    // "sales.source": "来源",
+    // "sales.assignedTo": "负责人",
+    // "sales.estimatedEmployees": "预估员工数",
+    // "sales.estimatedRevenue": "预估月收入",
+    // "sales.expectedCloseDate": "预计成交日期",
+    // "sales.intendedServices": "意向服务",
+    // "sales.targetCountries": "目标国家",
+    // "sales.lostReason": "丢失原因",
+    // "sales.convertToCustomer": "创建客户",
+    // "sales.convertConfirm": "此操作将从该线索创建客户记录。线索将保持在 MSA 已签约 阶段，直到第一个员工开始入职。是否继续？",
+    // "sales.convertSuccess": "客户创建成功！请介绍客户经理给客户，并安排启动会议。",
+    // "sales.closeWon": "标记赢单",
+    // "sales.closeWonConfirm": "确认将此交易标记为赢单？该客户已有员工进入入职或更后阶段。",
+    // "sales.closeWonSuccess": "交易已标记为赢单！",
+    // "sales.activities": "跟进记录",
+    // "sales.addActivity": "添加跟进",
+    // "sales.noActivities": "暂无跟进记录",
+    // "sales.pipeline": "销售管道",
+    // "sales.allLeads": "全部线索",
+    // "sales.status.discovery": "探索",
+    // "sales.status.leads": "线索",
+    // "sales.status.quotation_sent": "已发报价",
+    // "sales.status.msa_sent": "已发MSA",
+    // "sales.status.msa_signed": "MSA已签约",
+    // "sales.status.closed_won": "赢单",
+    // "sales.status.closed_lost": "丢单",
+    // "sales.activityType.call": "电话",
+    // "sales.activityType.email": "邮件",
+    // "sales.activityType.meeting": "会议",
+    // "sales.activityType.note": "备注",
+    // "sales.activityType.proposal": "方案",
+    // "sales.activityType.follow_up": "跟进",
+    // "sales.activityType.other": "其他",
+    // "sales.viewCustomer": "查看客户",
+    // "sales.deleteConfirm": "确定要删除此线索吗？",
+    // "sales.msaSignedTodo": "下一步：介绍客户经理给客户，安排启动会议，创建客户门户，配置价格表和联系人。",
+    // "sales.awaitingOnboarding": "等待员工进入入职阶段后方可标记为赢单。",
 
     // Dashboard
     "dashboard.title": "仪表盘",
@@ -2997,21 +3000,22 @@ const translations: Record<Language, Record<string, string>> = {
     "adjustments.table.header.amount": "金额",
     "adjustments.table.header.category": "类别",
     "adjustments.table.header.effectiveMonth": "生效月份",
-    "adjustments.table.header.employee": "员工",
-    "adjustments.table.header.receipt": "收据",
-    "adjustments.table.header.status": "状态",
-    "adjustments.table.header.type": "类型",
-    "adjustments.tabs.active": "生效中",
-    "adjustments.tabs.history": "历史记录",
-    "adjustments.title": "异动薪酬",
-    "adjustments.toast.approveSuccess": "异动薪酬已批准",
-    "adjustments.toast.deleteSuccess": "异动薪酬已删除",
-    "adjustments.toast.fileTooLarge": "文件大小必须小于20MB",
-    "adjustments.toast.rejectSuccess": "异动薪酬已拒绝",
-    "adjustments.toast.requiredFields": "员工和金额为必填项",
-    "adjustments.toast.submitSuccess": "异动薪酬已提交",
-    "adjustments.toast.updateSuccess": "异动薪酬已更新",
-    "adjustments.toast.uploadFailed": "收据上传失败：{error}",
+    // Adjustments (deleted duplicate block)
+    // "adjustments.table.header.employee": "员工",
+    // "adjustments.table.header.receipt": "收据",
+    // "adjustments.table.header.status": "状态",
+    // "adjustments.table.header.type": "类型",
+    // "adjustments.tabs.active": "生效中",
+    // "adjustments.tabs.history": "历史记录",
+    // "adjustments.title": "异动薪酬",
+    // "adjustments.toast.approveSuccess": "异动薪酬已批准",
+    // "adjustments.toast.deleteSuccess": "异动薪酬已删除",
+    // "adjustments.toast.fileTooLarge": "文件大小必须小于20MB",
+    // "adjustments.toast.rejectSuccess": "异动薪酬已拒绝",
+    // "adjustments.toast.requiredFields": "员工和金额为必填项",
+    // "adjustments.toast.submitSuccess": "异动薪酬已提交",
+    // "adjustments.toast.updateSuccess": "异动薪酬已更新",
+    // "adjustments.toast.uploadFailed": "收据上传失败：{error}",
 
     // Adminlogin
     "adminLogin.error.loginFailed": "登录失败，请重试。",
