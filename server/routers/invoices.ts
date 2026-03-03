@@ -27,6 +27,7 @@ import { generateInvoiceNumber, generateDepositInvoiceNumber } from "../services
 import { generateCreditNote, type CreditNoteLineItem } from "../services/creditNoteService";
 import { generateDepositRefund } from "../services/depositRefundService";
 import { notifyOwner } from "../_core/notification";
+import { notificationService } from "../services/notificationService";
 import { getExchangeRate } from "../services/exchangeRateService";
 
 const invoiceItemTypeEnum = z.enum([
@@ -468,6 +469,22 @@ export const invoicesRouter = router({
 
       if (input.status === "sent") {
         updateData.sentDate = new Date();
+        
+        // Trigger notification
+        const invoice = await getInvoiceById(input.id);
+        if (invoice) {
+          notificationService.send({
+            type: "invoice_sent",
+            customerId: invoice.customerId,
+            data: {
+              invoiceId: invoice.id,
+              invoiceNumber: invoice.invoiceNumber,
+              amount: invoice.total,
+              currency: invoice.currency,
+              dueDate: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : "N/A"
+            }
+          }).catch(err => console.error("Failed to send invoice notification:", err));
+        }
       } else if (input.status === "paid") {
         // Require paidAmount for paid status
         if (!input.paidAmount) {

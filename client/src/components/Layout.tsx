@@ -47,6 +47,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import NotificationCenter from "@/components/NotificationCenter";
 
 function useNavGroups() {
   const { t } = useI18n();
@@ -61,6 +62,7 @@ function useNavGroups() {
       label: t("nav.sales"),
       items: [
         { label: t("nav.crm_pipeline"), icon: Briefcase, href: "/sales-crm" },
+        { label: t("nav.quotations"), icon: FileText, href: "/quotations" },
       ],
     },
     {
@@ -75,6 +77,7 @@ function useNavGroups() {
       items: [
         { label: t("nav.customers"), icon: Building2, href: "/customers" },
         { label: t("nav.employees"), icon: Users, href: "/employees" },
+        { label: t("nav.contractors"), icon: FileText, href: "/contractors" },
       ],
     },
     {
@@ -311,12 +314,7 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
           </button>
 
           {/* Notifications */}
-          <button
-            className="relative p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            onClick={() => toast.info(t("common.coming_soon"))}
-          >
-            <Bell className="w-4 h-4" />
-          </button>
+          <NotificationCenter />
 
           {/* User Menu */}
           <DropdownMenu>

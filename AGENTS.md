@@ -67,6 +67,8 @@ Read documents in this order based on your task type. Each document is self-cont
 | Formatting | Centralized utilities | `client/src/lib/format.ts` |
 | AI Routing | Centralized LLM Gateway | `server/services/aiGatewayService.ts` |
 | Copilot | Global Smart Assistant | `client/src/components/CopilotSmartAssistant.tsx` |
+| Notification | In-App & Email Notifications | `server/services/notificationService.ts` |
+| Worker Portal | Employee Self-Service | `client/src/pages/worker/` |
 
 ### Essential Commands
 
@@ -99,6 +101,8 @@ server/services/aiGatewayService.ts → Central AI task routing and execution ga
 server/services/copilotService.ts   → Copilot business logic and chat handling
 client/src/components/CopilotSmartAssistant.tsx → Global floating assistant component
 docs/copilot-ai-routing-spec.md     → AI routing specification
+server/services/notificationService.ts → Notification delivery (In-App + Email)
+client/src/components/NotificationCenter.tsx → Notification UI component
 ```
 
 ---
@@ -151,6 +155,22 @@ The `server/_core/` directory is framework-level infrastructure (OAuth, tRPC set
 
 Direct calls to underlying LLM providers (e.g., via `openai` SDK directly) are **strictly prohibited** for business tasks. All AI capabilities MUST be routed through `executeTaskLLM()` in `server/services/aiGatewayService.ts`. This ensures centralized control over provider selection, fallback strategies, and observability.
 
+### Rule 12: Notification Channels
+
+Always use `server/services/notificationService.ts` for sending alerts. Notifications must be localized (i18n) and support both **In-App** (for dashboard alerts) and **Email** (for critical updates). Never send raw emails using `nodemailer` directly.
+
+### Rule 13: Contractor Invoicing
+
+Contractor invoices are handled separately from standard payroll runs. Use `server/services/contractorInvoiceGenerationService.ts` for logic. The cron job runs daily at 01:00 to generate invoices for active contractors.
+
+### Rule 14: Copilot Implementation
+
+Copilot business logic resides in `server/services/copilotService.ts`. It must use `aiGatewayService.ts` for all LLM interactions. The frontend component `client/src/components/CopilotSmartAssistant.tsx` must only handle UI, delegating logic to the backend.
+
+### Rule 15: Worker Portal Access
+
+Worker Portal uses a separate `server/portal/routers/worker` namespace and authentication flow. Ensure `protectedWorkerProcedure` is used for all worker-facing endpoints to enforce correct scoping.
+
 ---
 
 ## 5. How to Add a New Feature
@@ -198,6 +218,7 @@ These jobs run automatically. Be aware of their timing when debugging or modifyi
 | Daily 00:01 | Employee Auto-Activation | Activates employees whose `startDate` has arrived |
 | Daily 00:02 | Leave Status Transition | Updates leave records based on date ranges |
 | Daily 00:03 | Overdue Invoice Detection | Marks unpaid invoices past `dueDate` as `overdue` |
+| Daily 01:00 | Contractor Invoice Gen | Auto-generates invoices for contractors |
 | Daily 00:05 | Exchange Rate Fetch | Fetches ECB rates (published ~16:00 CET) |
 | Monthly 1st 00:10 | Leave Accrual | Accrues leave balances for eligible employees |
 | Monthly 5th 00:00 | Auto-Lock | Locks previous month's `submitted` adjustments and leave to `locked` |

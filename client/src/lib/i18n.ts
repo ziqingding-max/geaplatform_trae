@@ -52,6 +52,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.reports": "Reports",
     "nav.profit_loss": "Profit & Loss",
     "nav.cost_allocation": "Cost Allocation",
+    "nav.toolkit": "Toolkit",
+    "nav.costSimulator": "Cost Simulator",
+    "nav.countryGuide": "Country Guide",
 
     // Common
     "common.loading": "Loading...",
@@ -101,6 +104,30 @@ const translations: Record<Locale, Record<string, string>> = {
     "dashboard.openInvoices": "Open Invoices",
     "dashboard.payrollCostTrend": "Payroll Cost Trend",
     "dashboard.employeeDistribution": "Employee Distribution",
+
+    // Contractors
+    "contractors.title": "Contractors",
+    "contractors.description": "Manage external contractors, payment terms, and invoices.",
+    "contractors.list.empty.message": "No contractors found",
+    "contractors.actions.addContractor": "Add Contractor",
+    "contractors.list.table.header.contractor": "Contractor",
+    "contractors.list.table.header.service": "Service",
+    "contractors.list.table.header.status": "Status",
+    "contractors.list.table.header.rate": "Rate",
+    "contractors.detail.notFound": "Contractor not found",
+    "contractors.detail.tabs.overview": "Overview",
+    "contractors.detail.tabs.milestones": "Milestones",
+    "contractors.detail.tabs.invoices": "Invoices",
+    "contractors.detail.tabs.settings": "Settings",
+    "contractors.overview.personalInfo": "Personal Information",
+    "contractors.overview.serviceInfo": "Service Details",
+    "contractors.overview.financialConfig": "Financial Configuration",
+    "contractors.milestones.title": "Milestones",
+    "contractors.milestones.add": "Add Milestone",
+    "contractors.milestones.empty": "No milestones found",
+    "contractors.invoices.title": "Invoices",
+    "contractors.invoices.empty": "No invoices found",
+    "contractors.settings.title": "Contractor Settings",
 
     // Employees
     "employees.title": "Employees",
@@ -1315,6 +1342,9 @@ const translations: Record<Locale, Record<string, string>> = {
     "nav.reports": "报告",
     "nav.profit_loss": "盈利报告",
     "nav.cost_allocation": "成本分摊",
+    "nav.toolkit": "工具箱",
+    "nav.costSimulator": "成本模拟器",
+    "nav.countryGuide": "国家指南",
 
     // Common
     "common.loading": "加载中...",
@@ -1364,6 +1394,16 @@ const translations: Record<Locale, Record<string, string>> = {
     "dashboard.openInvoices": "待付发票",
     "dashboard.payrollCostTrend": "薪资成本趋势",
     "dashboard.employeeDistribution": "员工分布",
+
+    // Contractors
+    "contractors.title": "承包商管理",
+    "contractors.description": "管理外部承包商、付款条款和发票。",
+    "contractors.list.empty.message": "未找到承包商",
+    "contractors.actions.addContractor": "添加承包商",
+    "contractors.list.table.header.contractor": "承包商",
+    "contractors.list.table.header.service": "服务",
+    "contractors.list.table.header.status": "状态",
+    "contractors.list.table.header.rate": "费率",
 
     // Employees
     "employees.title": "员工管理",

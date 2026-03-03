@@ -42,6 +42,8 @@ import {
   updateLeaveBalance,
   getCustomerLeavePoliciesForCountry,
 } from "./db";
+import { notificationService } from "./services/notificationService";
+import { ContractorInvoiceGenerationService } from "./services/contractorInvoiceGenerationService";
 import { countriesConfig } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 
@@ -341,6 +343,15 @@ export async function runAutoCreatePayrollRuns(): Promise<{ created: number; emp
     created++;
     console.log(`[CronJob] Created payroll run #${runId} for ${countryCode} ${targetMonthStr}`);
 
+    notificationService.send({
+      type: "payroll_draft_created",
+      data: {
+        payrollRunId: runId,
+        countryCode: countryCode,
+        period: targetMonthStr
+      }
+    }).catch(err => console.error("Failed to send payroll notification:", err));
+
     // Get eligible employees for current month
     const eligibleEmployees = await getEmployeesForPayrollMonth(countryCode, targetMonthStr, targetMonthEndStr);
 
@@ -561,7 +572,7 @@ export async function runOverdueInvoiceDetection(): Promise<{ overdueCount: numb
 
   // Find all sent invoices with dueDate < today
   const overdueInvoices = await db
-    .select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber, dueDate: invoices.dueDate })
+    .select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber, dueDate: invoices.dueDate, customerId: invoices.customerId })
     .from(invoices)
     .where(
       and(
@@ -576,6 +587,17 @@ export async function runOverdueInvoiceDetection(): Promise<{ overdueCount: numb
     await db.update(invoices).set({ status: "overdue" }).where(eq(invoices.id, inv.id));
     overdueCount++;
     console.log(`[CronJob] Invoice ${inv.invoiceNumber || inv.id} marked as overdue (due: ${inv.dueDate})`);
+    
+    notificationService.send({
+      type: "invoice_overdue",
+      customerId: inv.customerId,
+      data: {
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoiceNumber,
+        dueDate: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : "N/A"
+      }
+    }).catch(err => console.error("Failed to send overdue notification:", err));
+
     await logAuditAction({
       userName: "System",
       action: "invoice_auto_overdue",
@@ -715,6 +737,19 @@ export async function runMonthlyLeaveAccrual(): Promise<{ processed: number; upd
   return { processed, updated, errors };
 }
 
+// ============================================================================
+// CRON JOB: Daily Contractor Invoice Generation (01:00 Beijing)
+// ============================================================================
+export async function runContractorInvoiceGeneration() {
+  console.log("[CronJob] Running contractor invoice generation...");
+  const result = await ContractorInvoiceGenerationService.processAll();
+  console.log(`[CronJob] Contractor invoices: ${result.generated} generated. Errors: ${result.errors.length}`);
+  if (result.errors.length > 0) {
+    console.error("[CronJob] Contractor invoice errors:", result.errors);
+  }
+  return result;
+}
+
 export function scheduleCronJobs() {
   // Daily at 00:01 Beijing time — employee auto-activation
   cron.schedule("0 1 0 * * *", async () => {
@@ -791,10 +826,21 @@ export function scheduleCronJobs() {
     }
   }, { timezone: "Asia/Shanghai" });
 
+  // Daily at 01:00 Beijing time — Contractor Invoice Generation
+  cron.schedule("0 0 1 * * *", async () => {
+    console.log("[CronJob] Running daily contractor invoice generation (Beijing 01:00)...");
+    try {
+      await runContractorInvoiceGeneration();
+    } catch (err) {
+      console.error("[CronJob] Contractor invoice generation failed:", err);
+    }
+  }, { timezone: "Asia/Shanghai" });
+
   console.log("[CronJob] Scheduled: Employee auto-activation (daily 00:01 Beijing)");
   console.log("[CronJob] Scheduled: Leave status transition (daily 00:02 Beijing)");
   console.log("[CronJob] Scheduled: Overdue invoice detection (daily 00:03 Beijing)");
   console.log("[CronJob] Scheduled: Exchange rate auto-fetch (daily 00:05 Beijing)");
+  console.log("[CronJob] Scheduled: Contractor invoice generation (daily 01:00 Beijing)");
   console.log("[CronJob] Scheduled: Auto-lock adjustments/leave (monthly 5th 00:00 Beijing)");
   console.log("[CronJob] Scheduled: Payroll auto-creation (monthly 5th 00:01 Beijing)");
   console.log("[CronJob] Scheduled: Monthly leave accrual (monthly 1st 00:10 Beijing)");

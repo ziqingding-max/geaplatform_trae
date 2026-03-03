@@ -36,6 +36,8 @@ import {
   CreditCard, Home,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ContractorList from "./Contractors";
 
 import { useI18n } from "@/contexts/i18n";
 const statusColors: Record<string, string> = {
@@ -74,6 +76,7 @@ const visaStatusColors: Record<string, string> = {
 /* ========== Employee List ========== */
 function EmployeeList() {
   const { t } = useI18n();
+  const [activeTab, setActiveTab] = useState("employees");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [customerFilter, setCustomerFilter] = useState<string>("all");
@@ -220,14 +223,22 @@ function EmployeeList() {
   const errCls = (field: string) => errors[field] ? "border-red-500 ring-1 ring-red-500" : "";
 
   return (
-    <Layout breadcrumb={["GEA", "Employees"]}>
+    <Layout breadcrumb={["GEA", "People"]}>
       <div className="p-6 space-y-6 page-enter">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">{t("employees.title")}</h1>
-            <p className="text-sm text-muted-foreground mt-1">{t("employees.description")}</p>
-          </div>
-          <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) setErrors({}); }}>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-4">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">People</h1>
+                <p className="text-sm text-muted-foreground mt-1">Manage your workforce, including employees and contractors.</p>
+              </div>
+              <TabsList>
+                <TabsTrigger value="employees">Employees</TabsTrigger>
+                <TabsTrigger value="contractors">Contractors</TabsTrigger>
+              </TabsList>
+            </div>
+            {activeTab === "employees" && (
+            <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) setErrors({}); }}>
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2" />{t("employees.actions.addEmployee")}</Button>
             </DialogTrigger>
@@ -419,8 +430,10 @@ function EmployeeList() {
               </div>
             </DialogContent>
           </Dialog>
+          )}
         </div>
 
+        <TabsContent value="employees" className="mt-0 space-y-6">
         {/* Filters */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 max-w-sm">
@@ -642,6 +655,11 @@ function EmployeeList() {
             </Card>
           )}
         </div>
+        </TabsContent>
+        <TabsContent value="contractors" className="mt-0">
+          <ContractorList />
+        </TabsContent>
+        </Tabs>
       </div>
     </Layout>
   );

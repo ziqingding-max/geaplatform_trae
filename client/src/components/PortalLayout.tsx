@@ -30,6 +30,8 @@ import {
   DollarSign,
   Globe,
   HelpCircle,
+  Calculator,
+  BookOpen,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -80,6 +82,13 @@ function buildPortalNavGroups(): NavGroup[] {
       labelKey: "nav.finance",
       items: [
         { labelKey: "nav.invoices", icon: Receipt, href: portalPath("/invoices") },
+      ],
+    },
+    {
+      labelKey: "nav.toolkit",
+      items: [
+        { labelKey: "nav.costSimulator", icon: Calculator, href: portalPath("/cost-simulator") },
+        { labelKey: "nav.countryGuide", icon: BookOpen, href: portalPath("/country-guide") },
       ],
     },
     {

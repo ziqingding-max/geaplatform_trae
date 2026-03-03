@@ -27,6 +27,12 @@ import { salesRouter } from "./routers/sales";
 import { knowledgeBaseAdminRouter } from "./routers/knowledgeBaseAdmin";
 import { aiSettingsRouter } from "./routers/aiSettings";
 import { copilotRouter } from "./routers/copilot";
+import { notificationsRouter } from "./routers/notifications";
+import { calculationRouter } from "./routers/calculationRouter";
+import { quotationRouter } from "./routers/quotationRouter";
+import { countryGuideRouter } from "./routers/countryGuideRouter";
+import { salaryBenchmarkRouter } from "./routers/salaryBenchmarkRouter";
+import { contractorsRouter } from "./routers/contractors";
 
 export const appRouter = router({
   system: systemRouter,
@@ -65,6 +71,12 @@ export const appRouter = router({
   knowledgeBaseAdmin: knowledgeBaseAdminRouter,
   aiSettings: aiSettingsRouter,
   copilot: copilotRouter,
+  notifications: notificationsRouter,
+  calculation: calculationRouter,
+  quotations: quotationRouter,
+  countryGuides: countryGuideRouter,
+  salaryBenchmarks: salaryBenchmarkRouter,
+  contractors: contractorsRouter,
 });
 
 export type AppRouter = typeof appRouter;

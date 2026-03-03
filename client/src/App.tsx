@@ -11,11 +11,13 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
+import Contractors from "./pages/Contractors";
+import ContractorDetail from "./pages/ContractorDetail";
 // import Countries from "./pages/Countries"; // Moved to Settings tab
 import Settings from "./pages/Settings";
 import Customers from "./pages/Customers";
-import CustomerDetail from "./pages/admin/customers/CustomerDetail";
-import CustomerPortal from "./pages/portal/CustomerPortal";
+// import CustomerDetail from "./pages/admin/customers/CustomerDetail";
+// import CustomerPortal from "./pages/portal/CustomerPortal";
 import Payroll from "./pages/Payroll";
 import Invoices from "./pages/Invoices";
 import Adjustments from "./pages/Adjustments";
@@ -32,6 +34,7 @@ import VendorBills from "./pages/VendorBills";
 import ProfitLossReport from "./pages/ProfitLossReport";
 // import CostAllocation from "./pages/CostAllocation"; // Removed: merged into VendorBills detail
 import SalesCRM from "./pages/SalesCRM";
+import Quotations from "./pages/Quotations";
 import AdminLogin from "./pages/AdminLogin";
 import AdminInvite from "./pages/AdminInvite";
 
@@ -44,6 +47,15 @@ import { portalTrpc } from "@/lib/portalTrpc";
 import { Loader2 } from "lucide-react";
 import { isPortalDomain, getPortalBasePath } from "@/lib/portalBasePath";
 import { CopilotSmartAssistant } from "@/components/CopilotSmartAssistant";
+
+// Worker Portal pages
+const WorkerLogin = lazy(() => import("./pages/worker/WorkerLogin"));
+const WorkerRegister = lazy(() => import("./pages/worker/WorkerRegister"));
+const WorkerDashboard = lazy(() => import("./pages/worker/WorkerDashboard"));
+const WorkerMilestones = lazy(() => import("./pages/worker/WorkerMilestones"));
+const WorkerInvoices = lazy(() => import("./pages/worker/WorkerInvoices"));
+const WorkerProfile = lazy(() => import("./pages/worker/WorkerProfile"));
+const WorkerOnboarding = lazy(() => import("./pages/worker/WorkerOnboarding"));
 
 const PortalLogin = lazy(() => import("./pages/portal/PortalLogin"));
 const PortalRegister = lazy(() => import("./pages/portal/PortalRegister"));
@@ -61,9 +73,11 @@ const PortalInvoiceDetail = lazy(() => import("./pages/portal/PortalInvoiceDetai
 const PortalForgotPassword = lazy(() => import("./pages/portal/PortalForgotPassword"));
 const PortalResetPassword = lazy(() => import("./pages/portal/PortalResetPassword"));
 const PortalReimbursements = lazy(() => import("./pages/portal/PortalReimbursements"));
-const PortalKnowledgeBase = lazy(() => import("./pages/portal/PortalKnowledgeBase"));
+const PortalKnowledgeBase = lazy(() => import("./pages/portal/PortalKnowledgeBase"));const PortalCostSimulator = lazy(() => import("./pages/portal/CostSimulator"));
+const PortalCountryGuide = lazy(() => import("./pages/portal/CountryGuide"));
+const PortalSalaryBenchmark = lazy(() => import("./pages/portal/PortalSalaryBenchmark"));
 
-// Separate QueryClient for portal (no admin auth redirect)
+// Worker Portal pagesSeparate QueryClient for portal (no admin auth redirect)
 const portalQueryClient = new QueryClient();
 const portalTrpcClient = portalTrpc.createClient({
   links: [
@@ -79,6 +93,49 @@ const portalTrpcClient = portalTrpc.createClient({
     }),
   ],
 });
+
+// Separate QueryClient for worker portal
+const workerQueryClient = new QueryClient();
+const workerTrpcClient = portalTrpc.createClient({ // Reusing portalTrpc config for now, can be split if needed
+  links: [
+    httpBatchLink({
+      url: "/api/worker", // Distinct API endpoint
+      transformer: superjson,
+      fetch(input, init) {
+        return globalThis.fetch(input, {
+          ...(init ?? {}),
+          credentials: "include",
+        });
+      },
+    }),
+  ],
+});
+
+/**
+ * Worker Router — wrapped in its own tRPC provider
+ */
+function WorkerRouter() {
+  return (
+    <portalTrpc.Provider client={workerTrpcClient} queryClient={workerQueryClient}>
+      <QueryClientProvider client={workerQueryClient}>
+        <Suspense fallback={<PortalFallback />}>
+          <Switch>
+            <Route path="/worker/login" component={WorkerLogin} />
+            <Route path="/worker/register" component={WorkerRegister} />
+            <Route path="/worker/invite/:token" component={WorkerRegister} /> {/* Invite link landing */}
+            <Route path="/worker/onboarding" component={WorkerOnboarding} />
+            <Route path="/worker/dashboard" component={WorkerDashboard} />
+            <Route path="/worker/milestones" component={WorkerMilestones} />
+            <Route path="/worker/invoices" component={WorkerInvoices} />
+            <Route path="/worker/profile" component={WorkerProfile} />
+            <Route path="/worker">{() => <Redirect to="/worker/dashboard" />}</Route>
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
+      </QueryClientProvider>
+    </portalTrpc.Provider>
+  );
+}
 
 function PortalFallback() {
   return (
@@ -114,6 +171,9 @@ function PortalRouter() {
             <Route path={`${base}/leave`} component={PortalLeave} />
             <Route path={`${base}/invoices/:id`} component={PortalInvoiceDetail} />
             <Route path={`${base}/invoices`} component={PortalInvoices} />
+            <Route path={`${base}/cost-simulator`} component={PortalCostSimulator} />
+            <Route path={`${base}/country-guide`} component={PortalCountryGuide} />
+            <Route path={`${base}/salary-benchmark`} component={PortalSalaryBenchmark} />
             <Route path={`${base}/knowledge-base`} component={PortalKnowledgeBase} />
             <Route path={`${base}/compliance`}>{() => <Redirect to={`${base}/knowledge-base`} />}</Route>
             <Route path={`${base}/help`}>{() => <Redirect to={`${base}/knowledge-base`} />}</Route>
@@ -134,10 +194,13 @@ function AdminRouter() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/sales-crm" component={SalesCRM} />
+      <Route path="/quotations" component={Quotations} />
       <Route path="/customers" component={Customers} />
-      <Route path="/customers/:id" component={CustomerDetail} />
+      {/* <Route path="/customers/:id" component={CustomerDetail} /> */}
       <Route path="/employees" component={Employees} />
       <Route path="/employees/:id" component={Employees} />
+      <Route path="/contractors" component={Contractors} />
+      <Route path="/contractors/:id" component={ContractorDetail} />
       <Route path="/payroll" component={Payroll} />
       <Route path="/payroll/:id" component={Payroll} />
       <Route path="/invoices" component={Invoices} />
@@ -186,6 +249,11 @@ function Router() {
       {/* Admin auth pages (no auth required) */}
       <Route path="/login" component={AdminLogin} />
       <Route path="/invite" component={AdminInvite} />
+      
+      {/* Worker Portal routes */}
+      <Route path="/worker/:rest*" component={WorkerRouter} />
+      <Route path="/worker" component={WorkerRouter} />
+
       {/* Portal routes (path-based fallback for dev/manus.space) */}
       <Route path="/portal/:a/:b" component={PortalRouter} />
       <Route path="/portal/:rest*" component={PortalRouter} />

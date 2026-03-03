@@ -1,5 +1,5 @@
 
-import { eq, like, count, desc, and, or, gte, lte } from "drizzle-orm";
+import { eq, like, count, desc, and, or, gte, lte, ne } from "drizzle-orm";
 import { 
   employees, InsertEmployee,
   employeeDocuments, InsertEmployeeDocument,
@@ -89,7 +89,11 @@ export async function getActiveEmployeesForPayroll(countryCode: string) {
   const db = await getDb();
   if (!db) return [];
   return await db.select().from(employees)
-    .where(and(eq(employees.country, countryCode), eq(employees.status, "active")));
+    .where(and(
+      eq(employees.country, countryCode), 
+      eq(employees.status, "active"),
+      ne(employees.serviceType, "aor") // Exclude AOR
+    ));
 }
 
 // EMPLOYEE DOCUMENTS
@@ -156,7 +160,10 @@ export async function getCountriesWithActiveEmployees() {
   if (!db) return [];
   const result = await db.select({ country: employees.country })
     .from(employees)
-    .where(eq(employees.status, 'active'))
+    .where(and(
+      eq(employees.status, 'active'),
+      ne(employees.serviceType, 'aor') // Exclude AOR
+    ))
     .groupBy(employees.country);
   return result.map(r => r.country);
 }
@@ -166,7 +173,11 @@ export async function getEmployeesForPayrollMonth(country: string, year: number,
   if (!db) return [];
   // Simplified logic: active employees in that country
   return await db.select().from(employees)
-    .where(and(eq(employees.country, country), eq(employees.status, 'active')));
+    .where(and(
+      eq(employees.country, country), 
+      eq(employees.status, 'active'),
+      ne(employees.serviceType, 'aor') // Exclude AOR
+    ));
 }
 
 // LEAVE BALANCES

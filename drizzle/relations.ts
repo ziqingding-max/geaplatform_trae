@@ -38,6 +38,17 @@ import {
   salesLeads,
   salesActivities,
   onboardingInvites,
+  countrySocialInsuranceItems,
+  countryGuideChapters,
+  salaryBenchmarks,
+  quotations,
+  salesDocuments,
+  contractors,
+  contractorInvoices,
+  contractorInvoiceItems,
+  contractorMilestones,
+  contractorAdjustments,
+  workerUsers,
 } from "./schema";
 
 // ============================================================================
@@ -49,6 +60,9 @@ export const countriesConfigRelations = relations(countriesConfig, ({ many }) =>
   publicHolidays: many(publicHolidays),
   employees: many(employees),
   payrollRuns: many(payrollRuns),
+  socialInsuranceItems: many(countrySocialInsuranceItems),
+  guideChapters: many(countryGuideChapters),
+  salaryBenchmarks: many(salaryBenchmarks),
 }));
 
 export const leaveTypesRelations = relations(leaveTypes, ({ one, many }) => ({
@@ -80,8 +94,10 @@ export const customersRelations = relations(customers, ({ many }) => ({
   employees: many(employees),
   invoices: many(invoices),
   adjustments: many(adjustments),
-  payrollRuns: many(payrollRuns),
+  // payrollRuns: many(payrollRuns), // Removed: payroll runs are per country, not per customer
   salesLeads: many(salesLeads),
+  quotations: many(quotations),
+  salesDocuments: many(salesDocuments),
 }));
 
 export const customerContactsRelations = relations(customerContacts, ({ one }) => ({
@@ -198,10 +214,10 @@ export const reimbursementsRelations = relations(reimbursements, ({ one }) => ({
 // ============================================================================
 
 export const payrollRunsRelations = relations(payrollRuns, ({ one, many }) => ({
-  customer: one(customers, {
-    fields: [payrollRuns.customerId],
-    references: [customers.id],
-  }),
+  // customer: one(customers, { // Removed: payroll runs are per country
+  //   fields: [payrollRuns.customerId],
+  //   references: [customers.id],
+  // }),
   country: one(countriesConfig, {
     fields: [payrollRuns.countryCode],
     references: [countriesConfig.countryCode],
@@ -251,7 +267,7 @@ export const creditNoteApplicationsRelations = relations(creditNoteApplications,
     relationName: "creditNote",
   }),
   targetInvoice: one(invoices, {
-    fields: [creditNoteApplications.targetInvoiceId],
+    fields: [creditNoteApplications.appliedToInvoiceId], // Fixed: targetInvoiceId -> appliedToInvoiceId
     references: [invoices.id],
     relationName: "targetInvoice",
   }),
@@ -298,10 +314,12 @@ export const billInvoiceAllocationsRelations = relations(billInvoiceAllocations,
 
 export const salesLeadsRelations = relations(salesLeads, ({ one, many }) => ({
   customer: one(customers, {
-    fields: [salesLeads.customerId],
+    fields: [salesLeads.convertedCustomerId], // Fixed: customerId -> convertedCustomerId
     references: [customers.id],
   }),
   activities: many(salesActivities),
+  quotations: many(quotations),
+  documents: many(salesDocuments),
 }));
 
 export const salesActivitiesRelations = relations(salesActivities, ({ one }) => ({
@@ -319,5 +337,112 @@ export const onboardingInvitesRelations = relations(onboardingInvites, ({ one })
   employee: one(employees, {
     fields: [onboardingInvites.employeeId],
     references: [employees.id],
+  }),
+}));
+
+// ============================================================================
+// 11. TOOLKIT & SALES ENGINE
+// ============================================================================
+
+export const countrySocialInsuranceItemsRelations = relations(countrySocialInsuranceItems, ({ one }) => ({
+  country: one(countriesConfig, {
+    fields: [countrySocialInsuranceItems.countryCode],
+    references: [countriesConfig.countryCode],
+  }),
+}));
+
+export const countryGuideChaptersRelations = relations(countryGuideChapters, ({ one }) => ({
+  country: one(countriesConfig, {
+    fields: [countryGuideChapters.countryCode],
+    references: [countriesConfig.countryCode],
+  }),
+}));
+
+export const salaryBenchmarksRelations = relations(salaryBenchmarks, ({ one }) => ({
+  country: one(countriesConfig, {
+    fields: [salaryBenchmarks.countryCode],
+    references: [countriesConfig.countryCode],
+  }),
+}));
+
+export const quotationsRelations = relations(quotations, ({ one, many }) => ({
+  lead: one(salesLeads, {
+    fields: [quotations.leadId],
+    references: [salesLeads.id],
+  }),
+  customer: one(customers, {
+    fields: [quotations.customerId],
+    references: [customers.id],
+  }),
+  salesDocuments: many(salesDocuments),
+}));
+
+export const salesDocumentsRelations = relations(salesDocuments, ({ one }) => ({
+  lead: one(salesLeads, {
+    fields: [salesDocuments.leadId],
+    references: [salesLeads.id],
+  }),
+  customer: one(customers, {
+    fields: [salesDocuments.customerId],
+    references: [customers.id],
+  }),
+  quotation: one(quotations, {
+    fields: [salesDocuments.quotationId],
+    references: [quotations.id],
+  }),
+}));
+
+// ============================================================================
+// 12. AOR SERVICES & WORKER PORTAL
+// ============================================================================
+
+export const contractorsRelations = relations(contractors, ({ one, many }) => ({
+  customer: one(customers, {
+    fields: [contractors.customerId],
+    references: [customers.id],
+  }),
+  invoices: many(contractorInvoices),
+  milestones: many(contractorMilestones),
+  adjustments: many(contractorAdjustments),
+  workerUser: one(workerUsers),
+}));
+
+export const contractorInvoicesRelations = relations(contractorInvoices, ({ one, many }) => ({
+  contractor: one(contractors, {
+    fields: [contractorInvoices.contractorId],
+    references: [contractors.id],
+  }),
+  customer: one(customers, {
+    fields: [contractorInvoices.customerId],
+    references: [customers.id],
+  }),
+  items: many(contractorInvoiceItems),
+}));
+
+export const contractorInvoiceItemsRelations = relations(contractorInvoiceItems, ({ one }) => ({
+  invoice: one(contractorInvoices, {
+    fields: [contractorInvoiceItems.invoiceId],
+    references: [contractorInvoices.id],
+  }),
+}));
+
+export const contractorMilestonesRelations = relations(contractorMilestones, ({ one }) => ({
+  contractor: one(contractors, {
+    fields: [contractorMilestones.contractorId],
+    references: [contractors.id],
+  }),
+}));
+
+export const contractorAdjustmentsRelations = relations(contractorAdjustments, ({ one }) => ({
+  contractor: one(contractors, {
+    fields: [contractorAdjustments.contractorId],
+    references: [contractors.id],
+  }),
+}));
+
+export const workerUsersRelations = relations(workerUsers, ({ one }) => ({
+  contractor: one(contractors, {
+    fields: [workerUsers.contractorId],
+    references: [contractors.id],
   }),
 }));

@@ -22,6 +22,7 @@ import { portalSettingsRouter } from "./routers/portalSettingsRouter";
 import { portalPayrollRouter } from "./routers/portalPayrollRouter";
 import { portalReimbursementsRouter } from "./routers/portalReimbursementsRouter";
 import { portalKnowledgeBaseRouter } from "./routers/portalKnowledgeBaseRouter";
+import { portalToolkitRouter } from "./routers/portalToolkitRouter";
 
 export const portalAppRouter = portalRouter({
   auth: portalAuthRouter,
@@ -34,6 +35,7 @@ export const portalAppRouter = portalRouter({
   invoices: portalInvoicesRouter,
   settings: portalSettingsRouter,
   knowledgeBase: portalKnowledgeBaseRouter,
+  toolkit: portalToolkitRouter,
 });
 
 export type PortalAppRouter = typeof portalAppRouter;

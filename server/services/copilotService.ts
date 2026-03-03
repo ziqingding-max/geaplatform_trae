@@ -54,6 +54,54 @@ interface AIResponse {
   costEstimate: number;
 }
 
+// 多模态支持常量
+const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const SUPPORTED_DOCUMENT_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/csv'
+];
+const SUPPORTED_SPREADSHEET_TYPES = [
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+];
+
+// 内容安全工具函数
+function sanitizeContent(content: string): string {
+  // 移除潜在的XSS攻击向量
+  return content
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '')
+    .replace(/data:text\/html/gi, '')
+    .trim();
+}
+
+function validateFileType(mimeType: string): boolean {
+  const allSupportedTypes = [
+    ...SUPPORTED_IMAGE_TYPES,
+    ...SUPPORTED_DOCUMENT_TYPES,
+    ...SUPPORTED_SPREADSHEET_TYPES
+  ];
+  return allSupportedTypes.includes(mimeType);
+}
+
+function getFileAnalysisTaskType(mimeType: string): AITask {
+  if (SUPPORTED_IMAGE_TYPES.includes(mimeType)) {
+    return "knowledge_summarize";
+  }
+  if (SUPPORTED_DOCUMENT_TYPES.includes(mimeType)) {
+    return "vendor_bill_parse";
+  }
+  if (SUPPORTED_SPREADSHEET_TYPES.includes(mimeType)) {
+    return "vendor_bill_parse";
+  }
+  return "knowledge_summarize"; // 默认回退
+}
+
 // 主服务类
 export class CopilotService {
   private db: any;
@@ -77,24 +125,29 @@ export class CopilotService {
 
   // 获取用户配置
   async getUserConfig(): Promise<CopilotUserConfig | null> {
-    // 检查缓存
-    const cached = await this.cacheManager.getUserConfig(this.userId);
-    if (cached) return cached;
+    try {
+      // 检查缓存
+      const cached = await this.cacheManager.getUserConfig(this.userId);
+      if (cached) return cached;
 
-    const db = await this.getDb();
-    const configs = await db
-      .select()
-      .from(copilotUserConfigs)
-      .where(eq(copilotUserConfigs.userId, this.userId))
-      .limit(1);
+      const db = await this.getDb();
+      const configs = await db
+        .select()
+        .from(copilotUserConfigs)
+        .where(eq(copilotUserConfigs.userId, this.userId))
+        .limit(1);
 
-    if (configs.length === 0) {
+      if (configs.length === 0) {
+        return null;
+      }
+
+      // 缓存结果
+      this.cacheManager.setUserConfig(this.userId, configs[0]);
+      return configs[0];
+    } catch (error) {
+      console.error("[CopilotService] Failed to get user config:", error);
       return null;
     }
-
-    // 缓存结果
-    this.cacheManager.setUserConfig(this.userId, configs[0]);
-    return configs[0];
   }
 
   // 更新用户配置
@@ -143,24 +196,41 @@ export class CopilotService {
     }
   }
 
-  // 处理聊天消息
+  // 处理聊天消息 - 增强的多模态支持
   async processChatMessage(
     userMessage: string,
     context?: DataContext,
     attachments?: Attachment[]
   ): Promise<AIResponse> {
     try {
+      // 输入验证
+      if (!userMessage || userMessage.trim().length === 0) {
+        throw new Error("消息内容不能为空");
+      }
+
+      // 内容安全验证
+      const sanitizedMessage = sanitizeContent(userMessage);
+      
+      // 附件验证
+      if (attachments && attachments.length > 0) {
+        for (const attachment of attachments) {
+          if (!validateFileType(attachment.mimeType || '')) {
+            throw new Error(`不支持的文件类型: ${attachment.mimeType}`);
+          }
+        }
+      }
+
       // 构建数据上下文
-      const dataContext = await this.buildDataContext(userMessage, context);
+      const dataContext = await this.buildDataContext(sanitizedMessage, context);
       
       // 生成系统提示词
       const systemPrompt = this.generateSystemPrompt(dataContext);
       
       // 生成用户提示词
-      const userPrompt = this.generateUserPrompt(userMessage, dataContext, attachments);
+      const userPrompt = this.generateUserPrompt(sanitizedMessage, dataContext, attachments);
       
-      // 通过 executeTaskLLM 调用
-      const taskType = this.selectOptimalTaskType(userMessage, attachments, dataContext);
+      // 选择最优任务类型
+      const taskType = this.selectOptimalTaskType(sanitizedMessage, attachments, dataContext);
       
       const invokeParams: InvokeParams = {
         messages: [
@@ -168,40 +238,43 @@ export class CopilotService {
           { role: "user", content: userPrompt }
         ],
         maxTokens: this.calculateOptimalMaxTokens(dataContext),
-        temperature: this.calculateOptimalTemperature(userMessage),
+        temperature: this.calculateOptimalTemperature(sanitizedMessage),
       };
 
       const result = await executeTaskLLM(taskType, invokeParams);
 
       // 提取建议操作
-      const suggestedActions = this.extractSuggestedActions(result.content, userMessage, dataContext);
+      const suggestedActions = this.extractSuggestedActions(result.content, sanitizedMessage, dataContext);
 
       return {
-        text: result.content,
+        text: sanitizeContent(result.content), // 对AI响应也进行安全验证
         suggestedActions,
         confidence: 85, // 默认置信度
-        providerUsed: "ai_gateway", // 简化provider信息
-        modelUsed: "default", // 简化model信息
-        costEstimate: 0.01, // 简化成本估算
+        providerUsed: "ai_gateway",
+        modelUsed: "default",
+        costEstimate: 0.01,
       };
     } catch (error) {
       console.error("[CopilotService] Failed to process chat message:", error);
+      if (error instanceof Error && error.message.includes('不支持的文件类型')) {
+        throw error;
+      }
       throw new Error("处理消息时发生错误，请稍后重试");
     }
   }
 
-  // 选择最优任务类型
+  // 选择最优任务类型 - 增强的多模态支持
   private selectOptimalTaskType(message: string, attachments?: Attachment[], dataContext?: DataContext): AITask {
     // 基于附件类型选择
     if (attachments && attachments.length > 0) {
       const hasImages = attachments.some(a => a.type === 'image');
       const hasFiles = attachments.some(a => a.type === 'file');
       
-      if (hasImages) return "knowledge_summarize"; // 图片分析使用知识总结
+      if (hasImages) return "knowledge_summarize";
       if (hasFiles) {
         const fileTypes = attachments.map(a => this.getFileExtension(a.name));
         if (fileTypes.some(ext => ['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(ext))) {
-          return "vendor_bill_parse"; // 文档分析使用供应商账单解析
+          return "vendor_bill_parse";
         }
       }
     }
@@ -210,29 +283,29 @@ export class CopilotService {
     const lowerMessage = message.toLowerCase();
     
     if (this.containsPayrollKeywords(lowerMessage)) {
-      return "knowledge_summarize"; // 薪酬分析使用知识总结
+      return "knowledge_summarize";
     }
     
     if (this.containsLeaveKeywords(lowerMessage)) {
-      return "knowledge_summarize"; // 休假分析使用知识总结
+      return "knowledge_summarize";
     }
     
     if (this.containsFinancialKeywords(lowerMessage)) {
-      return "invoice_audit"; // 财务分析使用发票审计
+      return "invoice_audit";
     }
     
     if (this.containsReportKeywords(lowerMessage)) {
-      return "knowledge_summarize"; // 报告生成使用知识总结
+      return "knowledge_summarize";
     }
     
     if (this.containsInsightKeywords(lowerMessage)) {
-      return "source_authority_review"; // 洞察提取使用源权威审查
+      return "source_authority_review";
     }
     
     return "knowledge_summarize"; // 默认使用知识总结
   }
 
-  // 构建数据上下文
+  // 构建数据上下文 - 增强错误处理
   private async buildDataContext(message: string, context?: DataContext): Promise<any> {
     const dataContext: any = {
       userRole: this.userRole,
@@ -246,214 +319,261 @@ export class CopilotService {
     }
 
     // 根据消息类型和权限获取相关数据
-    if (this.containsPayrollKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'operations_manager'])) {
-      dataContext.payroll = await this.getPayrollContext(context);
-    }
+    try {
+      if (this.containsPayrollKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'operations_manager'])) {
+        dataContext.payroll = await this.getPayrollContext(context);
+      }
 
-    if (this.containsLeaveKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'operations_manager'])) {
-      dataContext.leave = await this.getLeaveContext(context);
-    }
+      if (this.containsLeaveKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'operations_manager'])) {
+        dataContext.leave = await this.getLeaveContext(context);
+      }
 
-    if (this.containsFinancialKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'finance_manager'])) {
-      dataContext.financial = await this.getFinancialContext(context);
-    }
+      if (this.containsFinancialKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'finance_manager'])) {
+        dataContext.financial = await this.getFinancialContext(context);
+      }
 
-    if (this.containsEmployeeKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'operations_manager'])) {
-      dataContext.employees = await this.getEmployeeContext(context);
-    }
+      if (this.containsEmployeeKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'operations_manager'])) {
+        dataContext.employees = await this.getEmployeeContext(context);
+      }
 
-    if (this.containsCustomerKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'customer_manager'])) {
-      dataContext.customers = await this.getCustomerContext(context);
+      if (this.containsCustomerKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'customer_manager'])) {
+        dataContext.customers = await this.getCustomerContext(context);
+      }
+    } catch (error) {
+      console.error("[CopilotService] Error building data context:", error);
+      // 即使部分数据获取失败，也继续提供基础上下文
+      dataContext.dataError = "部分数据获取失败，可能影响分析准确性";
     }
 
     return dataContext;
   }
 
-  // 获取薪酬上下文
+  // 获取薪酬上下文 - 增强错误处理
   private async getPayrollContext(context?: DataContext): Promise<any> {
-    const db = await this.getDb();
-    
-    // 获取最近薪酬批次
-    const recentBatches = await db
-      .select({
-        id: sql`pr.id`,
-        country: sql`pr.country`,
-        month: sql`pr.month`,
-        year: sql`pr.year`,
-        status: sql`pr.status`,
-        totalAmount: sql`pr.totalAmount`,
-        createdAt: sql`pr.createdAt`,
-      })
-      .from(sql`payrollRuns pr`)
-      .where(sql`pr.status IN ('draft', 'pending_review', 'submitted')`)
-      .orderBy(sql`pr.createdAt DESC`)
-      .limit(5);
+    try {
+      const db = await this.getDb();
+      
+      // 获取最近薪酬批次
+      const recentBatches = await db
+        .select({
+          id: sql`id`,
+          country: sql`country`,
+          month: sql`month`,
+          year: sql`year`,
+          status: sql`status`,
+          totalAmount: sql`totalAmount`,
+          createdAt: sql`createdAt`,
+        })
+        .from(sql`payrollRuns`)
+        .where(sql`status IN ('draft', 'pending_review', 'submitted')`)
+        .orderBy(desc(sql`createdAt`))
+        .limit(5);
 
-    // 获取薪酬统计
-    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
-    const stats = await db
-      .select({
-        draftCount: sql`COUNT(CASE WHEN status = 'draft' THEN 1 END)`,
-        pendingCount: sql`COUNT(CASE WHEN status = 'pending_review' THEN 1 END)`,
-        submittedCount: sql`COUNT(CASE WHEN status = 'submitted' THEN 1 END)`,
-      })
-      .from(sql`payrollRuns`)
-      .where(sql`strftime('%Y-%m', createdAt) = ${currentMonth}`);
+      // 获取薪酬统计
+      const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+      const stats = await db
+        .select({
+          draftCount: sql`COUNT(CASE WHEN status = 'draft' THEN 1 END)`,
+          pendingCount: sql`COUNT(CASE WHEN status = 'pending_review' THEN 1 END)`,
+          submittedCount: sql`COUNT(CASE WHEN status = 'submitted' THEN 1 END)`,
+        })
+        .from(sql`payrollRuns`)
+        .where(sql`strftime('%Y-%m', createdAt) = ${currentMonth}`);
 
-    return {
-      recentBatches,
-      stats: stats[0] || { draftCount: 0, pendingCount: 0, submittedCount: 0 },
-    };
+      return {
+        recentBatches,
+        stats: stats[0] || { draftCount: 0, pendingCount: 0, submittedCount: 0 },
+      };
+    } catch (error) {
+      console.error("[CopilotService] Failed to get payroll context:", error);
+      return { 
+        recentBatches: [], 
+        stats: { draftCount: 0, pendingCount: 0, submittedCount: 0 },
+        error: "薪酬数据获取失败"
+      };
+    }
   }
 
-  // 获取休假上下文
+  // 获取休假上下文 - 增强错误处理
   private async getLeaveContext(context?: DataContext): Promise<any> {
-    const db = await this.getDb();
-    
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    try {
+      const db = await this.getDb();
+      
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    // 获取待审批休假
-    const pendingLeave = await db
-      .select({
-        id: sql`lr.id`,
-        employeeName: sql`e.name`,
-        startDate: sql`lr.startDate`,
-        endDate: sql`lr.endDate`,
-        days: sql`lr.days`,
-        type: sql`lr.type`,
-        status: sql`lr.status`,
-      })
-      .from(sql`leaveRecords lr`)
-      .leftJoin(sql`employees e`, sql`lr.employeeId = e.id`)
-      .where(sql`lr.status = 'pending' AND lr.startDate >= ${thirtyDaysAgo}`)
-      .orderBy(sql`lr.createdAt DESC`)
-      .limit(10);
+      // 获取待审批休假
+      const pendingLeave = await db
+        .select({
+          id: sql`id`,
+          employeeName: sql`name`,
+          startDate: sql`startDate`,
+          endDate: sql`endDate`,
+          days: sql`days`,
+          type: sql`type`,
+          status: sql`status`,
+        })
+        .from(sql`leaveRecords`)
+        .where(sql`status = 'pending' AND startDate >= ${thirtyDaysAgo}`)
+        .orderBy(desc(sql`createdAt`))
+        .limit(10);
 
-    // 获取休假统计
-    const stats = await db
-      .select({
-        pendingCount: sql`COUNT(CASE WHEN status = 'pending' THEN 1 END)`,
-        approvedCount: sql`COUNT(CASE WHEN status = 'approved' THEN 1 END)`,
-        rejectedCount: sql`COUNT(CASE WHEN status = 'rejected' THEN 1 END)`,
-      })
-      .from(sql`leaveRecords`)
-      .where(sql`createdAt >= ${thirtyDaysAgo}`);
+      // 获取休假统计
+      const stats = await db
+        .select({
+          pendingCount: sql`COUNT(CASE WHEN status = 'pending' THEN 1 END)`,
+          approvedCount: sql`COUNT(CASE WHEN status = 'approved' THEN 1 END)`,
+          rejectedCount: sql`COUNT(CASE WHEN status = 'rejected' THEN 1 END)`,
+        })
+        .from(sql`leaveRecords`)
+        .where(sql`createdAt >= ${thirtyDaysAgo}`);
 
-    return {
-      pendingLeave,
-      stats: stats[0] || { pendingCount: 0, approvedCount: 0, rejectedCount: 0 },
-    };
+      return {
+        pendingLeave,
+        stats: stats[0] || { pendingCount: 0, approvedCount: 0, rejectedCount: 0 },
+      };
+    } catch (error) {
+      console.error("[CopilotService] Failed to get leave context:", error);
+      return { 
+        pendingLeave: [], 
+        stats: { pendingCount: 0, approvedCount: 0, rejectedCount: 0 },
+        error: "休假数据获取失败"
+      };
+    }
   }
 
-  // 获取财务上下文
+  // 获取财务上下文 - 增强错误处理
   private async getFinancialContext(context?: DataContext): Promise<any> {
-    const db = await this.getDb();
-    
-    // 获取逾期发票
-    const overdueInvoices = await db
-      .select({
-        id: sql`i.id`,
-        invoiceNumber: sql`i.invoiceNumber`,
-        customerName: sql`c.name`,
-        amount: sql`i.amount`,
-        dueDate: sql`i.dueDate`,
-        status: sql`i.status`,
-        daysOverdue: sql`julianday('now') - julianday(i.dueDate)`,
-      })
-      .from(sql`invoices i`)
-      .leftJoin(sql`customers c`, sql`i.customerId = c.id`)
-      .where(sql`i.status = 'overdue'`)
-      .orderBy(sql`i.dueDate ASC`)
-      .limit(10);
+    try {
+      const db = await this.getDb();
+      
+      // 获取逾期发票
+      const overdueInvoices = await db
+        .select({
+          id: sql`id`,
+          invoiceNumber: sql`invoiceNumber`,
+          customerName: sql`name`,
+          amount: sql`amount`,
+          dueDate: sql`dueDate`,
+          status: sql`status`,
+          daysOverdue: sql`julianday('now') - julianday(dueDate)`,
+        })
+        .from(sql`invoices`)
+        .where(sql`status = 'overdue'`)
+        .orderBy(sql`dueDate ASC`)
+        .limit(10);
 
-    // 获取发票统计
-    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
-    const stats = await db
-      .select({
-        draftCount: sql`COUNT(CASE WHEN status = 'draft' THEN 1 END)`,
-        pendingCount: sql`COUNT(CASE WHEN status = 'pending_review' THEN 1 END)`,
-        sentCount: sql`COUNT(CASE WHEN status = 'sent' THEN 1 END)`,
-        paidCount: sql`COUNT(CASE WHEN status = 'paid' THEN 1 END)`,
-        overdueCount: sql`COUNT(CASE WHEN status = 'overdue' THEN 1 END)`,
-      })
-      .from(sql`invoices`)
-      .where(sql`strftime('%Y-%m', createdAt) = ${currentMonth}`);
+      // 获取发票统计
+      const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+      const stats = await db
+        .select({
+          draftCount: sql`COUNT(CASE WHEN status = 'draft' THEN 1 END)`,
+          pendingCount: sql`COUNT(CASE WHEN status = 'pending_review' THEN 1 END)`,
+          sentCount: sql`COUNT(CASE WHEN status = 'sent' THEN 1 END)`,
+          paidCount: sql`COUNT(CASE WHEN status = 'paid' THEN 1 END)`,
+          overdueCount: sql`COUNT(CASE WHEN status = 'overdue' THEN 1 END)`,
+        })
+        .from(sql`invoices`)
+        .where(sql`strftime('%Y-%m', createdAt) = ${currentMonth}`);
 
-    return {
-      overdueInvoices,
-      stats: stats[0] || { draftCount: 0, pendingCount: 0, sentCount: 0, paidCount: 0, overdueCount: 0 },
-    };
+      return {
+        overdueInvoices,
+        stats: stats[0] || { draftCount: 0, pendingCount: 0, sentCount: 0, paidCount: 0, overdueCount: 0 },
+      };
+    } catch (error) {
+      console.error("[CopilotService] Failed to get financial context:", error);
+      return { 
+        overdueInvoices: [], 
+        stats: { draftCount: 0, pendingCount: 0, sentCount: 0, paidCount: 0, overdueCount: 0 },
+        error: "财务数据获取失败"
+      };
+    }
   }
 
-  // 获取员工上下文
+  // 获取员工上下文 - 增强错误处理
   private async getEmployeeContext(context?: DataContext): Promise<any> {
-    const db = await this.getDb();
-    
-    // 获取试用期员工
-    const probationEmployees = await db
-      .select({
-        id: sql`e.id`,
-        name: sql`e.name`,
-        employeeId: sql`e.employeeId`,
-        department: sql`e.department`,
-        status: sql`e.status`,
-        startDate: sql`e.startDate`,
-        probationEndDate: sql`e.probationEndDate`,
-      })
-      .from(sql`employees e`)
-      .where(sql`e.status = 'probation' AND e.probationEndDate > date('now')`)
-      .orderBy(sql`e.probationEndDate ASC`)
-      .limit(10);
+    try {
+      const db = await this.getDb();
+      
+      // 获取试用期员工
+      const probationEmployees = await db
+        .select({
+          id: sql`id`,
+          name: sql`name`,
+          employeeId: sql`employeeId`,
+          department: sql`department`,
+          status: sql`status`,
+          startDate: sql`startDate`,
+          probationEndDate: sql`probationEndDate`,
+        })
+        .from(sql`employees`)
+        .where(sql`status = 'probation' AND probationEndDate > date('now')`)
+        .orderBy(sql`probationEndDate ASC`)
+        .limit(10);
 
-    // 获取员工统计
-    const stats = await db
-      .select({
-        activeCount: sql`COUNT(CASE WHEN status = 'active' THEN 1 END)`,
-        probationCount: sql`COUNT(CASE WHEN status = 'probation' THEN 1 END)`,
-        inactiveCount: sql`COUNT(CASE WHEN status = 'inactive' THEN 1 END)`,
-      })
-      .from(sql`employees`);
+      // 获取员工统计
+      const stats = await db
+        .select({
+          activeCount: sql`COUNT(CASE WHEN status = 'active' THEN 1 END)`,
+          probationCount: sql`COUNT(CASE WHEN status = 'probation' THEN 1 END)`,
+          inactiveCount: sql`COUNT(CASE WHEN status = 'inactive' THEN 1 END)`,
+        })
+        .from(sql`employees`);
 
-    return {
-      probationEmployees,
-      stats: stats[0] || { activeCount: 0, probationCount: 0, inactiveCount: 0 },
-    };
+      return {
+        probationEmployees,
+        stats: stats[0] || { activeCount: 0, probationCount: 0, inactiveCount: 0 },
+      };
+    } catch (error) {
+      console.error("[CopilotService] Failed to get employee context:", error);
+      return { 
+        probationEmployees: [], 
+        stats: { activeCount: 0, probationCount: 0, inactiveCount: 0 },
+        error: "员工数据获取失败"
+      };
+    }
   }
 
-  // 获取客户上下文
+  // 获取客户上下文 - 增强错误处理
   private async getCustomerContext(context?: DataContext): Promise<any> {
-    const db = await this.getDb();
-    
-    // 获取活跃客户
-    const activeCustomers = await db
-      .select({
-        id: sql`c.id`,
-        name: sql`c.name`,
-        country: sql`c.country`,
-        status: sql`c.status`,
-        contractStatus: sql`cc.status`,
-        lastActivity: sql`c.updatedAt`,
-      })
-      .from(sql`customers c`)
-      .leftJoin(sql`customerContracts cc`, sql`c.id = cc.customerId`)
-      .where(sql`c.status = 'active'`)
-      .orderBy(sql`c.updatedAt DESC`)
-      .limit(10);
+    try {
+      const db = await this.getDb();
+      
+      // 获取活跃客户
+      const activeCustomers = await db
+        .select({
+          id: sql`id`,
+          name: sql`name`,
+          country: sql`country`,
+          status: sql`status`,
+          lastActivity: sql`updatedAt`,
+        })
+        .from(sql`customers`)
+        .where(sql`status = 'active'`)
+        .orderBy(desc(sql`updatedAt`))
+        .limit(10);
 
-    // 获取客户统计
-    const stats = await db
-      .select({
-        activeCount: sql`COUNT(CASE WHEN status = 'active' THEN 1 END)`,
-        inactiveCount: sql`COUNT(CASE WHEN status = 'inactive' THEN 1 END)`,
-        prospectCount: sql`COUNT(CASE WHEN status = 'prospect' THEN 1 END)`,
-      })
-      .from(sql`customers`);
+      // 获取客户统计
+      const stats = await db
+        .select({
+          activeCount: sql`COUNT(CASE WHEN status = 'active' THEN 1 END)`,
+          inactiveCount: sql`COUNT(CASE WHEN status = 'inactive' THEN 1 END)`,
+          prospectCount: sql`COUNT(CASE WHEN status = 'prospect' THEN 1 END)`,
+        })
+        .from(sql`customers`);
 
-    return {
-      activeCustomers,
-      stats: stats[0] || { activeCount: 0, inactiveCount: 0, prospectCount: 0 },
-    };
+      return {
+        activeCustomers,
+        stats: stats[0] || { activeCount: 0, inactiveCount: 0, prospectCount: 0 },
+      };
+    } catch (error) {
+      console.error("[CopilotService] Failed to get customer context:", error);
+      return { 
+        activeCustomers: [], 
+        stats: { activeCount: 0, inactiveCount: 0, prospectCount: 0 },
+        error: "客户数据获取失败"
+      };
+    }
   }
 
   // 生成系统提示词
@@ -461,10 +581,17 @@ export class CopilotService {
     const role = this.userRole;
     const permissions = this.getRolePermissions(role);
     
+    let contextStr = JSON.stringify(dataContext, null, 2);
+    
+    // 如果有错误信息，添加到提示中
+    if (dataContext.dataError) {
+      contextStr += `\n注意: ${dataContext.dataError}`;
+    }
+    
     return `你是一个专业的企业运营助手，专门为GEA EOR SaaS平台提供智能分析服务。
 
 角色权限：${permissions}
-当前数据上下文：${JSON.stringify(dataContext, null, 2)}
+当前数据上下文：${contextStr}
 
 请基于用户的角色权限和数据上下文，提供准确、有用的分析和建议。注意保护敏感信息，只提供用户有权限查看的数据。
 
@@ -473,7 +600,8 @@ export class CopilotService {
 2. 提供具体的数据和见解
 3. 如有风险或问题，明确提醒
 4. 可以建议具体的操作步骤
-5. 保持专业和友好的语气`;
+5. 保持专业和友好的语气
+6. 如果数据获取有问题，请明确告知用户`;
   }
 
   // 生成用户提示词
@@ -483,7 +611,7 @@ export class CopilotService {
     if (attachments && attachments.length > 0) {
       prompt += `用户上传了 ${attachments.length} 个文件：\n`;
       attachments.forEach((att, index) => {
-        prompt += `${index + 1}. ${att.name} (${att.type})\n`;
+        prompt += `${index + 1}. ${att.name} (${att.type}, ${att.mimeType})\n`;
       });
       prompt += '\n';
     }

@@ -35,7 +35,14 @@
 │  │  Role-based procedures    │    │  customerId-scoped procedures    │  │
 │  └─────────┬─────────────────┘    └──────────┬───────────────────────┘  │
 │            │                                  │                        │
-│            ▼                                  ▼                        │
+│            │   ┌──────────────────────────────────┐                    │
+│            │   │  Worker Portal Instance          │                    │
+│            │   │  /api/worker                     │                    │
+│            │   │  Auth: Worker JWT                │                    │
+│            │   │  Context: ctx.workerUser         │                    │
+│            │   └───────────┬──────────────────────┘                    │
+│            │               │                                           │
+│            ▼               ▼                                           ▼
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │                    Shared Data Layer                              │  │
 │  │  Drizzle ORM → MySQL 8 / TiDB Serverless (33 tables)            │  │
@@ -140,6 +147,8 @@ Password reset uses a similar token flow: `/portal/forgot-password` → email wi
 | `copilot` | `routers/copilot.ts` | protected | Chat, context awareness, predictions |
 | `aiSettings` | `routers/aiSettings.ts` | admin | Provider config, task routing policies |
 | `knowledgeBaseAdmin` | `routers/knowledgeBaseAdmin.ts` | admin | Knowledge base management |
+| `notification` | `routers/notification.ts` | protected | In-app notification management |
+| `contractor` | `routers/contractor.ts` | operationsManager | Contractor management and invoicing |
 
 ---
 
@@ -159,7 +168,18 @@ Password reset uses a similar token flow: `/portal/forgot-password` → email wi
 
 ---
 
-## 6. Data Model Overview
+## 6. Worker Portal tRPC Router Map (New)
+
+| Router | File | Key Operations |
+|:---|:---|:---|
+| `auth` | `workerAuthRouter.ts` | Login, invite registration, password reset |
+| `profile` | `workerProfileRouter.ts` | Personal info, bank details |
+| `documents` | `workerDocumentsRouter.ts` | Contract, compliance docs upload |
+| `invoices` | `workerInvoicesRouter.ts` | View and download self-invoices |
+
+---
+
+## 7. Data Model Overview
 
 The 33 database tables are defined in `drizzle/schema.ts` with relationships in `drizzle/relations.ts`. Below is the entity relationship summary organized by functional domain.
 
@@ -240,6 +260,8 @@ Complex business logic is encapsulated in service files under `server/services/`
 | PDF Generation | `pdfService.ts` | Generate invoice PDFs with billing entity branding |
 | AI Gateway | `aiGatewayService.ts` | Centralized LLM task routing and execution |
 | Copilot Service | `copilotService.ts` | Chat processing, context gathering, tool execution |
+| Notification Service | `notificationService.ts` | Multi-channel alert delivery (Email, In-App) |
+| Contractor Invoice | `contractorInvoiceGenerationService.ts` | Daily auto-generation of contractor bills |
 
 ---
 
@@ -256,6 +278,7 @@ All cron jobs are defined in `server/cronJobs.ts` and registered in the server s
 | Leave Accrual | Monthly 1st 00:10 | `runLeaveAccrual()` | Customer leave policies |
 | Auto-Lock | Monthly 5th 00:00 | `runAutoLock()` | None |
 | Auto-Create Payroll | Monthly 5th 00:01 | `runAutoCreatePayroll()` | Auto-lock must complete first |
+| Contractor Invoices | Daily 01:00 | `runContractorInvoiceGen()` | Contractor contracts |
 
 **Important**: The auto-lock job (5th 00:00) must complete before auto-create payroll (5th 00:01). The 1-minute gap provides buffer time. If auto-lock fails, payroll creation will include unlocked data, which is incorrect.
 

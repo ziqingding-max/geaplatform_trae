@@ -1,4 +1,3 @@
-
 import {
   integer,
   text,
@@ -1099,6 +1098,7 @@ export const vendorBills = sqliteTable(
       "overdue",
       "cancelled",
       "void",
+      "applied", // For deposit bills that are applied
     ] }).default("draft").notNull(),
     category: text("category", { enum: [
       "payroll_processing",
@@ -1504,7 +1504,247 @@ export type AITaskExecution = typeof aiTaskExecutions.$inferSelect;
 export type InsertAITaskExecution = typeof aiTaskExecutions.$inferInsert;
 
 // ============================================================================
-// 16. COPILOT ASSISTANT — AI-Powered Enterprise Assistant
+// 16. NOTIFICATIONS
+// ============================================================================
+
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    
+    // Target definition
+    targetPortal: text("targetPortal", { enum: ["admin", "client"] }).notNull(),
+    targetUserId: integer("targetUserId"), // Specific user ID (optional)
+    targetRole: text("targetRole"), // e.g. 'finance_manager', 'hr_manager' (optional)
+    targetCustomerId: integer("targetCustomerId"), // For client portal notifications (optional)
+    
+    // Content definition
+    type: text("type").notNull(), // e.g. 'invoice_sent', 'invoice_overdue'
+    title: text("title").notNull(), // Pre-rendered title for quick display
+    data: text("data", { mode: "json" }), // Dynamic data for template rendering
+    
+    // Status
+    isRead: integer("isRead", { mode: "boolean" }).default(false).notNull(),
+    readAt: integer("readAt", { mode: "timestamp" }),
+    
+    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    notifTargetIdx: index("notif_target_idx").on(table.targetPortal, table.targetUserId, table.targetRole),
+    notifCustomerIdx: index("notif_customer_idx").on(table.targetCustomerId),
+    notifReadIdx: index("notif_read_idx").on(table.isRead),
+    notifTypeIdx: index("notif_type_idx").on(table.type),
+    notifCreatedIdx: index("notif_created_idx").on(table.createdAt),
+  })
+);
+
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = typeof notifications.$inferInsert;
+
+// ============================================================================
+// 17. TOOLKIT & SALES ENGINE
+// ============================================================================
+
+export const countrySocialInsuranceItems = sqliteTable(
+  "country_social_insurance_items",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    countryCode: text("countryCode", { length: 3 }).notNull(),
+    
+    // Item details
+    itemKey: text("itemKey", { length: 50 }).notNull(),     // e.g. "bhxh", "bhyt", "cpf_ordinary"
+    itemNameEn: text("itemNameEn", { length: 200 }).notNull(),
+    itemNameZh: text("itemNameZh", { length: 200 }).notNull(),
+    category: text("category", { enum: [
+      "social_insurance",    // Social Insurance
+      "health_insurance",    // Health Insurance
+      "unemployment",        // Unemployment
+      "pension",             // Pension
+      "work_injury",         // Work Injury
+      "housing_fund",        // Housing Fund
+      "trade_union",         // Trade Union
+      "other_mandatory",     // Other Mandatory
+    ] }).notNull(),
+    
+    // Rates
+    rateEmployer: text("rateEmployer").default("0").notNull(),   // Employer Rate (e.g. 0.175 = 17.5%)
+    rateEmployee: text("rateEmployee").default("0").notNull(),   // Employee Rate
+    
+    // Cap Rules
+    capType: text("capType", { enum: [
+      "none",                // No Cap
+      "fixed_amount",        // Fixed Amount Cap (e.g. 46,800,000 VND)
+      "salary_multiple",     // Multiple of Base (e.g. 20x Regional Minimum Wage)
+      "bracket",             // Bracketed Rate (e.g. Singapore CPF by age)
+    ] }).default("none").notNull(),
+    capBase: text("capBase"),          // Cap Base Amount (used with fixed_amount)
+    capMultiplier: text("capMultiplier"), // Multiplier (used with salary_multiple)
+    capReferenceBase: text("capReferenceBase"), // Reference Base (e.g. "regional_minimum_wage")
+    
+    // Conditions
+    regionCode: text("regionCode"),    // Region Code (e.g. VN-Zone1, CN-BJ, CN-SH)
+    regionName: text("regionName"),    // Region Name
+    ageBracketMin: integer("ageBracketMin"), // Min Age (inclusive)
+    ageBracketMax: integer("ageBracketMax"), // Max Age (inclusive)
+    salaryBracketMin: text("salaryBracketMin"), // Min Salary (inclusive)
+    salaryBracketMax: text("salaryBracketMax"), // Max Salary (inclusive)
+    
+    // Versioning
+    effectiveYear: integer("effectiveYear").notNull(),  // Effective Year
+    effectiveFrom: text("effectiveFrom"),               // Effective Date (ISO)
+    effectiveTo: text("effectiveTo"),                   // Expiry Date (ISO)
+    
+    // Meta
+    legalReference: text("legalReference"),  // Legal Reference (e.g. "Decree No 38/2022/ND-CP")
+    notes: text("notes"),                    // Notes
+    
+    sortOrder: integer("sortOrder").default(0).notNull(),
+    isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    csiCountryYearIdx: index("csi_country_year_idx").on(table.countryCode, table.effectiveYear),
+    csiCountryItemIdx: index("csi_country_item_idx").on(table.countryCode, table.itemKey),
+    csiRegionIdx: index("csi_region_idx").on(table.regionCode),
+  })
+);
+
+export type CountrySocialInsuranceItem = typeof countrySocialInsuranceItems.$inferSelect;
+export type InsertCountrySocialInsuranceItem = typeof countrySocialInsuranceItems.$inferInsert;
+
+export const countryGuideChapters = sqliteTable(
+  "country_guide_chapters",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    countryCode: text("countryCode", { length: 3 }).notNull(),
+    part: integer("part").notNull(),           // 1=Employment Guide, 2=Business Guide
+    chapterKey: text("chapterKey", { length: 50 }).notNull(),
+    titleEn: text("titleEn", { length: 300 }).notNull(),
+    titleZh: text("titleZh", { length: 300 }).notNull(),
+    contentEn: text("contentEn").notNull(),    // Markdown content
+    contentZh: text("contentZh").notNull(),
+    sortOrder: integer("sortOrder").default(0).notNull(),
+    version: text("version", { length: 20 }).notNull(),  // e.g. "2026-Q1"
+    status: text("status", { enum: ["draft", "review", "published", "archived"] })
+      .default("draft").notNull(),
+    metadata: text("metadata", { mode: "json" }),  // Extra structured data
+    effectiveFrom: text("effectiveFrom"),
+    effectiveTo: text("effectiveTo"),
+    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    cgcCountryIdx: index("cgc_country_idx").on(table.countryCode),
+    cgcStatusIdx: index("cgc_status_idx").on(table.status),
+  })
+);
+
+export type CountryGuideChapter = typeof countryGuideChapters.$inferSelect;
+export type InsertCountryGuideChapter = typeof countryGuideChapters.$inferInsert;
+
+export const salaryBenchmarks = sqliteTable(
+  "salary_benchmarks",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    countryCode: text("countryCode", { length: 3 }).notNull(),
+    jobCategory: text("jobCategory", { length: 100 }).notNull(),
+    jobTitle: text("jobTitle", { length: 200 }).notNull(),
+    seniorityLevel: text("seniorityLevel", { enum: ["junior", "mid", "senior", "lead", "director"] }).notNull(),
+    salaryP25: text("salaryP25").notNull(),   // 25th percentile
+    salaryP50: text("salaryP50").notNull(),   // Median
+    salaryP75: text("salaryP75").notNull(),   // 75th percentile
+    currency: text("currency", { length: 3 }).notNull(),
+    dataYear: integer("dataYear").notNull(),
+    source: text("source"),
+    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    sbCountryIdx: index("sb_country_idx").on(table.countryCode),
+    sbJobTitleIdx: index("sb_job_title_idx").on(table.jobTitle),
+  })
+);
+
+export type SalaryBenchmark = typeof salaryBenchmarks.$inferSelect;
+export type InsertSalaryBenchmark = typeof salaryBenchmarks.$inferInsert;
+
+export const quotations = sqliteTable(
+  "quotations",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    quotationNumber: text("quotationNumber", { length: 50 }).notNull().unique(),
+    leadId: integer("leadId"),
+    customerId: integer("customerId"),
+    
+    // Quotation content (JSON snapshot of inputs)
+    countries: text("countries", { mode: "json" }),  // [{countryCode, tier, headcount, unitPrice, serviceType}]
+    
+    // Financials
+    totalMonthly: text("totalMonthly").notNull(),
+    currency: text("currency", { length: 3 }).default("USD").notNull(),
+    
+    // Snapshot Data (Critical for audit)
+    snapshotData: text("snapshotData", { mode: "json" }), // Stores exchange rates, fee versions, salary inputs at time of creation
+    
+    validUntil: text("validUntil"),
+    
+    // Status
+    status: text("status", { enum: ["draft", "sent", "accepted", "expired", "rejected"] })
+      .default("draft").notNull(),
+    
+    // PDF
+    pdfUrl: text("pdfUrl"),
+    pdfKey: text("pdfKey"),
+    
+    // Tracking
+    sentAt: integer("sentAt", { mode: "timestamp" }),
+    sentTo: text("sentTo"),
+    sentBy: integer("sentBy"),
+    
+    createdBy: integer("createdBy").notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    qtNumberIdx: uniqueIndex("qt_number_idx").on(table.quotationNumber),
+    qtLeadIdx: index("qt_lead_idx").on(table.leadId),
+    qtCustomerIdx: index("qt_customer_idx").on(table.customerId),
+    qtStatusIdx: index("qt_status_idx").on(table.status),
+  })
+);
+
+export type Quotation = typeof quotations.$inferSelect;
+export type InsertQuotation = typeof quotations.$inferInsert;
+
+export const salesDocuments = sqliteTable(
+  "sales_documents",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    leadId: integer("leadId"),
+    customerId: integer("customerId"),
+    quotationId: integer("quotationId"), // Optional link to quotation
+    
+    docType: text("docType", { enum: ["quotation", "cost_simulation", "proposal", "contract", "other"] }).notNull(),
+    title: text("title", { length: 255 }).notNull(),
+    
+    fileUrl: text("fileUrl").notNull(),
+    fileKey: text("fileKey", { length: 500 }).notNull(),
+    
+    generatedBy: integer("generatedBy").notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    sdLeadIdx: index("sd_lead_idx").on(table.leadId),
+    sdCustomerIdx: index("sd_customer_idx").on(table.customerId),
+    sdQuotationIdx: index("sd_quotation_idx").on(table.quotationId),
+  })
+);
+
+export type SalesDocument = typeof salesDocuments.$inferSelect;
+export type InsertSalesDocument = typeof salesDocuments.$inferInsert;
+
+// ============================================================================
+// 18. COPILOT ASSISTANT — AI-Powered Enterprise Assistant
 // ============================================================================
 // Re-export all Copilot-related tables and types from copilot-schema.ts
 // This maintains consistency with the project's import patterns
@@ -1536,3 +1776,34 @@ export {
   type InsertCopilotShortcut,
   type InsertCopilotMetric,
 } from "./copilot-schema";
+
+// ============================================================================
+// 19. AOR SERVICES & WORKER PORTAL
+// ============================================================================
+
+export {
+  // Tables
+  contractors,
+  contractorInvoices,
+  contractorInvoiceItems,
+  contractorMilestones,
+  contractorAdjustments,
+  workerUsers,
+  migrationIdMap,
+
+  // Types
+  type Contractor,
+  type ContractorInvoice,
+  type ContractorInvoiceItem,
+  type ContractorMilestone,
+  type ContractorAdjustment,
+  type WorkerUser,
+  type MigrationIdMap,
+  type InsertContractor,
+  type InsertContractorInvoice,
+  type InsertContractorInvoiceItem,
+  type InsertContractorMilestone,
+  type InsertContractorAdjustment,
+  type InsertWorkerUser,
+  type InsertMigrationIdMap,
+} from "./aor-schema";

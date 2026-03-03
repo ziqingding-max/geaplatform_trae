@@ -18,11 +18,18 @@ interface DragState {
   initialPosition: Position | null;
 }
 
+// 屏幕边缘检测常量
+const EDGE_THRESHOLD = 20;
+const FLOATING_BUTTON_SIZE = 56; // w-14 = 56px
+
 export function CopilotSmartAssistant() {
-  const [position, setPosition] = useState<Position>({ x: 20, y: 20 });
+  const [position, setPosition] = useState<Position>({ x: 0, y: 0 });
+  const [isMounted, setIsMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [dragState, setDragState] = useState<DragState>({
     isDragging: false,
     dragStart: null,
@@ -32,50 +39,89 @@ export function CopilotSmartAssistant() {
   const floatingRef = useRef<HTMLDivElement>(null);
   const { context, predictions, shortcuts, isLoading, initialize } = useCopilot();
 
-  // 初始化
+  // 初始化位置 - 只在客户端执行
   useEffect(() => {
-    initialize();
-  }, [initialize]);
+    setIsMounted(true);
+    const getInitialPosition = (): Position => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      return {
+        x: Math.max(20, width - FLOATING_BUTTON_SIZE - 20),
+        y: Math.max(20, height - FLOATING_BUTTON_SIZE - 100)
+      };
+    };
+    setPosition(getInitialPosition());
+  }, []);
+
+  // 初始化Copilot
+  useEffect(() => {
+    if (isMounted) {
+      initialize();
+    }
+  }, [isMounted, initialize]);
+
+  // 响应式定位调整
+  useEffect(() => {
+    if (!isMounted) return;
+
+    const handleResize = () => {
+      setPosition(prev => {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+        
+        return {
+          x: Math.min(width - FLOATING_BUTTON_SIZE, Math.max(0, prev.x)),
+          y: Math.min(height - FLOATING_BUTTON_SIZE, Math.max(0, prev.y))
+        };
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isMounted]);
 
   // 键盘快捷键
   useEffect(() => {
+    if (!isMounted) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + Shift + C 打开/关闭
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
         e.preventDefault();
         setIsOpen(!isOpen);
       }
 
-      // ESC 关闭面板
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape') {
         setIsOpen(false);
+        setIsExpanded(false);
+        setShowSettings(false);
+        setShowHelp(false);
+        setShowShortcuts(false);
       }
 
-      // 快捷键处理
-      if (isOpen) {
-        shortcuts.forEach(shortcut => {
-          if (shortcut.hotkey && matchesHotkey(e, shortcut.hotkey)) {
-            e.preventDefault();
-            handleQuickAction(shortcut);
-          }
-        });
-      }
+      shortcuts.forEach(shortcut => {
+        if (shortcut.hotkey && matchesHotkey(e, shortcut.hotkey)) {
+          e.preventDefault();
+          executeQuickAction(shortcut);
+        }
+      });
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, shortcuts]);
+  }, [isMounted, isOpen, shortcuts]);
 
-  // 拖拽处理
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (showSettings) return; // 设置模式下禁用拖拽
+  // 拖拽功能
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     
     setDragState({
       isDragging: true,
       dragStart: { x: e.clientX, y: e.clientY },
-      initialPosition: { ...position },
+      initialPosition: { ...position }
     });
-  }, [position, showSettings]);
+  };
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!dragState.isDragging || !dragState.dragStart || !dragState.initialPosition) return;
@@ -83,9 +129,32 @@ export function CopilotSmartAssistant() {
     const deltaX = e.clientX - dragState.dragStart.x;
     const deltaY = e.clientY - dragState.dragStart.y;
 
+    const newPosition = {
+      x: dragState.initialPosition.x + deltaX,
+      y: dragState.initialPosition.y + deltaY
+    };
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    let finalX = newPosition.x;
+    let finalY = newPosition.y;
+
+    if (newPosition.x < EDGE_THRESHOLD) {
+      finalX = 0;
+    } else if (newPosition.x > width - EDGE_THRESHOLD - FLOATING_BUTTON_SIZE) {
+      finalX = width - FLOATING_BUTTON_SIZE;
+    }
+
+    if (newPosition.y < EDGE_THRESHOLD) {
+      finalY = 0;
+    } else if (newPosition.y > height - EDGE_THRESHOLD - FLOATING_BUTTON_SIZE) {
+      finalY = height - FLOATING_BUTTON_SIZE;
+    }
+
     setPosition({
-      x: Math.max(10, Math.min(window.innerWidth - 60, dragState.initialPosition.x + deltaX)),
-      y: Math.max(10, Math.min(window.innerHeight - 60, dragState.initialPosition.y + deltaY)),
+      x: Math.max(0, Math.min(width - FLOATING_BUTTON_SIZE, finalX)),
+      y: Math.max(0, Math.min(height - FLOATING_BUTTON_SIZE, finalY))
     });
   }, [dragState]);
 
@@ -125,8 +194,29 @@ export function CopilotSmartAssistant() {
   // 切换主面板
   const toggleMainPanel = useCallback(() => {
     setIsOpen(!isOpen);
-    setIsExpanded(false); // 关闭时重置展开状态
+    setIsExpanded(false);
   }, [isOpen]);
+
+  // 显示帮助信息
+  const toggleHelp = useCallback(() => {
+    setShowHelp(!showHelp);
+    setShowShortcuts(false);
+    setShowSettings(false);
+  }, [showHelp]);
+
+  // 显示快捷键
+  const toggleShortcuts = useCallback(() => {
+    setShowShortcuts(!showShortcuts);
+    setShowHelp(false);
+    setShowSettings(false);
+  }, [showShortcuts]);
+
+  // 显示设置
+  const toggleSettings = useCallback(() => {
+    setShowSettings(!showSettings);
+    setShowHelp(false);
+    setShowShortcuts(false);
+  }, [showSettings]);
 
   // 快捷键匹配
   const matchesHotkey = (e: KeyboardEvent, hotkey: string): boolean => {
@@ -148,9 +238,31 @@ export function CopilotSmartAssistant() {
 
   // 执行快速操作
   const executeQuickAction = async (shortcut: any) => {
-    // 这里可以集成具体的业务逻辑
     console.log('Executing quick action:', shortcut);
-    // 例如：导航到特定页面、打开模态框、执行API调用等
+    
+    try {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      switch (shortcut.action) {
+        case 'navigate_payroll':
+          window.location.href = '/payroll';
+          break;
+        case 'navigate_leave':
+          window.location.href = '/leave';
+          break;
+        case 'navigate_invoices':
+          window.location.href = '/invoices';
+          break;
+        case 'export_current_data':
+          console.log('Exporting data with format:', shortcut.params?.format);
+          break;
+        default:
+          console.log('Unknown action:', shortcut.action);
+      }
+    } catch (error) {
+      console.error('Error executing quick action:', error);
+      throw new Error(`执行快捷操作失败: ${shortcut.title}`);
+    }
   };
 
   // 重要通知检测
@@ -163,8 +275,144 @@ export function CopilotSmartAssistant() {
     return predictions.filter(p => !p.isDismissed).length;
   };
 
+  // 计算面板位置 - 确保在可视区域内
+  const getPanelPosition = (panelWidth: number, panelHeight: number, preferredPosition: 'top' | 'bottom' | 'left' | 'right' = 'top'): Position => {
+    const spacing = 12;
+    let x = position.x;
+    let y = position.y;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    switch (preferredPosition) {
+      case 'top':
+        y = position.y - panelHeight - spacing;
+        x = position.x;
+        if (y < spacing) {
+          y = position.y + FLOATING_BUTTON_SIZE + spacing;
+        }
+        break;
+      case 'bottom':
+        y = position.y + FLOATING_BUTTON_SIZE + spacing;
+        x = position.x;
+        if (y + panelHeight > height - spacing) {
+          y = position.y - panelHeight - spacing;
+        }
+        break;
+      case 'left':
+        x = position.x - panelWidth - spacing;
+        y = position.y;
+        if (x < spacing) {
+          x = position.x + FLOATING_BUTTON_SIZE + spacing;
+        }
+        break;
+      case 'right':
+        x = position.x + FLOATING_BUTTON_SIZE + spacing;
+        y = position.y;
+        if (x + panelWidth > width - spacing) {
+          x = position.x - panelWidth - spacing;
+        }
+        break;
+    }
+
+    if (x + panelWidth > width - spacing) {
+      x = width - panelWidth - spacing;
+    }
+    if (x < spacing) {
+      x = spacing;
+    }
+    if (y + panelHeight > height - spacing) {
+      y = height - panelHeight - spacing;
+    }
+    if (y < spacing) {
+      y = spacing;
+    }
+
+    return { x, y };
+  };
+
+  if (!isMounted) {
+    return null;
+  }
+
   return (
     <div className="fixed inset-0 pointer-events-none z-50">
+      {/* 帮助信息面板 */}
+      {showHelp && (() => {
+        const panelPos = getPanelPosition(320, 240, 'left');
+        return (
+          <div 
+            className="pointer-events-auto bg-white rounded-lg shadow-xl border p-4 w-80"
+            style={{
+              position: 'fixed',
+              left: panelPos.x,
+              top: panelPos.y,
+              zIndex: 60
+            }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-900">使用帮助</h3>
+              <button
+                onClick={() => setShowHelp(false)}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-2 text-sm text-gray-600">
+              <p>• 拖拽悬浮球可以调整位置</p>
+              <p>• Ctrl+Shift+C 快速打开/关闭</p>
+              <p>• ESC 键关闭所有面板</p>
+              <p>• 支持文件上传和智能分析</p>
+              <p>• 点击快捷操作快速导航</p>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 快捷键面板 */}
+      {showShortcuts && (() => {
+        const panelPos = getPanelPosition(320, 240, 'left');
+        return (
+          <div 
+            className="pointer-events-auto bg-white rounded-lg shadow-xl border p-4 w-80"
+            style={{
+              position: 'fixed',
+              left: panelPos.x,
+              top: panelPos.y,
+              zIndex: 60
+            }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-900">快捷键列表</h3>
+              <button
+                onClick={() => setShowShortcuts(false)}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">打开/关闭 Copilot:</span>
+                <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">Ctrl+Shift+C</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">聚焦输入框:</span>
+                <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">Ctrl+Shift+F</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">快捷操作:</span>
+                <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">Ctrl+Shift+A</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">关闭所有面板:</span>
+                <kbd className="px-2 py-1 bg-gray-100 rounded text-xs">ESC</kbd>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 预测卡片 */}
       {predictions.length > 0 && (
         <CopilotPredictions 
@@ -184,25 +432,57 @@ export function CopilotSmartAssistant() {
       )}
 
       {/* 设置面板 */}
-      {showSettings && (
-        <CopilotSettings
-          onClose={() => setShowSettings(false)}
-          className="pointer-events-auto"
-        />
-      )}
+      {showSettings && (() => {
+        const panelPos = getPanelPosition(320, 400, 'left');
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              left: panelPos.x,
+              top: panelPos.y,
+              zIndex: 60
+            }}
+          >
+            <CopilotSettings
+              onClose={() => setShowSettings(false)}
+              className="pointer-events-auto"
+            />
+          </div>
+        );
+      })()}
 
       {/* 主聊天面板 */}
-      {isOpen && (
-        <CopilotChatPanel
-          context={context}
-          shortcuts={shortcuts}
-          onClose={() => setIsOpen(false)}
-          className="pointer-events-auto"
-        />
-      )}
+      {isOpen && (() => {
+        const panelPos = getPanelPosition(384, 600, 'top');
+        return (
+          <div 
+            className="pointer-events-auto"
+            style={{
+              position: 'fixed',
+              left: panelPos.x,
+              top: panelPos.y,
+              zIndex: 60
+            }}
+          >
+            <CopilotChatPanel
+              context={context}
+              shortcuts={shortcuts}
+              onClose={() => setIsOpen(false)}
+              className="mb-4"
+            />
+          </div>
+        );
+      })()}
 
       {/* 悬浮球和控制按钮 */}
-      <div className="absolute pointer-events-auto" style={{ right: position.x, bottom: position.y }}>
+      <div 
+        className="absolute pointer-events-auto" 
+        style={{ 
+          left: position.x, 
+          top: position.y,
+          zIndex: 55 
+        }}
+      >
         {/* 展开/收起按钮 */}
         <div className="flex items-center gap-2 mb-2">
           <button
@@ -219,7 +499,7 @@ export function CopilotSmartAssistant() {
 
           {/* 设置按钮 */}
           <button
-            onClick={() => setShowSettings(!showSettings)}
+            onClick={toggleSettings}
             className={cn(
               "w-8 h-8 rounded-full bg-white shadow-lg border flex items-center justify-center",
               "hover:bg-gray-50 transition-all duration-200",
@@ -232,8 +512,12 @@ export function CopilotSmartAssistant() {
 
           {/* 帮助按钮 */}
           <button
-            onClick={() => {/* 显示帮助 */}}
-            className="w-8 h-8 rounded-full bg-white shadow-lg border flex items-center justify-center hover:bg-gray-50 transition-all duration-200"
+            onClick={toggleHelp}
+            className={cn(
+              "w-8 h-8 rounded-full bg-white shadow-lg border flex items-center justify-center",
+              "hover:bg-gray-50 transition-all duration-200",
+              showHelp ? "bg-green-50 border-green-200" : ""
+            )}
             title="帮助"
           >
             <HelpCircle className="w-4 h-4" />
@@ -241,8 +525,12 @@ export function CopilotSmartAssistant() {
 
           {/* 快捷键提示 */}
           <button
-            onClick={() => {/* 显示快捷键 */}}
-            className="w-8 h-8 rounded-full bg-white shadow-lg border flex items-center justify-center hover:bg-gray-50 transition-all duration-200"
+            onClick={toggleShortcuts}
+            className={cn(
+              "w-8 h-8 rounded-full bg-white shadow-lg border flex items-center justify-center",
+              "hover:bg-gray-50 transition-all duration-200",
+              showShortcuts ? "bg-purple-50 border-purple-200" : ""
+            )}
             title="快捷键"
           >
             <Keyboard className="w-4 h-4" />
