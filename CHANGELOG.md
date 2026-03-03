@@ -4,6 +4,18 @@
 
 ---
 
+## [3.4.0] — 2026-03-03
+
+### Added
+
+- **Trae Copilot Integration**：全新发布智能助手，提供全局悬浮入口，支持上下文感知的 AI 对话与操作建议。
+- **Smart Assistant UI**：悬浮球交互设计，支持聊天、预测分析、文件上传和快捷指令。
+- **Context Awareness**：自动检测当前页面上下文（如 Employee Detail, Invoice List），提供相关建议。
+- **AI Routing Infrastructure**：基于 `aiGatewayService` 的任务路由中心，支持多 Provider 策略与故障回退。
+- **Documentation**：完整的 Copilot 技术方案文档 (`docs/copilot-*.md`) 及架构更新。
+
+---
+
 ## [3.3.1] — 2026-03-03
 
 ### Changed

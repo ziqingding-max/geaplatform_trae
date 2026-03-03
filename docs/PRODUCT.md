@@ -65,6 +65,15 @@ Sales CRM 模块管理销售线索（Leads），支持多服务类型多选（EO
 
 Settings 页面整合了汇率管理、用户管理、Billing Entities 和审计日志四个 Tab（仅 Admin 可见）。汇率管理集成 ExchangeRate-API（主，166 种货币）和 Frankfurter/ECB（备，30 种货币），每日自动抓取，支持全局 Markup 百分比配置和手动覆盖。用户管理支持角色分配（多角色组合）、禁用/启用用户和重置密码。
 
+### 2.12 智能助手 (Trae Copilot)
+
+Trae Copilot 是基于 AI Gateway 架构的全局智能助手，通过右下角悬浮球提供随时随地的 AI 支持。核心能力包括：
+- **上下文感知**：自动读取当前页面数据（如员工薪资详情、发票状态），用户无需手动复制粘贴即可针对当前内容提问。
+- **快捷指令 (Quick Actions)**：根据当前页面上下文推荐常用操作（如在员工列表页推荐“添加新员工”，在发票页推荐“导出 PDF”），一键直达。
+- **智能预测**：基于历史薪酬数据预测下月支出，或分析合同到期风险。
+- **文件分析**：支持上传简历、合同、发票等文件，AI 自动提取关键信息并回答相关问题。
+- **多模型路由**：后台通过 AI Gateway 动态选择最佳大模型（如 GPT-4 处理复杂逻辑，Claude 3.5 处理代码/文本），确保回答质量与成本的最优平衡。
+
 ---
 
 ## 3. 客户门户功能模块
@@ -125,8 +134,9 @@ Settings 页面整合了汇率管理、用户管理、Billing Entities 和审计
 | 财务域 | invoices, invoice_items, credit_note_applications, billing_entities, exchange_rates | 发票、贷记单、账单实体和汇率 |
 | 供应商域 | vendors, vendor_bills, vendor_bill_items, bill_invoice_allocations | 供应商账单和成本分配 |
 | 合规域 | countries_config, leave_types, public_holidays | 126 国配置、假期类型和公共假期 |
-| 系统域 | users, audit_logs, system_config, system_settings | 用户、审计、系统配置 |
 | 销售域 | sales_leads, sales_activities | 销售线索和活动记录 |
+| AI 域 | ai_provider_configs, ai_task_policies, copilot_chats, copilot_messages | AI 提供商配置、任务路由策略及聊天历史 |
+| 系统域 | users, audit_logs, system_config, system_settings | 用户、审计、系统配置 |
 
 完整的字段级数据字典详见 [data-dictionary.md](data-dictionary.md)。
 
