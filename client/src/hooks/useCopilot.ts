@@ -8,12 +8,12 @@ interface CopilotState {
   isLoading: boolean;
   error: string | null;
   context: any;
-  predictions: Prediction[];
-  shortcuts: QuickAction[];
+  predictions: CopilotPrediction[];
+  shortcuts: CopilotShortcut[];
   userConfig: CopilotUserConfig | null;
 }
 
-interface Prediction {
+interface CopilotPrediction {
   id: string;
   type: 'deadline_risk' | 'anomaly' | 'insight' | 'trend';
   title: string;
@@ -29,7 +29,7 @@ interface Prediction {
   };
 }
 
-interface QuickAction {
+interface CopilotShortcut {
   id: string;
   title: string;
   description: string;
@@ -38,6 +38,8 @@ interface QuickAction {
   badge?: string;
   hotkey?: string;
   params?: Record<string, any>;
+  usageCount?: number;
+  lastUsedAt?: Date;
 }
 
 interface CopilotUserConfig {
