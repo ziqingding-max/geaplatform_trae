@@ -57,7 +57,8 @@
 | **数据库** | MySQL 8 / TiDB Serverless | 33 张业务表，关系型存储 |
 | **认证** | Manus OAuth (Admin) + JWT (Portal) | 双认证体系，互不干扰 |
 | **文件存储** | AWS S3 | 员工文档、发票 PDF、报销凭证 |
-| **AI 集成** | LLM (GPT) + Whisper | 供应商账单智能解析 |
+| **AI 路由** | AI Gateway | 统一的大模型任务路由与故障回退机制 |
+| **智能助手** | Trae Copilot | 全局悬浮助手，支持上下文感知与快捷操作 |
 | **定时任务** | node-cron | 员工自动激活、薪酬生成、汇率抓取等 |
 | **测试** | Vitest | 40 个测试文件，633+ 测试用例 |
 | **构建** | esbuild + Vite | 前端 Vite 构建，后端 esbuild 打包 |
@@ -84,6 +85,16 @@
 **合规与审计** 内置 125 国法定假期数据（1,312 条公共假期记录）、法定年假天数、试用期、通知期等合规信息。完整的审计日志记录所有关键操作，支持按用户、操作类型、时间范围筛选。
 
 **仪表盘** 提供五个维度的数据看板（Overview、Operations、Finance、HR & Leave、Activity Log），包含月度趋势图表、收入分析、合同到期预警等，按角色控制可见性。
+
+### 智能助手 (Trae Copilot)
+
+Trae Copilot 是嵌入在系统右下角的全局智能助手，通过 AI Gateway 路由到最佳大模型（如 GPT-4, Claude 3.5 Sonnet），提供以下核心能力：
+
+- **全局悬浮入口**：随时唤起，不打断当前工作流。
+- **上下文感知**：自动识别当前页面（如“员工详情页”、“发票列表页”），提供针对性的操作建议（“分析该员工薪资历史”、“解释当前发票状态”）。
+- **快捷操作 (Quick Actions)**：一键执行系统功能（如“创建新员工”、“生成本月报表”），无需记忆复杂菜单路径。
+- **文件智能分析**：支持拖拽上传 PDF/Excel/图片，自动解析内容并回答相关问题（如“提取简历中的关键技能”、“解释合同条款”）。
+- **智能预测**：基于历史数据预测下月薪酬支出趋势或潜在合规风险。
 
 ### 客户门户 (Client Portal)
 
@@ -331,6 +342,8 @@ npx vitest watch
 | [docs/audit-log-inventory.md](docs/audit-log-inventory.md) | 审计日志清单 |
 | [docs/exchange-rate-api-comparison.md](docs/exchange-rate-api-comparison.md) | 汇率 API 对比 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本变更日志 |
+| [docs/copilot-ai-routing-spec.md](docs/copilot-ai-routing-spec.md) | Copilot 与 AI 路由技术方案 |
+| [docs/copilot-deployment-guide.md](docs/copilot-deployment-guide.md) | Copilot 部署指南 |
 | [SEED_MIGRATION_README.md](SEED_MIGRATION_README.md) | 种子数据迁移指南 |
 
 ---

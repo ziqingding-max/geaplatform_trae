@@ -41,7 +41,7 @@
 │  │  Drizzle ORM → MySQL 8 / TiDB Serverless (33 tables)            │  │
 │  │  S3 Storage → File uploads (invoices, documents, contracts)      │  │
 │  │  ECB API → Exchange rates (daily fetch)                          │  │
-│  │  Manus LLM → AI features (PDF parsing, etc.)                    │  │
+│  │  AI Gateway → Centralized Task Routing (OpenAI, Gemini, etc.)    │  │
 │  └──────────────────────────────────────────────────────────────────┘  │
 │                                                                       │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
@@ -137,6 +137,9 @@ Password reset uses a similar token flow: `/portal/forgot-password` → email wi
 | `allocations` | `routers/allocations.ts` | financeManager | Cost allocation CRUD |
 | `pdfParsing` | `routers/pdfParsing.ts` | operationsManager | AI-powered PDF data extraction |
 | `sales` | `routers/sales.ts` | customerManager | CRM leads, activities, pipeline |
+| `copilot` | `routers/copilot.ts` | protected | Chat, context awareness, predictions |
+| `aiSettings` | `routers/aiSettings.ts` | admin | Provider config, task routing policies |
+| `knowledgeBaseAdmin` | `routers/knowledgeBaseAdmin.ts` | admin | Knowledge base management |
 
 ---
 
@@ -211,6 +214,15 @@ salesLeads (1) ──── (N) salesActivities
 customerLeavePolicies (per-customer leave config)
 ```
 
+### AI & Copilot
+
+```
+ai_provider_configs (LLM provider settings)
+ai_task_policies (Task-specific routing rules)
+copilot_chats (1) ──── (N) copilot_messages
+knowledge_base_articles (KB content)
+```
+
 ---
 
 ## 7. Service Layer
@@ -226,6 +238,8 @@ Complex business logic is encapsulated in service files under `server/services/`
 | Credit Note | `creditNoteService.ts` | Create and apply credit notes to invoices |
 | Exchange Rate | `exchangeRateService.ts` | Fetch ECB rates, calculate markup |
 | PDF Generation | `pdfService.ts` | Generate invoice PDFs with billing entity branding |
+| AI Gateway | `aiGatewayService.ts` | Centralized LLM task routing and execution |
+| Copilot Service | `copilotService.ts` | Chat processing, context gathering, tool execution |
 
 ---
 

@@ -65,6 +65,8 @@ Read documents in this order based on your task type. Each document is self-cont
 | Testing | Vitest | `server/*.test.ts` |
 | i18n | Zustand-based EN/ZH | `client/src/lib/i18n.ts` |
 | Formatting | Centralized utilities | `client/src/lib/format.ts` |
+| AI Routing | Centralized LLM Gateway | `server/services/aiGatewayService.ts` |
+| Copilot | Global Smart Assistant | `client/src/components/CopilotSmartAssistant.tsx` |
 
 ### Essential Commands
 
@@ -93,6 +95,10 @@ client/src/components/PortalLayout.tsx → Portal sidebar navigation
 client/src/lib/format.ts       → Date/currency/country formatting (MUST use these)
 client/src/lib/i18n.ts         → Translation dictionary (MUST add translations here)
 client/src/App.tsx             → Route definitions (Admin + Portal)
+server/services/aiGatewayService.ts → Central AI task routing and execution gateway (Use this!)
+server/services/copilotService.ts   → Copilot business logic and chat handling
+client/src/components/CopilotSmartAssistant.tsx → Global floating assistant component
+docs/copilot-ai-routing-spec.md     → AI routing specification
 ```
 
 ---
@@ -140,6 +146,10 @@ On the 5th of each month, the cron job auto-locks the previous month's `submitte
 ### Rule 10: No Direct `server/_core/` Edits
 
 The `server/_core/` directory is framework-level infrastructure (OAuth, tRPC setup, Vite bridge). Do not modify files in this directory unless explicitly extending infrastructure capabilities.
+
+### Rule 11: AI Task Routing
+
+Direct calls to underlying LLM providers (e.g., via `openai` SDK directly) are **strictly prohibited** for business tasks. All AI capabilities MUST be routed through `executeTaskLLM()` in `server/services/aiGatewayService.ts`. This ensures centralized control over provider selection, fallback strategies, and observability.
 
 ---
 
