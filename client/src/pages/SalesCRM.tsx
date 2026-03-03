@@ -260,13 +260,18 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
     setFormErrors({});
     createMutation.mutate({
       ...formData,
-      contactEmail: formData.contactEmail || undefined,
+      contactEmail: formData.contactEmail.trim() === "" ? "" : formData.contactEmail,
+      contactPhone: formData.contactPhone.trim() === "" ? undefined : formData.contactPhone,
+      country: formData.country.trim() === "" ? undefined : formData.country,
+      industry: formData.industry.trim() === "" ? undefined : formData.industry,
+      source: formData.source.trim() === "" ? undefined : formData.source,
+      notes: formData.notes.trim() === "" ? undefined : formData.notes,
+      intendedServices: formData.intendedServices.trim() === "" ? undefined : formData.intendedServices,
+      targetCountries: formData.targetCountries.trim() === "" ? undefined : formData.targetCountries,
       assignedTo: formData.assignedTo || undefined,
       estimatedEmployees: formData.estimatedEmployees || undefined,
-      estimatedRevenue: formData.estimatedRevenue || undefined,
-      expectedCloseDate: formData.expectedCloseDate || undefined,
-      intendedServices: formData.intendedServices || undefined,
-      targetCountries: formData.targetCountries || undefined,
+      estimatedRevenue: formData.estimatedRevenue.trim() === "" ? undefined : formData.estimatedRevenue,
+      expectedCloseDate: formData.expectedCloseDate.trim() === "" ? undefined : formData.expectedCloseDate,
     });
   }
 
@@ -367,7 +372,7 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
                   </div>
                   <div className="space-y-2">
                     <Label>{t("sales.estimatedRevenue")}</Label>
-                    <Input type="number" min={0} step="0.01" value={formData.estimatedRevenue} onChange={(e) => setFormData({ ...formData, estimatedRevenue: e.target.value })} placeholder="0.00" />
+                    <Input type="number" min={0} step="0.01" value={formData.estimatedRevenue} onChange={(e) => setFormData({ ...formData, estimatedRevenue: e.target.value || "" })} placeholder="0.00" />
                   </div>
                   <div className="space-y-2">
                     <Label>{t("sales.expectedCloseDate")}</Label>
@@ -897,21 +902,21 @@ function EditLeadDialog({
       id: lead.id,
       data: {
         companyName: formData.companyName,
-        contactName: formData.contactName || undefined,
-        contactEmail: formData.contactEmail || undefined,
-        contactPhone: formData.contactPhone || undefined,
-        country: formData.country || undefined,
-        industry: formData.industry || undefined,
-        source: formData.source || undefined,
+        contactName: formData.contactName,
+        contactEmail: formData.contactEmail.trim() === "" ? "" : formData.contactEmail,
+        contactPhone: formData.contactPhone.trim() === "" ? undefined : formData.contactPhone,
+        country: formData.country.trim() === "" ? undefined : formData.country,
+        industry: formData.industry.trim() === "" ? undefined : formData.industry,
+        source: formData.source.trim() === "" ? undefined : formData.source,
         status: formData.status as any,
         lostReason: formData.status === "closed_lost" ? formData.lostReason : undefined,
         assignedTo: formData.assignedTo,
         estimatedEmployees: formData.estimatedEmployees,
-        estimatedRevenue: formData.estimatedRevenue || undefined,
-        notes: formData.notes || undefined,
-        expectedCloseDate: formData.expectedCloseDate || null,
-        intendedServices: formData.intendedServices || undefined,
-        targetCountries: formData.targetCountries || undefined,
+        estimatedRevenue: formData.estimatedRevenue.trim() === "" ? undefined : formData.estimatedRevenue,
+        notes: formData.notes.trim() === "" ? undefined : formData.notes,
+        expectedCloseDate: formData.expectedCloseDate.trim() === "" ? null : formData.expectedCloseDate,
+        intendedServices: formData.intendedServices.trim() === "" ? undefined : formData.intendedServices,
+        targetCountries: formData.targetCountries.trim() === "" ? undefined : formData.targetCountries,
       },
     });
   }

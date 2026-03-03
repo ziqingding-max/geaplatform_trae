@@ -1,0 +1,521 @@
+import { z } from "zod";
+import { 
+  protectedProcedure, 
+  adminProcedure, 
+  operationsManagerProcedure,
+  financeManagerProcedure,
+  customerManagerProcedure 
+} from "../procedures";
+import { router } from "../_core/trpc";
+import { CopilotService } from "../services/copilotService";
+import { PredictionGenerator, QuickActionGenerator } from "../services/copilotGenerators";
+import { 
+  copilotUserConfigs, 
+  copilotConversations, 
+  copilotMessages, 
+  copilotFileAnalyses, 
+  copilotPredictions, 
+  copilotShortcuts, 
+  copilotMetrics 
+} from "../../drizzle/schema";
+import { eq, and, desc, sql, count } from "drizzle-orm";
+import { getDb } from "../db";
+import { hasAnyRole } from "../../shared/roles";
+import { storagePut } from "../storage";
+
+// 输入验证schema
+const sendMessageInput = z.object({
+  message: z.string().min(1).max(5000),
+  attachments: z.array(z.object({
+    type: z.enum(["image", "file"]),
+    url: z.string().url(),
+    name: z.string(),
+    mimeType: z.string().optional(),
+  })).optional(),
+  context: z.object({
+    currentPage: z.string().optional(),
+    selectedCustomerId: z.string().optional(),
+    selectedEmployeeId: z.string().optional(),
+    selectedPayrollId: z.string().optional(),
+    payrollBatches: z.array(z.any()).optional(),
+    leaveRecords: z.array(z.any()).optional(),
+  }).optional(),
+});
+
+const updateUserConfigInput = z.object({
+  preferences: z.object({}).optional(),
+  hotkeys: z.object({}).optional(),
+  enabledFeatures: z.array(z.string()).optional(),
+  disabledPredictions: z.array(z.string()).optional(),
+  theme: z.enum(["auto", "light", "dark"]).optional(),
+  language: z.string().optional(),
+  position: z.string().optional(),
+  isEnabled: z.boolean().optional(),
+});
+
+const uploadFileInput = z.object({
+  fileName: z.string(),
+  fileSize: z.number().max(10 * 1024 * 1024), // 10MB限制
+  mimeType: z.string(),
+  analysisType: z.enum(["invoice", "contract", "document", "receipt", "general"]),
+});
+
+const createShortcutInput = z.object({
+  title: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+  action: z.string().min(1).max(100),
+  params: z.object({}).optional(),
+  icon: z.string().max(50).optional(),
+  hotkey: z.string().max(50).optional(),
+});
+
+// Copilot路由
+export const copilotRouter = router({
+  // 获取用户配置
+  getUserConfig: protectedProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      
+      const configs = await db
+        .select()
+        .from(copilotUserConfigs)
+        .where(eq(copilotUserConfigs.userId, ctx.user.id))
+        .limit(1);
+      
+      if (configs.length === 0) {
+        // 创建默认配置
+        const [newConfig] = await db
+          .insert(copilotUserConfigs)
+          .values({
+            userId: ctx.user.id,
+            preferences: {
+              showCostInfo: true,
+              showProcessingTime: true,
+              autoSaveConversations: true,
+              enableRealTime: false,
+            },
+            hotkeys: {
+              toggleCopilot: "ctrl+shift+c",
+              quickActions: "ctrl+shift+a",
+              focusInput: "ctrl+shift+f",
+            },
+            enabledFeatures: ["chat", "predictions", "shortcuts", "fileUpload"],
+            disabledPredictions: [],
+            theme: "auto",
+            language: ctx.user.language || "zh",
+            position: "bottom-right",
+            isEnabled: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+        
+        return newConfig;
+      }
+      
+      return configs[0];
+    }),
+
+  // 更新用户配置
+  updateUserConfig: protectedProcedure
+    .input(updateUserConfigInput)
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      
+      const existing = await db
+        .select()
+        .from(copilotUserConfigs)
+        .where(eq(copilotUserConfigs.userId, ctx.user.id))
+        .limit(1);
+      
+      if (existing.length === 0) {
+        // 创建新配置
+        const [newConfig] = await db
+          .insert(copilotUserConfigs)
+          .values({
+            userId: ctx.user.id,
+            preferences: input.preferences || {},
+            hotkeys: input.hotkeys || {},
+            enabledFeatures: input.enabledFeatures || ["chat", "predictions", "shortcuts"],
+            disabledPredictions: input.disabledPredictions || [],
+            theme: input.theme || "auto",
+            language: input.language || ctx.user.language || "zh",
+            position: input.position || "bottom-right",
+            isEnabled: input.isEnabled !== false,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+        
+        return newConfig;
+      }
+      
+      // 更新现有配置
+      const [updated] = await db
+        .update(copilotUserConfigs)
+        .set({
+          ...input,
+          updatedAt: new Date(),
+        })
+        .where(eq(copilotUserConfigs.id, existing[0].id))
+        .returning();
+      
+      return updated;
+    }),
+
+  // 发送消息
+  sendMessage: protectedProcedure
+    .input(sendMessageInput)
+    .mutation(async ({ ctx, input }) => {
+      const copilotService = new CopilotService(ctx.user.id, ctx.user.role);
+      
+      try {
+        const response = await copilotService.processChatMessage(
+          input.message,
+          input.context,
+          input.attachments
+        );
+        
+        // 记录使用统计
+        await recordUsage(ctx.user.id, "message", response.costEstimate || 0);
+        
+        return response;
+      } catch (error) {
+        console.error("[CopilotRouter] Failed to process message:", error);
+        throw new Error("处理消息失败，请稍后重试");
+      }
+    }),
+
+  // 获取对话历史
+  getConversationHistory: protectedProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      
+      // 获取活跃的对话
+      const conversations = await db
+        .select()
+        .from(copilotConversations)
+        .where(and(
+          eq(copilotConversations.userId, ctx.user.id),
+          eq(copilotConversations.isActive, true)
+        ))
+        .orderBy(desc(copilotConversations.lastMessageAt))
+        .limit(1);
+      
+      if (conversations.length === 0) {
+        return [];
+      }
+      
+      // 获取对话消息
+      const messages = await db
+        .select()
+        .from(copilotMessages)
+        .where(eq(copilotMessages.conversationId, conversations[0].id))
+        .orderBy(copilotMessages.createdAt)
+        .limit(100);
+      
+      return messages.map(msg => ({
+        id: msg.id.toString(),
+        role: msg.role,
+        content: msg.content,
+        attachments: msg.attachments,
+        metadata: msg.metadata,
+        createdAt: msg.createdAt,
+      }));
+    }),
+
+  // 清空对话历史
+  clearConversationHistory: protectedProcedure
+    .mutation(async ({ ctx }) => {
+      const db = await getDb();
+      
+      // 获取用户的活跃对话
+      const conversations = await db
+        .select({ id: copilotConversations.id })
+        .from(copilotConversations)
+        .where(and(
+          eq(copilotConversations.userId, ctx.user.id),
+          eq(copilotConversations.isActive, true)
+        ));
+      
+      if (conversations.length > 0) {
+        // 删除相关消息
+        await db
+          .delete(copilotMessages)
+          .where(eq(copilotMessages.conversationId, conversations[0].id));
+        
+        // 标记对话为非活跃
+        await db
+          .update(copilotConversations)
+          .set({ 
+            isActive: false,
+            updatedAt: new Date() 
+          })
+          .where(eq(copilotConversations.id, conversations[0].id));
+      }
+      
+      return { success: true };
+    }),
+
+  // 获取预测
+  getPredictions: protectedProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      
+      // 获取用户配置
+      const userConfig = await db
+        .select()
+        .from(copilotUserConfigs)
+        .where(eq(copilotUserConfigs.userId, ctx.user.id))
+        .limit(1);
+      
+      if (userConfig.length === 0 || !userConfig[0].isEnabled) {
+        return [];
+      }
+      
+      const disabledTypes = userConfig[0].disabledPredictions || [];
+      
+      // 获取活跃预测
+      const predictions = await db
+        .select()
+        .from(copilotPredictions)
+        .where(and(
+          eq(copilotPredictions.userId, ctx.user.id),
+          eq(copilotPredictions.isDismissed, false)
+        ))
+        .orderBy(desc(copilotPredictions.createdAt))
+        .limit(20);
+      
+      // 过滤用户禁用的预测类型
+      return predictions.filter(p => !disabledTypes.includes(p.predictionType));
+    }),
+
+  // 忽略预测
+  dismissPrediction: protectedProcedure
+    .input(z.object({ predictionId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      
+      await db
+        .update(copilotPredictions)
+        .set({ 
+          isDismissed: true,
+          dismissedAt: new Date(),
+          updatedAt: new Date()
+        })
+        .where(and(
+          eq(copilotPredictions.id, input.predictionId),
+          eq(copilotPredictions.userId, ctx.user.id)
+        ));
+      
+      return { success: true };
+    }),
+
+  // 获取快捷操作
+  getShortcuts: protectedProcedure
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      
+      // 获取用户自定义快捷操作
+      const userShortcuts = await db
+        .select()
+        .from(copilotShortcuts)
+        .where(and(
+          eq(copilotShortcuts.userId, ctx.user.id),
+          eq(copilotShortcuts.isActive, true)
+        ))
+        .orderBy(desc(copilotShortcuts.usageCount), desc(copilotShortcuts.lastUsedAt))
+        .limit(20);
+      
+      // 生成基于角色的推荐快捷操作
+      const roleBasedShortcuts = QuickActionGenerator.generateRoleBasedShortcuts(ctx.user.role);
+      
+      // 合并并去重
+      const allShortcuts = [...userShortcuts, ...roleBasedShortcuts];
+      
+      return allShortcuts.map(shortcut => ({
+        id: shortcut.id.toString(),
+        title: shortcut.title,
+        description: shortcut.description,
+        icon: shortcut.icon,
+        action: shortcut.action,
+        badge: shortcut.badge,
+        hotkey: shortcut.hotkey,
+        params: shortcut.params,
+        usageCount: shortcut.usageCount || 0,
+        lastUsedAt: shortcut.lastUsedAt,
+      }));
+    }),
+
+  // 创建快捷操作
+  createShortcut: protectedProcedure
+    .input(createShortcutInput)
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      
+      const [shortcut] = await db
+        .insert(copilotShortcuts)
+        .values({
+          userId: ctx.user.id,
+          title: input.title,
+          description: input.description,
+          action: input.action,
+          params: input.params || {},
+          icon: input.icon,
+          hotkey: input.hotkey,
+          usageCount: 0,
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+      
+      return shortcut;
+    }),
+
+  // 更新快捷操作使用统计
+  updateShortcutUsage: protectedProcedure
+    .input(z.object({ shortcutId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      
+      await db
+        .update(copilotShortcuts)
+        .set({
+          usageCount: sql`${copilotShortcuts.usageCount} + 1`,
+          lastUsedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(copilotShortcuts.id, input.shortcutId),
+          eq(copilotShortcuts.userId, ctx.user.id)
+        ));
+      
+      return { success: true };
+    }),
+
+  // 上传文件并分析
+  uploadFile: protectedProcedure
+    .input(uploadFileInput)
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      
+      try {
+        // 创建文件分析记录
+        const [analysis] = await db
+          .insert(copilotFileAnalyses)
+          .values({
+            userId: ctx.user.id,
+            fileName: input.fileName,
+            fileUrl: "", // 将在上传后更新
+            fileKey: "", // 将在上传后更新
+            fileSize: input.fileSize,
+            mimeType: input.mimeType,
+            analysisType: input.analysisType,
+            status: "pending",
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+        
+        // 记录使用统计
+        await recordUsage(ctx.user.id, "file_upload", 0.01); // 小额成本
+        
+        return {
+          analysisId: analysis.id,
+          uploadUrl: "", // 这里应该返回预签名URL
+          status: "pending",
+        };
+      } catch (error) {
+        console.error("[CopilotRouter] Failed to create file analysis:", error);
+        throw new Error("创建文件分析失败");
+      }
+    }),
+
+  // 获取使用统计
+  getUsageStats: protectedProcedure
+    .input(z.object({
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    }).optional())
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      
+      const startDate = input?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const endDate = input?.endDate || new Date().toISOString().slice(0, 10);
+      
+      const stats = await db
+        .select({
+          totalMessages: sum(copilotMetrics.messageCount),
+          totalFileAnalyses: sum(copilotMetrics.fileAnalysisCount),
+          totalPredictions: sum(copilotMetrics.predictionCount),
+          totalShortcuts: sum(copilotMetrics.shortcutUsageCount),
+          totalCost: sum(copilotMetrics.totalCost),
+          avgResponseTime: avg(copilotMetrics.averageResponseTime),
+        })
+        .from(copilotMetrics)
+        .where(and(
+          eq(copilotMetrics.userId, ctx.user.id),
+          sql`${copilotMetrics.date} >= ${startDate}`,
+          sql`${copilotMetrics.date} <= ${endDate}`
+        ));
+      
+      return stats[0];
+    }),
+});
+
+// 辅助函数：记录使用情况
+async function recordUsage(userId: number, usageType: string, cost: number): Promise<void> {
+  const db = await getDb();
+  const today = new Date().toISOString().slice(0, 10);
+  
+  try {
+    // 获取或创建今日统计
+    const existing = await db
+      .select()
+      .from(copilotMetrics)
+      .where(and(
+        eq(copilotMetrics.userId, userId),
+        eq(copilotMetrics.date, today)
+      ))
+      .limit(1);
+    
+    if (existing.length === 0) {
+      // 创建新记录
+      await db
+        .insert(copilotMetrics)
+        .values({
+          userId,
+          date: today,
+          messageCount: usageType === "message" ? 1 : 0,
+          fileAnalysisCount: usageType === "file_upload" ? 1 : 0,
+          predictionCount: 0,
+          shortcutUsageCount: 0,
+          totalCost: cost.toFixed(4),
+          averageResponseTime: 0,
+          createdAt: new Date(),
+        });
+    } else {
+      // 更新现有记录
+      const updateData: any = {
+        totalCost: sql`${copilotMetrics.totalCost} + ${cost.toFixed(4)}`,
+        updatedAt: new Date(),
+      };
+      
+      if (usageType === "message") {
+        updateData.messageCount = sql`${copilotMetrics.messageCount} + 1`;
+      } else if (usageType === "file_upload") {
+        updateData.fileAnalysisCount = sql`${copilotMetrics.fileAnalysisCount} + 1`;
+      } else if (usageType === "shortcut") {
+        updateData.shortcutUsageCount = sql`${copilotMetrics.shortcutUsageCount} + 1`;
+      }
+      
+      await db
+        .update(copilotMetrics)
+        .set(updateData)
+        .where(eq(copilotMetrics.id, existing[0].id));
+    }
+  } catch (error) {
+    console.error("[CopilotRouter] Failed to record usage:", error);
+  }
+}
