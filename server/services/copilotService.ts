@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, count, sum, avg } from "drizzle-orm";
+import { getDb } from "../db";
 import { 
   copilotUserConfigs, 
   copilotConversations, 
@@ -7,117 +7,31 @@ import {
   copilotPredictions, 
   copilotShortcuts, 
   copilotMetrics,
-  users,
-  customers,
-  employees,
-  payrollRuns,
-  leaveRecords,
-  adjustments,
-  reimbursements,
-  invoices,
-  countriesConfig,
-  exchangeRates
+  type CopilotUserConfig,
+  type CopilotConversation,
+  type CopilotMessage,
+  type CopilotFileAnalysis,
+  type CopilotPrediction,
+  type CopilotShortcut,
+  type CopilotMetric
 } from "../../drizzle/schema";
-import { getDb } from "../db";
-import { invokeAIGateway, type AITask, type AIProvider } from "./aiGatewayService";
+import { eq, and, desc, sql, count } from "drizzle-orm";
 import { hasAnyRole } from "../../shared/roles";
 import { storagePut } from "../storage";
 import { ENV } from "../_core/env";
 import { getCopilotCacheManager } from "./copilotCache";
+import { executeTaskLLM } from "./aiGatewayService";
+import type { InvokeParams, AITask } from "../_core/llm";
 
-// 扩展AI任务类型
-export const COPILOT_TASKS = [
-  "copilot_chat",
-  "copilot_data_analysis", 
-  "copilot_file_analysis",
-  "copilot_report_generation",
-  "copilot_insights_extraction",
-  "copilot_payroll_analysis",
-  "copilot_leave_analysis",
-  "copilot_financial_analysis"
-] as const;
-
-export type CopilotTask = typeof COPILOT_TASKS[number];
-
-// 核心接口定义
-export interface AIContext {
-  userMessage: string;
-  dataContext?: DataContext;
-  attachments?: Attachment[];
-  options?: AIOptions;
-  userRole: string;
-  currentPage?: string;
-}
-
-export interface DataContext {
-  accessibleScopes: DataScope;
-  relevantData: any;
-  summary: string;
-  sources: string[];
-}
-
-export interface DataScope {
-  customers: boolean;
-  employees: boolean;
-  payroll: boolean;
-  invoices: boolean;
-  vendors: boolean;
-  reports: boolean;
-  sales: boolean;
-}
-
-export interface Attachment {
-  type: "image" | "file";
+// 类型定义
+interface Attachment {
+  type: 'image' | 'file';
   url: string;
   name: string;
   mimeType?: string;
 }
 
-export interface AIOptions {
-  preferredProvider?: AIProvider;
-  creativityLevel?: "conservative" | "balanced" | "creative";
-  responseFormat?: "text" | "json" | "markdown";
-}
-
-export interface AIResponse {
-  text: string;
-  suggestedActions?: SuggestedAction[];
-  confidence?: number;
-  providerUsed?: string;
-  modelUsed?: string;
-  costEstimate?: number;
-}
-
-export interface SuggestedAction {
-  type: "navigate" | "export" | "create" | "analyze";
-  label: string;
-  target?: string;
-  params?: Record<string, any>;
-}
-
-export interface Prediction {
-  id: string;
-  type: "deadline_risk" | "anomaly" | "insight" | "trend";
-  title: string;
-  description: string;
-  confidence: number;
-  severity: "low" | "medium" | "high" | "critical";
-  expiresAt?: Date;
-  suggestedAction?: SuggestedAction;
-}
-
-export interface QuickAction {
-  id: string;
-  title: string;
-  description: string;
-  icon: any;
-  action: string;
-  badge?: string;
-  hotkey?: string;
-  params?: Record<string, any>;
-}
-
-export interface OperationalContext {
+interface DataContext {
   currentPage?: string;
   selectedCustomerId?: string;
   selectedEmployeeId?: string;
@@ -125,6 +39,19 @@ export interface OperationalContext {
   payrollBatches?: any[];
   leaveRecords?: any[];
   userRole: string;
+}
+
+interface AIResponse {
+  text: string;
+  suggestedActions?: Array<{
+    label: string;
+    action: string;
+    params?: Record<string, any>;
+  }>;
+  confidence: number;
+  providerUsed: string;
+  modelUsed: string;
+  costEstimate: number;
 }
 
 // 主服务类
@@ -140,7 +67,8 @@ export class CopilotService {
     this.cacheManager = getCopilotCacheManager();
   }
 
-  private async ensureDb() {
+  // 获取数据库连接
+  private async getDb() {
     if (!this.db) {
       this.db = await getDb();
     }
@@ -149,37 +77,45 @@ export class CopilotService {
 
   // 获取用户配置
   async getUserConfig(): Promise<CopilotUserConfig | null> {
-    const db = await this.ensureDb();
+    // 检查缓存
+    const cached = await this.cacheManager.getUserConfig(this.userId);
+    if (cached) return cached;
+
+    const db = await this.getDb();
     const configs = await db
       .select()
       .from(copilotUserConfigs)
       .where(eq(copilotUserConfigs.userId, this.userId))
       .limit(1);
-    
-    return configs[0] || null;
+
+    if (configs.length === 0) {
+      return null;
+    }
+
+    // 缓存结果
+    this.cacheManager.setUserConfig(this.userId, configs[0]);
+    return configs[0];
   }
 
   // 更新用户配置
   async updateUserConfig(config: Partial<CopilotUserConfig>): Promise<boolean> {
-    const db = await this.ensureDb();
-    const existing = await this.getUserConfig();
+    const db = await this.getDb();
     
-    if (existing) {
-      await db
-        .update(copilotUserConfigs)
-        .set({
-          ...config,
-          updatedAt: new Date(),
-        })
-        .where(eq(copilotUserConfigs.id, existing.id));
-    } else {
-      await db
-        .insert(copilotUserConfigs)
-        .values({
+    try {
+      const existing = await db
+        .select()
+        .from(copilotUserConfigs)
+        .where(eq(copilotUserConfigs.userId, this.userId))
+        .limit(1);
+
+      if (existing.length === 0) {
+        // 创建新配置
+        await db.insert(copilotUserConfigs).values({
           userId: this.userId,
           preferences: config.preferences || {},
           hotkeys: config.hotkeys || {},
           enabledFeatures: config.enabledFeatures || ["chat", "predictions", "shortcuts"],
+          disabledPredictions: config.disabledPredictions || [],
           theme: config.theme || "auto",
           language: config.language || "zh",
           position: config.position || "bottom-right",
@@ -187,210 +123,71 @@ export class CopilotService {
           createdAt: new Date(),
           updatedAt: new Date(),
         });
+      } else {
+        // 更新现有配置
+        await db
+          .update(copilotUserConfigs)
+          .set({
+            ...config,
+            updatedAt: new Date(),
+          })
+          .where(eq(copilotUserConfigs.id, existing[0].id));
+      }
+
+      // 清除缓存
+      await this.cacheManager.invalidateUserCache(this.userId);
+      return true;
+    } catch (error) {
+      console.error("[CopilotService] Failed to update user config:", error);
+      return false;
     }
-    
-    return true;
   }
 
   // 处理聊天消息
   async processChatMessage(
-    message: string,
-    context?: OperationalContext,
-    attachments?: Attachment[],
-    options?: AIOptions
+    userMessage: string,
+    context?: DataContext,
+    attachments?: Attachment[]
   ): Promise<AIResponse> {
-    const db = await this.ensureDb();
-    
     try {
-      // 1. 获取或创建会话
-      let conversation = await this.getActiveConversation();
-      if (!conversation) {
-        conversation = await this.createConversation(context);
-      }
+      // 构建数据上下文
+      const dataContext = await this.buildDataContext(userMessage, context);
+      
+      // 生成系统提示词
+      const systemPrompt = this.generateSystemPrompt(dataContext);
+      
+      // 生成用户提示词
+      const userPrompt = this.generateUserPrompt(userMessage, dataContext, attachments);
+      
+      // 通过 executeTaskLLM 调用
+      const taskType = this.selectOptimalTaskType(userMessage, attachments, dataContext);
+      
+      const invokeParams: InvokeParams = {
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        maxTokens: this.calculateOptimalMaxTokens(dataContext),
+        temperature: this.calculateOptimalTemperature(userMessage),
+      };
 
-      // 2. 保存用户消息
-      await this.saveMessage(conversation.id, "user", message, attachments);
+      const result = await executeTaskLLM(taskType, invokeParams);
 
-      // 3. 构建数据上下文
-      const dataContext = await this.buildDataContext(message, context);
+      // 提取建议操作
+      const suggestedActions = this.extractSuggestedActions(result.content, userMessage, dataContext);
 
-      // 4. 选择最优任务类型
-      const taskType = this.selectOptimalTaskType(message, attachments, dataContext);
-
-      // 5. 生成AI响应
-      const aiResponse = await this.generateAIResponse({
-        userMessage: message,
-        dataContext,
-        attachments,
-        options,
-        userRole: this.userRole,
-        currentPage: context?.currentPage,
-      });
-
-      // 6. 保存AI响应
-      await this.saveMessage(conversation.id, "assistant", aiResponse.text, undefined, {
-        taskType,
-        providerUsed: aiResponse.providerUsed,
-        modelUsed: aiResponse.modelUsed,
-        costEstimate: aiResponse.costEstimate,
-        processingTime: Date.now(),
-      });
-
-      // 7. 更新会话统计
-      await this.updateConversationStats(conversation.id);
-
-      return aiResponse;
-
+      return {
+        text: result.content,
+        suggestedActions,
+        confidence: 85, // 默认置信度
+        providerUsed: "ai_gateway", // 简化provider信息
+        modelUsed: "default", // 简化model信息
+        costEstimate: 0.01, // 简化成本估算
+      };
     } catch (error) {
-      console.error("[CopilotService] Chat processing error:", error);
+      console.error("[CopilotService] Failed to process chat message:", error);
       throw new Error("处理消息时发生错误，请稍后重试");
     }
-  }
-
-  // 获取活跃的会话
-  private async getActiveConversation(): Promise<CopilotConversation | null> {
-    const db = await this.ensureDb();
-    const conversations = await db
-      .select()
-      .from(copilotConversations)
-      .where(and(
-        eq(copilotConversations.userId, this.userId),
-        eq(copilotConversations.isActive, true)
-      ))
-      .orderBy(desc(copilotConversations.lastMessageAt))
-      .limit(1);
-    
-    return conversations[0] || null;
-  }
-
-  // 创建新会话
-  private async createConversation(context?: OperationalContext): Promise<CopilotConversation> {
-    const db = await this.ensureDb();
-    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const [conversation] = await db
-      .insert(copilotConversations)
-      .values({
-        userId: this.userId,
-        sessionId,
-        title: "新对话",
-        context: context || {},
-        messageCount: 0,
-        isActive: true,
-        lastMessageAt: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
-    
-    return conversation;
-  }
-
-  // 保存消息
-  private async saveMessage(
-    conversationId: number,
-    role: "user" | "assistant" | "system",
-    content: string,
-    attachments?: Attachment[],
-    metadata?: any
-  ): Promise<void> {
-    const db = await this.ensureDb();
-    
-    await db
-      .insert(copilotMessages)
-      .values({
-        conversationId,
-        role,
-        content,
-        attachments: attachments || null,
-        metadata: metadata || null,
-        createdAt: new Date(),
-      });
-  }
-
-  // 更新会话统计
-  private async updateConversationStats(conversationId: number): Promise<void> {
-    const db = await this.ensureDb();
-    
-    const messageCount = await db
-      .select({ count: count() })
-      .from(copilotMessages)
-      .where(eq(copilotMessages.conversationId, conversationId));
-    
-    await db
-      .update(copilotConversations)
-      .set({
-        messageCount: messageCount[0].count,
-        lastMessageAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(copilotConversations.id, conversationId));
-  }
-
-  // 构建数据上下文
-  private async buildDataContext(message: string, context?: OperationalContext): Promise<DataContext> {
-    const accessibleScopes = this.getAccessibleScopes();
-    const relevantData: any = {};
-    const sources: string[] = [];
-
-    try {
-      // 分析消息意图，提取相关数据
-      if (this.containsPayrollKeywords(message) && accessibleScopes.payroll) {
-        const payrollData = await this.getPayrollData(context);
-        relevantData.payroll = payrollData;
-        sources.push("payroll_runs");
-      }
-
-      if (this.containsLeaveKeywords(message) && accessibleScopes.employees) {
-        const leaveData = await this.getLeaveData(context);
-        relevantData.leave = leaveData;
-        sources.push("leave_records");
-      }
-
-      if (this.containsFinancialKeywords(message) && accessibleScopes.invoices) {
-        const financialData = await this.getFinancialData(context);
-        relevantData.financial = financialData;
-        sources.push("invoices", "exchange_rates");
-      }
-
-      if (this.containsEmployeeKeywords(message) && accessibleScopes.employees) {
-        const employeeData = await this.getEmployeeData(context);
-        relevantData.employees = employeeData;
-        sources.push("employees");
-      }
-
-      // 生成数据摘要
-      const summary = this.generateDataSummary(relevantData);
-
-      return {
-        accessibleScopes,
-        relevantData,
-        summary,
-        sources,
-      };
-
-    } catch (error) {
-      console.error("[CopilotService] Error building data context:", error);
-      return {
-        accessibleScopes,
-        relevantData: {},
-        summary: "数据获取失败",
-        sources: [],
-      };
-    }
-  }
-
-  // 获取权限范围
-  private getAccessibleScopes(): DataScope {
-    return {
-      customers: hasAnyRole(this.userRole, ["admin", "customer_manager"]),
-      employees: hasAnyRole(this.userRole, ["admin", "customer_manager", "operations_manager"]),
-      payroll: hasAnyRole(this.userRole, ["admin", "operations_manager"]),
-      invoices: hasAnyRole(this.userRole, ["admin", "finance_manager"]),
-      vendors: hasAnyRole(this.userRole, ["admin", "finance_manager"]),
-      reports: hasAnyRole(this.userRole, ["admin", "finance_manager", "operations_manager"]),
-      sales: hasAnyRole(this.userRole, ["admin", "customer_manager"]),
-    };
   }
 
   // 选择最优任务类型
@@ -400,11 +197,11 @@ export class CopilotService {
       const hasImages = attachments.some(a => a.type === 'image');
       const hasFiles = attachments.some(a => a.type === 'file');
       
-      if (hasImages) return "copilot_file_analysis";
+      if (hasImages) return "knowledge_summarize"; // 图片分析使用知识总结
       if (hasFiles) {
         const fileTypes = attachments.map(a => this.getFileExtension(a.name));
         if (fileTypes.some(ext => ['pdf', 'doc', 'docx', 'xls', 'xlsx'].includes(ext))) {
-          return "copilot_file_analysis";
+          return "vendor_bill_parse"; // 文档分析使用供应商账单解析
         }
       }
     }
@@ -413,449 +210,399 @@ export class CopilotService {
     const lowerMessage = message.toLowerCase();
     
     if (this.containsPayrollKeywords(lowerMessage)) {
-      return "copilot_payroll_analysis";
+      return "knowledge_summarize"; // 薪酬分析使用知识总结
     }
     
     if (this.containsLeaveKeywords(lowerMessage)) {
-      return "copilot_leave_analysis";
+      return "knowledge_summarize"; // 休假分析使用知识总结
     }
     
     if (this.containsFinancialKeywords(lowerMessage)) {
-      return "copilot_financial_analysis";
+      return "invoice_audit"; // 财务分析使用发票审计
     }
     
     if (this.containsReportKeywords(lowerMessage)) {
-      return "copilot_report_generation";
+      return "knowledge_summarize"; // 报告生成使用知识总结
     }
     
     if (this.containsInsightKeywords(lowerMessage)) {
-      return "copilot_insights_extraction";
+      return "source_authority_review"; // 洞察提取使用源权威审查
     }
     
-    return "copilot_chat";
+    return "knowledge_summarize"; // 默认使用知识总结
   }
 
-  // 生成AI响应
-  private async generateAIResponse(context: AIContext): Promise<AIResponse> {
-    const { userMessage, dataContext, attachments, options, userRole, currentPage } = context;
-    
-    // 构建系统提示词
-    const systemPrompt = this.buildSystemPrompt(userRole, dataContext);
-    
-    // 构建用户提示词
-    const userPrompt = this.buildUserPrompt(userMessage, dataContext, attachments, currentPage);
-
-    // 通过AI Gateway调用
-    const result = await invokeAIGateway({
-      task: this.selectOptimalTaskType(userMessage, attachments, dataContext),
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      maxTokens: this.calculateOptimalMaxTokens(dataContext),
-      temperature: this.calculateOptimalTemperature(userMessage),
-      ...(options?.preferredProvider && { preferredProvider: options.preferredProvider }),
-    });
-
-    // 提取建议操作
-    const suggestedActions = this.extractSuggestedActions(result.content, userMessage, dataContext);
-
-    return {
-      text: result.content,
-      suggestedActions,
-      confidence: result.confidence,
-      providerUsed: result.provider,
-      modelUsed: result.model,
-      costEstimate: parseFloat(result.costEstimate || "0"),
+  // 构建数据上下文
+  private async buildDataContext(message: string, context?: DataContext): Promise<any> {
+    const dataContext: any = {
+      userRole: this.userRole,
+      timestamp: new Date().toISOString(),
+      messageType: this.classifyMessageType(message),
     };
+
+    // 添加页面上下文
+    if (context?.currentPage) {
+      dataContext.currentPage = context.currentPage;
+    }
+
+    // 根据消息类型和权限获取相关数据
+    if (this.containsPayrollKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'operations_manager'])) {
+      dataContext.payroll = await this.getPayrollContext(context);
+    }
+
+    if (this.containsLeaveKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'operations_manager'])) {
+      dataContext.leave = await this.getLeaveContext(context);
+    }
+
+    if (this.containsFinancialKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'finance_manager'])) {
+      dataContext.financial = await this.getFinancialContext(context);
+    }
+
+    if (this.containsEmployeeKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'operations_manager'])) {
+      dataContext.employees = await this.getEmployeeContext(context);
+    }
+
+    if (this.containsCustomerKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ['admin', 'customer_manager'])) {
+      dataContext.customers = await this.getCustomerContext(context);
+    }
+
+    return dataContext;
   }
 
-  // 构建系统提示词
-  private buildSystemPrompt(userRole: string, dataContext?: DataContext): string {
-    const basePrompt = `你是一个专业的企业运营助手，帮助用户分析数据、解答问题和提供建议。`;
+  // 获取薪酬上下文
+  private async getPayrollContext(context?: DataContext): Promise<any> {
+    const db = await this.getDb();
     
-    const roleContext = this.getRoleSpecificContext(userRole);
-    
-    const dataContextPrompt = dataContext ? `
-可访问的数据范围：
-${Object.entries(dataContext.accessibleScopes)
-  .filter(([_, accessible]) => accessible)
-  .map(([scope, _]) => `- ${scope}: 可访问`)
-  .join('\n')}
-
-当前数据摘要：${dataContext.summary}
-` : '';
-
-    const safetyGuidelines = `
-重要原则：
-1. 只基于用户权限范围内的数据进行分析
-2. 不提供具体的个人敏感信息（如薪资、银行账号等）
-3. 使用专业的商业语言
-4. 提供可操作的建议
-5. 如不确定，建议用户咨询相关专业人士
-`;
-
-    return `${basePrompt}\n\n${roleContext}\n\n${dataContextPrompt}\n\n${safetyGuidelines}`;
-  }
-
-  // 获取角色特定上下文
-  private getRoleSpecificContext(userRole: string): string {
-    const contexts = {
-      "admin": "作为系统管理员，你可以访问所有数据和功能，请提供全面的分析和建议。",
-      "customer_manager": "作为客户经理，你专注于客户管理、合同和销售相关数据，请重点关注客户关系和业务拓展。",
-      "operations_manager": "作为运营经理，你专注于员工管理、薪资、休假等运营数据，请重点关注运营效率和合规性。",
-      "finance_manager": "作为财务经理，你专注于发票、财务报表、成本分析等财务数据，请重点关注财务健康和成本控制。",
-      "user": "作为普通用户，你具有基础的查看权限，请基于可用数据提供帮助。"
-    };
-    
-    return contexts[userRole as keyof typeof contexts] || "请基于你的角色权限范围提供帮助。";
-  }
-
-  // 构建用户提示词
-  private buildUserPrompt(
-    userMessage: string, 
-    dataContext?: DataContext, 
-    attachments?: Attachment[],
-    currentPage?: string
-  ): string {
-    let prompt = `用户问题：${userMessage}\n\n`;
-    
-    if (currentPage) {
-      prompt += `当前页面：${currentPage}\n\n`;
-    }
-    
-    if (dataContext?.relevantData && Object.keys(dataContext.relevantData).length > 0) {
-      prompt += `相关数据：\n${JSON.stringify(dataContext.relevantData, null, 2)}\n\n`;
-    }
-
-    if (attachments && attachments.length > 0) {
-      prompt += `附件信息：${attachments.length} 个文件已上传\n`;
-      prompt += `文件类型：${attachments.map(a => a.type).join(", ")}\n\n`;
-    }
-
-    prompt += `请基于以上信息提供专业的分析和建议，使用中文回答。`;
-    return prompt;
-  }
-
-  // 计算最优maxTokens
-  private calculateOptimalMaxTokens(dataContext?: DataContext): number {
-    let maxTokens = 2000; // 默认值
-    
-    if (dataContext?.relevantData) {
-      const dataSize = JSON.stringify(dataContext.relevantData).length;
-      if (dataSize > 10000) maxTokens += 1000;
-      if (dataSize > 50000) maxTokens += 2000;
-    }
-    
-    return Math.min(maxTokens, 8000); // 上限8000
-  }
-
-  // 计算最优temperature
-  private calculateOptimalTemperature(message: string): number {
-    const lowerMessage = message.toLowerCase();
-    
-    // 分析类任务需要较低temperature
-    if (this.containsAnalysisKeywords(lowerMessage)) {
-      return 0.3;
-    }
-    
-    // 创意类任务需要较高temperature
-    if (this.containsCreativeKeywords(lowerMessage)) {
-      return 0.8;
-    }
-    
-    // 默认平衡值
-    return 0.5;
-  }
-
-  // 提取建议操作
-  private extractSuggestedActions(content: string, userMessage: string, dataContext?: DataContext): SuggestedAction[] {
-    const actions: SuggestedAction[] = [];
-    
-    // 基于内容分析建议操作
-    if (content.includes("查看详细") || content.includes("详细信息")) {
-      actions.push({
-        type: "navigate",
-        label: "查看详细数据",
-        target: "dashboard",
-      });
-    }
-    
-    if (content.includes("导出") || content.includes("下载")) {
-      actions.push({
-        type: "export",
-        label: "导出数据",
-        format: "excel",
-      });
-    }
-    
-    if (content.includes("创建") || content.includes("新建")) {
-      actions.push({
-        type: "create",
-        label: "创建新记录",
-      });
-    }
-    
-    if (this.containsAnalysisKeywords(userMessage)) {
-      actions.push({
-        type: "analyze",
-        label: "深度分析",
-      });
-    }
-
-    return actions;
-  }
-
-  // 数据获取方法
-  private async getPayrollData(context?: OperationalContext): Promise<any> {
-    const db = await this.ensureDb();
-    
-    // 获取当前月份薪酬数据
-    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
-    
-    let query = db
+    // 获取最近薪酬批次
+    const recentBatches = await db
       .select({
-        id: payrollRuns.id,
-        country: payrollRuns.country,
-        month: payrollRuns.month,
-        status: payrollRuns.status,
-        totalAmount: payrollRuns.totalAmount,
-        currency: payrollRuns.currency,
-        employeeCount: payrollRuns.employeeCount,
-        createdAt: payrollRuns.createdAt,
+        id: sql`pr.id`,
+        country: sql`pr.country`,
+        month: sql`pr.month`,
+        year: sql`pr.year`,
+        status: sql`pr.status`,
+        totalAmount: sql`pr.totalAmount`,
+        createdAt: sql`pr.createdAt`,
       })
-      .from(payrollRuns)
-      .where(eq(payrollRuns.month, currentMonth))
-      .orderBy(desc(payrollRuns.createdAt))
-      .limit(20);
+      .from(sql`payrollRuns pr`)
+      .where(sql`pr.status IN ('draft', 'pending_review', 'submitted')`)
+      .orderBy(sql`pr.createdAt DESC`)
+      .limit(5);
 
-    if (context?.selectedCustomerId) {
-      query = query.where(eq(payrollRuns.customerId, parseInt(context.selectedCustomerId))) as any;
-    }
-
-    const payrolls = await query;
-    
-    // 获取统计信息
+    // 获取薪酬统计
+    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
     const stats = await db
       .select({
-        totalBatches: count(),
-        draftCount: sum(sql`CASE WHEN status = 'draft' THEN 1 ELSE 0 END`),
-        pendingCount: sum(sql`CASE WHEN status = 'pending_review' THEN 1 ELSE 0 END`),
-        approvedCount: sum(sql`CASE WHEN status = 'approved' THEN 1 ELSE 0 END`),
-        totalAmount: sum(payrollRuns.totalAmount),
+        draftCount: sql`COUNT(CASE WHEN status = 'draft' THEN 1 END)`,
+        pendingCount: sql`COUNT(CASE WHEN status = 'pending_review' THEN 1 END)`,
+        submittedCount: sql`COUNT(CASE WHEN status = 'submitted' THEN 1 END)`,
       })
-      .from(payrollRuns)
-      .where(eq(payrollRuns.month, currentMonth));
+      .from(sql`payrollRuns`)
+      .where(sql`strftime('%Y-%m', createdAt) = ${currentMonth}`);
 
     return {
-      payrolls,
-      stats: stats[0],
-      currentMonth,
+      recentBatches,
+      stats: stats[0] || { draftCount: 0, pendingCount: 0, submittedCount: 0 },
     };
   }
 
-  private async getLeaveData(context?: OperationalContext): Promise<any> {
-    const db = await this.ensureDb();
+  // 获取休假上下文
+  private async getLeaveContext(context?: DataContext): Promise<any> {
+    const db = await this.getDb();
     
-    // 获取最近30天的休假数据
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    
-    const leaveData = await db
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // 获取待审批休假
+    const pendingLeave = await db
       .select({
-        id: leaveRecords.id,
-        employeeId: leaveRecords.employeeId,
-        leaveType: leaveRecords.leaveType,
-        startDate: leaveRecords.startDate,
-        endDate: leaveRecords.endDate,
-        days: leaveRecords.days,
-        status: leaveRecords.status,
-        reason: leaveRecords.reason,
-        createdAt: leaveRecords.createdAt,
+        id: sql`lr.id`,
+        employeeName: sql`e.name`,
+        startDate: sql`lr.startDate`,
+        endDate: sql`lr.endDate`,
+        days: sql`lr.days`,
+        type: sql`lr.type`,
+        status: sql`lr.status`,
       })
-      .from(leaveRecords)
-      .where(sql`${leaveRecords.startDate} >= ${thirtyDaysAgo}`)
-      .orderBy(desc(leaveRecords.createdAt))
-      .limit(50);
+      .from(sql`leaveRecords lr`)
+      .leftJoin(sql`employees e`, sql`lr.employeeId = e.id`)
+      .where(sql`lr.status = 'pending' AND lr.startDate >= ${thirtyDaysAgo}`)
+      .orderBy(sql`lr.createdAt DESC`)
+      .limit(10);
 
     // 获取休假统计
     const stats = await db
       .select({
-        totalRequests: count(),
-        approvedCount: sum(sql`CASE WHEN status = 'approved' THEN 1 ELSE 0 END`),
-        pendingCount: sum(sql`CASE WHEN status = 'pending' THEN 1 ELSE 0 END`),
-        rejectedCount: sum(sql`CASE WHEN status = 'rejected' THEN 1 ELSE 0 END`),
-        totalDays: sum(leaveRecords.days),
+        pendingCount: sql`COUNT(CASE WHEN status = 'pending' THEN 1 END)`,
+        approvedCount: sql`COUNT(CASE WHEN status = 'approved' THEN 1 END)`,
+        rejectedCount: sql`COUNT(CASE WHEN status = 'rejected' THEN 1 END)`,
       })
-      .from(leaveRecords)
-      .where(sql`${leaveRecords.startDate} >= ${thirtyDaysAgo}`);
+      .from(sql`leaveRecords`)
+      .where(sql`createdAt >= ${thirtyDaysAgo}`);
 
     return {
-      leaveRequests: leaveData,
-      stats: stats[0],
-      period: "最近30天",
+      pendingLeave,
+      stats: stats[0] || { pendingCount: 0, approvedCount: 0, rejectedCount: 0 },
     };
   }
 
-  private async getFinancialData(context?: OperationalContext): Promise<any> {
-    const db = await this.ensureDb();
+  // 获取财务上下文
+  private async getFinancialContext(context?: DataContext): Promise<any> {
+    const db = await this.getDb();
     
-    // 获取当前月份财务数据
-    const currentMonth = new Date().toISOString().slice(0, 7);
-    
-    const invoiceData = await db
+    // 获取逾期发票
+    const overdueInvoices = await db
       .select({
-        id: invoices.id,
-        invoiceNumber: invoices.invoiceNumber,
-        customerId: invoices.customerId,
-        amount: invoices.amount,
-        currency: invoices.currency,
-        status: invoices.status,
-        dueDate: invoices.dueDate,
-        createdAt: invoices.createdAt,
+        id: sql`i.id`,
+        invoiceNumber: sql`i.invoiceNumber`,
+        customerName: sql`c.name`,
+        amount: sql`i.amount`,
+        dueDate: sql`i.dueDate`,
+        status: sql`i.status`,
+        daysOverdue: sql`julianday('now') - julianday(i.dueDate)`,
       })
-      .from(invoices)
-      .where(sql`strftime('%Y-%m', ${invoices.createdAt}) = ${currentMonth}`)
-      .orderBy(desc(invoices.createdAt))
-      .limit(50);
-
-    // 获取最新汇率
-    const latestRates = await db
-      .select({
-        fromCurrency: exchangeRates.fromCurrency,
-        toCurrency: exchangeRates.toCurrency,
-        rate: exchangeRates.rate,
-        effectiveDate: exchangeRates.effectiveDate,
-      })
-      .from(exchangeRates)
-      .orderBy(desc(exchangeRates.effectiveDate))
+      .from(sql`invoices i`)
+      .leftJoin(sql`customers c`, sql`i.customerId = c.id`)
+      .where(sql`i.status = 'overdue'`)
+      .orderBy(sql`i.dueDate ASC`)
       .limit(10);
 
+    // 获取发票统计
+    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+    const stats = await db
+      .select({
+        draftCount: sql`COUNT(CASE WHEN status = 'draft' THEN 1 END)`,
+        pendingCount: sql`COUNT(CASE WHEN status = 'pending_review' THEN 1 END)`,
+        sentCount: sql`COUNT(CASE WHEN status = 'sent' THEN 1 END)`,
+        paidCount: sql`COUNT(CASE WHEN status = 'paid' THEN 1 END)`,
+        overdueCount: sql`COUNT(CASE WHEN status = 'overdue' THEN 1 END)`,
+      })
+      .from(sql`invoices`)
+      .where(sql`strftime('%Y-%m', createdAt) = ${currentMonth}`);
+
     return {
-      invoices: invoiceData,
-      exchangeRates: latestRates,
-      currentMonth,
+      overdueInvoices,
+      stats: stats[0] || { draftCount: 0, pendingCount: 0, sentCount: 0, paidCount: 0, overdueCount: 0 },
     };
   }
 
-  private async getEmployeeData(context?: OperationalContext): Promise<any> {
-    const db = await this.ensureDb();
+  // 获取员工上下文
+  private async getEmployeeContext(context?: DataContext): Promise<any> {
+    const db = await this.getDb();
     
-    // 获取活跃员工数据
-    const employeeData = await db
+    // 获取试用期员工
+    const probationEmployees = await db
       .select({
-        id: employees.id,
-        fullName: employees.fullName,
-        employeeId: employees.employeeId,
-        status: employees.status,
-        country: employees.country,
-        department: employees.department,
-        jobTitle: employees.jobTitle,
-        startDate: employees.startDate,
-        createdAt: employees.createdAt,
+        id: sql`e.id`,
+        name: sql`e.name`,
+        employeeId: sql`e.employeeId`,
+        department: sql`e.department`,
+        status: sql`e.status`,
+        startDate: sql`e.startDate`,
+        probationEndDate: sql`e.probationEndDate`,
       })
-      .from(employees)
-      .where(eq(employees.status, "active"))
-      .orderBy(desc(employees.createdAt))
-      .limit(50);
+      .from(sql`employees e`)
+      .where(sql`e.status = 'probation' AND e.probationEndDate > date('now')`)
+      .orderBy(sql`e.probationEndDate ASC`)
+      .limit(10);
 
     // 获取员工统计
     const stats = await db
       .select({
-        totalEmployees: count(),
-        activeCount: sum(sql`CASE WHEN status = 'active' THEN 1 ELSE 0 END`),
-        probationCount: sum(sql`CASE WHEN status = 'probation' THEN 1 ELSE 0 END`),
-        inactiveCount: sum(sql`CASE WHEN status = 'inactive' THEN 1 ELSE 0 END`),
+        activeCount: sql`COUNT(CASE WHEN status = 'active' THEN 1 END)`,
+        probationCount: sql`COUNT(CASE WHEN status = 'probation' THEN 1 END)`,
+        inactiveCount: sql`COUNT(CASE WHEN status = 'inactive' THEN 1 END)`,
       })
-      .from(employees);
+      .from(sql`employees`);
 
     return {
-      employees: employeeData,
-      stats: stats[0],
+      probationEmployees,
+      stats: stats[0] || { activeCount: 0, probationCount: 0, inactiveCount: 0 },
     };
   }
 
+  // 获取客户上下文
+  private async getCustomerContext(context?: DataContext): Promise<any> {
+    const db = await this.getDb();
+    
+    // 获取活跃客户
+    const activeCustomers = await db
+      .select({
+        id: sql`c.id`,
+        name: sql`c.name`,
+        country: sql`c.country`,
+        status: sql`c.status`,
+        contractStatus: sql`cc.status`,
+        lastActivity: sql`c.updatedAt`,
+      })
+      .from(sql`customers c`)
+      .leftJoin(sql`customerContracts cc`, sql`c.id = cc.customerId`)
+      .where(sql`c.status = 'active'`)
+      .orderBy(sql`c.updatedAt DESC`)
+      .limit(10);
+
+    // 获取客户统计
+    const stats = await db
+      .select({
+        activeCount: sql`COUNT(CASE WHEN status = 'active' THEN 1 END)`,
+        inactiveCount: sql`COUNT(CASE WHEN status = 'inactive' THEN 1 END)`,
+        prospectCount: sql`COUNT(CASE WHEN status = 'prospect' THEN 1 END)`,
+      })
+      .from(sql`customers`);
+
+    return {
+      activeCustomers,
+      stats: stats[0] || { activeCount: 0, inactiveCount: 0, prospectCount: 0 },
+    };
+  }
+
+  // 生成系统提示词
+  private generateSystemPrompt(dataContext: any): string {
+    const role = this.userRole;
+    const permissions = this.getRolePermissions(role);
+    
+    return `你是一个专业的企业运营助手，专门为GEA EOR SaaS平台提供智能分析服务。
+
+角色权限：${permissions}
+当前数据上下文：${JSON.stringify(dataContext, null, 2)}
+
+请基于用户的角色权限和数据上下文，提供准确、有用的分析和建议。注意保护敏感信息，只提供用户有权限查看的数据。
+
+回答要求：
+1. 使用中文回答
+2. 提供具体的数据和见解
+3. 如有风险或问题，明确提醒
+4. 可以建议具体的操作步骤
+5. 保持专业和友好的语气`;
+  }
+
+  // 生成用户提示词
+  private generateUserPrompt(message: string, dataContext: any, attachments?: Attachment[]): string {
+    let prompt = `用户问题：${message}\n\n`;
+    
+    if (attachments && attachments.length > 0) {
+      prompt += `用户上传了 ${attachments.length} 个文件：\n`;
+      attachments.forEach((att, index) => {
+        prompt += `${index + 1}. ${att.name} (${att.type})\n`;
+      });
+      prompt += '\n';
+    }
+
+    prompt += `请基于以下数据上下文回答问题：\n${JSON.stringify(dataContext, null, 2)}\n\n`;
+    prompt += "请提供详细、准确的回答，并给出可操作的建议。";
+    
+    return prompt;
+  }
+
+  // 提取建议操作
+  private extractSuggestedActions(aiResponse: string, originalMessage: string, dataContext: any): Array<{label: string, action: string, params?: Record<string, any>}> {
+    const actions: Array<{label: string, action: string, params?: Record<string, any>}> = [];
+    
+    const lowerResponse = aiResponse.toLowerCase();
+    const lowerMessage = originalMessage.toLowerCase();
+    
+    // 基于响应内容提取建议操作
+    if (lowerResponse.includes("查看") && lowerResponse.includes("薪酬")) {
+      actions.push({
+        label: "查看薪酬详情",
+        action: "navigate_payroll",
+        params: { filter: "recent" }
+      });
+    }
+    
+    if (lowerResponse.includes("审批") && lowerResponse.includes("休假")) {
+      actions.push({
+        label: "处理休假申请",
+        action: "navigate_leave",
+        params: { filter: "pending" }
+      });
+    }
+    
+    if (lowerResponse.includes("逾期") && lowerResponse.includes("发票")) {
+      actions.push({
+        label: "查看逾期发票",
+        action: "navigate_invoices",
+        params: { filter: "overdue" }
+      });
+    }
+    
+    if (lowerResponse.includes("导出") || lowerResponse.includes("报表")) {
+      actions.push({
+        label: "导出数据",
+        action: "export_current_data",
+        params: { format: "excel" }
+      });
+    }
+    
+    return actions;
+  }
+
   // 辅助方法
-  private containsPayrollKeywords(message: string): boolean {
-    const keywords = ['薪酬', '工资', 'payroll', '批次', 'salary', 'pay'];
-    return keywords.some(keyword => message.toLowerCase().includes(keyword));
+  private getRolePermissions(role: string): string {
+    const permissions: Record<string, string> = {
+      'admin': '全部权限 - 可访问所有数据和功能',
+      'operations_manager': '运营管理权限 - 可访问薪酬、休假、员工数据',
+      'finance_manager': '财务管理权限 - 可访问发票、财务数据',
+      'customer_manager': '客户管理权限 - 可访问客户、合同数据',
+      'user': '基础权限 - 只读访问个人相关数据'
+    };
+    return permissions[role] || '基础权限';
   }
 
-  private containsLeaveKeywords(message: string): boolean {
-    const keywords = ['休假', '请假', 'leave', '年假', '病假', 'vacation'];
-    return keywords.some(keyword => message.toLowerCase().includes(keyword));
+  private classifyMessageType(message: string): string {
+    const lower = message.toLowerCase();
+    if (this.containsPayrollKeywords(lower)) return 'payroll';
+    if (this.containsLeaveKeywords(lower)) return 'leave';
+    if (this.containsFinancialKeywords(lower)) return 'financial';
+    if (this.containsEmployeeKeywords(lower)) return 'employee';
+    if (this.containsCustomerKeywords(lower)) return 'customer';
+    return 'general';
   }
 
-  private containsFinancialKeywords(message: string): boolean {
-    const keywords = ['财务', '发票', 'invoice', '费用', 'cost', 'financial', 'billing'];
-    return keywords.some(keyword => message.toLowerCase().includes(keyword));
+  private containsPayrollKeywords(text: string): boolean {
+    return /薪酬|工资|payroll|salary|wage/.test(text);
   }
 
-  private containsEmployeeKeywords(message: string): boolean {
-    const keywords = ['员工', 'employee', '人员', '人事', 'staff', 'worker'];
-    return keywords.some(keyword => message.toLowerCase().includes(keyword));
+  private containsLeaveKeywords(text: string): boolean {
+    return /休假|请假|leave|vacation|holiday/.test(text);
   }
 
-  private containsReportKeywords(message: string): boolean {
-    const keywords = ['报告', '报表', 'report', '统计', '分析', 'summary'];
-    return keywords.some(keyword => message.toLowerCase().includes(keyword));
+  private containsFinancialKeywords(text: string): boolean {
+    return /财务|发票|invoice|finance|payment|billing/.test(text);
   }
 
-  private containsInsightKeywords(message: string): boolean {
-    const keywords = ['洞察', 'insight', '趋势', 'trend', '模式', 'pattern', '建议', 'recommendation'];
-    return keywords.some(keyword => message.toLowerCase().includes(keyword));
+  private containsEmployeeKeywords(text: string): boolean {
+    return /员工|employee|staff|人事|hr/.test(text);
   }
 
-  private containsAnalysisKeywords(message: string): boolean {
-    const keywords = ['分析', 'analyze', '统计', 'statistics', '对比', 'compare', '评估', 'evaluate'];
-    return keywords.some(keyword => message.toLowerCase().includes(keyword));
+  private containsCustomerKeywords(text: string): boolean {
+    return /客户|customer|client|用户|user/.test(text);
   }
 
-  private containsCreativeKeywords(message: string): boolean {
-    const keywords = ['创意', 'creative', '想法', 'idea', '创新', 'innovation', '设计', 'design'];
-    return keywords.some(keyword => message.toLowerCase().includes(keyword));
+  private containsReportKeywords(text: string): boolean {
+    return /报表|报告|report|统计|statistics/.test(text);
+  }
+
+  private containsInsightKeywords(text: string): boolean {
+    return /洞察|insight|分析|analysis|趋势|trend/.test(text);
   }
 
   private getFileExtension(filename: string): string {
     return filename.split('.').pop()?.toLowerCase() || '';
   }
 
-  private generateDataSummary(data: any): string {
-    const parts: string[] = [];
-    
-    if (data.payroll) {
-      parts.push(`薪酬数据：${data.payroll.payrolls?.length || 0}个批次`);
+  private calculateOptimalMaxTokens(dataContext: any): number {
+    // 根据数据复杂度调整最大token数
+    const baseTokens = 1000;
+    const complexity = Object.keys(dataContext).length;
+    return Math.min(baseTokens + (complexity * 200), 4000);
+  }
+
+  private calculateOptimalTemperature(message: string): number {
+    // 根据消息类型调整温度
+    if (this.containsFinancialKeywords(message) || this.containsPayrollKeywords(message)) {
+      return 0.1; // 财务和薪酬需要更准确的回答
     }
-    
-    if (data.leave) {
-      parts.push(`休假数据：${data.leave.leaveRequests?.length || 0}条记录`);
-    }
-    
-    if (data.financial) {
-      parts.push(`财务数据：${data.financial.invoices?.length || 0}张发票`);
-    }
-    
-    if (data.employees) {
-      parts.push(`员工数据：${data.employees.employees?.length || 0}名员工`);
-    }
-    
-    return parts.length > 0 ? parts.join('，') : '暂无相关数据';
+    return 0.3; // 默认温度
   }
 }
-
-// 导出类型定义
-export type {
-  CopilotUserConfig,
-  InsertCopilotUserConfig,
-  CopilotConversation,
-  InsertCopilotConversation,
-  CopilotMessage,
-  InsertCopilotMessage,
-  CopilotFileAnalysis,
-  InsertCopilotFileAnalysis,
-  CopilotPrediction,
-  InsertCopilotPrediction,
-  CopilotShortcut,
-  InsertCopilotShortcut,
-  CopilotMetric,
-  InsertCopilotMetric,
-} from "../../drizzle/schema";

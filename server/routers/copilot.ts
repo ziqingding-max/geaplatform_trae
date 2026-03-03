@@ -69,6 +69,62 @@ const createShortcutInput = z.object({
   hotkey: z.string().max(50).optional(),
 });
 
+// 辅助函数：记录使用情况
+async function recordUsage(userId: number, usageType: string, cost: number): Promise<void> {
+  const db = await getDb();
+  const today = new Date().toISOString().slice(0, 10);
+  
+  try {
+    // 获取或创建今日统计
+    const existing = await db
+      .select()
+      .from(copilotMetrics)
+      .where(and(
+        eq(copilotMetrics.userId, userId),
+        eq(copilotMetrics.date, today)
+      ))
+      .limit(1);
+    
+    if (existing.length === 0) {
+      // 创建新记录
+      await db
+        .insert(copilotMetrics)
+        .values({
+          userId,
+          date: today,
+          messageCount: usageType === "message" ? 1 : 0,
+          fileAnalysisCount: usageType === "file_upload" ? 1 : 0,
+          predictionCount: 0,
+          shortcutUsageCount: 0,
+          totalCost: cost.toFixed(4),
+          averageResponseTime: 0,
+          createdAt: new Date(),
+        });
+    } else {
+      // 更新现有记录
+      const updateData: any = {
+        totalCost: sql`${copilotMetrics.totalCost} + ${cost.toFixed(4)}`,
+        updatedAt: new Date(),
+      };
+      
+      if (usageType === "message") {
+        updateData.messageCount = sql`${copilotMetrics.messageCount} + 1`;
+      } else if (usageType === "file_upload") {
+        updateData.fileAnalysisCount = sql`${copilotMetrics.fileAnalysisCount} + 1`;
+      } else if (usageType === "shortcut") {
+        updateData.shortcutUsageCount = sql`${copilotMetrics.shortcutUsageCount} + 1`;
+      }
+      
+      await db
+        .update(copilotMetrics)
+        .set(updateData)
+        .where(eq(copilotMetrics.id, existing[0].id));
+    }
+  } catch (error) {
+    console.error("[CopilotRouter] Failed to record usage:", error);
+  }
+}
+
 // Copilot路由
 export const copilotRouter = router({
   // 获取用户配置
@@ -153,7 +209,7 @@ export const copilotRouter = router({
       // 更新现有配置
       const [updated] = await db
         .update(copilotUserConfigs)
-        .set({
+        .set({ 
           ...input,
           updatedAt: new Date(),
         })
@@ -463,59 +519,3 @@ export const copilotRouter = router({
       return stats[0];
     }),
 });
-
-// 辅助函数：记录使用情况
-async function recordUsage(userId: number, usageType: string, cost: number): Promise<void> {
-  const db = await getDb();
-  const today = new Date().toISOString().slice(0, 10);
-  
-  try {
-    // 获取或创建今日统计
-    const existing = await db
-      .select()
-      .from(copilotMetrics)
-      .where(and(
-        eq(copilotMetrics.userId, userId),
-        eq(copilotMetrics.date, today)
-      ))
-      .limit(1);
-    
-    if (existing.length === 0) {
-      // 创建新记录
-      await db
-        .insert(copilotMetrics)
-        .values({
-          userId,
-          date: today,
-          messageCount: usageType === "message" ? 1 : 0,
-          fileAnalysisCount: usageType === "file_upload" ? 1 : 0,
-          predictionCount: 0,
-          shortcutUsageCount: 0,
-          totalCost: cost.toFixed(4),
-          averageResponseTime: 0,
-          createdAt: new Date(),
-        });
-    } else {
-      // 更新现有记录
-      const updateData: any = {
-        totalCost: sql`${copilotMetrics.totalCost} + ${cost.toFixed(4)}`,
-        updatedAt: new Date(),
-      };
-      
-      if (usageType === "message") {
-        updateData.messageCount = sql`${copilotMetrics.messageCount} + 1`;
-      } else if (usageType === "file_upload") {
-        updateData.fileAnalysisCount = sql`${copilotMetrics.fileAnalysisCount} + 1`;
-      } else if (usageType === "shortcut") {
-        updateData.shortcutUsageCount = sql`${copilotMetrics.shortcutUsageCount} + 1`;
-      }
-      
-      await db
-        .update(copilotMetrics)
-        .set(updateData)
-        .where(eq(copilotMetrics.id, existing[0].id));
-    }
-  } catch (error) {
-    console.error("[CopilotRouter] Failed to record usage:", error);
-  }
-}
