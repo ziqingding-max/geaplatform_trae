@@ -1513,7 +1513,7 @@ export const notifications = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     
     // Target definition
-    targetPortal: text("targetPortal", { enum: ["admin", "client"] }).notNull(),
+    targetPortal: text("targetPortal", { enum: ["admin", "client", "worker"] }).notNull(),
     targetUserId: integer("targetUserId"), // Specific user ID (optional)
     targetRole: text("targetRole"), // e.g. 'finance_manager', 'hr_manager' (optional)
     targetCustomerId: integer("targetCustomerId"), // For client portal notifications (optional)

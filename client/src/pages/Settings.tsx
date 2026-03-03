@@ -34,7 +34,7 @@ import NotificationSettingsSection from "@/components/pages/NotificationSettings
 import { useI18n } from "@/contexts/i18n";
 
 export default function Settings() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
@@ -64,7 +64,7 @@ export default function Settings() {
             </TabsTrigger>
             {isAdmin && (
               <TabsTrigger value="notifications" className="gap-1.5">
-                <Bell className="w-3.5 h-3.5" />Notifications
+                <Bell className="w-3.5 h-3.5" />{locale === "zh" ? "通知设置" : "Notifications"}
               </TabsTrigger>
             )}
             {isAdmin && (

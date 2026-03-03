@@ -69,6 +69,7 @@ function useNavGroups() {
       label: t("nav.marketing"),
       items: [
         { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin" },
+        { label: t("nav.countryGuide"), icon: Globe, href: "/admin/knowledge/country-guides" },
         { label: t("nav.ai_settings"), icon: Bot, href: "/ai-settings" },
       ],
     },
