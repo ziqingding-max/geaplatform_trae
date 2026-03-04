@@ -42,6 +42,8 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
         },
       },
       crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: false,
+      crossOriginOpenerPolicy: false,
     })
   );
 
