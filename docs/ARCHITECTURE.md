@@ -10,45 +10,38 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        Client (Browser)                             │
 │                                                                     │
-│  ┌──────────────────────┐         ┌──────────────────────────────┐  │
-│  │   Admin Portal        │         │   Client Portal              │  │
-│  │   (React 19 + Vite)   │         │   (React 19 + Vite, lazy)   │  │
-│  │   admin.geahr.com     │         │   app.geahr.com              │  │
-│  │                        │         │                              │  │
-│  │  trpc.* hooks          │         │  portalTrpc.* hooks          │  │
-│  │  → /api/trpc           │         │  → /api/portal               │  │
-│  └────────┬───────────────┘         └─────────┬────────────────────┘  │
-│           │                                   │                      │
-└───────────┼───────────────────────────────────┼──────────────────────┘
-            │                                   │
-            ▼                                   ▼
+│  ┌──────────────────────┐  ┌──────────────────────┐  ┌────────────────┐  │
+│  │   Admin Portal        │  │   Client Portal       │  │  Worker Portal  │  │
+│  │   (React 19 + Vite)   │  │   (React 19 + Vite)   │  │  (React 19 + Vite)│
+│  │   admin.geahr.com     │  │   app.geahr.com       │  │  worker.geahr.com │
+│  │                       │  │                       │  │                 │
+│  │  trpc.* hooks         │  │  portalTrpc.* hooks   │  │  workerTrpc.* hooks│
+│  │  → /api/trpc          │  │  → /api/portal        │  │  → /api/worker  │
+│  └────────┬──────────────┘  └─────────┬─────────────┘  └───────┬────────┘  │
+│           │                           │                        │           │
+└───────────┼───────────────────────────┼────────────────────────┼───────────┘
+            │                           │                        │
+            ▼                           ▼                        ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │                     Express 4 Server (Node.js 22)                     │
 │                                                                       │
-│  ┌─────────────────────────┐    ┌──────────────────────────────────┐  │
-│  │  Admin tRPC Instance     │    │  Portal tRPC Instance            │  │
-│  │  /api/trpc               │    │  /api/portal                     │  │
-│  │                           │    │                                  │  │
-│  │  Auth: Manus OAuth        │    │  Auth: JWT + bcrypt              │  │
-│  │  Context: ctx.user        │    │  Context: ctx.portalUser         │  │
-│  │  20 routers               │    │  9 routers                       │  │
-│  │  Role-based procedures    │    │  customerId-scoped procedures    │  │
-│  └─────────┬─────────────────┘    └──────────┬───────────────────────┘  │
-│            │                                  │                        │
-│            │   ┌──────────────────────────────────┐                    │
-│            │   │  Worker Portal Instance          │                    │
-│            │   │  /api/worker                     │                    │
-│            │   │  Auth: Worker JWT                │                    │
-│            │   │  Context: ctx.workerUser         │                    │
-│            │   └───────────┬──────────────────────┘                    │
-│            │               │                                           │
-│            ▼               ▼                                           ▼
+│  ┌─────────────────────────┐ ┌────────────────────────┐ ┌────────────────┐ │
+│  │  Admin tRPC Instance    │ │  Portal tRPC Instance  │ │ Worker tRPC Instance │
+│  │  /api/trpc              │ │  /api/portal          │ │ /api/worker    │ │
+│  │                         │ │                        │ │                │ │
+│  │  Auth: JWT (HS256)      │ │  Auth: JWT + bcrypt   │ │ Auth: JWT + bcrypt │
+│  │  Context: ctx.user      │ │  Context: ctx.portalUser│ │ Context: ctx.workerUser│
+│  │  31 routers             │ │  12 routers           │ │ 7 routers      │ │
+│  │  Role-based procedures  │ │  customerId-scoped    │ │ workerId-scoped│
+│  └─────────┬───────────────┘ └──────────┬─────────────┘ └───────┬────────┘ │
+│            │                             │                        │         │
+│            ▼                             ▼                        ▼         │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │                    Shared Data Layer                              │  │
-│  │  Drizzle ORM → MySQL 8 / TiDB Serverless (33 tables)            │  │
-│  │  S3 Storage → File uploads (invoices, documents, contracts)      │  │
+│  │  Drizzle ORM → SQLite via @libsql/client (48 tables)            │  │
+│  │  Alibaba Cloud OSS → S3-compatible file uploads                  │  │
 │  │  ECB API → Exchange rates (daily fetch)                          │  │
-│  │  AI Gateway → Centralized Task Routing (OpenAI, Gemini, etc.)    │  │
+│  │  AI Gateway → Alibaba Cloud DashScope (qwen-turbo, qwen-max)     │  │
 │  └──────────────────────────────────────────────────────────────────┘  │
 │                                                                       │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
@@ -61,48 +54,48 @@
 
 ---
 
-## 2. Dual-Portal Design
+## 2. Three-Portal Design
 
-The system runs two completely separate tRPC instances on the same Express server. They share the database but have no code-level cross-references.
+The system runs three separate tRPC instances on the same Express server. They share the database but have no code-level cross-references.
 
-| Aspect | Admin Portal | Client Portal |
-|:---|:---|:---|
-| **URL** | `admin.geahr.com` | `app.geahr.com` |
-| **tRPC Mount** | `/api/trpc` | `/api/portal` |
-| **tRPC Instance** | `server/_core/trpc.ts` | `server/portal/portalTrpc.ts` |
-| **Auth Mechanism** | Manus OAuth + Session Cookie | JWT + bcrypt (self-managed) |
-| **Context Object** | `ctx.user` (Manus user) | `ctx.portalUser` (customer contact) |
-| **Router File** | `server/routers.ts` (20 routers) | `server/portal/portalRouter.ts` (9 routers) |
-| **Procedure Base** | `protectedProcedure` + role middleware | `protectedPortalProcedure` (auto-injects customerId) |
-| **Data Scope** | All customers, all data | Single customer only (customerId-scoped) |
-| **Frontend Entry** | `client/src/App.tsx → AdminRouter` | `client/src/App.tsx → PortalRouter` (lazy-loaded) |
-| **Frontend tRPC** | `client/src/lib/trpc.ts` | `client/src/lib/portalTrpc.ts` |
-| **Layout** | `components/Layout.tsx` (sidebar) | `components/PortalLayout.tsx` (sidebar) |
-| **i18n** | `contexts/i18n.tsx` | `lib/i18n.ts` (portal-specific) |
+| Aspect | Admin Portal | Client Portal | Worker Portal |
+|:---|:---|:---|:---|
+| **URL** | `admin.geahr.com` | `app.geahr.com` | `worker.geahr.com` |
+| **tRPC Mount** | `/api/trpc` | `/api/portal` | `/api/worker` |
+| **tRPC Instance** | `server/_core/trpc.ts` | `server/portal/portalTrpc.ts` | `server/worker/workerTrpc.ts` |
+| **Auth Mechanism** | JWT (HS256) in HttpOnly Cookie | JWT + bcrypt (self-managed) | JWT + bcrypt (self-managed) |
+| **Context Object** | `ctx.user` (from JWT) | `ctx.portalUser` (customer contact) | `ctx.workerUser` (employee/contractor) |
+| **Router File** | `server/routers.ts` (31 routers) | `server/portal/portalRouter.ts` (12 routers) | `server/worker/workerRouter.ts` (7 routers) |
+| **Procedure Base** | `protectedProcedure` + role middleware | `protectedPortalProcedure` (auto-injects customerId) | `protectedWorkerProcedure` (auto-injects workerId) |
+| **Data Scope** | All customers, all data | Single customer only (customerId-scoped) | Single worker only (workerId-scoped) |
+| **Frontend Entry** | `client/src/App.tsx → AdminRouter` | `client/src/App.tsx → PortalRouter` | `client/src/App.tsx → WorkerRouter` |
+| **Frontend tRPC** | `client/src/lib/trpc.ts` | `client/src/lib/portalTrpc.ts` | `client/src/lib/workerTrpc.ts` |
+| **Layout** | `components/Layout.tsx` (sidebar) | `components/PortalLayout.tsx` (sidebar) | `components/WorkerLayout.tsx` (sidebar) |
+| **i18n** | Zustand-based i18n store at `client/src/lib/i18n.ts` | (Shared) | (Shared) |
 
 ### Routing Decision
-
-The `Router` component in `App.tsx` determines which portal to render based on the hostname. On `app.geahr.com`, it renders `PortalRouter` at the root level. On all other domains (including `localhost` during development), it uses path-based routing: `/portal/*` → `PortalRouter`, everything else → `AdminRouter`.
+The `Router` component in `App.tsx` determines which portal to render based on the hostname. On `app.geahr.com` it renders `PortalRouter`, on `worker.geahr.com` it renders `WorkerRouter`. On all other domains (including `localhost`), it uses path-based routing for the Admin portal.
 
 ---
 
 ## 3. Authentication Flows
 
-### Admin Authentication (Manus OAuth)
+### Admin Authentication (JWT + HttpOnly Cookie)
+
+Admin authentication is handled by `server/_core/adminAuth.ts` and `server/_core/authRoutes.ts`. It uses a JWT signed with HS256 (via `jose` library) stored in an HttpOnly cookie.
 
 ```
-Browser → /login → Redirect to Manus OAuth Portal
-       → User authenticates on Manus
-       → Callback to /api/oauth/callback
-       → Server creates session cookie (COOKIE_NAME = "app_session_id")
+Browser → /login → POST email + password
+       → Server validates credentials
+       → Server issues JWT in HttpOnly cookie (via JWT_SECRET)
        → Redirect to admin dashboard
 ```
 
-The session cookie is validated on every `/api/trpc` request via `server/_core/context.ts`. The user object is injected as `ctx.user` with fields: `id`, `name`, `email`, `role`, `openId`.
+The initial admin user is bootstrapped from `ADMIN_BOOTSTRAP_EMAIL` and `ADMIN_BOOTSTRAP_PASSWORD` environment variables on first startup.
 
-Admin users can also be invited via the `/invite` page, which generates a Manus OAuth link with a pre-configured role.
+### Portal Authentication (JWT + Invite)
 
-### Portal Authentication (JWT)
+Portal authentication (`server/portal/portalAuth.ts`) uses JWT with bcrypt for password hashing. Registration is invite-only.
 
 ```
 Browser → /portal/login → POST email + password
@@ -111,13 +104,17 @@ Browser → /portal/login → POST email + password
        → Redirect to portal dashboard
 ```
 
-Portal registration is invite-only. An admin creates an invite link via `trpc.customers.createInvite`, which generates a time-limited token (72 hours). The invite link leads to `/portal/register?token=...` where the contact sets their password.
+An admin creates an invite link (`trpc.customers.createInvite`), generating a time-limited token. The user registers via `/portal/register?token=...` to set their password.
 
-Password reset uses a similar token flow: `/portal/forgot-password` → email with reset link → `/portal/reset-password?token=...`.
+### Worker Authentication (JWT + Invite)
+
+Worker authentication (`server/worker/workerAuth.ts`) follows the same pattern as the portal: JWT with bcrypt and an invite-only registration flow.
 
 ---
 
-## 4. Admin tRPC Router Map (20 Routers)
+## 4. Admin tRPC Router Map (31 Routers)
+
+*This list reflects the 31 router files in the `server/routers` directory.*
 
 | Router | File | Middleware | Key Operations |
 |:---|:---|:---|:---|
@@ -152,7 +149,9 @@ Password reset uses a similar token flow: `/portal/forgot-password` → email wi
 
 ---
 
-## 5. Portal tRPC Router Map (9 Routers)
+## 5. Portal tRPC Router Map (12 Routers)
+
+*This list reflects the 12 router files in the `server/portal/routers` directory.*
 
 | Router | File | Key Operations |
 |:---|:---|:---|
@@ -168,20 +167,25 @@ Password reset uses a similar token flow: `/portal/forgot-password` → email wi
 
 ---
 
-## 6. Worker Portal tRPC Router Map (New)
+## 6. Worker Portal tRPC Router Map (7 Routers)
+
+*This list reflects the 7 router files in the `server/worker/routers` directory.*
 
 | Router | File | Key Operations |
 |:---|:---|:---|
 | `auth` | `workerAuthRouter.ts` | Login, invite registration, password reset |
-| `profile` | `workerProfileRouter.ts` | Personal info, bank details |
-| `documents` | `workerDocumentsRouter.ts` | Contract, compliance docs upload |
-| `invoices` | `workerInvoicesRouter.ts` | View and download self-invoices |
+| `profile` | `workerProfileRouter.ts` | Personal info, bank details, profile management |
+| `documents` | `workerDocumentsRouter.ts` | Contract viewing, compliance docs upload |
+| `invoices` | `workerInvoicesRouter.ts` | View and download payslips/invoices |
+| `onboarding` | `workerOnboardingRouter.ts` | Onboarding task submission |
+| `milestones` | `workerMilestonesRouter.ts` | Milestone tracking and submission |
+| `dashboard` | `workerDashboardRouter.ts` | Worker-specific dashboard |
 
 ---
 
 ## 7. Data Model Overview
 
-The 33 database tables are defined in `drizzle/schema.ts` with relationships in `drizzle/relations.ts`. Below is the entity relationship summary organized by functional domain.
+The 48 database tables are defined in `drizzle/schema.ts` with relationships in `drizzle/relations.ts`. The database is **SQLite**, accessed via `@libsql/client` and `drizzle-orm/libsql`. The `drizzle.config.ts` specifies `dialect: "sqlite"`. In production, the database file is at `file:/app/data/production.db`.
 
 ### Core Entities
 
@@ -224,96 +228,30 @@ costAllocations (N) ──── (1) invoices
 ### System
 
 ```
-users (admin users, Manus OAuth)
+users (admin users)
 auditLogs (action tracking)
 systemSettings (key-value config)
 exchangeRates (daily rates from ECB)
-depositRules (per-country deposit config)
-countriesConfig (country-level settings: VAT, statutory leave, currency)
-salesLeads (1) ──── (N) salesActivities
-customerLeavePolicies (per-customer leave config)
-```
-
-### AI & Copilot
-
-```
-ai_provider_configs (LLM provider settings)
-ai_task_policies (Task-specific routing rules)
-copilot_chats (1) ──── (N) copilot_messages
-knowledge_base_articles (KB content)
 ```
 
 ---
 
-## 7. Service Layer
+## 8. Deployment & Infrastructure
 
-Complex business logic is encapsulated in service files under `server/services/`:
+The entire system is self-hosted on **Alibaba Cloud Malaysia (ap-southeast-3)** using **Docker Compose**. It is fully independent and has no dependencies on external platforms.
 
-| Service | File | Responsibility |
-|:---|:---|:---|
-| Invoice Generation | `invoiceGenerationService.ts` | Generate invoices from approved payroll runs (5-dimension split) |
-| Invoice Number | `invoiceNumberService.ts` | Sequential numbering with billing entity prefix |
-| Deposit Invoice | `depositInvoiceService.ts` | Generate deposit invoices on employee onboarding |
-| Deposit Refund | `depositRefundService.ts` | Generate refund invoices on employee termination |
-| Credit Note | `creditNoteService.ts` | Create and apply credit notes to invoices |
-| Exchange Rate | `exchangeRateService.ts` | Fetch ECB rates, calculate markup |
-| PDF Generation | `pdfService.ts` | Generate invoice PDFs with billing entity branding |
-| AI Gateway | `aiGatewayService.ts` | Centralized LLM task routing and execution |
-| Copilot Service | `copilotService.ts` | Chat processing, context gathering, tool execution |
-| Notification Service | `notificationService.ts` | Multi-channel alert delivery (Email, In-App) |
-| Contractor Invoice | `contractorInvoiceGenerationService.ts` | Daily auto-generation of contractor bills |
+- **Web Server**: Nginx acts as a reverse proxy.
+- **SSL**: Managed by Certbot for automatic certificate renewal.
+- **File Storage**: **Alibaba Cloud OSS** is used for all file uploads, accessed via an S3-compatible API (`@aws-sdk/client-s3`).
 
----
+### Environment Variables
 
-## 8. Cron Job System
+Key environment variables include:
 
-All cron jobs are defined in `server/cronJobs.ts` and registered in the server startup. They use `node-cron` with Beijing time (UTC+8) scheduling.
-
-| Job | Schedule (Beijing) | Function | Dependencies |
-|:---|:---|:---|:---|
-| Employee Auto-Activation | Daily 00:01 | `runEmployeeAutoActivation()` | None |
-| Leave Status Transition | Daily 00:02 | `runLeaveStatusTransition()` | None |
-| Overdue Invoice Detection | Daily 00:03 | `runOverdueInvoiceDetection()` | None |
-| Exchange Rate Fetch | Daily 00:05 | `runExchangeRateFetch()` | ECB API |
-| Leave Accrual | Monthly 1st 00:10 | `runLeaveAccrual()` | Customer leave policies |
-| Auto-Lock | Monthly 5th 00:00 | `runAutoLock()` | None |
-| Auto-Create Payroll | Monthly 5th 00:01 | `runAutoCreatePayroll()` | Auto-lock must complete first |
-| Contractor Invoices | Daily 01:00 | `runContractorInvoiceGen()` | Contractor contracts |
-
-**Important**: The auto-lock job (5th 00:00) must complete before auto-create payroll (5th 00:01). The 1-minute gap provides buffer time. If auto-lock fails, payroll creation will include unlocked data, which is incorrect.
-
----
-
-## 9. File Storage Architecture
-
-All file uploads go through S3 via the `storagePut()` helper in `server/storage.ts`. The database stores only the S3 URL, never the file bytes.
-
-| File Type | Storage Key Pattern | Database Field |
-|:---|:---|:---|
-| Employee documents | `{userId}-files/{filename}-{random}.ext` | `employeeDocuments.fileUrl` |
-| Employee visas | `{userId}-visas/{filename}-{random}.ext` | `employeeVisas.documentUrl` |
-| Invoice PDFs | `invoices/{invoiceNumber}.pdf` | `invoices.pdfUrl` |
-| Contract files | `contracts/{filename}-{random}.ext` | `customerContracts.fileUrl` |
-
----
-
-## 10. Frontend Architecture
-
-### Admin Frontend
-
-The admin frontend uses a persistent sidebar layout (`components/Layout.tsx`) with 6 navigation groups: Overview, Sales, Client Management, Operations, Finance, and System. All pages are eagerly loaded.
-
-### Portal Frontend
-
-The portal frontend is **lazy-loaded** via React `lazy()` and `Suspense`. It has its own tRPC provider (`portalTrpc`) and layout (`PortalLayout.tsx`). Portal pages are under `client/src/pages/portal/`.
-
-### Shared Utilities
-
-Both portals share these utilities (but through separate imports):
-
-| Utility | File | Purpose |
-|:---|:---|:---|
-| `formatDate/Amount/Month` | `client/src/lib/format.ts` | Consistent date and currency display |
-| `useI18n` | `client/src/lib/i18n.ts` (portal) / `client/src/contexts/i18n.tsx` (admin) | EN/ZH translations |
-| `statusLabels` | Defined per-page | Consistent status badge display |
-| Shadcn/UI components | `client/src/components/ui/` | Button, Card, Dialog, Table, etc. |
+- `DATABASE_URL`: SQLite connection string.
+- `JWT_SECRET`: Secret for signing admin JWTs.
+- `ADMIN_BOOTSTRAP_EMAIL`, `ADMIN_BOOTSTRAP_PASSWORD`: For initial admin user creation.
+- `ADMIN_APP_URL`, `PORTAL_APP_URL`, `WORKER_APP_URL`: Base URLs for each portal.
+- `OSS_*`: Credentials for Alibaba Cloud OSS.
+- `EMAIL_*`: SMTP server settings for sending emails.
+- `DASHSCOPE_API_KEY`: API key for Alibaba Cloud DashScope AI services.

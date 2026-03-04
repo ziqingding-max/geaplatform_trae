@@ -1,5 +1,3 @@
-# Business Rules & Domain Logic
-
 > **Purpose**: Definitive reference for all business rules, state machines, and calculation logic. AI Agents must consult this document before modifying any business logic.
 
 ---
@@ -79,7 +77,6 @@ draft → cancelled
 | `manual` | Manual creation | `{prefix}{YYYYMM}-{seq}` |
 
 ### Credit Note Rules
-
 These rules are critical and have caused bugs when violated:
 
 1. Credit notes can **only** be applied to invoices in `pending_review` status. Never to `sent` invoices, because the customer may have already downloaded the invoice for payment processing.
@@ -162,7 +159,6 @@ The monthly cutoff is the **5th of each month at 00:00 Beijing time (UTC+8)**. T
 ---
 
 ## 5. Leave Management
-
 ### Leave Types
 
 | Type | Affects Payroll | Balance Tracked |
@@ -246,6 +242,7 @@ Each invoice contains:
 
 ## 9. Exchange Rate & Multi-Currency
 
+
 Exchange rates are fetched daily from the European Central Bank (ECB) at 00:05 Beijing time. Rates are stored in the `exchangeRates` table with the base currency as EUR.
 
 **Markup**: Each billing entity can configure an exchange rate markup percentage. The `exchangeRateWithMarkup` is calculated as:
@@ -272,9 +269,13 @@ grossProfit = invoiceTotal - allocatedVendorCosts
 
 ---
 
-## 11. Customer Portal Data Isolation
+## 11. Portal Data Isolation
 
-Every portal query is scoped by `ctx.portalUser.customerId`. This is enforced at the tRPC middleware level (`protectedPortalProcedure`). Portal users can only see employees, invoices, adjustments, and leave records belonging to their customer.
+The system provides three distinct portals with strict data isolation:
+
+1.  **Admin Portal (`admin.geahr.com`)**: For internal GEA operations staff. Access is controlled by JWT signed with HS256, stored in an HttpOnly cookie. Initial admin user is bootstrapped via environment variables.
+2.  **Client Portal (`app.geahr.com`)**: For customers. Every query is scoped by `customerId`. This is enforced at the tRPC middleware level (`protectedPortalProcedure`). Portal users can only see employees, invoices, adjustments, and leave records belonging to their customer. Authentication is JWT + bcrypt with an invite-based registration flow.
+3.  **Worker Portal (`worker.geahr.com`)**: For employees and contractors. Allows workers to manage their profile, view contracts, download payslips/invoices, track milestones, and complete onboarding tasks. Authentication is JWT + bcrypt with an invite-based registration flow.
 
 Portal users have their own role system: `admin` (full access), `hr_manager` (employees, leave), `finance` (invoices, read-only), `viewer` (read-only all).
 

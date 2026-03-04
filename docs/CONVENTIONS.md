@@ -1,5 +1,3 @@
-# Coding Conventions & Patterns
-
 > **Purpose**: Unified coding standards for all AI Agents and developers working on this project. Following these conventions ensures code consistency across 78,000+ lines of TypeScript.
 
 ---
@@ -12,10 +10,12 @@
 |:---|:---|:---|
 | Admin router | `server/routers/<feature>.ts` (camelCase) | `invoiceGeneration.ts` |
 | Portal router | `server/portal/routers/portal<Feature>Router.ts` | `portalInvoicesRouter.ts` |
+| Worker router | `server/worker/routers/worker<Feature>Router.ts` | `workerPayslipsRouter.ts` |
 | Service | `server/services/<feature>Service.ts` | `creditNoteService.ts` |
 | Test | `server/<feature>.test.ts` (kebab-case OK) | `finance-phase1.test.ts` |
 | Page | `client/src/pages/<Feature>.tsx` (PascalCase) | `Invoices.tsx` |
 | Portal page | `client/src/pages/portal/Portal<Feature>.tsx` | `PortalEmployees.tsx` |
+| Worker page | `client/src/pages/worker/Worker<Feature>.tsx` | `WorkerProfile.tsx` |
 | Component | `client/src/components/<Component>.tsx` | `Layout.tsx` |
 | Utility | `client/src/lib/<name>.ts` | `format.ts`, `i18n.ts` |
 
@@ -71,7 +71,8 @@ export const invoicesRouter = router({
 | `operationsManagerProcedure` | `procedures.ts` | admin, operations_manager | Payroll/leave/adjustments |
 | `financeManagerProcedure` | `procedures.ts` | admin, finance_manager | Invoices/billing/vendors |
 | `adminProcedure` | `procedures.ts` | admin only | System settings, user management |
-| `protectedPortalProcedure` | `portal/portalTrpc.ts` | Portal users (auto-injects customerId) | All portal data access |
+| `protectedPortalProcedure` | `portal/portalTrpc.ts` | Portal users (auto-injects customerId) | All client portal data access |
+| `protectedWorkerProcedure` | `worker/workerTrpc.ts` | Worker users (auto-injects workerId) | All worker portal data access |
 
 ### Database Query Patterns
 
@@ -95,7 +96,6 @@ getById: protectedProcedure
 ```
 
 ### Audit Logging
-
 All write operations on core entities should log to `auditLogs`. Use the helper pattern:
 
 ```typescript
@@ -203,7 +203,6 @@ Detail pages pass `from_page` in the URL so the list page can restore the correc
 ---
 
 ## 4. Date & Time Rules
-
 All date handling follows these rules without exception.
 
 **Storage**: UTC millisecond timestamps in the database (`timestamp` columns or `bigint` for custom timestamps).
@@ -246,7 +245,7 @@ All date handling follows these rules without exception.
 
 The system supports English (en) and Chinese (zh). All user-facing text must be translated.
 
-**Translation file**: `client/src/lib/i18n.ts` contains the `translations` dictionary. Admin uses `client/src/contexts/i18n.tsx` for the i18n context.
+**Translation file**: `client/src/lib/i18n.ts` contains the `translations` dictionary and the Zustand-based i18n store. All pages use the `useI18n()` hook and `t("key")` pattern for translations.
 
 **Adding translations**: Add keys to both `en` and `zh` sections simultaneously. Use dot-notation keys organized by module:
 
@@ -283,12 +282,41 @@ These patterns have caused bugs in the past. Avoid them.
 | Anti-Pattern | Correct Approach |
 |:---|:---|
 | Creating new objects in render as query inputs | Stabilize with `useState(() => ...)` or `useMemo` |
-| Storing file bytes in database BLOB columns | Use `storagePut()` to S3, store URL in database |
+| Storing file bytes in database BLOB columns | Use `storagePut()` to Alibaba Cloud OSS, store URL in database |
 | Hardcoding port numbers in server code | Use `process.env.PORT` or let the framework assign |
 | Importing admin procedures in portal code | Use separate `protectedPortalProcedure` |
 | Comparing role strings with `===` | Use `hasRole()` or `hasAnyRole()` from `shared/roles.ts` |
 | Using `new Date()` in render (unstable reference) | Use `useState(() => new Date())` |
 | Nesting `<a>` inside `<Link>` | Pass children directly to `<Link>` |
 | Using empty string `""` as `<Select.Item>` value | Every item must have a non-empty value |
-| Hardcoding `window.location.origin` for OAuth | Use `getLoginUrl()` from `client/src/const.ts` |
+| Hardcoding `window.location.origin` for auth redirects | Use server-provided URLs from environment variables |
 | Editing files in `server/_core/` | These are framework files — do not modify |
+
+---
+
+## 9. Technical Stack & Architecture
+
+This section provides a high-level overview of the core technologies used in the GEA Platform.
+
+### Authentication
+Authentication is handled via **JWT + bcrypt + HttpOnly Cookie**. This is a unified system across all three portals.
+- **Admin Auth**: JWT signed with HS256 via the `jose` library, stored in an HttpOnly cookie. Logic is in `server/_core/adminAuth.ts` and `server/_core/authRoutes.ts`.
+- **Portal Auth**: JWT + bcrypt with an invite-based registration flow. Logic is in `server/portal/portalAuth.ts`.
+- **Worker Auth**: JWT + bcrypt with an invite-based registration flow. Logic is in `server/worker/workerAuth.ts`.
+- The primary environment variable for signing is `JWT_SECRET`.
+- The initial admin user is created at startup using `ADMIN_BOOTSTRAP_EMAIL` and `ADMIN_BOOTSTRAP_PASSWORD`.
+
+### Database
+The database is **SQLite**, accessed via `@libsql/client` with `drizzle-orm/libsql` as the ORM. The `drizzle.config.ts` specifies `dialect: "sqlite"`. In production, the database file is located at `/app/data/production.db` within the Docker container.
+
+### Deployment
+ The entire system is self-hosted on **Alibaba Cloud Malaysia (ap-southeast-3)** using **Docker Compose, Nginx, and Certbot for SSL**. It is fully independent and does not rely on any external platform services. The public-facing domains are:
+- **Admin Portal**: `admin.geahr.com`
+- **Client Portal**: `app.geahr.com`
+- **Worker Portal**: `worker.geahr.com`
+
+### File Storage
+File storage uses **Alibaba Cloud OSS**, which is compatible with the S3 API. The `@aws-sdk/client-s3` library is used to interact with it. Configuration is managed through environment variables: `OSS_ACCESS_KEY_ID`, `OSS_ACCESS_KEY_SECRET`, `OSS_REGION`, `OSS_BUCKET`, and `OSS_ENDPOINT`.
+
+### AI Services
+All AI-powered features are routed through a central `aiGatewayService.ts`. This gateway directs requests to **Alibaba Cloud DashScope** models like `qwen-turbo` and `qwen-max`. The API key is configured via the `DASHSCOPE_API_KEY` environment variable.

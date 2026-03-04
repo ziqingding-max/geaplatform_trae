@@ -4,6 +4,35 @@
 
 ---
 
+## [3.6.0] — 2026-03-05
+
+### Changed
+
+- **认证架构迁移 (Admin)**：Admin Portal 认证从 Manus OAuth 迁移至 **JWT + bcrypt + HttpOnly Cookie**（HS256 via `jose`），与 Portal/Worker 统一认证架构。新增 `server/_core/adminAuth.ts` 和 `server/_core/authRoutes.ts`，移除 Manus OAuth 依赖。
+- **数据库迁移**：从 MySQL/TiDB Serverless 迁移至 **SQLite (libsql)**，使用 `@libsql/client` + `drizzle-orm/libsql`，Drizzle config dialect 改为 `"sqlite"`。
+- **部署架构迁移**：从 AWS Singapore 迁移至**阿里云马来西亚 (ap-southeast-3)**，采用 Docker Compose + Nginx + Certbot SSL 自托管方案。
+- **文件存储迁移**：从 AWS S3 迁移至**阿里云 OSS**（S3-compatible API via `@aws-sdk/client-s3`）。
+- **AI 服务迁移**：LLM 调用从 OpenAI 迁移至**阿里云 DashScope**（qwen-turbo/qwen-max 等模型），通过 AI Gateway 统一路由。
+- **i18n 架构统一**：全系统国际化统一收敛至 `client/src/lib/i18n.ts`（Zustand-based store），所有页面通过 `useI18n()` + `t("key")` 获取翻译，移除所有硬编码文案。
+- **数据库表扩展**：从 33 张表扩展至 **48 张表**，新增 AI 配置（`aiProviderConfigs`、`aiTaskPolicies`、`aiTaskExecutions`）、知识库（`knowledgeItems`、`knowledgeSources` 等）、钱包（`customerWallets`、`walletTransactions`）、通知（`notifications`）等。
+
+### Fixed
+
+- **i18n.ts 重复 key 修复**：移除英文和中文翻译中 29 个重复的 key 定义。
+- **组件导入修复**：修复 `DatePicker`（Employees.tsx/Customers.tsx 默认导入 → 命名导入）、`PortalLayout`（PortalWallet.tsx 命名导入 → 默认导入）的导入方式不匹配。
+- **walletService.ts 路径修复**：修正 `../db/connection` → `./db/connection`、`../../../drizzle/schema` → `../../drizzle/schema`。
+- **Payroll 详情页崩溃修复**：添加缺失的 `payrollStatusLabels` 常量定义，修复 `ReferenceError` 导致的页面崩溃。
+- **Payroll 后端签名修复**：修正 `listPayrollRuns`、`getSubmittedAdjustmentsForPayroll`、`lockSubmittedAdjustments`、`getSubmittedUnpaidLeaveForPayroll`、`lockSubmittedLeaveRecords` 共 5 个函数签名与路由调用不匹配的问题。
+- **Invoice 创建修复**：修正 `invoiceMonth`/`dueDate` 传入 `Date` 对象到 `text` 类型列的问题，涉及 `invoices.ts`（router）、`invoiceGenerationService.ts`、`depositInvoiceService.ts`、`depositRefundService.ts`、`visaServiceInvoiceService.ts`、`creditNoteService.ts` 共 6 个文件。
+- **Invoice 列表修复**：修正 `listInvoices` 函数签名（`page, pageSize, search` → `filters, limit, offset`）和不存在的 schema 字段引用（`issueDate`/`totalAmount`/`type`）。
+- **Invoice 创建表单增强**：前端 Invoices.tsx 补全 Invoice Type、Month、Currency、Billing Entity、Due Date、Notes 等缺失字段。
+
+### Documentation
+
+- **全量纲领性文档更新**：基于代码审计结果，更新 README.md、AGENTS.md、CHANGELOG.md 及 docs/ 目录下全部 14 个文档，修正认证架构、数据库类型、部署方案、表数量、路由数量等过时信息。
+
+---
+
 ## [3.5.0] — 2026-03-04
 
 ### Added
@@ -37,9 +66,9 @@
 
 ### Changed
 
-- **Version3 文案标准落地（Admin + Client Portal）**：统一优化 AI Settings / Knowledge Review / Portal Knowledge Base 关键文案，聚焦“可理解、少歧义、动作可预期”。
-- **AI Settings 命名重构**：`AI Provider Settings` 调整为 `AI Task Routing Center`，并将 `Providers`、`Task Policies` 等改为更明确的“路由/端点”语义。
-- **知识模块表达优化**：明确营销按钮为“仅预览不发送”，并优化内容缺口、采集流程等管理术语，降低误解成本。
+- **Version3 文案标准落地（Admin + Client Portal）**：统一优化 AI Settings / Knowledge Review / Portal Knowledge Base 关键文案，聚焦"可理解、少歧义、动作可预期"。
+- **AI Settings 命名重构**：`AI Provider Settings` 调整为 `AI Task Routing Center`，并将 `Providers`、`Task Policies` 等改为更明确的"路由/端点"语义。
+- **知识模块表达优化**：明确营销按钮为"仅预览不发送"，并优化内容缺口、采集流程等管理术语，降低误解成本。
 
 ---
 
@@ -55,7 +84,7 @@
 
 - **AI 调用路径解耦**：Vendor Bill 解析等调用切换为 `executeTaskLLM` 任务网关路径，统一 Provider 选择逻辑。
 - **i18n 持续治理（分批推进）**：完成 `AISettings`、`AuditLogs`、`AdminLogin`、`AdminInvite`、`NotFound` 以及 `VendorBills`（AI 上传/审核主流程）的硬编码文案替换。
-- **运营文档同步**：补充/更新 i18n 审计与统一评审文档，明确“全量 i18n 页面化替换”作为持续波次推进项。
+- **运营文档同步**：补充/更新 i18n 审计与统一评审文档，明确"全量 i18n 页面化替换"作为持续波次推进项。
 
 ### Fixed
 
@@ -78,7 +107,6 @@
 ## [3.1.0] — 2026-02-28
 
 ### Added
-
 - **管理员一键访问客户门户**：Admin 可通过一键按钮生成临时 JWT，以客户身份登录 Client Portal 进行调试和支持。
 - **发票分页**：Invoice 列表页新增分页控件（Active 和 History 标签页各自独立分页，每页 20 条）。
 - **全局筛选页码重置**：所有列表页在筛选条件变更时自动重置到第 1 页。
@@ -158,7 +186,6 @@
 ---
 
 ## [2.5.0] — 2026-02-24
-
 ### Added
 
 - **Portal UX Overhaul Batch 4**：Payroll/Adjustment/Leave History 页面；Reimbursement 从 Adjustments 拆分为独立模块。
@@ -238,7 +265,6 @@
 ---
 
 ## [1.8.0] — 2026-02-16
-
 ### Added
 
 - **Invoice PDF 预览**：Draft/Pending Review 状态支持浏览器内预览。
@@ -332,8 +358,7 @@
 
 ### Added
 
-- 项目初始化，基于 Manus web-db-user 脚手架创建。
-- React 19 + TypeScript + Vite + Tailwind CSS 4 前端。
+- 项目初始化，基于 React 19 + TypeScript + Vite + Tailwind CSS 4 前端。
 - Express + tRPC + Drizzle ORM 后端。
-- Manus OAuth 认证集成。
-- MySQL/TiDB 数据库。
+- SQLite (libsql) 数据库。
+- JWT + bcrypt 认证。

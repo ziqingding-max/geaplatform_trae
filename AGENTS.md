@@ -6,9 +6,9 @@
 
 ## 1. System Identity
 
-**GEA EOR SaaS Admin** is a full-stack enterprise SaaS platform for Global Employment Advisors (GEA), managing Employer of Record (EOR), Agency of Record (AOR), and Visa services across 15+ countries. The system consists of two portals: an **Admin Portal** (internal operations) and a **Client Portal** (customer self-service). Both share the same database but have completely separate authentication, tRPC instances, and UI.
+**GEA EOR SaaS Admin** is a full-stack enterprise SaaS platform for Global Employment Advisors (GEA), managing Employer of Record (EOR), Agency of Record (AOR), and Visa services across 15+ countries. The system consists of three portals: an **Admin Portal** (internal operations), a **Client Portal** (customer self-service), and a **Worker Portal** (employee/contractor self-service). All three share the same database but have completely separate authentication, tRPC instances, and UI.
 
-**Production URL**: `admin.geahr.com` (Admin) / `app.geahr.com` (Portal)
+**Production URLs**: `admin.geahr.com` (Admin) / `app.geahr.com` (Portal) / `worker.geahr.com` (Worker)
 
 ---
 
@@ -21,7 +21,7 @@ Read documents in this order based on your task type. Each document is self-cont
 | Order | Document | Focus | Est. Time |
 |:---:|:---|:---|:---:|
 | 1 | `AGENTS.md` (this file) | System overview, critical rules, checklists | 5 min |
-| 2 | `docs/ARCHITECTURE.md` | System architecture, data model, dual-portal design | 8 min |
+| 2 | `docs/ARCHITECTURE.md` | System architecture, data model, tri-portal design | 8 min |
 | 3 | `docs/CONVENTIONS.md` | Coding standards, patterns, file organization | 6 min |
 | 4 | `docs/BUSINESS-RULES.md` | Domain logic, state machines, calculations | 10 min |
 | 5 | `docs/TESTING.md` | Test strategy, data cleanup, test patterns | 5 min |
@@ -41,7 +41,7 @@ Read documents in this order based on your task type. Each document is self-cont
 |:---|:---|
 | `docs/PRODUCT.md` | Full feature inventory with module descriptions |
 | `docs/rbac-matrix.md` | Role-permission matrix for all modules |
-| `docs/data-dictionary.md` | All 33 database tables with column definitions |
+| `docs/data-dictionary.md` | All 48 database tables with column definitions |
 | `docs/client-portal-spec.md` | Portal architecture and module details |
 | `docs/development-workflow.md` | Sprint process, release checklist |
 | `CHANGELOG.md` | Version history and past changes |
@@ -56,19 +56,21 @@ Read documents in this order based on your task type. Each document is self-cont
 | Layer | Technology | Key Files |
 |:---|:---|:---|
 | Frontend | React 19 + Vite + Tailwind CSS 4 + Shadcn/UI | `client/src/` |
-| API | tRPC 11 + SuperJSON + Zod | `server/routers/`, `server/portal/routers/` |
+| API | tRPC 11 + SuperJSON + Zod | `server/routers/`, `server/portal/routers/`, `server/worker/routers/` |
 | Backend | Node.js 22 + Express 4 | `server/_core/` |
 | ORM | Drizzle ORM | `drizzle/schema.ts` |
-| Database | MySQL 8 / TiDB Serverless | `drizzle/migrations/` |
-| Auth (Admin) | Manus OAuth + Session Cookie | `server/_core/oauth.ts` |
+| Database | SQLite via libsql | `@libsql/client` + `drizzle-orm/libsql`, dialect: `"sqlite"` |
+| Auth (Admin) | JWT + bcrypt + HttpOnly Cookie | `server/_core/adminAuth.ts`, `server/_core/authRoutes.ts` |
 | Auth (Portal) | JWT + bcrypt + Invite Registration | `server/portal/portalAuth.ts` |
+| Auth (Worker) | JWT + bcrypt + Invite Registration | `server/worker/workerAuth.ts` |
 | Testing | Vitest | `server/*.test.ts` |
-| i18n | Zustand-based EN/ZH | `client/src/lib/i18n.ts` |
+| i18n | Zustand-based EN/ZH store | `client/src/lib/i18n.ts`, `useI18n()` + `t("key")` |
 | Formatting | Centralized utilities | `client/src/lib/format.ts` |
-| AI Routing | Centralized LLM Gateway | `server/services/aiGatewayService.ts` |
+| AI Routing | 阿里云 DashScope via AI Gateway | `server/services/aiGatewayService.ts` |
 | Copilot | Global Smart Assistant | `client/src/components/CopilotSmartAssistant.tsx` |
 | Notification | In-App & Email Notifications | `server/services/notificationService.ts` |
-| Worker Portal | Employee Self-Service | `client/src/pages/worker/` |
+| File Storage | 阿里云 OSS (S3-compatible API) | `server/storage.ts` |
+| Deployment | Docker Compose + Nginx + Certbot SSL | 阿里云马来西亚 (ap-southeast-3) |
 
 ### Essential Commands
 
@@ -80,23 +82,24 @@ npx tsc --noEmit      # Type check without emitting
 ```
 
 ### Key File Map
-
 ```
-drizzle/schema.ts              → 33 database tables (source of truth for data model)
+drizzle/schema.ts              → 48 database tables (source of truth for data model)
 drizzle/relations.ts           → Table relationships
 server/procedures.ts           → Role-based middleware (admin/customerManager/operationsManager/financeManager)
-server/routers.ts              → Admin tRPC router aggregation (20 routers)
-server/portal/portalRouter.ts  → Portal tRPC router aggregation (9 routers)
-server/cronJobs.ts             → 7 scheduled tasks
+server/routers.ts              → Admin tRPC router aggregation (31 routers)
+server/portal/portalRouter.ts  → Portal tRPC router aggregation (12 routers)
+server/worker/workerRouter.ts  → Worker tRPC router aggregation (7 routers)
+server/cronJobs.ts             → Scheduled tasks
 server/services/               → Complex business logic (invoice generation, deposits, credit notes)
-server/db.ts                   → Database query helpers
+server/services/db/            → Database query helpers (financeService, employeeService, etc.)
 shared/roles.ts                → Multi-role parsing and validation
 shared/const.ts                → System constants (cookie names, error messages)
 client/src/components/Layout.tsx    → Admin sidebar navigation structure
 client/src/components/PortalLayout.tsx → Portal sidebar navigation
+client/src/pages/worker/WorkerLayout.tsx → Worker sidebar navigation
 client/src/lib/format.ts       → Date/currency/country formatting (MUST use these)
 client/src/lib/i18n.ts         → Translation dictionary (MUST add translations here)
-client/src/App.tsx             → Route definitions (Admin + Portal)
+client/src/App.tsx             → Route definitions (Admin + Portal + Worker)
 server/services/aiGatewayService.ts → Central AI task routing and execution gateway (Use this!)
 server/services/copilotService.ts   → Copilot business logic and chat handling
 client/src/components/CopilotSmartAssistant.tsx → Global floating assistant component
@@ -111,9 +114,9 @@ client/src/components/NotificationCenter.tsx → Notification UI component
 
 These rules are non-negotiable. Violating any of them will cause production issues.
 
-### Rule 1: Dual-Portal Isolation
+### Rule 1: Tri-Portal Isolation
 
-Admin and Portal are **completely separate** tRPC instances. Admin uses `server/routers/` with `protectedProcedure` (Manus OAuth). Portal uses `server/portal/routers/` with `protectedPortalProcedure` (JWT). **Never import admin procedures in portal code or vice versa.** Portal procedures MUST always filter by `ctx.portalUser.customerId` — no cross-customer data access is allowed.
+Admin, Portal, and Worker are **completely separate** tRPC instances. Admin uses `server/routers/` with `protectedProcedure` (JWT via `adminAuth.ts`). Portal uses `server/portal/routers/` with `protectedPortalProcedure` (JWT via `portalAuth.ts`). Worker uses `server/worker/routers/` with `protectedWorkerProcedure` (JWT via `workerAuth.ts`). **Never import procedures across portal boundaries.** Portal procedures MUST always filter by `ctx.portalUser.customerId` — no cross-customer data access is allowed. Worker procedures MUST always filter by `ctx.workerUser.employeeId` — no cross-employee data access is allowed.
 
 ### Rule 2: Role-Based Access
 
@@ -121,7 +124,7 @@ Use the correct procedure middleware from `server/procedures.ts`. Admin and User
 
 ### Rule 3: Date/Time as UTC Timestamps
 
-Store all business timestamps as **UTC milliseconds** in the database. Display dates using `formatDate()` from `client/src/lib/format.ts` — never use raw `new Date().toLocaleDateString()`. Cutoff logic uses **Beijing time (UTC+8)**. The monthly cutoff is the **5th of each month**.
+Store all business timestamps as **UTC milliseconds** in the database. Display dates using `formatDate()` from `client/src/lib/format.ts` — never use raw `new Date().toLocaleDateString()`. Cutoff logic uses **UTC+8 time**. The monthly cutoff is the **5th of each month**. **Important**: Schema columns with `text` type for dates (e.g., `startDate`, `endDate`, `invoiceMonth`, `dueDate`) must receive **string values** (e.g., `"2026-03-01"`), NOT `Date` objects.
 
 ### Rule 4: Currency Formatting
 
@@ -129,15 +132,15 @@ Use `formatAmount(value, currency)` from `format.ts`. KRW, VND, IDR display **0 
 
 ### Rule 5: i18n for All User-Facing Text
 
-Every user-facing string must go through `client/src/lib/i18n.ts`. Add both EN and ZH translations. Use `t("key")` in components — never hardcode display text. Status labels use the `statusLabels` mapping — never use `.replace("_", " ")`.
+Every user-facing string must go through `client/src/lib/i18n.ts` (Zustand-based store). Add both EN and ZH translations. Use `const { t } = useI18n()` in components — never hardcode display text. Status labels use the `statusLabels` mapping — never use `.replace("_", " ")`.
 
 ### Rule 6: Zero-Tolerance Test Data Policy
 
 **This system shares a single database between dev server and production. Test data leakage has caused production incidents before.** Every test file MUST: (1) call `cleanup.track*()` immediately after every `create` call, before any assertions; (2) include `afterAll(async () => { await cleanup.run(); })` at the top level; (3) never create data via the browser UI during testing. Before saving any checkpoint, run the post-test audit queries in `docs/TESTING.md` Section 10 to verify zero test data remains. This is a **blocking requirement** — no checkpoint until the database is clean. See `docs/TESTING.md` Sections 9-10 for full details.
 
-### Rule 7: File Storage via S3
+### Rule 7: File Storage via 阿里云 OSS
 
-Never store file bytes in database columns. Use `storagePut()` from `server/storage.ts` to upload to S3, then store the URL in the database. Static assets for the web app go to `/home/ubuntu/webdev-static-assets/` and must be uploaded via `manus-upload-file --webdev`.
+Never store file bytes in database columns. Use `storagePut()` from `server/storage.ts` to upload to 阿里云 OSS (S3-compatible API via `@aws-sdk/client-s3`), then store the URL in the database.
 
 ### Rule 8: Invoice Status Transitions
 
@@ -149,18 +152,17 @@ On the 5th of each month, the cron job auto-locks the previous month's `submitte
 
 ### Rule 10: No Direct `server/_core/` Edits
 
-The `server/_core/` directory is framework-level infrastructure (OAuth, tRPC setup, Vite bridge). Do not modify files in this directory unless explicitly extending infrastructure capabilities.
+The `server/_core/` directory is framework-level infrastructure (Auth, tRPC setup, Vite bridge). Do not modify files in this directory unless explicitly extending infrastructure capabilities.
 
 ### Rule 11: AI Task Routing
 
-Direct calls to underlying LLM providers (e.g., via `openai` SDK directly) are **strictly prohibited** for business tasks. All AI capabilities MUST be routed through `executeTaskLLM()` in `server/services/aiGatewayService.ts`. This ensures centralized control over provider selection, fallback strategies, and observability.
+Direct calls to underlying LLM providers are **strictly prohibited** for business tasks. All AI capabilities MUST be routed through `executeTaskLLM()` in `server/services/aiGatewayService.ts`. This ensures centralized control over provider selection (阿里云 DashScope), fallback strategies, and observability.
 
 ### Rule 12: Notification Channels
 
 Always use `server/services/notificationService.ts` for sending alerts. Notifications must be localized (i18n) and support both **In-App** (for dashboard alerts) and **Email** (for critical updates). Never send raw emails using `nodemailer` directly.
 
 ### Rule 13: Contractor Invoicing
-
 Contractor invoices are handled separately from standard payroll runs. Use `server/services/contractorInvoiceGenerationService.ts` for logic. The cron job runs daily at 01:00 to generate invoices for active contractors.
 
 ### Rule 14: Copilot Implementation
@@ -169,7 +171,7 @@ Copilot business logic resides in `server/services/copilotService.ts`. It must u
 
 ### Rule 15: Worker Portal Access
 
-Worker Portal uses a separate `server/portal/routers/worker` namespace and authentication flow. Ensure `protectedWorkerProcedure` is used for all worker-facing endpoints to enforce correct scoping.
+Worker Portal uses a separate `server/worker/routers/` namespace and authentication flow (`server/worker/workerAuth.ts`). Ensure `protectedWorkerProcedure` is used for all worker-facing endpoints to enforce correct scoping by `ctx.workerUser.employeeId`.
 
 ---
 
@@ -181,21 +183,21 @@ Follow this checklist in order. Each step maps to a specific file.
 
 **Step 2 — Define Schema.** Add or modify tables in `drizzle/schema.ts`. Define relationships in `drizzle/relations.ts`. Run `pnpm db:push` to generate and apply migrations.
 
-**Step 3 — Write Query Helpers.** Add database query functions in `server/db.ts`. For complex business logic (calculations, multi-step operations), create a service file in `server/services/`.
+**Step 3 — Write Query Helpers.** Add database query functions in `server/services/db/`. For complex business logic (calculations, multi-step operations), create a service file in `server/services/`.
 
-**Step 4 — Create tRPC Procedures.** Create a new router file in `server/routers/<feature>.ts` (or `server/portal/routers/portal<Feature>Router.ts` for portal). Use the appropriate procedure middleware from `server/procedures.ts`. Define Zod input schemas. Register the router in `server/routers.ts` (or `server/portal/portalRouter.ts`).
+**Step 4 — Create tRPC Procedures.** Create a new router file in `server/routers/<feature>.ts` (or `server/portal/routers/portal<Feature>Router.ts` for portal, or `server/worker/routers/worker<Feature>Router.ts` for worker). Use the appropriate procedure middleware from `server/procedures.ts`. Define Zod input schemas. Register the router in `server/routers.ts` (or `server/portal/portalRouter.ts` or `server/worker/workerRouter.ts`).
 
-**Step 5 — Build Frontend.** Create page component in `client/src/pages/<Feature>.tsx`. Use `trpc.<feature>.useQuery()` and `trpc.<feature>.useMutation()` for data. Add i18n translations in `client/src/lib/i18n.ts` (both EN and ZH). Register the route in `client/src/App.tsx`. Add sidebar navigation in `client/src/components/Layout.tsx`.
+**Step 5 — Build Frontend.** Create page component in `client/src/pages/<Feature>.tsx`. Use `trpc.<feature>.useQuery()` and `trpc.<feature>.useMutation()` for data. Add i18n translations in `client/src/lib/i18n.ts` (both EN and ZH). Register the route in `client/src/App.tsx`. Add sidebar navigation in the appropriate Layout component.
 
 **Step 6 — Write Tests.** Create `server/<feature>.test.ts` with Vitest. Test happy path, error cases, and permission checks. Include `afterAll` cleanup. Run `pnpm test` to verify.
 
-**Step 7 — Mark Complete.** Update `todo.md` to mark items as `[x]`. Save checkpoint via `webdev_save_checkpoint`.
+**Step 7 — Mark Complete.** Update `todo.md` to mark items as `[x]`. Save checkpoint.
 
 ---
 
 ## 6. How to Fix a Bug
 
-**Step 1 — Reproduce.** Check browser console logs (`.manus-logs/browserConsole.log`) and network logs (`.manus-logs/networkRequests.log`). Identify the failing tRPC procedure or component.
+**Step 1 — Reproduce.** Check browser console logs and network logs. Identify the failing tRPC procedure or component.
 
 **Step 2 — Locate.** Trace from the frontend page → tRPC hook → router procedure → db query/service. Check `docs/BUSINESS-RULES.md` for relevant domain rules.
 
@@ -209,7 +211,7 @@ Follow this checklist in order. Each step maps to a specific file.
 
 ---
 
-## 7. Cron Job Schedule (Beijing Time UTC+8)
+## 7. Cron Jobs Schedule
 
 These jobs run automatically. Be aware of their timing when debugging or modifying related features.
 
@@ -228,20 +230,25 @@ These jobs run automatically. Be aware of their timing when debugging or modifyi
 
 ## 8. Database Table Groups
 
-The 33 tables are organized into these functional groups. Refer to `docs/data-dictionary.md` for full column definitions.
+The 48 tables are organized into these functional groups. Refer to `docs/data-dictionary.md` for full column definitions.
 
 | Group | Tables | Description |
 |:---|:---|:---|
-| Core Entities | `customers`, `employees`, `billingEntities`, `countries` | Primary business entities |
+| Core Entities | `customers`, `employees`, `billingEntities`, `countriesConfig` | Primary business entities |
 | Contacts & Auth | `customerContacts`, `users` | Admin users and portal contacts |
 | Contracts | `customerContracts`, `employeeContracts` | Legal agreements |
+| Documents | `employeeDocuments`, `salesDocuments` | File attachments |
 | Pricing | `customerPricing` | Per-country or global discount pricing |
-| Leave | `customerLeavePolicies`, `leaveRecords`, `leaveBalances` | Leave management |
+| Leave | `customerLeavePolicies`, `leaveTypes`, `leaveRecords`, `leaveBalances`, `publicHolidays` | Leave management |
 | Payroll | `payrollRuns`, `payrollItems` | Monthly payroll processing |
 | Adjustments | `adjustments` | Bonuses, allowances, deductions |
 | Reimbursements | `reimbursements` | Employee expense claims |
-| Invoices | `invoices`, `invoiceItems` | Billing and line items |
-| Vendors | `vendors`, `vendorBills`, `vendorBillItems`, `costAllocations` | Supplier management |
-| Finance | `exchangeRates`, `depositRules` | Currency and deposit config |
-| Sales | `salesLeads`, `salesActivities` | CRM pipeline |
-| System | `auditLogs`, `systemSettings`, `employeeDocuments`, `employeeVisas` | Operations and config |
+| Invoices | `invoices`, `invoiceItems`, `creditNoteApplications` | Billing and line items |
+| Wallet | `customerWallets`, `walletTransactions` | Customer prepayment management |
+| Vendors | `vendors`, `vendorBills`, `vendorBillItems`, `billInvoiceAllocations` | Supplier management |
+| Finance | `exchangeRates`, `quotations`, `salaryBenchmarks` | Currency, quotes, benchmarks |
+| Sales | `salesLeads`, `salesActivities`, `salesDocuments` | CRM pipeline |
+| Country Data | `countriesConfig`, `countrySocialInsuranceItems`, `countryGuideChapters` | Country-specific config |
+| AI | `aiProviderConfigs`, `aiTaskPolicies`, `aiTaskExecutions` | AI gateway configuration |
+| Knowledge | `knowledgeItems`, `knowledgeSources`, `knowledgeFeedbackEvents`, `knowledgeMarketingEvents` | Knowledge base |
+| System | `auditLogs`, `systemConfig`, `systemSettings`, `notifications`, `onboardingInvites` | Operations and config |
