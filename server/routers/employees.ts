@@ -30,7 +30,7 @@ import {
   hasDepositBeenProcessed,
   getDb,
 } from "../db";
-import { storagePut } from "../storage";
+import { storagePut, storageGet } from "../storage";
 import { generateDepositInvoice } from "../services/depositInvoiceService";
 import { generateDepositRefund } from "../services/depositRefundService";
 import { generateVisaServiceInvoice } from "../services/visaServiceInvoiceService";
@@ -582,7 +582,19 @@ export const employeesRouter = router({
     list: userProcedure
       .input(z.object({ employeeId: z.number() }))
       .query(async ({ input }) => {
-        return await listEmployeeContracts(input.employeeId);
+        const contracts = await listEmployeeContracts(input.employeeId);
+        // Map to signed URLs for viewing
+        return await Promise.all(contracts.map(async (c) => {
+          if (c.fileKey) {
+            try {
+              const { url } = await storageGet(c.fileKey);
+              return { ...c, fileUrl: url };
+            } catch (e) {
+              return c;
+            }
+          }
+          return c;
+        }));
       }),
 
     upload: customerManagerProcedure
@@ -680,7 +692,19 @@ export const employeesRouter = router({
     list: userProcedure
       .input(z.object({ employeeId: z.number() }))
       .query(async ({ input }) => {
-        return await listEmployeeDocuments(input.employeeId);
+        const docs = await listEmployeeDocuments(input.employeeId);
+        // Map to signed URLs for viewing
+        return await Promise.all(docs.map(async (d) => {
+          if (d.fileKey) {
+            try {
+              const { url } = await storageGet(d.fileKey);
+              return { ...d, fileUrl: url };
+            } catch (e) {
+              return d;
+            }
+          }
+          return d;
+        }));
       }),
 
     upload: customerManagerProcedure

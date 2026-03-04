@@ -25,8 +25,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Tabs, TabsList, TabsTrigger,
+  Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
+import ContractorMilestones from "@/components/pages/ContractorMilestones";
 import { CalendarDays, Plus, Pencil, Trash2, Lock, AlertCircle, Eye, Info, CheckCircle2, XCircle, Download } from "lucide-react";
 import { DatePicker } from "@/components/DatePicker";
 import { toast } from "sonner";
@@ -388,11 +389,11 @@ export default function Leave() {
                     <SelectContent>
                       {leaveTypesData?.map((lt: any) => (
                         <SelectItem key={lt.id} value={String(lt.id)}>
-                          {lt.leaveTypeName} {lt.isPaid ? "" : "(Unpaid)"} {lt.annualEntitlement ? `— ${lt.annualEntitlement} days/yr` : ""}
+                          {lt.leaveTypeName} {lt.isPaid ? "" : `(${t("leave.type.unpaid")})`} {lt.annualEntitlement ? `— ${lt.annualEntitlement} ${t("leave.type.daysPerYear")}` : ""}
                         </SelectItem>
                       ))}
                       {(!leaveTypesData || leaveTypesData.length === 0) && selectedEmployee && (
-                        <SelectItem value="__none" disabled>No leave types for {selectedEmployee.country}</SelectItem>
+                        <SelectItem value="__none" disabled>{t("leave.form.noLeaveTypes", { country: selectedEmployee.country })}</SelectItem>
                       )}
                     </SelectContent>
                   </Select>
@@ -405,7 +406,7 @@ export default function Leave() {
                     <DatePicker
                       value={formData.startDate}
                       onChange={(v) => setFormData({ ...formData, startDate: v })}
-                      placeholder="Select start date"
+                      placeholder={t("leave.form.placeholder.startDate")}
                     />
                   </div>
                   <div className="space-y-2">
@@ -413,7 +414,7 @@ export default function Leave() {
                     <DatePicker
                       value={formData.endDate}
                       onChange={(v) => setFormData({ ...formData, endDate: v })}
-                      placeholder="Select end date"
+                      placeholder={t("leave.form.placeholder.endDate")}
                       minDate={formData.startDate || undefined}
                     />
                   </div>
@@ -485,176 +486,189 @@ export default function Leave() {
           </div>
         </div>
 
-        {/* Active / History Tabs */}
-        <Tabs value={viewTab} onValueChange={(v) => { setViewTab(v); setStatusFilter("all"); }} className="w-full">
-          <TabsList>
-            <TabsTrigger value="active">{t("leave.tabs.active")}</TabsTrigger>
-            <TabsTrigger value="history">{t("leave.tabs.history")}</TabsTrigger>
+        <Tabs defaultValue="leave" className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="leave">{t("leave.tab.leave")}</TabsTrigger>
+            <TabsTrigger value="milestones">{t("leave.tab.milestones")}</TabsTrigger>
           </TabsList>
-        </Tabs>
 
-        {/* Filters */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <Select value={customerFilter} onValueChange={setCustomerFilter}>
-            <SelectTrigger className="w-44"><SelectValue placeholder={t("leave.filters.allCustomers")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("leave.filters.allCustomers")}</SelectItem>
-              {customersList.map((c) => (
-                <SelectItem key={c.id} value={String(c.id)}>{c.companyName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={countryFilter} onValueChange={setCountryFilter}>
-            <SelectTrigger className="w-36"><SelectValue placeholder={t("leave.filters.allCountries")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("leave.filters.allCountries")}</SelectItem>
-              {availableCountries.map((cc) => (
-                <SelectItem key={cc} value={cc}>{cc}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {viewTab === "active" && (
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36"><SelectValue placeholder={t("leave.table.header.status")} /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("leave.filters.allStatus")}</SelectItem>
-                <SelectItem value="submitted">{t("leave.status.submitted")}</SelectItem>
-                <SelectItem value="client_approved">{t("leave.status.client_approved")}</SelectItem>
-                <SelectItem value="client_rejected">{t("leave.status.client_rejected")}</SelectItem>
-                <SelectItem value="admin_rejected">{t("leave.status.admin_rejected")}</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-          <Select value={monthFilter} onValueChange={setMonthFilter}>
-            <SelectTrigger className="w-40"><SelectValue placeholder={t("leave.filters.allMonths")} /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("leave.filters.allMonths")}</SelectItem>
-              {monthOptions.map((m) => (
-                <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          <TabsContent value="leave" className="space-y-6">
+            {/* Active / History Tabs */}
+            <Tabs value={viewTab} onValueChange={(v) => { setViewTab(v); setStatusFilter("all"); }} className="w-full">
+              <TabsList>
+                <TabsTrigger value="active">{t("leave.tabs.active")}</TabsTrigger>
+                <TabsTrigger value="history">{t("leave.tabs.history")}</TabsTrigger>
+              </TabsList>
+            </Tabs>
 
-        {/* Table */}
-        <Card>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("leave.table.header.employee")}</TableHead>
-                  <TableHead>{t("leave.table.header.leaveType")}</TableHead>
-                  <TableHead>{t("leave.table.header.period")}</TableHead>
-                  <TableHead>{t("leave.table.header.days")}</TableHead>
-                  <TableHead>{t("leave.table.header.status")}</TableHead>
-                  <TableHead className="w-[120px]">{t("leave.table.header.actions")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 6 }).map((_, j) => (
-                        <TableCell key={j}><Skeleton className="h-4 w-24" /></TableCell>
-                      ))}
-                      <TableCell></TableCell>
+            {/* Filters */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <Select value={customerFilter} onValueChange={setCustomerFilter}>
+                <SelectTrigger className="w-44"><SelectValue placeholder={t("leave.filters.allCustomers")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("leave.filters.allCustomers")}</SelectItem>
+                  {customersList.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.companyName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={countryFilter} onValueChange={setCountryFilter}>
+                <SelectTrigger className="w-36"><SelectValue placeholder={t("leave.filters.allCountries")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("leave.filters.allCountries")}</SelectItem>
+                  {availableCountries.map((cc) => (
+                    <SelectItem key={cc} value={cc}>{cc}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {viewTab === "active" && (
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-36"><SelectValue placeholder={t("leave.table.header.status")} /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("leave.filters.allStatus")}</SelectItem>
+                    <SelectItem value="submitted">{t("leave.status.submitted")}</SelectItem>
+                    <SelectItem value="client_approved">{t("leave.status.client_approved")}</SelectItem>
+                    <SelectItem value="client_rejected">{t("leave.status.client_rejected")}</SelectItem>
+                    <SelectItem value="admin_rejected">{t("leave.status.admin_rejected")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              <Select value={monthFilter} onValueChange={setMonthFilter}>
+                <SelectTrigger className="w-40"><SelectValue placeholder={t("leave.filters.allMonths")} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("leave.filters.allMonths")}</SelectItem>
+                  {monthOptions.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Table */}
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t("leave.table.header.employee")}</TableHead>
+                      <TableHead>{t("leave.table.header.leaveType")}</TableHead>
+                      <TableHead>{t("leave.table.header.period")}</TableHead>
+                      <TableHead>{t("leave.table.header.days")}</TableHead>
+                      <TableHead>{t("leave.table.header.status")}</TableHead>
+                      <TableHead className="w-[120px]">{t("leave.table.header.actions")}</TableHead>
                     </TableRow>
-                  ))
-                ) : leaves.length > 0 ? (
-                  leaves.map((leave) => {
-                    const emp = employeeMap[leave.employeeId];
-                    const empName = emp?.name || `Employee #${leave.employeeId}`;
-                    // leaveTypeName comes from backend JOIN
-                    const typeName = (leave as any).leaveTypeName || `Type #${leave.leaveTypeId}`;
-                    return (
-                      <TableRow key={leave.id}>
-                        <TableCell className="text-sm font-medium">{empName}</TableCell>
-                        <TableCell className="text-sm">{typeName}</TableCell>
-                        <TableCell className="text-sm">
-                          {formatDate(leave.startDate)} — {formatDate(leave.endDate)}
-                        </TableCell>
-                        <TableCell className="text-sm font-mono">{leave.days}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={`text-xs ${statusColors[leave.status] || ""}`}>
-                            {leave.status === "locked" && <Lock className="w-3 h-3 mr-1 inline" />}
-                            {t(`leave.status.${leave.status}`) || leave.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            {leave.status === "client_approved" && (
-                              <>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <TableRow key={i}>
+                          {Array.from({ length: 6 }).map((_, j) => (
+                            <TableCell key={j}><Skeleton className="h-4 w-24" /></TableCell>
+                          ))}
+                          <TableCell></TableCell>
+                        </TableRow>
+                      ))
+                    ) : leaves.length > 0 ? (
+                      leaves.map((leave) => {
+                        const emp = employeeMap[leave.employeeId];
+                        const empName = emp?.name || `Employee #${leave.employeeId}`;
+                        // leaveTypeName comes from backend JOIN
+                        const typeName = (leave as any).leaveTypeName || `Type #${leave.leaveTypeId}`;
+                        return (
+                          <TableRow key={leave.id}>
+                            <TableCell className="text-sm font-medium">{empName}</TableCell>
+                            <TableCell className="text-sm">{typeName}</TableCell>
+                            <TableCell className="text-sm">
+                              {formatDate(leave.startDate)} — {formatDate(leave.endDate)}
+                            </TableCell>
+                            <TableCell className="text-sm font-mono">{leave.days}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={`text-xs ${statusColors[leave.status] || ""}`}>
+                                {leave.status === "locked" && <Lock className="w-3 h-3 mr-1 inline" />}
+                                {t(`leave.status.${leave.status}`) || leave.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-1">
+                                {leave.status === "client_approved" && (
+                                  <>
+                                    <Button
+                                      variant="ghost" size="icon"
+                                      className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                      onClick={() => adminApproveMutation.mutate({ id: leave.id })}
+                                      disabled={adminApproveMutation.isPending}
+                                      title="Admin Approve"
+                                    >
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost" size="icon"
+                                      className="h-7 w-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                                      onClick={() => adminRejectMutation.mutate({ id: leave.id })}
+                                      disabled={adminRejectMutation.isPending}
+                                      title="Admin Reject"
+                                    >
+                                      <XCircle className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </>
+                                )}
+                                {leave.status === "submitted" && (
+                                  <>
+                                    <Button
+                                      variant="ghost" size="icon"
+                                      className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                      onClick={() => handleEdit(leave)}
+                                      title="Edit"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost" size="icon"
+                                      className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      onClick={() => handleDelete(leave.id)}
+                                      disabled={deleteMutation.isPending}
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </>
+                                )}
                                 <Button
                                   variant="ghost" size="icon"
-                                  className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                                  onClick={() => adminApproveMutation.mutate({ id: leave.id })}
-                                  disabled={adminApproveMutation.isPending}
-                                  title="Admin Approve"
+                                  className="h-7 w-7"
+                                  onClick={() => setViewLeave(leave)}
+                                  title="View details"
                                 >
-                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <Eye className="w-3.5 h-3.5" />
                                 </Button>
-                                <Button
-                                  variant="ghost" size="icon"
-                                  className="h-7 w-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                                  onClick={() => adminRejectMutation.mutate({ id: leave.id })}
-                                  disabled={adminRejectMutation.isPending}
-                                  title="Admin Reject"
-                                >
-                                  <XCircle className="w-3.5 h-3.5" />
-                                </Button>
-                              </>
-                            )}
-                            {leave.status === "submitted" && (
-                              <>
-                                <Button
-                                  variant="ghost" size="icon"
-                                  className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                  onClick={() => handleEdit(leave)}
-                                  title="Edit"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button
-                                  variant="ghost" size="icon"
-                                  className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                  onClick={() => handleDelete(leave.id)}
-                                  disabled={deleteMutation.isPending}
-                                  title="Delete"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                              </>
-                            )}
-                            <Button
-                              variant="ghost" size="icon"
-                              className="h-7 w-7"
-                              onClick={() => setViewLeave(leave)}
-                              title="View details"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-12">
+                          <CalendarDays className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+                          <p className="text-sm text-muted-foreground">{t("leave.emptyState.noRecords")}</p>
                         </TableCell>
                       </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12">
-                      <CalendarDays className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
-                      <p className="text-sm text-muted-foreground">{t("leave.emptyState.noRecords")}</p>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-        {data && (
-          <p className="text-xs text-muted-foreground text-right">
-            Showing {leaves.length} of {data.total} leave records
-          </p>
-        )}
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+            {data && (
+              <p className="text-xs text-muted-foreground text-right">
+                Showing {leaves.length} of {data.total} leave records
+              </p>
+            )}
+          </TabsContent>
+
+          <TabsContent value="milestones">
+            <ContractorMilestones />
+          </TabsContent>
+        </Tabs>
 
         {/* View Leave Detail Dialog (read-only) */}
         <Dialog open={!!viewLeave} onOpenChange={(open) => { if (!open) setViewLeave(null); }}>
@@ -734,7 +748,7 @@ export default function Leave() {
                   <SelectContent>
                     {editLeaveTypesData?.map((lt: any) => (
                       <SelectItem key={lt.id} value={String(lt.id)}>
-                        {lt.leaveTypeName} {lt.isPaid ? "" : "(Unpaid)"} {lt.annualEntitlement ? `— ${lt.annualEntitlement} days/yr` : ""}
+                        {lt.leaveTypeName} {lt.isPaid ? "" : `(${t("leave.type.unpaid")})`} {lt.annualEntitlement ? `— ${lt.annualEntitlement} ${t("leave.type.daysPerYear")}` : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -748,7 +762,7 @@ export default function Leave() {
                   <DatePicker
                     value={editFormData.startDate}
                     onChange={(v) => setEditFormData({ ...editFormData, startDate: v })}
-                    placeholder="Select start date"
+                    placeholder={t("leave.form.placeholder.startDate")}
                   />
                 </div>
                 <div className="space-y-2">
@@ -756,7 +770,7 @@ export default function Leave() {
                   <DatePicker
                     value={editFormData.endDate}
                     onChange={(v) => setEditFormData({ ...editFormData, endDate: v })}
-                    placeholder="Select end date"
+                    placeholder={t("leave.form.placeholder.endDate")}
                     minDate={editFormData.startDate || undefined}
                   />
                 </div>

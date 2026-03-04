@@ -678,7 +678,8 @@ export const invoices = sqliteTable(
     paidAmount: text("paidAmount"),
     // Credit note application tracking
     creditApplied: text("creditApplied").default("0"), // Total credit applied to this invoice
-    amountDue: text("amountDue"), // Adjusted amount due after credit (total - creditApplied)
+    walletAppliedAmount: text("walletAppliedAmount").default("0"), // Total wallet balance applied to this invoice
+    amountDue: text("amountDue"), // Adjusted amount due after credit (total - creditApplied - walletAppliedAmount)
     // Cost allocation tracking (denormalized for query performance)
     costAllocated: text("costAllocated").default("0"), // Total vendor bill cost allocated to this invoice
     // Related credit note / refund
@@ -1779,7 +1780,78 @@ export {
 } from "./copilot-schema";
 
 // ============================================================================
-// 19. AOR SERVICES & WORKER PORTAL
+// 19. CUSTOMER WALLET (PREPAYMENT) SYSTEM
+// ============================================================================
+
+/**
+ * Customer Wallets — stores current balance per currency.
+ * Optimistic locking (version) is used to prevent concurrent balance updates.
+ */
+export const customerWallets = sqliteTable(
+  "customer_wallets",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    customerId: integer("customerId").notNull(),
+    currency: text("currency", { length: 3 }).notNull(), // USD, EUR, CNY...
+    balance: text("balance").default("0").notNull(), // Decimal string
+    version: integer("version").default(0).notNull(), // Optimistic lock
+    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    cwCustomerCurrencyIdx: uniqueIndex("cw_customer_currency_idx").on(table.customerId, table.currency),
+  })
+);
+
+export type CustomerWallet = typeof customerWallets.$inferSelect;
+export type InsertCustomerWallet = typeof customerWallets.$inferInsert;
+
+/**
+ * Wallet Transactions — immutable ledger of all fund movements.
+ * Source of truth for audit and accounting.
+ */
+export const walletTransactions = sqliteTable(
+  "wallet_transactions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    walletId: integer("walletId").notNull(),
+    
+    type: text("type", { enum: [
+      "credit_note_in",       // Credit Note converted to balance (+)
+      "overpayment_in",       // Invoice overpayment converted to balance (+)
+      "top_up",               // Direct bank transfer top-up (+)
+      "invoice_deduction",    // Balance used to pay invoice (-)
+      "invoice_refund",       // Invoice rejected/voided, balance returned (+)
+      "manual_adjustment",    // Admin manual adjustment (+/-)
+      "payout",               // Withdrawal/Refund to bank (-)
+    ] }).notNull(),
+
+    amount: text("amount").notNull(), // Always positive
+    direction: text("direction", { enum: ["credit", "debit"] }).notNull(), // credit = increase balance, debit = decrease balance
+    
+    balanceBefore: text("balanceBefore").notNull(),
+    balanceAfter: text("balanceAfter").notNull(),
+    
+    // Audit Trail
+    referenceId: integer("referenceId").notNull(), // InvoiceID, CreditNoteID, PaymentID
+    referenceType: text("referenceType", { enum: ["invoice", "credit_note", "payment", "manual"] }).notNull(),
+    
+    description: text("description"),
+    internalNote: text("internalNote"),
+    createdBy: integer("createdBy"), // User ID
+    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    wtWalletIdIdx: index("wt_wallet_id_idx").on(table.walletId),
+    wtReferenceIdx: index("wt_reference_idx").on(table.referenceId, table.referenceType),
+    wtCreatedIdx: index("wt_created_idx").on(table.createdAt),
+  })
+);
+
+export type WalletTransaction = typeof walletTransactions.$inferSelect;
+export type InsertWalletTransaction = typeof walletTransactions.$inferInsert;
+
+// ============================================================================
+// 20. AOR SERVICES & WORKER PORTAL
 // ============================================================================
 
 export {

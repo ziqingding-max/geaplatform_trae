@@ -14,7 +14,56 @@ import {
 } from "../../drizzle/schema";
 import { eq, like, and, ne, sql } from "drizzle-orm";
 import { getInvoiceById, listInvoiceItemsByInvoice, getBillingEntityById, getCustomerById } from "../db";
-import { generateInvoiceNumber } from "./invoiceNumberService";
+import { walletService } from "./walletService";
+
+export async function approveCreditNote(creditNoteId: number, approvedBy?: number) {
+  const db = getDb();
+  if (!db) throw new Error("Database not initialized");
+
+  return await db.transaction(async (tx) => {
+    // 1. Get the credit note
+    const creditNote = await tx.query.invoices.findFirst({
+      where: eq(invoices.id, creditNoteId),
+    });
+
+    if (!creditNote) throw new Error("Credit note not found");
+    if (creditNote.invoiceType !== "credit_note" && creditNote.invoiceType !== "deposit_refund") {
+      throw new Error("Invalid invoice type for credit note approval");
+    }
+    if (creditNote.status === "paid") {
+      throw new Error("Credit note is already processed");
+    }
+
+    // 2. Calculate credit amount (absolute value)
+    const creditAmount = Math.abs(parseFloat(creditNote.total));
+
+    // 3. Credit to wallet
+    await walletService.transact({
+      walletId: (await walletService.getWallet(creditNote.customerId, creditNote.currency)).id,
+      type: "credit_note_in",
+      amount: creditAmount.toFixed(2),
+      direction: "credit",
+      referenceId: creditNote.id,
+      referenceType: "credit_note",
+      description: `Credit Note #${creditNote.invoiceNumber} approved`,
+      createdBy: approvedBy,
+    });
+
+    // 4. Mark credit note as paid/processed
+    await tx
+      .update(invoices)
+      .set({
+        status: "paid",
+        paidDate: new Date(),
+        paidAmount: creditNote.total, // Negative amount
+        amountDue: "0",
+      })
+      .where(eq(invoices.id, creditNoteId));
+
+    return { success: true, message: "Credit note approved and credited to wallet" };
+  });
+}
+
 
 export interface CreditNoteLineItem {
   originalItemId?: number;

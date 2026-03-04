@@ -50,8 +50,6 @@ import { exportToCsv } from "@/lib/csvExport";
 import { useI18n } from "@/lib/i18n";
   const statusColors: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-700 border-amber-200",
-  client_approved: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  client_rejected: "bg-red-50 text-red-700 border-red-200",
   admin_approved: "bg-green-50 text-green-700 border-green-200",
   admin_rejected: "bg-orange-50 text-orange-700 border-orange-200",
   locked: "bg-blue-50 text-blue-700 border-blue-200",
@@ -60,7 +58,6 @@ import { useI18n } from "@/lib/i18n";
 const typeColors: Record<string, string> = {
   bonus: "bg-emerald-50 text-emerald-700",
   allowance: "bg-blue-50 text-blue-700",
-  reimbursement: "bg-purple-50 text-purple-700",
   deduction: "bg-red-50 text-red-700",
   other: "bg-gray-50 text-gray-700",
 };
@@ -270,20 +267,26 @@ export default function Adjustments() {
     }
   };
 
-  const handleEdit = (adj) => {
-    setEditingAdj(adj);
-    const effMonth = adj.effectiveMonth
-      ? new Date(adj.effectiveMonth).toISOString().slice(0, 7)
-      : defaultMonth;
-    setEditFormData({
-      adjustmentType: adj.adjustmentType,
-      category: adj.category || "",
-      description: adj.description || "",
-      amount: adj.amount?.toString() || "",
-      effectiveMonth: effMonth,
-    });
-    setEditReceiptFile(null);
-    setEditOpen(true);
+  const handleEdit = (adj: any) => {
+    try {
+      console.log("Editing adjustment:", adj);
+      setEditingAdj(adj);
+      const effMonth = adj.effectiveMonth
+        ? new Date(adj.effectiveMonth).toISOString().slice(0, 7)
+        : defaultMonth;
+      setEditFormData({
+        adjustmentType: adj.adjustmentType,
+        category: adj.category || "",
+        description: adj.description || "",
+        amount: adj.amount?.toString() || "",
+        effectiveMonth: effMonth,
+      });
+      setEditReceiptFile(null);
+      setEditOpen(true);
+    } catch (e) {
+      console.error("Error opening edit dialog:", e);
+      toast.error("Failed to open edit dialog");
+    }
   };
 
   const handleUpdate = async () => {
@@ -490,7 +493,6 @@ export default function Adjustments() {
                       <SelectContent>
                         <SelectItem value="bonus">{t("adjustments.type.bonus")}</SelectItem>
                         <SelectItem value="allowance">{t("adjustments.type.allowance")}</SelectItem>
-                        <SelectItem value="reimbursement">{t("adjustments.type.reimbursement")}</SelectItem>
                         <SelectItem value="deduction">{t("adjustments.type.deduction")}</SelectItem>
                         <SelectItem value="other">{t("adjustments.type.other")}</SelectItem>
                       </SelectContent>
@@ -613,13 +615,12 @@ export default function Adjustments() {
               <SelectValue placeholder={t("adjustments.form.label.type")} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">{t("adjustments.filters.allTypes")}</SelectItem>
-              <SelectItem value="bonus">{t("adjustments.type.bonus")}</SelectItem>
-              <SelectItem value="allowance">{t("adjustments.type.allowance")}</SelectItem>
-              <SelectItem value="reimbursement">{t("adjustments.type.reimbursement")}</SelectItem>
-              <SelectItem value="deduction">{t("adjustments.type.deduction")}</SelectItem>
-              <SelectItem value="other">{t("adjustments.type.other")}</SelectItem>
-            </SelectContent>
+                <SelectItem value="all">{t("adjustments.filters.allTypes")}</SelectItem>
+                <SelectItem value="bonus">{t("adjustments.type.bonus")}</SelectItem>
+                <SelectItem value="allowance">{t("adjustments.type.allowance")}</SelectItem>
+                <SelectItem value="deduction">{t("adjustments.type.deduction")}</SelectItem>
+                <SelectItem value="other">{t("adjustments.type.other")}</SelectItem>
+              </SelectContent>
           </Select>
           {viewTab === "active" && (
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -629,8 +630,7 @@ export default function Adjustments() {
               <SelectContent>
                 <SelectItem value="all">{t("adjustments.filters.allStatuses")}</SelectItem>
                 <SelectItem value="submitted">{t("adjustments.status.submitted")}</SelectItem>
-                <SelectItem value="client_approved">{t("adjustments.status.client_approved")}</SelectItem>
-                <SelectItem value="client_rejected">{t("adjustments.status.client_rejected")}</SelectItem>
+                <SelectItem value="admin_approved">{t("adjustments.status.admin_approved")}</SelectItem>
                 <SelectItem value="admin_rejected">{t("adjustments.status.admin_rejected")}</SelectItem>
               </SelectContent>
             </Select>
@@ -717,7 +717,7 @@ export default function Adjustments() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            {adj.status === "client_approved" && (
+                            {adj.status === "submitted" && (
                               <>
                                 <Button
                                   variant="ghost"
@@ -739,10 +739,6 @@ export default function Adjustments() {
                                 >
                                   <XCircle className="w-3.5 h-3.5" />
                                 </Button>
-                              </>
-                            )}
-                            {adj.status === "submitted" && (
-                              <>
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -815,7 +811,6 @@ export default function Adjustments() {
                     <SelectContent>
                       <SelectItem value="bonus">{t("adjustments.type.bonus")}</SelectItem>
                       <SelectItem value="allowance">{t("adjustments.type.allowance")}</SelectItem>
-                      <SelectItem value="reimbursement">{t("adjustments.type.reimbursement")}</SelectItem>
                       <SelectItem value="deduction">{t("adjustments.type.deduction")}</SelectItem>
                       <SelectItem value="other">{t("adjustments.type.other")}</SelectItem>
                     </SelectContent>

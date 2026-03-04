@@ -37,8 +37,6 @@ import { exportToCsv } from "@/lib/csvExport";
 import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-700 border-amber-200",
-  client_approved: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  client_rejected: "bg-red-50 text-red-700 border-red-200",
   admin_approved: "bg-green-50 text-green-700 border-green-200",
   admin_rejected: "bg-orange-50 text-orange-700 border-orange-200",
   locked: "bg-blue-50 text-blue-700 border-blue-200",
@@ -233,17 +231,22 @@ export default function Reimbursements() {
   }
 
   function handleEdit(item: any) {
-    setEditingId(item.id);
-    setFormData({
-      employeeId: item.employeeId,
-      category: item.category || "other",
-      description: item.description || "",
-      amount: item.amount || "",
-      effectiveMonth: item.effectiveMonth ? new Date(item.effectiveMonth).toISOString().slice(0, 7) : defaultMonth,
-      receiptFileUrl: item.receiptFileUrl || "",
-      receiptFileKey: item.receiptFileKey || "",
-    });
-    setShowCreate(true);
+    try {
+      setEditingId(item.id);
+      setFormData({
+        employeeId: item.employeeId,
+        category: item.category || "other",
+        description: item.description || "",
+        amount: item.amount || "",
+        effectiveMonth: item.effectiveMonth ? new Date(item.effectiveMonth).toISOString().slice(0, 7) : defaultMonth,
+        receiptFileUrl: item.receiptFileUrl || "",
+        receiptFileKey: item.receiptFileKey || "",
+      });
+      setShowCreate(true);
+    } catch (e) {
+      console.error("Error editing reimbursement:", e);
+      toast.error("Failed to load reimbursement for editing");
+    }
   }
 
   function handleDelete(id: number) {
@@ -323,8 +326,7 @@ export default function Reimbursements() {
                 <SelectContent>
                   <SelectItem value="all">{t("reimbursements.filters.allStatuses")}</SelectItem>
                   <SelectItem value="submitted">{t("reimbursements.status.submitted")}</SelectItem>
-                  <SelectItem value="client_approved">{t("reimbursements.status.client_approved")}</SelectItem>
-                  <SelectItem value="client_rejected">{t("reimbursements.status.client_rejected")}</SelectItem>
+                  <SelectItem value="admin_approved">{t("reimbursements.status.admin_approved")}</SelectItem>
                   <SelectItem value="admin_rejected">{t("reimbursements.status.admin_rejected")}</SelectItem>
                 </SelectContent>
               </Select>
@@ -407,7 +409,7 @@ export default function Reimbursements() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              {item.status === "client_approved" && (
+                              {item.status === "submitted" && (
                                 <>
                                   <Button
                                     variant="ghost" size="icon"
@@ -427,10 +429,6 @@ export default function Reimbursements() {
                                   >
                                     <XCircle className="w-3.5 h-3.5" />
                                   </Button>
-                                </>
-                              )}
-                              {item.status === "submitted" && (
-                                <>
                                   <Button
                                     variant="ghost" size="icon"
                                     className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
@@ -530,7 +528,7 @@ export default function Reimbursements() {
               />
             </div>
             <div className="space-y-2">
-              <Label>{t("reimbursements.dialog.field.receipt")}</Label>
+              <Label>{t("reimbursements.dialog.field.receipt")} <span className="text-destructive">*</span></Label>
               <input
                 ref={fileInputRef}
                 type="file"

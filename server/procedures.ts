@@ -54,5 +54,27 @@ export const financeManagerProcedure = protectedProcedure.use(({ ctx, next }) =>
   return next({ ctx });
 });
 
+// Sales: CRM and Quotations
+export const salesProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!hasAnyRole(ctx.user.role, ["admin", "sales"])) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Sales access required",
+    });
+  }
+  return next({ ctx });
+});
+
+// CRM Access: Sales + Customer Manager
+export const crmProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!hasAnyRole(ctx.user.role, ["admin", "sales", "customer_manager"])) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "CRM access required",
+    });
+  }
+  return next({ ctx });
+});
+
 // Any authenticated user
 export const userProcedure = protectedProcedure;

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { customerManagerProcedure, userProcedure } from "../procedures";
+import { customerManagerProcedure, userProcedure, crmProcedure } from "../procedures";
 import {
   createSalesLead,
   getSalesLeadById,
@@ -76,7 +76,7 @@ export const salesRouter = router({
     }),
 
   // ── Create a new sales lead ──────────────────────────────────────────
-  create: customerManagerProcedure
+  create: crmProcedure
     .input(
       z.object({
         companyName: z.string().min(1, "Company name is required"),
@@ -131,7 +131,7 @@ export const salesRouter = router({
     }),
 
   // ── Update a sales lead ──────────────────────────────────────────────
-  update: customerManagerProcedure
+  update: crmProcedure
     .input(
       z.object({
         id: z.number(),
@@ -203,7 +203,7 @@ export const salesRouter = router({
     }),
 
   // ── Convert lead to customer (triggered at MSA Signed stage) ─────────
-  convertToCustomer: customerManagerProcedure
+  convertToCustomer: crmProcedure
     .input(
       z.object({
         leadId: z.number(),
@@ -326,7 +326,7 @@ export const salesRouter = router({
     }),
 
   // ── Mark as Closed Won (requires customer to have employee at onboarding+) ──
-  closeWon: customerManagerProcedure
+  closeWon: crmProcedure
     .input(z.object({ leadId: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const lead = await getSalesLeadById(input.leadId);
@@ -385,7 +385,7 @@ export const salesRouter = router({
     }),
 
   // ── Delete a sales lead ──────────────────────────────────────────────
-  delete: customerManagerProcedure
+  delete: crmProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const existing = await getSalesLeadById(input.id);
@@ -420,7 +420,7 @@ export const salesRouter = router({
         return await listSalesActivities(input.leadId);
       }),
 
-    create: customerManagerProcedure
+    create: crmProcedure
       .input(
         z.object({
           leadId: z.number(),
@@ -448,7 +448,7 @@ export const salesRouter = router({
         });
       }),
 
-    delete: customerManagerProcedure
+    delete: crmProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await deleteSalesActivity(input.id);

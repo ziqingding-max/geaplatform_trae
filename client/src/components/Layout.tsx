@@ -51,8 +51,15 @@ import NotificationCenter from "@/components/NotificationCenter";
 
 import { useMemo } from "react";
 
-function useNavGroups() {
+function useNavGroups(user: any) {
   const { t } = useI18n();
+  const roleStr = user?.role || "user";
+  
+  const hasRole = (allowed: string[]) => {
+    const roles = roleStr.split(",").map((r: string) => r.trim());
+    return allowed.some(r => roles.includes(r));
+  };
+
   return useMemo(() => [
     {
       label: t("nav.overview"),
@@ -65,22 +72,22 @@ function useNavGroups() {
       items: [
         { label: t("nav.crm_pipeline"), icon: Briefcase, href: "/sales-crm" },
         { label: t("nav.quotations"), icon: FileText, href: "/quotations" },
-      ],
+      ].filter(() => hasRole(["admin", "sales", "customer_manager"])),
     },
     {
       label: t("nav.marketing"),
       items: [
-        { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin" },
-        { label: t("nav.countryGuide"), icon: Globe, href: "/admin/knowledge/country-guides" },
-        { label: t("nav.ai_settings"), icon: Bot, href: "/ai-settings" },
-      ],
+        { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin", roles: ["admin"] },
+        { label: t("nav.countryGuide"), icon: Globe, href: "/admin/knowledge/country-guides", roles: ["admin", "sales", "customer_manager"] },
+        { label: t("nav.ai_settings"), icon: Bot, href: "/ai-settings", roles: ["admin"] },
+      ].filter(item => !item.roles || hasRole(item.roles)),
     },
     {
       label: t("nav.client_management"),
       items: [
         { label: t("nav.customers"), icon: Building2, href: "/customers" },
         { label: t("nav.people"), icon: Users, href: "/people" },
-      ],
+      ].filter(() => hasRole(["admin", "customer_manager"])),
     },
     {
       label: t("nav.operations"),
@@ -89,7 +96,7 @@ function useNavGroups() {
         { label: t("nav.adjustments"), icon: ArrowUpDown, href: "/adjustments" },
         { label: t("nav.reimbursements"), icon: Receipt, href: "/reimbursements" },
         { label: t("nav.leave"), icon: CalendarDays, href: "/leave" },
-      ],
+      ].filter(() => hasRole(["admin", "operations_manager"])),
     },
     {
       label: t("nav.finance"),
@@ -98,16 +105,15 @@ function useNavGroups() {
         { label: t("nav.vendors"), icon: Truck, href: "/vendors" },
         { label: t("nav.vendor_bills"), icon: FileStack, href: "/vendor-bills" },
         { label: t("nav.profit_loss"), icon: BarChart3, href: "/reports/profit-loss" },
-      ],
+      ].filter(() => hasRole(["admin", "finance_manager"])),
     },
     {
       label: t("nav.system"),
       items: [
-        { label: t("nav.helpCenter"), icon: HelpCircle, href: "/help" },
-        { label: t("nav.settings"), icon: Settings, href: "/settings" },
-      ],
+        { label: t("nav.settings"), icon: Settings, href: "/settings", roles: ["admin"] },
+      ].filter(item => !item.roles || hasRole(item.roles)),
     },
-  ], [t]);
+  ].filter(group => group.items.length > 0), [t, roleStr]);
 }
 
 interface LayoutProps {
@@ -122,7 +128,7 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, logout } = useAuth();
   const { lang, setLang, t } = useI18n();
-  const navGroups = useNavGroups();
+  const navGroups = useNavGroups(user);
 
   const navRef = useRef<HTMLElement>(null);
 

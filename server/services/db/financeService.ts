@@ -143,7 +143,7 @@ export async function updatePayrollRun(id: number, data: Partial<InsertPayrollRu
 export async function findPayrollRunByCountryMonth(country: string, month: string) {
   const db = await getDb();
   if (!db) return null;
-  const result = await db.select().from(payrollRuns).where(and(eq(payrollRuns.country, country), eq(payrollRuns.period, month))).limit(1);
+  const result = await db.select().from(payrollRuns).where(and(eq(payrollRuns.countryCode, country), eq(payrollRuns.payrollMonth, month))).limit(1);
   return result[0];
 }
 
