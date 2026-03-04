@@ -170,7 +170,8 @@ export async function generateDepositRefund(
       status: "draft",
       dueDate,
       relatedInvoiceId: depositInvoice.id,
-      invoiceMonth: new Date(),
+      invoiceMonth: new Date().toISOString().slice(0, 10), // text column: use YYYY-MM-DD string
+      amountDue: (-refundAmount).toFixed(2),
       notes: `Deposit refund for terminated employee ${employee.firstName} ${employee.lastName} (${employee.employeeCode}). Original deposit: ${depositInvoice.invoiceNumber}`,
     };
 

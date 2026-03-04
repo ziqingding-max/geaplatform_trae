@@ -30,34 +30,47 @@ export async function getInvoiceById(id: number) {
   return result[0];
 }
 
-export async function listInvoices(page: number = 1, pageSize: number = 50, search?: string) {
+export async function listInvoices(
+  filters: { customerId?: number; status?: string; invoiceType?: string; invoiceMonth?: string } = {},
+  limit: number = 50,
+  offset: number = 0
+) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
-  const offset = (page - 1) * pageSize;
-  const where = search ? like(invoices.invoiceNumber, `%${search}%`) : undefined;
-  
+
+  // Build WHERE conditions from filters
+  const conditions = [];
+  if (filters.customerId) conditions.push(eq(invoices.customerId, filters.customerId));
+  if (filters.status) conditions.push(eq(invoices.status, filters.status as any));
+  if (filters.invoiceType) conditions.push(eq(invoices.invoiceType, filters.invoiceType as any));
+  if (filters.invoiceMonth) conditions.push(eq(invoices.invoiceMonth, filters.invoiceMonth));
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
   const [data, totalResult] = await Promise.all([
     db.select({
       id: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
       customerId: invoices.customerId,
       customerName: customers.companyName,
+      billingEntityId: invoices.billingEntityId,
+      invoiceType: invoices.invoiceType,
+      invoiceMonth: invoices.invoiceMonth,
       status: invoices.status,
-      issueDate: invoices.issueDate,
       dueDate: invoices.dueDate,
-      totalAmount: invoices.totalAmount,
+      total: invoices.total,
+      amountDue: invoices.amountDue,
       currency: invoices.currency,
-      type: invoices.type
+      createdAt: invoices.createdAt,
     })
     .from(invoices)
     .leftJoin(customers, eq(invoices.customerId, customers.id))
     .where(where)
-    .limit(pageSize)
+    .limit(limit)
     .offset(offset)
     .orderBy(desc(invoices.createdAt)),
     db.select({ count: count() }).from(invoices).where(where)
   ]);
-  
+
   return { data, total: totalResult[0]?.count || 0 };
 }
 

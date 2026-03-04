@@ -163,7 +163,8 @@ export async function generateDepositInvoice(
       tax: "0",
       total: depositAmount.toFixed(2),
       status: "draft",
-      dueDate,
+      dueDate: dueDate.toISOString().slice(0, 10), // text column: use YYYY-MM-DD string
+      amountDue: depositAmount.toFixed(2),
       notes: `Deposit invoice for employee ${employee.firstName} ${employee.lastName} (${employee.employeeCode}). Deposit = (${baseSalary} + ${estimatedEmployerCost}) × ${depositMultiplier} = ${localAmount.toFixed(2)} ${employeeCurrency}${employeeCurrency !== settlementCurrency ? ` → ${depositAmount.toFixed(2)} ${settlementCurrency}` : ""}`,
     };
 
