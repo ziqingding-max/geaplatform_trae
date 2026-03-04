@@ -32,18 +32,20 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // unsafe-inline/eval required for Vite dev mode
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
           styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-          imgSrc: ["'self'", "data:", "https://*"], // Allow external images
-          connectSrc: ["'self'", "ws:", "wss:"], // Allow WebSocket for HMR
+          imgSrc: ["'self'", "data:", "https://*"],
+          connectSrc: ["'self'", "ws:", "wss:"],
           objectSrc: ["'none'"],
-          upgradeInsecureRequests: [],
+          // Do NOT include upgradeInsecureRequests when serving over HTTP
         },
       },
       crossOriginEmbedderPolicy: false,
       crossOriginResourcePolicy: false,
       crossOriginOpenerPolicy: false,
+      // Disable HSTS when not using HTTPS yet
+      strictTransportSecurity: false,
     })
   );
 
