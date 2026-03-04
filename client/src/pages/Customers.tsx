@@ -5,7 +5,7 @@
 import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
 import CountrySelect from "@/components/CountrySelect";
-import DatePicker from "@/components/DatePicker";
+import { DatePicker } from "@/components/DatePicker";
 import { formatDate, formatDateISO } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useState, useRef, useEffect } from "react";

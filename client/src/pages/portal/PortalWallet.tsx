@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { PortalLayout } from "@/components/PortalLayout";
+import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { formatCurrency, formatDateISO } from "@/lib/format";
 import {

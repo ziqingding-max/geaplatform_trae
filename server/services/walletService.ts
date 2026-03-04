@@ -1,6 +1,6 @@
 import { eq, sql, and } from "drizzle-orm";
-import { getDb } from "../db/connection";
-import { customerWallets, walletTransactions, type WalletTransaction, type CustomerWallet } from "../../../drizzle/schema";
+import { getDb } from "./db/connection";
+import { customerWallets, walletTransactions, type WalletTransaction, type CustomerWallet } from "../../drizzle/schema";
 import { TRPCError } from "@trpc/server";
 
 export type WalletTransactionType = WalletTransaction["type"];
