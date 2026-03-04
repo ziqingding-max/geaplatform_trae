@@ -24,9 +24,10 @@
 | Backend unit/integration | `server/<feature>.test.ts` | Feature-based naming |
 | Portal security | `server/portal/portal.security.test.ts` | Portal-specific |
 | Portal invite | `server/portal/portalInvite.test.ts` | Portal-specific |
+| Worker security | `server/worker/worker.security.test.ts` | Worker-specific |
 | Reference example | `server/auth.logout.test.ts` | Template test |
 
-There are currently 38 test files covering all major features. When adding a new feature, create a new test file rather than appending to an existing one (unless the test is a direct extension of an existing feature).
+There are currently 50 test files covering all major features (31 Admin, 12 Portal, 7 Worker). When adding a new feature, create a new test file rather than appending to an existing one (unless the test is a direct extension of an existing feature).
 
 ---
 
@@ -83,7 +84,6 @@ The `TestCleanup` class provides these tracking methods. Call the appropriate me
 | `trackVendorBill(id)` | Vendor bill | Bill items |
 
 ### Deletion Order
-
 The cleanup utility deletes in this order to respect foreign key constraints:
 
 ```
@@ -103,17 +103,15 @@ The cleanup utility deletes in this order to respect foreign key constraints:
 
 ## 4. Test Context Helpers
 
-### Admin Context (Manus OAuth)
+### Admin Context (JWT)
 
 ```typescript
 function createAdminCaller() {
   const ctx: TrpcContext = {
     user: {
       id: 1,
-      openId: "test-admin",
       email: "admin@test.com",
       name: "Test Admin",
-      loginMethod: "manus",
       role: "admin",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -137,7 +135,7 @@ To test role-based access, change the `role` field:
 function createManagerCaller(role: string) {
   const ctx: TrpcContext = {
     user: {
-      ...baseUser,
+      ...baseUser, // Assumes a base user object is defined
       role: role, // e.g., "operations_manager", "finance_manager,customer_manager"
     },
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
@@ -149,7 +147,7 @@ function createManagerCaller(role: string) {
 
 ### Portal Context
 
-Portal tests use a separate tRPC instance:
+Portal tests use a separate tRPC instance for client-facing features:
 
 ```typescript
 import { portalAppRouter } from "./portal/portalRouter";
@@ -170,10 +168,30 @@ function createPortalCaller(customerId: number, contactId: number) {
 }
 ```
 
+### Worker Context
+
+Worker tests use their own tRPC instance for employee/contractor-facing features:
+
+```typescript
+import { workerAppRouter } from "./worker/workerRouter";
+import type { WorkerContext } from "./worker/workerTrpc";
+
+function createWorkerCaller(employeeId: number) {
+  const ctx: WorkerContext = {
+    workerUser: {
+      employeeId,
+      email: "test@worker.com",
+    },
+    req: { ... } as any,
+    res: { ... } as any,
+  };
+  return workerAppRouter.createCaller(ctx);
+}
+```
+
 ---
 
 ## 5. What to Test for Each Feature Type
-
 ### New CRUD Feature
 
 | Test Case | Priority |
@@ -242,7 +260,7 @@ const customer = await caller.customers.create({
 
 These rules protect production data during testing:
 
-1. **Never run tests against production database.** Tests connect to the same database as the dev server. The dev and production databases are separate environments.
+1. **Never run tests against production database.** Tests connect to the same database as the dev server. The dev and production databases are separate environments (dev uses local SQLite, prod uses a file-based SQLite DB).
 
 2. **Never use `DELETE FROM table` without a WHERE clause** in test cleanup. Always delete by specific tracked IDs.
 
@@ -255,7 +273,6 @@ These rules protect production data during testing:
 ---
 
 ## 8. Running Tests Before Delivery
-
 Before saving a checkpoint or delivering work, run this verification sequence:
 
 ```bash
@@ -275,7 +292,7 @@ If pre-existing tests fail (not related to your changes), document the failures 
 
 ## 9. Zero-Tolerance Test Data Policy (CRITICAL)
 
-> **This system shares a single database between dev server and vitest. Test data that leaks into the database will appear in the production UI, corrupt dashboards, pollute reports, and degrade user experience. This has happened before and must never happen again.**
+> **This system shares a single SQLite database between the dev server and Vitest. Test data that leaks into the database will appear in the development UI, corrupt dashboards, pollute reports, and degrade user experience. This has happened before and must never happen again.**
 
 The following rules are **non-negotiable** and apply to every AI Agent and developer:
 
@@ -339,26 +356,27 @@ When testing via the browser (manual or automated):
 
 ## 10. Post-Test Audit Checklist
 
-Before delivering any work, run this audit to ensure zero test data leakage:
 
-```bash
-# 1. Run all tests
-pnpm test
+Before delivering any work, run this audit to ensure zero test data leakage. These queries are for SQLite.
 
-# 2. Check for test data in customers table
-# Should return 0 rows
+```sql
+-- 1. Run all tests
+-- pnpm test
+
+-- 2. Check for test data in customers table
+-- Should return 0 rows
 SELECT id, companyName FROM customers 
 WHERE companyName LIKE '%TEST%' OR companyName LIKE '%test%' 
    OR companyName LIKE '%script%' OR companyName LIKE '%demo%';
 
-# 3. Check for test data in employees table  
-# Should return 0 rows
+-- 3. Check for test data in employees table  
+-- Should return 0 rows
 SELECT id, firstName, lastName FROM employees
 WHERE firstName LIKE '%Test%' OR lastName LIKE '%Test%'
    OR email LIKE '%test%' OR email LIKE '%example.com%';
 
-# 4. Check for orphaned records
-# Employees with non-existent customers
+-- 4. Check for orphaned records
+-- Employees with non-existent customers
 SELECT e.id, e.firstName, e.customerId FROM employees e
 LEFT JOIN customers c ON e.customerId = c.id
 WHERE c.id IS NULL;

@@ -29,7 +29,7 @@ The following changes **require** documentation updates. This is a blocking requ
 Each document includes a version header. When updating a document, increment the version and update the date:
 
 ```markdown
-> Version: 3.3 | Last Updated: 2026-02-28 | Author: Manus AI
+> Version: 3.6 | Last Updated: 2026-03-05
 ```
 
 The version follows `MAJOR.MINOR` format where MAJOR increments for structural changes (new sections, reorganization) and MINOR increments for content updates within existing sections.
@@ -72,8 +72,8 @@ When updating any of these project documents, the corresponding file in the `gea
 After updating a project document, copy it to the Skill directory:
 
 ```bash
-cp /home/ubuntu/eor-saas-admin/AGENTS.md /home/ubuntu/skills/gea-eor-knowledge/references/AGENTS.md
-cp /home/ubuntu/eor-saas-admin/docs/<FILE>.md /home/ubuntu/skills/gea-eor-knowledge/references/<FILE>.md
+cp /home/ubuntu/geaplatform_trae/AGENTS.md /home/ubuntu/skills/gea-eor-knowledge/references/AGENTS.md
+cp /home/ubuntu/geaplatform_trae/docs/<FILE>.md /home/ubuntu/skills/gea-eor-knowledge/references/<FILE>.md
 ```
 
 ---
@@ -94,7 +94,7 @@ Before saving a checkpoint, verify:
 
 When updating documents, maintain these standards:
 
-**Accuracy**: Every statement must reflect the current codebase. If a document says "33 tables" and a new table was added, update it to "34 tables."
+**Accuracy**: Every statement must reflect the current codebase. If a document says "48 tables" and a new table was added, update it to "49 tables."
 
 **Completeness**: New features must appear in all relevant documents. A new invoice status must appear in BUSINESS-RULES.md (state machine), ARCHITECTURE.md (data model), and AGENTS.md (if it affects critical rules).
 

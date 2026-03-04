@@ -1,75 +1,75 @@
-# AI Routing集成的Copilot助手技术方案
+# AI Routing\u96C6\u6210\u7684Copilot\u52A9\u624B\u6280\u672F\u65B9\u6848
 
-## 概述
+## \u6982\u8FF0
 
-基于GEA EOR SaaS平台现有的AI routing系统，设计一个完全解耦、智能路由的admin全局copilot助手。该方案充分利用现有AI基础设施，实现智能模型选择和任务路由。
+\u57FA\u4E8EGEA EOR SaaS\u5E73\u53F0\u73B0\u6709\u7684AI routing\u7CFB\u7EDF\uFF0C\u8BBE\u8BA1\u4E00\u4E2A\u5B8C\u5168\u89E3\u8026\u3001\u667A\u80FD\u8DEF\u7531\u7684admin\u5168\u5C40copilot\u52A9\u624B\u3002\u8BE5\u65B9\u6848\u5145\u5206\u5229\u7528\u73B0\u6709AI\u57FA\u7840\u8BBE\u65BD\uFF0C\u5B9E\u73B0\u667A\u80FD\u6A21\u578B\u9009\u62E9\u548C\u4EFB\u52A1\u8DEF\u7531\u3002
 
-## 核心优势
+## \u6838\u5FC3\u4F18\u52BF
 
-### 🎯 完全解耦
-- **零Manus依赖**: 完全基于现有AI routing基础设施
-- **统一任务管理**: 复用aiTaskPolicies、aiProviderConfigs、aiTaskExecutions
-- **标准化接口**: 通过aiGatewayService统一调用
+### \uD83C\uDFAF \u5B8C\u5168\u89E3\u8026
+- **\u96F6\u4F9D\u8D56**: \u5B8C\u5168\u57FA\u4E8E\u73B0\u6709AI routing\u57FA\u7840\u8BBE\u65BD
+- **\u7EDF\u4E00\u4EFB\u52A1\u7BA1\u7406**: \u590D\u7528aiTaskPolicies\u3001aiProviderConfigs\u3001aiTaskExecutions
+- **\u6807\u51C6\u5316\u63A5\u53E3**: \u901A\u8FC7aiGatewayService\u7EDF\u4E00\u8C03\u7528
 
-### 🤖 智能路由
-- **动态任务分类**: 基于用户输入自动选择最优任务类型
-- **智能模型选择**: 综合考虑任务复杂度、用户角色、成本预算
-- **自动降级**: 主provider失败时自动切换到备用provider
+### \uD83E\uDD16 \u667A\u80FD\u8DEF\u7531
+- **\u52A8\u6001\u4EFB\u52A1\u5206\u7C7B**: \u57FA\u4E8E\u7528\u6237\u8F93\u5165\u81EA\u52A8\u9009\u62E9\u6700\u4F18\u4EFB\u52A1\u7C7B\u578B
+- **\u667A\u80FD\u6A21\u578B\u9009\u62E9**: \u7EFC\u5408\u8003\u8651\u4EFB\u52A1\u590D\u6742\u5EA6\u3001\u7528\u6237\u89D2\u8272\u3001\u6210\u672C\u9884\u7B97
+- **\u81EA\u52A8\u964D\u7EA7**: \u4E3Bprovider\u5931\u8D25\u65F6\u81EA\u52A8\u5207\u6362\u5230\u5907\u7528provider
 
-### 💰 成本优化
-- **差异化计费**: 基于任务类型和数据复杂度
-- **预算控制**: 角色级别的成本限制和告警
-- **性能监控**: 实时追踪provider性能和成本效益
+### \uD83D\uDCB0 \u6210\u672C\u4F18\u5316
+- **\u5DEE\u5F02\u5316\u8BA1\u8D39**: \u57FA\u4E8E\u4EFB\u52A1\u7C7B\u578B\u548C\u6570\u636E\u590D\u6742\u5EA6
+- **\u9884\u7B97\u63A7\u5236**: \u89D2\u8272\u7EA7\u522B\u7684\u6210\u672C\u9650\u5236\u548C\u544A\u8B66
+- **\u6027\u80FD\u76D1\u63A7**: \u5B9E\u65F6\u8FFD\u8E2Aprovider\u6027\u80FD\u548C\u6210\u672C\u6548\u76CA
 
-## 技术架构
+## \u6280\u672F\u67B6\u6784
 
-### 1. 任务类型扩展
+### 1. \u4EFB\u52A1\u7C7B\u578B\u6269\u5C55
 
 ```typescript
-// 新增Copilot专用任务类型
+// \u65B0\u589E䊂opilot\u4E13\u7528\u4EFB\u52A1\u7C7B\u578B
 const taskEnum = z.enum([
-  // 现有任务
+  // \u73B0\u6709\u4EFB\u52A1
   "knowledge_summarize",
   "source_authority_review", 
   "vendor_bill_parse",
   "invoice_audit",
   
-  // 新增Copilot任务
-  "copilot_chat",                    // 通用对话
-  "copilot_data_analysis",          // 数据分析
-  "copilot_file_analysis",          // 文件分析
-  "copilot_report_generation",        // 报告生成
-  "copilot_insights_extraction",     // 洞察提取
+  // \u65B0\u589E䊂opilot\u4EFB\u52A1
+  "copilot_chat",                    // \u901A\u7528\u5BF9\u8BDD
+  "copilot_data_analysis",          // \u6570\u636E\u5206\u6790
+  "copilot_file_analysis",          // \u6587\u4EF6\u5206\u6790
+  "copilot_report_generation",        // \u62A5\u544A\u751F\u6210
+  "copilot_insights_extraction",     // \u6D1E\u5BDF\u63D0\u53D6
 ]);
 ```
 
-### 2. 智能任务路由流程
+### 2. \u667A\u80FD\u4EFB\u52A1\u8DEF\u7531\u6D41\u7A0B
 
 ```
-用户输入 → 意图识别 → 任务分类 → 模型选择 → AI Gateway → 结果返回
-    ↓         ↓         ↓         ↓         ↓
-  上下文分析 → 数据复杂度评估 → 角色权限检查 → Provider路由 → 执行日志
+\u7528\u6237\u8F93\u5165 \u2192 \u610F\u56FE\u8BC6\u522B \u2192 \u4EFB\u52A1\u5206\u7C7B \u2192 \u6A21\u578B\u9009\u62E9 \u2192 AI Gateway \u2192 \u7ED3\u679C\u8FD4\u56DE
+    \u2193         \u2193         \u2193         \u2193         \u2193
+  \u4E0A\u4E0B\u6587\u5206\u6790 \u2192 \u6570\u636E\u590D\u6742\u5EA6\u8BC4\u4F30 \u2192 \u89D2\u8272\u6743\u9650\u68C0\u67E5 \u2192 Provider\u8DEF\u7531 \u2192 \u6267\u884C\u65E5\u5FD7
 ```
 
-### 3. 模型选择策略
+### 3. \u6A21\u578B\u9009\u62E9\u7B56\u7565
 
-#### 任务类型映射
-- **copilot_chat**: GPT-3.5-turbo/Qwen-turbo (低成本对话)
-- **copilot_data_analysis**: GPT-4-turbo/Gemini-pro (高精度分析)
-- **copilot_file_analysis**: Gemini-vision/GPT-4-vision (多模态处理)
-- **copilot_report_generation**: GPT-4/Gemini-ultra (复杂生成)
+#### \u4EFB\u52A1\u7C7B\u578B\u6620\u5C04
+- **copilot_chat**: qwen-turbo (\u4F4E\u6210\u672C\u5BF9\u8BDD)
+- **copilot_data_analysis**: qwen-max (\u9AD8\u7CBE\u5EA6\u5206\u6790)
+- **copilot_file_analysis**: qwen-vl-max (\u591A\u6A21\u6001\u5904\u7406)
+- **copilot_report_generation**: qwen-max (\u590D\u6742\u751F\u6210)
 
-#### 选择维度
-1. **任务复杂度**: 数据量、分析深度、输出长度
-2. **用户角色**: 权限级别、成本预算、使用频率
-3. **性能要求**: 响应时间、准确率、稳定性
-4. **成本控制**: 预算限制、性价比、历史使用
+#### \u9009\u62E9\u7EF4\u5EA6
+1. **\u4EFB\u52A1\u590D\u6742\u5EA6**: \u6570\u636E\u91CF\u3001\u5206\u6790\u6DF1\u5EA6\u3001\u8F93\u51FA\u957F\u5EA6
+2. **\u7528\u6237\u89D2\u8272**: \u6743\u9650\u7EA7\u522B\u3001\u6210\u672C\u9884\u7B97\u3001\u4F7F\u7528\u9891\u7387
+3. **\u6027\u80FD\u8981\u6C42**: \u54CD\u5E94\u65F6\u95F4\u3001\u51C6\u786E\u7387\u3001\u7A33\u5B9A\u6027
+4. **\u6210\u672C\u63A7\u5236**: \u9884\u7B97\u9650\u5236\u3001\u6027\u4EF7\u6BD4\u3001\u5386\u53F2\u4F7F\u7528
 
-### 4. 成本优化机制
+### 4. \u6210\u672C\u4F18\u5316\u673A\u5236
 
-#### 差异化定价
+#### \u5DEE\u5F02\u5316\u5B9A\u4EF7
 ```typescript
-// 基于任务类型的成本估算
+// \u57FA\u4E8E\u4EFB\u52A1\u7C7B\u578B\u7684\u6210\u672C\u4F30\u7B97
 const costRates = {
   "copilot_chat": { input: 0.0000015, output: 0.000004 },
   "copilot_data_analysis": { input: 0.000003, output: 0.000008 },
@@ -78,140 +78,142 @@ const costRates = {
 };
 ```
 
-#### 预算控制
-- **角色级别**: 不同角色设置不同的月度预算
-- **实时监控**: 实时追踪使用成本和剩余预算
-- **预警机制**: 达到预算阈值时自动降级到低成本模型
+#### \u9884\u7B97\u63A7\u5236
+- **\u89D2\u8272\u7EA7\u522B**: \u4E0D\u540C\u89D2\u8272\u8BBE\u7F6E\u4E0D\u540C\u7684\u6708\u5EA6\u9884\u7B97
+- **\u5B9E\u65F6\u76D1\u63A7**: \u5B9E\u65F6\u8FFD\u8E2A\u4F7F\u7528\u6210\u672C\u548C\u5269\u4F59\u9884\u7B97
+- **\u9884\u8B66\u673A\u5236**: \u8FBE\u5230\u9884\u7B97\u9608\u503C\u65F6\u81EA\u52A8\u964D\u7EA7\u5230\u4F4E\u6210\u672C\u6A21\u578B
 
-## 实施方案
+## \u5B9E\u65BD\u65B9\u6848
 
-### 第一阶段：基础集成 (1-2周)
+### \u7B2C\u4E00\u9636\u6BB5\uFF1A\u57FA\u7840\u96C6\u6210 (1-2\u5468)
 
-1. **数据库迁移**
-   - 扩展aiTaskPolicies表，添加copilot任务类型
-   - 添加copilot专用配置参数
-   - 创建成本控制和性能监控索引
+1. **\u6570\u636E\u5E93\u6269\u5C55**
+   - \u6269\u5C55aiTaskPolicies\u8868\uFF0C\u6DFB\u52A0copilot\u4EFB\u52A1\u7C7B\u578B
+   - \u6DFB\u52A0copilot\u4E13\u7528\u914D\u7F6E\u53C2\u6570
+   - \u521B\u5EFA\u6210\u672C\u63A7\u5236\u548C\u6027\u80FD\u76D1\u63A7\u7D22\u5F15
 
-2. **后端服务开发**
-   - 实现CopilotAIService，集成aiGatewayService
-   - 开发CopilotModelSelector，智能模型选择
-   - 创建copilotRouter，处理前端请求
+2. **\u540E\u7AEF\u670D\u52A1\u5F00\u53D1**
+   - \u5B9E\u73B0CopilotAIService\uFF0C\u96C6\u6210aiGatewayService
+   - \u5F00\u53D1CopilotModelSelector\uFF0C\u667A\u80FD\u6A21\u578B\u9009\u62E9
+   - \u521B\u5EFAcopilotRouter\uFF0C\u5904\u7406\u524D\u7AEF\u8BF7\u6C42
 
-3. **基础配置**
-   - 配置默认provider和模型映射
-   - 设置基础成本估算参数
-   - 建立性能监控基线
+3. **\u57FA\u7840\u914D\u7F6E**
+   - \u914D\u7F6E\u9ED8\u8BA4provider\u548C\u6A21\u578B\u6620\u5C04
+   - \u8BBE\u7F6E\u57FA\u7840\u6210\u672C\u4F30\u7B97\u53C2\u6570
+   - \u5EFA\u7ACB\u6027\u80FD\u76D1\u63A7\u57FA\u7EBF
 
-### 第二阶段：智能优化 (2-3周)
+### \u7B2C\u4E8C\u9636\u6BB5\uFF1A\u667A\u80FD\u4F18\u5316 (2-3\u5468)
 
-1. **智能路由增强**
-   - 实现动态任务分类算法
-   - 开发上下文感知的路由决策
-   - 添加多模态输入支持
+1. **\u667A\u80FD\u8DEF\u7531\u589E\u5F3A**
+   - \u5B9E\u73B0\u52A8\u6001\u4EFB\u52A1\u5206\u7C7B\u7B97\u6CD5
+   - \u5F00\u53D1\u4E0A\u4E0B\u6587\u611F\u77E5\u7684\u8DEF\u7531\u51B3\u7B56
+   - \u6DFB\u52A0\u591A\u6A21\u6001\u8F93\u5165\u652F\u6301
 
-2. **成本优化**
-   - 实现角色级别预算控制
-   - 开发实时成本监控面板
-   - 添加智能降级机制
+2. **\u6210\u672C\u4F18\u5316**
+   - \u5B9E\u73B0\u89D2\u8272\u7EA7\u522B\u9884\u7B97\u63A7\u5236
+   - \u5F00\u53D1\u5B9E\u65F6\u6210\u672C\u76D1\u63A7\u9762\u677F
+   - \u6DFB\u52A0\u667A\u80FD\u964D\u7EA7\u673A\u5236
 
-3. **性能监控**
-   - 集成现有aiHealthSummary
-   - 开发copilot专用监控指标
-   - 实现异常检测和告警
+3. **\u6027\u80FD\u76D1\u63A7**
+   - \u96C6\u6210\u73B0\u6709aiHealthSummary
+   - \u5F00\u53D1copilot\u4E13\u7528\u76D1\u63A7\u6307\u6807
+   - \u5B9E\u73B0\u5F02\u5E38\u68C0\u6D4B\u548C\u544A\u8B66
 
-### 第三阶段：高级功能 (2-3周)
+### \u7B2C\u4E09\u9636\u6BB5\uFF1A\u9AD8\u7EA7\u529F\u80FD (2-3\u5468)
 
-1. **高级分析**
-   - 实现复杂数据分析任务
-   - 开发报告生成功能
-   - 添加商业洞察提取
+1. **\u9AD8\u7EA7\u5206\u6790**
+   - \u5B9E\u73B0\u590D\u6742\u6570\u636E\u5206\u6790\u4EFB\u52A1
+   - \u5F00\u53D1\u62A5\u544A\u751F\u6210\u529F\u80FD
+   - \u6DFB\u52A0\u5546\u4E1A\u6D1E\u5BDF\u63D0\u53D6
 
-2. **多模态支持**
-   - 增强文件分析能力
-   - 实现图像识别和OCR
-   - 支持复杂文档处理
+2. **\u591A\u6A21\u6001\u652F\u6301**
+   - \u589E\u5F3A\u6587\u4EF6\u5206\u6790\u80FD\u529B
+   - \u5B9E\u73B0\u56FE\u50CF\u8BC6\u522B\u548C OCR
+   - \u652F\u6301\u590D\u6742\u6587\u6863\u5904\u7406
 
-3. **用户体验优化**
-   - 开发智能建议功能
-   - 实现上下文记忆
-   - 优化响应速度和准确性
+3. **\u7528\u6237\u4F53\u9A8C\u4F18\u5316**
+   - \u5F00\u53D1\u667A\u80FD\u5EFA\u8BAE\u529F\u80FD
+   - \u5B9E\u73B0\u4E0A\u4E0B\u6587\u8BB0\u5FC6
+   - \u4F18\u5316\u54CD\u5E94\u901F\u5EA6\u548C\u51C6\u786E\u6027
 
-## 配置管理
+## \u914D\u7F6E\u7BA1\u7406
 
-### Provider配置 (aiProviderConfigs)
+### Provider\u914D\u7F6E (aiProviderConfigs)
 ```json
 {
-  "provider": "openai",
-  "displayName": "OpenAI GPT-4",
-  "baseUrl": "https://api.openai.com/v1",
-  "model": "gpt-4-turbo",
-  "apiKeyEnv": "OPENAI_API_KEY",
+  "provider": "dashscope",
+  "displayName": "Alibaba Cloud DashScope",
+  "baseUrl": "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation",
+  "model": "qwen-turbo",
+  "apiKeyEnv": "DASHSCOPE_API_KEY",
   "isEnabled": true,
   "priority": 1
 }
 ```
 
-### 任务策略 (aiTaskPolicies)
+### \u4EFB\u52A1\u7B56\u7565 (aiTaskPolicies)
 ```json
 {
   "task": "copilot_data_analysis",
-  "primaryProvider": "openai",
-  "fallbackProvider": "google",
-  "modelOverride": "gpt-4",
+  "primaryProvider": "dashscope",
+  "fallbackProvider": "dashscope",
+  "modelOverride": "qwen-max",
   "temperature": 0.3,
   "maxTokens": 4000,
   "isActive": true
 }
 ```
 
-## 监控指标
+## \u76D1\u63A7\u6307\u6807
 
-### 性能指标
-- **响应时间**: P50、P95、P99延迟
-- **成功率**: 总体成功率、按任务类型分布
-- **降级率**: fallback触发频率
-- **并发处理**: 峰值并发、平均并发
 
-### 成本指标
-- **总成本**: 按天、周、月的成本趋势
-- **单次成本**: 不同任务类型的平均成本
-- **成本效益**: 成本与使用价值的比例
-- **预算使用率**: 各角色预算使用情况
+### \u6027\u80FD\u6307\u6807
+- **\u54CD\u5E94\u65F6\u95F4**: P50\u3001P95\u3001P99\u5EF6\u8FDF
+- **\u6210\u529F\u7387**: \u603B\u4F53\u6210\u529F\u7387\u3001\u6309\u4EFB\u52A1\u7C7B\u578B\u5206\u5E03
+- **\u964D\u7EA7\u7387**: fallback\u89E6\u53D1\u9891\u7387
+- **\u5E76\u53D1\u5904\u7406**: \u5CF0\u503C\u5E76\u53D1\u3001\u5E73\u5747\u5E76\u53D1
 
-### 质量指标
-- **用户满意度**: 反馈评分、使用频率
-- **结果准确性**: 数据分析准确率
-- **建议采纳率**: AI建议被用户采纳的比例
-- **错误分类**: 按错误类型和频率分析
+### \u6210\u672C\u6307\u6807
+- **\u603B\u6210\u672C**: \u6309\u5929\u3001\u5468\u3001\u6708\u7684\u6210\u672C\u8D8B\u52BF
+- **\u5355\u6B21\u6210\u672C**: \u4E0D\u540C\u4EFB\u52A1\u7C7B\u578B\u7684\u5E73\u5747\u6210\u672C
+- **\u6210\u672C\u6548\u76CA**: \u6210\u672C\u4E0E\u4F7F\u7528\u4EF7\u503C\u7684\u6BD4\u4F8B
+- **\u9884\u7B97\u4F7F\u7528\u7387**: \u5404\u89D2\u8272\u9884\u7B97\u4F7F\u7528\u60C5\u51B5
 
-## 安全考虑
+### \u8D28\u91CF\u6307\u6807
+- **\u7528\u6237\u6EE1\u610F\u5EA6**: \u53CD\u9988\u8BC4\u5206\u3001\u4F7F\u7528\u9891\u7387
+- **\u7ED3\u679C\u51C6\u786E\u6027**: \u6570\u636E\u5206\u6790\u51C6\u786E\u7387
+- **\u5EFA\u8BAE\u91C7\u7EB3\u7387**: AI\u5EFA\u8BAE\u88AB\u7528\u6237\u91C7\u7EB3\u7684\u6BD4\u4F8B
+- **\u9519\u8BEF\u5206\u7C7B**: \u6309\u9519\u8BEF\u7C7B\u578B\u548C\u9891\u7387\u5206\u6790
 
-### 数据安全
-- **权限控制**: 严格遵循现有RBAC体系
-- **数据脱敏**: 敏感信息自动过滤
-- **审计日志**: 完整记录所有AI交互
-- **加密传输**: 所有数据传输使用HTTPS
+## \u5B89\u5168\u8003\u8651
 
-### 系统安全
-- **频率限制**: API调用频率控制
-- **输入验证**: 严格的参数验证和清理
-- **错误处理**: 安全的错误信息返回
-- **监控告警**: 异常行为实时告警
+### \u6570\u636E\u5B89\u5168
+- **\u6743\u9650\u63A7\u5236**: \u4F7F\u7528JWT + bcrypt + HttpOnly Cookie\uFF0C\u4E25\u683C\u9075\u5FAA\u73B0\u6709RBAC\u4F53\u7CFB
+- **\u6570\u636E\u8131\u654F**: \u654F\u611F\u4FE1\u606F\u81EA\u52A8\u8FC7\u6EE4
+- **\u5BA1\u8BA1\u65E5\u5FD7**: \u5B8C\u6574\u8BB0\u5F55\u6240\u6709AI\u4EA4\u4E92
+- **\u52A0\u5BC6\u4F20\u8F93**: \u6240\u6709\u6570\u636E\u4F20\u8F93\u4F7F\u7528HTTPS
 
-## 扩展能力
+### \u7CFB\u7EDF\u5B89\u5168
+- **\u9891\u7387\u9650\u5236**: API\u8C03\u7528\u9891\u7387\u63A7\u5236
+- **\u8F93\u5165\u9A8C\u8BC1**: \u4E25\u683C\u7684\u53C2\u6570\u9A8C\u8BC1\u548C\u6E05\u7406
+- **\u9519\u8BEF\u5904\u7406**: \u5B89\u5168\u7684\u9519\u8BEF\u4FE1\u606F\u8FD4\u56DE
+- **\u76D1\u63A7\u544A\u8B66**: \u5F02\u5E38\u884C\u4E3A\u5B9E\u65F6\u544A\u8B66
 
-### 未来增强
-1. **个性化推荐**: 基于用户历史行为的个性化模型选择
-2. **A/B测试**: 不同模型和参数的效果对比
-3. **自学习能力**: 基于用户反馈的自适应优化
-4. **多语言支持**: 扩展更多语言的处理能力
+## \u6269\u5C55\u80FD\u529B
 
-### 集成扩展
-1. **第三方系统**: 与其他业务系统的深度集成
-2. **工作流自动化**: 基于AI结果的自动工作流触发
-3. **预测分析**: 基于历史数据的趋势预测
-4. **智能报表**: 自动生成和分发业务报表
+### \u672A\u6765\u589E\u5F3A
+1. **\u4E2A\u6027\u5316\u63A8\u8350**: \u57FA\u4E8E\u7528\u6237\u5386\u53F2\u884C\u4E3A\u7684\u4E2A\u6027\u5316\u6A21\u578B\u9009\u62E9
+2. **A/B\u6D4B\u8BD5**: \u4E0D\u540C\u6A21\u578B\u548C\u53C2\u6570\u7684\u6548\u679C\u5BF9\u6BD4
+3. **\u81EA\u5B66\u4E60\u80FD\u529B**: \u57FA\u4E8E\u7528\u6237\u53CD\u9988\u7684\u81EA\u9002\u5E94\u4F18\u5316
+4. **\u591A\u8BED\u8A00\u652F\u6301**: \u57FA\u4E8EZustand\u7684i18n store\uFF0C\u6269\u5C55\u66F4\u591A\u8BED\u8A00\u7684\u5904\u7406\u80FD\u529B
 
-## 总结
+### \u96C6\u6210\u6269\u5C55
+1. **\u7B2C\u4E09\u65B9\u7CFB\u7EDF**: \u4E0E\u5176\u4ED6\u4E1A\u52A1\u7CFB\u7EDF\u7684\u6DF1\u5EA6\u96C6\u6210
+2. **\u5DE5\u4F5C\u6D41\u81EA\u52A8\u5316**: \u57FA\u4E8EAI\u7ED3\u679C\u7684\u81EA\u52A8\u5DE5\u4F5C\u6D41\u89E6\u53D1
+3. **\u9884\u6D4B\u5206\u6790**: \u57FA\u4E8E\u5386\u53F2\u6570\u636E\u7684\u8D8B\u52BF\u9884\u6D4B
+4. **\u667A\u80FD\u62A5\u8868**: \u81EA\u52A8\u751F\u6210\u548C\u5206\u53D1\u4E1A\u52A1\u62A5\u8868
 
-该方案充分利用GEA平台现有的AI routing基础设施，通过标准化的任务管理和智能路由机制，实现了一个高度可扩展、成本可控、性能优越的admin copilot助手。方案遵循企业级SaaS的最佳实践，确保了系统的稳定性、安全性和可维护性。
+## \u603B\u7ED3
+
+\u8BE5\u65B9\u6848\u5145\u5206\u5229\u7528GEA\u5E73\u53F0\u73B0\u6709\u7684AI routing\u57FA\u7840\u8BBE\u65BD\uFF0C\u901A\u8FC7\u6807\u51C6\u5316\u7684\u4EFB\u52A1\u7BA1\u7406\u548C\u667A\u80FD\u8DEF\u7531\u673A\u5236\uFF0C\u5B9E\u73B0\u4E86\u4E00\u4E2A\u9AD8\u5EA6\u53EF\u6269\u5C55\u3001\u6210\u672C\u53EF\u63A7\u3001\u6027\u80FD\u4F18\u8D8A\u7684admin copilot\u52A9\u624B\u3002\u65B9\u6848\u9075\u5FAA\u4F01\u4E1A\u7EA7SaaS\u7684\u6700\u4F73\u5B9E\u8DF5\uFF0C\u786E\u4FDD\u4E86\u7CFB\u7EDF\u7684\u7A33\u5B9A\u6027\u3001\u5B89\u5168\u6027\u548C\u53EF\u7EF4\u62A4\u6027\u3002
+
