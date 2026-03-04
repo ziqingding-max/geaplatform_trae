@@ -45,6 +45,13 @@ const statusColors: Record<string, string> = {
   rejected: "bg-red-50 text-red-700 border-red-200",
 };
 
+const payrollStatusLabels: Record<string, string> = {
+  draft: "Draft",
+  pending_approval: "Pending Approval",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
 // Generate year options (current year ± 2)
 function getYearOptions() {
   const current = new Date().getFullYear();

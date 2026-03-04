@@ -250,9 +250,23 @@ export async function deleteLeaveRecord(id: number) {
   await db.delete(leaveRecords).where(eq(leaveRecords.id, id));
 }
 
-export async function lockSubmittedLeaveRecords(payrollRunId: number, country: string, month: string) {
-  // Placeholder logic
-  return 0;
+export async function lockSubmittedLeaveRecords(monthStr: string, countryCode: string) {
+  const db = await getDb();
+  if (!db) return 0;
+  // Lock admin_approved leave records for the given country+month
+  const empRows = await db.select({ id: employees.id }).from(employees).where(eq(employees.country, countryCode));
+  const empIds = empRows.map(e => e.id);
+  if (empIds.length === 0) return 0;
+  const monthPrefix = monthStr.length === 7 ? monthStr : monthStr.substring(0, 7);
+  const startOfMonth = `${monthPrefix}-01`;
+  const endOfMonth = `${monthPrefix}-31`;
+  const result = await db.update(leaveRecords).set({ status: 'locked' as any }).where(and(
+    or(...empIds.map(id => eq(leaveRecords.employeeId, id))),
+    gte(leaveRecords.startDate, startOfMonth),
+    lte(leaveRecords.startDate, endOfMonth),
+    eq(leaveRecords.status, 'admin_approved')
+  ));
+  return (result as any).changes || 0;
 }
 
 export async function getActiveLeaveRecordsForDate(employeeId: number, date: Date) {
@@ -272,7 +286,40 @@ export async function getOnLeaveEmployeesWithExpiredLeave() {
   return [];
 }
 
-export async function getSubmittedUnpaidLeaveForPayroll(employeeId: number, monthStr: string) {
-  // Placeholder logic
-  return [];
+export async function getSubmittedUnpaidLeaveForPayroll(countryCodeOrEmployeeId: string | number, monthStr: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const { leaveTypes } = await import('../../../drizzle/schema');
+  const monthPrefix = monthStr.length === 7 ? monthStr : monthStr.substring(0, 7);
+  const startOfMonth = `${monthPrefix}-01`;
+  const endOfMonth = `${monthPrefix}-31`;
+
+  // Get unpaid leave type IDs
+  const unpaidTypes = await db.select({ id: leaveTypes.id }).from(leaveTypes).where(eq(leaveTypes.isPaid, false));
+  const unpaidTypeIds = unpaidTypes.map(t => t.id);
+  if (unpaidTypeIds.length === 0) return [];
+
+  if (typeof countryCodeOrEmployeeId === 'string') {
+    // Fetch all unpaid leave records for employees in this country for the given month
+    const empRows = await db.select({ id: employees.id }).from(employees).where(eq(employees.country, countryCodeOrEmployeeId));
+    const empIds = empRows.map(e => e.id);
+    if (empIds.length === 0) return [];
+    return await db.select().from(leaveRecords)
+      .where(and(
+        or(...empIds.map(id => eq(leaveRecords.employeeId, id))),
+        or(...unpaidTypeIds.map(id => eq(leaveRecords.leaveTypeId, id))),
+        gte(leaveRecords.startDate, startOfMonth),
+        lte(leaveRecords.startDate, endOfMonth),
+        eq(leaveRecords.status, 'admin_approved')
+      ));
+  } else {
+    return await db.select().from(leaveRecords)
+      .where(and(
+        eq(leaveRecords.employeeId, countryCodeOrEmployeeId),
+        or(...unpaidTypeIds.map(id => eq(leaveRecords.leaveTypeId, id))),
+        gte(leaveRecords.startDate, startOfMonth),
+        lte(leaveRecords.startDate, endOfMonth),
+        eq(leaveRecords.status, 'admin_approved')
+      ));
+  }
 }
