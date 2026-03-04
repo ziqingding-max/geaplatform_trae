@@ -51,6 +51,10 @@ COPY --from=builder /app/drizzle ./drizzle
 # 复制种子数据文件
 COPY --from=builder /app/data ./data
 
+# 复制启动脚本
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+
 # 创建数据目录（用于 SQLite 持久化）
 RUN mkdir -p /app/data && chown -R node:node /app/data
 
@@ -65,8 +69,8 @@ USER node
 EXPOSE 3000
 
 # 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:3000/ || exit 1
 
-# 启动应用
-CMD ["node", "dist/index.js"]
+# 启动应用（先迁移数据库再启动）
+ENTRYPOINT ["./docker-entrypoint.sh"]
