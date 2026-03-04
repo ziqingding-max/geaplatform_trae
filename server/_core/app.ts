@@ -38,7 +38,7 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
           imgSrc: ["'self'", "data:", "https://*"],
           connectSrc: ["'self'", "ws:", "wss:"],
           objectSrc: ["'none'"],
-          // Do NOT include upgradeInsecureRequests when serving over HTTP
+          upgradeInsecureRequests: null,
         },
       },
       crossOriginEmbedderPolicy: false,
