@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { FileText, ChevronRight } from "lucide-react";
 import { useLocation } from "wouter";
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 import { formatDate, formatMonth, formatAmount } from "@/lib/format";
 
 interface InvoiceTableProps {

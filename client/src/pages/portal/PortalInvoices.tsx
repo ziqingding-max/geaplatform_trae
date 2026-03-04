@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 import { exportToCsv } from "@/lib/csvExport";
 import { formatCurrency, formatDate } from "@/lib/format";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 /* ─── Status Display Config ──────────────────────────────────────────────── */
 
 // Portal status labels: sent → Issued

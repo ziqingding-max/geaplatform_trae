@@ -31,7 +31,7 @@ import BillingEntitiesSection from "./BillingEntities";
 import AuditLogsSection from "./AuditLogs";
 import CountriesContent from "@/components/pages/CountriesContent";
 import NotificationSettingsSection from "@/components/pages/NotificationSettingsSection";
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 
 export default function Settings() {
   const { t, lang } = useI18n();

@@ -58,7 +58,7 @@ import { formatCurrency, countryFlag, countryName } from "@/lib/format";
 
 
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 const statusConfig: Record<string, { color: string; icon: any }> = {
   draft: { color: "bg-gray-50 text-gray-600 border-gray-200", icon: FileText },
   pending_approval: { color: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },

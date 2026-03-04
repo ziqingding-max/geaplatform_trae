@@ -31,7 +31,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate } from "@/lib/format";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 /* ─── Status Config ──────────────────────────────────────────────────────── */
 
 const statusLabels: Record<string, string> = {

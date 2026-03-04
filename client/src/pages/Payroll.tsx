@@ -37,7 +37,7 @@ import EmployeeSelector from "@/components/EmployeeSelector";
 import { formatCurrencyAmount, CurrencyInput } from "@/components/CurrencyAmount";
 import { exportToCsv } from "@/lib/csvExport";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
   draft: "bg-slate-50 text-slate-700 border-slate-200",
   pending_approval: "bg-amber-50 text-amber-700 border-amber-200",

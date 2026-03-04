@@ -35,7 +35,7 @@ import { toast } from "sonner";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 
 // ─── Company Profile ─────────────────────────────────────────────────────────
 

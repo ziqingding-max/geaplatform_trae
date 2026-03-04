@@ -47,7 +47,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 const statusConfig: Record<string, { label: string; color: string }> = {
   pending_review: { label: "Pending Review", color: "bg-amber-50 text-amber-700 border-amber-200" },
   documents_incomplete: { label: "Documents Incomplete", color: "bg-rose-50 text-rose-700 border-rose-200" },

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 import { exportToCsv } from "@/lib/csvExport";
 import { formatDate, formatAmount } from "@/lib/format";
 

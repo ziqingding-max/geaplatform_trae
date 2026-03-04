@@ -15,6 +15,7 @@ interface QuotationItemInput {
   currency: string;
   serviceType: "eor" | "visa_eor";
   serviceFee: number;
+  oneTimeFee?: number;
 }
 
 interface CreateQuotationInput {
@@ -191,14 +192,19 @@ export const quotationService = {
 
         doc.fontSize(8).fillColor("black");
         smartText(doc, item.countryCode, cols.country.x, y, { width: cols.country.w }, cjkFontPath);
-        smartText(doc, item.serviceType.toUpperCase(), cols.role.x, y, { width: cols.role.w }, cjkFontPath);
-        doc.text(item.headcount.toString(), cols.count.x, y);
+        smartText(doc, (item.serviceType || "").toUpperCase(), cols.role.x, y, { width: cols.role.w }, cjkFontPath);
+        doc.text((item.headcount || 0).toString(), cols.count.x, y);
         doc.text(formatMoney(item.salary), cols.salary.x, y, { align: "right", width: cols.salary.w });
         doc.text(formatMoney(item.employerCost), cols.employer.x, y, { align: "right", width: cols.employer.w });
-        doc.text(formatMoney(item.serviceFee), cols.fee.x, y, { align: "right", width: cols.fee.w });
-        doc.font("Helvetica-Bold").text(formatMoney(item.subtotal), cols.subtotal.x, y, { align: "right", width: cols.subtotal.w });
-        
-        y += 15;
+         doc.text(formatMoney(item.serviceFee), cols.fee.x, y, { align: "right", width: cols.fee.w });
+         
+         if (item.oneTimeFee) {
+           doc.fontSize(6).text(`+ ${formatMoney(item.oneTimeFee)} (one-time)`, cols.fee.x, y + 10, { align: "right", width: cols.fee.w });
+         }
+
+         doc.font("Helvetica-Bold").text(formatMoney(item.subtotal), cols.subtotal.x, y, { align: "right", width: cols.subtotal.w });
+         
+         y += item.oneTimeFee ? 25 : 15;
       }
 
       doc.moveTo(50, y).lineTo(540, y).stroke();

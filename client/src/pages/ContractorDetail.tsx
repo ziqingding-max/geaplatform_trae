@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { useRoute, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Plus, Calendar, DollarSign, User, Briefcase, FileText, Settings, CreditCard } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

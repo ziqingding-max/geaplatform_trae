@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-600 border-gray-300",
   pending_approval: "bg-amber-100 text-amber-700 border-amber-300",

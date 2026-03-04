@@ -22,6 +22,7 @@ export const quotationRouter = router({
             currency: z.string().default("USD"),
             serviceType: z.enum(["eor", "visa_eor"]),
             serviceFee: z.number(),
+            oneTimeFee: z.number().optional(),
           })
         ),
         validUntil: z.string().optional(),

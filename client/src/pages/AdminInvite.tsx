@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Eye, EyeOff, Lock, ShieldCheck, CheckCircle2, XCircle } from "lucide-react";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 export default function AdminInvite() {
   const { t } = useI18n();
   const [, setLocation] = useLocation();

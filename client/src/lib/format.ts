@@ -61,7 +61,13 @@ export function formatMonthLong(value: string | number | Date | null | undefined
  */
 export function formatDateTime(value: string | number | Date | null | undefined): string {
   if (!value) return "—";
-  const d = new Date(value);
+  let d = new Date(value);
+  
+  // Handle microsecond timestamps (if year is > 3000, likely microseconds)
+  if (!isNaN(d.getTime()) && d.getFullYear() > 3000 && typeof value === "number") {
+    d = new Date(value / 1000);
+  }
+
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-GB", {
     day: "2-digit", month: "short", year: "numeric",
