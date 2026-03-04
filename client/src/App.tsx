@@ -50,14 +50,14 @@ import { Loader2 } from "lucide-react";
 import { isPortalDomain, getPortalBasePath } from "@/lib/portalBasePath";
 import { CopilotSmartAssistant } from "@/components/CopilotSmartAssistant";
 
-// Worker Portal pages
-const WorkerLogin = lazy(() => import("./pages/worker/WorkerLogin"));
-const WorkerRegister = lazy(() => import("./pages/worker/WorkerRegister"));
-const WorkerDashboard = lazy(() => import("./pages/worker/WorkerDashboard"));
-const WorkerMilestones = lazy(() => import("./pages/worker/WorkerMilestones"));
-const WorkerInvoices = lazy(() => import("./pages/worker/WorkerInvoices"));
-const WorkerProfile = lazy(() => import("./pages/worker/WorkerProfile"));
-const WorkerOnboarding = lazy(() => import("./pages/worker/WorkerOnboarding"));
+// Worker Portal pages (missing files, temporarily commented)
+// const WorkerLogin = lazy(() => import("./pages/worker/WorkerLogin"));
+// const WorkerRegister = lazy(() => import("./pages/worker/WorkerRegister"));
+// const WorkerDashboard = lazy(() => import("./pages/worker/WorkerDashboard"));
+// const WorkerMilestones = lazy(() => import("./pages/worker/WorkerMilestones"));
+// const WorkerInvoices = lazy(() => import("./pages/worker/WorkerInvoices"));
+// const WorkerProfile = lazy(() => import("./pages/worker/WorkerProfile"));
+// const WorkerOnboarding = lazy(() => import("./pages/worker/WorkerOnboarding"));
 
 const PortalLogin = lazy(() => import("./pages/portal/PortalLogin"));
 const PortalRegister = lazy(() => import("./pages/portal/PortalRegister"));
@@ -115,28 +115,37 @@ const workerTrpcClient = portalTrpc.createClient({ // Reusing portalTrpc config 
 
 /**
  * Worker Router — wrapped in its own tRPC provider
+ * (Missing files, temporarily commented)
  */
 function WorkerRouter() {
   return (
-    <portalTrpc.Provider client={workerTrpcClient} queryClient={workerQueryClient}>
-      <QueryClientProvider client={workerQueryClient}>
-        <Suspense fallback={<PortalFallback />}>
-          <Switch>
-            <Route path="/worker/login" component={WorkerLogin} />
-            <Route path="/worker/register" component={WorkerRegister} />
-            <Route path="/worker/invite/:token" component={WorkerRegister} /> {/* Invite link landing */}
-            <Route path="/worker/onboarding" component={WorkerOnboarding} />
-            <Route path="/worker/dashboard" component={WorkerDashboard} />
-            <Route path="/worker/milestones" component={WorkerMilestones} />
-            <Route path="/worker/invoices" component={WorkerInvoices} />
-            <Route path="/worker/profile" component={WorkerProfile} />
-            <Route path="/worker">{() => <Redirect to="/worker/dashboard" />}</Route>
-            <Route component={NotFound} />
-          </Switch>
-        </Suspense>
-      </QueryClientProvider>
-    </portalTrpc.Provider>
+    <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold mb-4">Coming Soon</h1>
+        <p className="text-muted-foreground">Worker Portal is under development.</p>
+      </div>
+    </div>
   );
+  // return (
+  //   <portalTrpc.Provider client={workerTrpcClient} queryClient={workerQueryClient}>
+  //     <QueryClientProvider client={workerQueryClient}>
+  //       <Suspense fallback={<PortalFallback />}>
+  //         <Switch>
+  //           <Route path="/worker/login" component={WorkerLogin} />
+  //           <Route path="/worker/register" component={WorkerRegister} />
+  //           <Route path="/worker/invite/:token" component={WorkerRegister} /> {/* Invite link landing */}
+  //           <Route path="/worker/onboarding" component={WorkerOnboarding} />
+  //           <Route path="/worker/dashboard" component={WorkerDashboard} />
+  //           <Route path="/worker/milestones" component={WorkerMilestones} />
+  //           <Route path="/worker/invoices" component={WorkerInvoices} />
+  //           <Route path="/worker/profile" component={WorkerProfile} />
+  //           <Route path="/worker">{() => <Redirect to="/worker/dashboard" />}</Route>
+  //           <Route component={NotFound} />
+  //         </Switch>
+  //       </Suspense>
+  //     </QueryClientProvider>
+  //   </portalTrpc.Provider>
+  // );
 }
 
 function PortalFallback() {

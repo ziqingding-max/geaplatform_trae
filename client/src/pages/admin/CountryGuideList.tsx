@@ -1,4 +1,4 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation } from "wouter";
 import Layout from "@/components/Layout";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
@@ -7,7 +7,7 @@ import { Loader2, Globe } from "lucide-react";
 
 export default function CountryGuideList() {
   const { t } = useI18n();
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const { data: countries, isLoading } = trpc.countries.list.useQuery();
 
   return (
@@ -28,7 +28,7 @@ export default function CountryGuideList() {
               <Card 
                 key={country.countryCode} 
                 className="cursor-pointer hover:bg-accent/50 transition-colors"
-                onClick={() => navigate(`/admin/knowledge/country-guides/${country.countryCode}`)}
+                onClick={() => setLocation(`/admin/knowledge/country-guides/${country.countryCode}`)}
               >
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">
