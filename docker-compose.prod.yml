@@ -27,7 +27,7 @@ services:
       - ADMIN_BOOTSTRAP_PASSWORD=${ADMIN_BOOTSTRAP_PASSWORD}
       - ADMIN_APP_URL=${ADMIN_APP_URL:-https://admin.geahr.com}
       - PORTAL_APP_URL=${PORTAL_APP_URL:-https://app.geahr.com}
-      - WORKER_APP_URL=${WORKER_APP_URL:-https://app.geahr.com/worker}
+      - WORKER_APP_URL=${WORKER_APP_URL:-https://worker.geahr.com}
       # 阿里云 OSS (马来西亚吉隆坡节点)
       - OSS_ACCESS_KEY_ID=${OSS_ACCESS_KEY_ID}
       - OSS_ACCESS_KEY_SECRET=${OSS_ACCESS_KEY_SECRET}
