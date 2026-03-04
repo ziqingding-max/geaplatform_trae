@@ -11,7 +11,7 @@ import { formatDateTime, formatCurrencyCompact, formatMonthShort } from "@/lib/f
 import { formatActivitySummary } from "@/lib/auditDescriptions";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";

@@ -50,7 +50,7 @@ import {
 } from "lucide-react";
 import { exportToCsv } from "@/lib/csvExport";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 const ACRONYMS = new Set(["hr", "it", "eor"]);
 function formatLabel(raw: string): string {
   return raw.replace(/_/g, " ").split(" ").map(w => ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)).join(" ");

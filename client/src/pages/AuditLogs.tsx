@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Layout from "@/components/Layout";
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/format";
 import { formatAuditDescription } from "@/lib/auditDescriptions";
 import { trpc } from "@/lib/trpc";

@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MonthPicker } from "@/components/DatePicker";
 import { Button } from "@/components/ui/button";
 import { Search, XCircle } from "lucide-react";
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 
 interface InvoiceFiltersProps {
   search: string;

@@ -7,6 +7,7 @@
 import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
 import CountrySelect from "@/components/CountrySelect";
+import DatePicker from "@/components/DatePicker";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import { formatDate, formatMonth, formatDateISO, formatDateTime } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
@@ -40,7 +41,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContractorListContent } from "./Contractors";
 import ContractorCreateDialog from "@/components/pages/ContractorCreateDialog";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
   active: "bg-emerald-50 text-emerald-700 border-emerald-200",
   pending_review: "bg-amber-50 text-amber-700 border-amber-200",
@@ -356,7 +357,7 @@ function EmployeeList() {
                     </div>
                     <div className="space-y-2">
                       <Label>{t("employees.create.form.dateOfBirth")}</Label>
-                      <Input type="text" placeholder="YYYY-MM-DD" value={formData.dateOfBirth} onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })} />
+                      <DatePicker value={formData.dateOfBirth ? new Date(formData.dateOfBirth) : undefined} onChange={(d) => setFormData({ ...formData, dateOfBirth: d ? formatDateISO(d) : "" })} />
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-4">

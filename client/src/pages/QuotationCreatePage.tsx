@@ -1,4 +1,4 @@
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 import { useState } from "react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -23,9 +23,11 @@ interface QuotationItem {
   salary: number;
   currency: string;
   serviceFee: number;
+  oneTimeFee?: number;
   // Computed fields
   employerCost?: number;
   totalMonthly?: number;
+  totalOneTime?: number;
 }
 
 export default function QuotationCreatePage() {
@@ -221,6 +223,15 @@ export default function QuotationCreatePage() {
                                   <Input type="number" className="pl-5" value={item.serviceFee} onChange={(e) => updateItem(index, "serviceFee", parseFloat(e.target.value))} />
                                 </div>
                             </div>
+                            {item.serviceType === "visa_eor" && (
+                              <div className="col-span-2 space-y-2">
+                                  <Label className="text-xs">One Time Fee</Label>
+                                  <div className="relative">
+                                    <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">$</span>
+                                    <Input type="number" className="pl-5" value={item.oneTimeFee || 0} onChange={(e) => updateItem(index, "oneTimeFee", parseFloat(e.target.value))} />
+                                  </div>
+                              </div>
+                            )}
                             <div className="col-span-2 space-y-2">
                                 <Label className="text-xs">{t("quotations.items.headcount")}</Label>
                                 <Input type="number" min={1} value={item.headcount} onChange={(e) => updateItem(index, "headcount", parseInt(e.target.value))} />

@@ -26,7 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Globe, Search, CalendarDays, Clock, Briefcase, Pencil, DollarSign, CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import CurrencySelect from "@/components/CurrencySelect";
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 
 type FilterStatus = "all" | "active" | "inactive";
 

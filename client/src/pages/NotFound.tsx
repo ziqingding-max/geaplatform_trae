@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, Home } from "lucide-react";
 import { useLocation } from "wouter";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 export default function NotFound() {
   const { t } = useI18n();
   const [, setLocation] = useLocation();

@@ -47,7 +47,7 @@ import PayrollCycleIndicator from "@/components/PayrollCycleIndicator";
 import { MonthPicker } from "@/components/DatePicker";
 import { exportToCsv } from "@/lib/csvExport";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
   const statusColors: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-700 border-amber-200",
   client_approved: "bg-emerald-50 text-emerald-700 border-emerald-200",

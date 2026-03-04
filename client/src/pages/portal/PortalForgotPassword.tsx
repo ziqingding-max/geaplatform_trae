@@ -21,7 +21,7 @@ import {
 import { ArrowLeft, Mail, CheckCircle2, Copy, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 export default function PortalForgotPassword() {
   const { t } = useI18n();
   const [email, setEmail] = useState("");

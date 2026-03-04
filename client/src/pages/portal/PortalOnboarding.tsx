@@ -59,7 +59,7 @@ import {
 import { getPortalOrigin, portalPath } from "@/lib/portalBasePath";
 import { cn } from "@/lib/utils";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 // ── Status Configs ──
 const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
   pending_review: { label: "Pending Review", color: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },

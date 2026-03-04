@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
   active: "bg-emerald-50 text-emerald-700 border-emerald-200",
   suspended: "bg-amber-50 text-amber-700 border-amber-200",
@@ -414,6 +414,7 @@ function CustomerDetail({ id }: { id: number }) {
     selectedCountries: [] as string[],
     serviceType: "eor" as "eor" | "visa_eor" | "aor",
     fixedPrice: "",
+    visaOneTimeFee: "",
     currency: "USD",
     effectiveFrom: formatDateISO(new Date()),
     effectiveTo: "",
@@ -450,6 +451,7 @@ function CustomerDetail({ id }: { id: number }) {
         countryCodes: pricingForm.selectedCountries,
         serviceType: pricingForm.serviceType,
         fixedPrice: pricingForm.fixedPrice,
+        visaOneTimeFee: pricingForm.serviceType === "visa_eor" && pricingForm.visaOneTimeFee ? pricingForm.visaOneTimeFee : undefined,
         currency: pricingForm.currency,
         effectiveFrom: pricingForm.effectiveFrom,
         effectiveTo: pricingForm.effectiveTo || undefined,
@@ -463,6 +465,7 @@ function CustomerDetail({ id }: { id: number }) {
         countryCode: pricingForm.countryCode,
         serviceType: pricingForm.serviceType,
         fixedPrice: pricingForm.fixedPrice,
+        visaOneTimeFee: pricingForm.serviceType === "visa_eor" && pricingForm.visaOneTimeFee ? pricingForm.visaOneTimeFee : undefined,
         currency: pricingForm.currency,
         effectiveFrom: pricingForm.effectiveFrom,
         effectiveTo: pricingForm.effectiveTo || undefined,
@@ -882,7 +885,7 @@ function CustomerDetail({ id }: { id: number }) {
               </CardContent>
             </Card>
             <div className="flex justify-end">
-              <Dialog open={pricingOpen} onOpenChange={(open) => { setPricingOpen(open); if (open) { setPricingMode("single"); setPricingForm({ pricingType: "country_specific", globalDiscountPercent: "", countryCode: "", selectedCountries: [], serviceType: "eor", fixedPrice: "", currency: "USD", effectiveFrom: formatDateISO(new Date()), effectiveTo: "" }); } }}>
+              <Dialog open={pricingOpen} onOpenChange={(open) => { setPricingOpen(open); if (open) { setPricingMode("single"); setPricingForm({ pricingType: "country_specific", globalDiscountPercent: "", countryCode: "", selectedCountries: [], serviceType: "eor", fixedPrice: "", visaOneTimeFee: "", currency: "USD", effectiveFrom: formatDateISO(new Date()), effectiveTo: "" }); } }}>
                 <DialogTrigger asChild>
                   <Button size="sm"><Plus className="w-4 h-4 mr-2" />{t("customers.pricing.addPricing")}</Button>
                 </DialogTrigger>
@@ -976,6 +979,12 @@ function CustomerDetail({ id }: { id: number }) {
                             <Label>{t("customers.pricing.fixedPricePerEmployeePerMonth")} *</Label>
                             <Input type="number" step="0.01" value={pricingForm.fixedPrice} onChange={(e) => setPricingForm({ ...pricingForm, fixedPrice: e.target.value })} placeholder="500.00" />
                           </div>
+                          {pricingForm.serviceType === "visa_eor" && (
+                            <div className="space-y-2">
+                              <Label>Visa One Time Fee</Label>
+                              <Input type="number" step="0.01" value={pricingForm.visaOneTimeFee} onChange={(e) => setPricingForm({ ...pricingForm, visaOneTimeFee: e.target.value })} placeholder="1000.00" />
+                            </div>
+                          )}
                           <div className="space-y-2">
                             <Label>{t("common.currency")}</Label>
                             <CurrencySelect value={pricingForm.currency} onValueChange={(v) => setPricingForm({ ...pricingForm, currency: v })} />
@@ -1042,8 +1051,10 @@ function CustomerDetail({ id }: { id: number }) {
                                 : p.fixedPrice ? `${p.currency} ${p.fixedPrice}/mo` : "—"}
                             </TableCell>
                             <TableCell className="text-sm font-mono text-muted-foreground">
-                              {p.serviceType === "visa_eor" && p.countryCode && stdRates?.visaSetupFee
-                                ? `${stdRates?.currency || "USD"} ${stdRates.visaSetupFee} (one-time)`
+                              {p.serviceType === "visa_eor"
+                                ? (p.visaOneTimeFee
+                                  ? `${p.currency} ${p.visaOneTimeFee} (one-time)`
+                                  : (p.countryCode && stdRates?.visaSetupFee ? `${stdRates?.currency || "USD"} ${stdRates.visaSetupFee} (one-time)` : "—"))
                                 : "—"}
                             </TableCell>
                             <TableCell className="text-sm">

@@ -252,6 +252,14 @@ export const salesRouter = router({
 
       const customerId = (customerResult as any)[0]?.insertId ?? (customerResult as any).insertId;
 
+      if (!customerId) {
+        console.error("Failed to get customer ID after creation", customerResult);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to create customer: ID not returned",
+        });
+      }
+
       // 2. Auto-create primary contact if contact info exists
       if (customerId && lead.contactName) {
         await createCustomerContact({

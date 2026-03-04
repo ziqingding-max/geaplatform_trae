@@ -15,7 +15,7 @@ import CountrySelect, { ALL_COUNTRIES } from "@/components/CountrySelect";
 import { DatePicker } from "@/components/DatePicker";
 import { formatDate, formatDateISO, formatDateTime } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react";
 
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 export default function AdminLogin() {
   const { t } = useI18n();
   const [email, setEmail] = useState("");

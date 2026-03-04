@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { Loader2, Search } from "lucide-react";
 import CountrySelect from "@/components/CountrySelect"; // Assuming this component works for portal too or needs adaptation
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 
 export default function PortalSalaryBenchmark() {
   const { t } = useI18n();

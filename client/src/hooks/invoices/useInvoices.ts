@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { useI18n } from "@/contexts/i18n";
+import { useI18n } from "@/lib/i18n";
 
 export function useInvoices() {
   const { t } = useI18n();
