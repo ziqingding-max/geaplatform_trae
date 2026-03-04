@@ -48,7 +48,7 @@ import { httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { Loader2 } from "lucide-react";
-import { isPortalDomain, getPortalBasePath } from "@/lib/portalBasePath";
+import { isPortalDomain, getPortalBasePath, isWorkerDomain } from "@/lib/portalBasePath";
 import { CopilotDrawer } from "@/components/CopilotDrawer";
 
 // Worker Portal pages
@@ -118,20 +118,24 @@ const workerTrpcClient = portalTrpc.createClient({ // Reusing portalTrpc config 
  * Worker Router — wrapped in its own tRPC provider
  */
 function WorkerRouter() {
+  const isWorkerSubdomain = isWorkerDomain();
+  const basePath = isWorkerSubdomain ? "" : "/worker";
+  const redirectPath = isWorkerSubdomain ? "/dashboard" : "/worker/dashboard";
+  
   return (
     <portalTrpc.Provider client={workerTrpcClient} queryClient={workerQueryClient}>
       <QueryClientProvider client={workerQueryClient}>
         <Suspense fallback={<PortalFallback />}>
           <Switch>
-            <Route path="/worker/login" component={WorkerLogin} />
-            <Route path="/worker/register" component={WorkerRegister} />
-            <Route path="/worker/invite/:token" component={WorkerRegister} /> {/* Invite link landing */}
-            <Route path="/worker/onboarding" component={WorkerOnboarding} />
-            <Route path="/worker/dashboard" component={WorkerDashboard} />
-            <Route path="/worker/milestones" component={WorkerMilestones} />
-            <Route path="/worker/invoices" component={WorkerInvoices} />
-            <Route path="/worker/profile" component={WorkerProfile} />
-            <Route path="/worker">{() => <Redirect to="/worker/dashboard" />}</Route>
+            <Route path={`${basePath}/login`} component={WorkerLogin} />
+            <Route path={`${basePath}/register`} component={WorkerRegister} />
+            <Route path={`${basePath}/invite/:token`} component={WorkerRegister} />
+            <Route path={`${basePath}/onboarding`} component={WorkerOnboarding} />
+            <Route path={`${basePath}/dashboard`} component={WorkerDashboard} />
+            <Route path={`${basePath}/milestones`} component={WorkerMilestones} />
+            <Route path={`${basePath}/invoices`} component={WorkerInvoices} />
+            <Route path={`${basePath}/profile`} component={WorkerProfile} />
+            <Route path={basePath || "/"}>{() => <Redirect to={redirectPath} />}</Route>
             <Route component={NotFound} />
           </Switch>
         </Suspense>
@@ -200,7 +204,7 @@ function AdminRouter() {
       <Route path="/quotations" component={Quotations} />
       <Route path="/quotations/new" component={QuotationCreatePage} />
       <Route path="/customers" component={Customers} />
-      {/* <Route path="/customers/:id" component={CustomerDetail} /> */}
+      <Route path="/customers/:id" component={Customers} />
       <Route path="/people" component={Employees} />
       <Route path="/people/:id" component={Employees} />
       {/* Legacy routes redirect to People */}
@@ -247,6 +251,10 @@ function AdminRouter() {
  *   - localhost / *.manus.space → path-based: /portal/* → PortalRouter, else AdminRouter
  */
 function Router() {
+  // On worker subdomain (worker.geahr.com), render worker portal at root level
+  if (isWorkerDomain()) {
+    return <WorkerRouter />;
+  }
   // On portal subdomain (app.geahr.com), render portal at root level
   if (isPortalDomain()) {
     return <PortalRouter />;

@@ -10,6 +10,16 @@
  */
 
 const PORTAL_SUBDOMAINS = ["app.geahr.com"];
+const WORKER_SUBDOMAINS = ["worker.geahr.com"];
+
+/**
+ * Returns true if the current hostname is a worker portal subdomain
+ */
+export function isWorkerDomain(): boolean {
+  if (typeof window === "undefined") return false;
+  const hostname = window.location.hostname;
+  return WORKER_SUBDOMAINS.some((d) => hostname === d);
+}
 
 /**
  * Returns true if the current hostname is a portal subdomain

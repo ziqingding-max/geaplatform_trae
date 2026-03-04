@@ -16,7 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Building2, Loader2, Eye, EyeOff, Lock, Mail } from "lucide-react";
 
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/contexts/i18n";
 export default function PortalLogin() {
   const { t } = useI18n();
   const [, setLocation] = useLocation();
@@ -27,7 +27,7 @@ export default function PortalLogin() {
 
   const loginMutation = portalTrpc.auth.login.useMutation({
     onSuccess: () => {
-      setLocation("/portal");
+      setLocation(portalPath("/"));
     },
     onError: (err) => {
       setError(err.message || t("portal_login.alert.login_failed"));
