@@ -22,6 +22,8 @@ import { eq, and } from "drizzle-orm";
 export async function createApp(options: { skipStatic?: boolean } = {}) {
   const app = express();
   const server = createServer(app);
+  // Trust proxy (required when behind Nginx reverse proxy)
+  app.set('trust proxy', 1);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
