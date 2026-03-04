@@ -37,7 +37,7 @@ import { toast } from "sonner";
 import { exportToCsv } from "@/lib/csvExport";
 import { MonthPicker } from "@/components/DatePicker";
 
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/contexts/i18n";
 
 const statusColors: Record<string, string> = {
   submitted: "bg-yellow-100 text-yellow-800 border-yellow-200",
