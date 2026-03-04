@@ -37,7 +37,7 @@ import { exportToCsv } from "@/lib/csvExport";
 import { cn } from "@/lib/utils";
 import { MonthPicker } from "@/components/DatePicker";
 
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/contexts/i18n";
 const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800 border-gray-200",
   submitted: "bg-yellow-100 text-yellow-800 border-yellow-200",

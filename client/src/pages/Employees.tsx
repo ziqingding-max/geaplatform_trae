@@ -65,6 +65,19 @@ const docTypes = [
   "other",
 ];
 
+const docTypeLabels: Record<string, string> = {
+  resume: "Resume",
+  passport: "Passport",
+  national_id: "National ID",
+  work_permit: "Work Permit",
+  visa: "Visa",
+  contract: "Contract",
+  education: "Education",
+  payslip: "Payslip",
+  reimbursement_receipt: "Reimbursement Receipt",
+  other: "Other",
+};
+
 const visaStatusColors: Record<string, string> = {
   not_required: "bg-gray-50 text-gray-600",
   pending_application: "bg-amber-50 text-amber-700",
