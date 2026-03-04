@@ -49,15 +49,15 @@ const sendMessageInput = z.object({
 }).strict();
 
 const updateUserConfigInput = z.object({
-  preferences: z.record(z.any()).optional(),
-  hotkeys: z.record(z.any()).optional(),
-  enabledFeatures: z.array(z.string()).optional(),
-  disabledPredictions: z.array(z.string()).optional(),
-  theme: z.string().optional(),
-  language: z.string().optional(),
-  position: z.string().optional(),
+  preferences: z.object({}).passthrough().optional(),
+  hotkeys: z.object({}).passthrough().optional(),
+  enabledFeatures: z.array(z.string().max(50)).max(20).optional(),
+  disabledPredictions: z.array(z.string().max(50)).max(20).optional(),
+  theme: z.enum(["auto", "light", "dark"]).optional(),
+  language: z.string().min(2).max(10).optional(),
+  position: z.string().max(50).optional(),
   isEnabled: z.boolean().optional(),
-});
+}).strict();
 
 const uploadFileInput = z.object({
   fileName: z.string().min(1).max(255),
