@@ -49,6 +49,8 @@ import {
   contractorMilestones,
   contractorAdjustments,
   workerUsers,
+  customerWallets,
+  walletTransactions,
 } from "./schema";
 
 // ============================================================================
@@ -93,6 +95,7 @@ export const customersRelations = relations(customers, ({ many }) => ({
   leavePolicies: many(customerLeavePolicies),
   employees: many(employees),
   invoices: many(invoices),
+  wallet: many(customerWallets),
   adjustments: many(adjustments),
   // payrollRuns: many(payrollRuns), // Removed: payroll runs are per country, not per customer
   salesLeads: many(salesLeads),
@@ -444,5 +447,24 @@ export const workerUsersRelations = relations(workerUsers, ({ one }) => ({
   contractor: one(contractors, {
     fields: [workerUsers.contractorId],
     references: [contractors.id],
+  }),
+}));
+
+// ============================================================================
+// 13. CUSTOMER WALLET
+// ============================================================================
+
+export const customerWalletsRelations = relations(customerWallets, ({ one, many }) => ({
+  customer: one(customers, {
+    fields: [customerWallets.customerId],
+    references: [customers.id],
+  }),
+  transactions: many(walletTransactions),
+}));
+
+export const walletTransactionsRelations = relations(walletTransactions, ({ one }) => ({
+  wallet: one(customerWallets, {
+    fields: [walletTransactions.walletId],
+    references: [customerWallets.id],
   }),
 }));

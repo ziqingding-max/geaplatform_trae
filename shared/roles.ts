@@ -14,6 +14,7 @@ export const ALL_ROLES = [
   "customer_manager",
   "operations_manager",
   "finance_manager",
+  "sales",
   "user",
 ] as const;
 
@@ -24,6 +25,7 @@ export const MANAGER_ROLES: RoleValue[] = [
   "customer_manager",
   "operations_manager",
   "finance_manager",
+  "sales",
 ];
 
 /** Exclusive roles (cannot be combined with others) */
@@ -88,6 +90,7 @@ export const ROLE_LABELS: Record<string, string> = {
   customer_manager: "Customer Manager",
   operations_manager: "Operations Manager",
   finance_manager: "Finance Manager",
+  sales: "Sales",
   user: "User",
 };
 

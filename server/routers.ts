@@ -33,6 +33,7 @@ import { quotationRouter } from "./routers/quotationRouter";
 import { countryGuideRouter } from "./routers/countryGuideRouter";
 import { salaryBenchmarkRouter } from "./routers/salaryBenchmarkRouter";
 import { contractorsRouter } from "./routers/contractors";
+import { walletRouter } from "./routers/billing/walletRouter";
 
 export const appRouter = router({
   system: systemRouter,
@@ -77,6 +78,7 @@ export const appRouter = router({
   countryGuides: countryGuideRouter,
   salaryBenchmarks: salaryBenchmarkRouter,
   contractors: contractorsRouter,
+  wallet: walletRouter,
 });
 
 export type AppRouter = typeof appRouter;

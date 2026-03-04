@@ -417,13 +417,15 @@ function EmployeeList() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>{t("employees.create.form.startDate")} <span className="text-red-500">*</span></Label>
-                      <Input type="text" placeholder="YYYY-MM-DD" className={errCls("startDate")} value={formData.startDate} onChange={(e) => { setFormData({ ...formData, startDate: e.target.value }); setErrors({ ...errors, startDate: false }); }} />
+                      <div className={errors.startDate ? "rounded-md ring-1 ring-red-500" : ""}>
+                        <DatePicker value={formData.startDate ? new Date(formData.startDate) : undefined} onChange={(d) => { setFormData({ ...formData, startDate: d ? formatDateISO(d) : "" }); setErrors({ ...errors, startDate: false }); }} />
+                      </div>
                       {errors.startDate && <p className="text-xs text-red-500">{t("common.required")}</p>}
                     </div>
                     {formData.employmentType === "fixed_term" && (
                     <div className="space-y-2">
                       <Label>{t("employees.create.form.endDate")}</Label>
-                      <Input type="text" placeholder="YYYY-MM-DD" value={formData.endDate} onChange={(e) => setFormData({ ...formData, endDate: e.target.value })} />
+                      <DatePicker value={formData.endDate ? new Date(formData.endDate) : undefined} onChange={(d) => setFormData({ ...formData, endDate: d ? formatDateISO(d) : "" })} />
                     </div>
                     )}
                   </div>
@@ -770,6 +772,7 @@ function EmployeeDetail({ id }: { id: number }) {
   const [uploadDocName, setUploadDocName] = useState("");
   const [uploadNotes, setUploadNotes] = useState("");
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Leave balance editing
   const [editLeaveId, setEditLeaveId] = useState<number | null>(null);
@@ -812,7 +815,7 @@ function EmployeeDetail({ id }: { id: number }) {
   });
 
   const uploadMutation = trpc.employees.documents.upload.useMutation({
-    onSuccess: () => { toast.success("Document uploaded"); setUploadDialogOpen(false); refetchDocs(); setUploadDocName(""); setUploadNotes(""); },
+    onSuccess: () => { toast.success("Document uploaded"); setUploadDialogOpen(false); refetchDocs(); setUploadDocName(""); setUploadNotes(""); setSelectedFile(null); },
     onError: (err) => toast.error(err.message),
   });
 
@@ -910,28 +913,34 @@ function EmployeeDetail({ id }: { id: number }) {
     setEditOpen(true);
   }
 
-  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
       toast.error("File size must be under 10MB");
       return;
     }
+    setSelectedFile(file);
+    if (!uploadDocName) setUploadDocName(file.name);
+  }
+
+  function handleConfirmUpload() {
+    if (!selectedFile) return;
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = (reader.result as string).split(",")[1];
       uploadMutation.mutate({
         employeeId: id,
         documentType: uploadDocType as any,
-        documentName: uploadDocName || file.name,
+        documentName: uploadDocName || selectedFile.name,
         fileBase64: base64,
-        fileName: file.name,
-        mimeType: file.type || "application/octet-stream",
-        fileSize: file.size,
+        fileName: selectedFile.name,
+        mimeType: selectedFile.type || "application/octet-stream",
+        fileSize: selectedFile.size,
         notes: uploadNotes || undefined,
       });
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(selectedFile);
   }
 
   if (isLoading) {
@@ -1290,8 +1299,7 @@ function EmployeeDetail({ id }: { id: number }) {
                   </div>
                   <div className="space-y-2">
                     <Label>{t("employees.detail.visa.status.labels.expiryDate")}</Label>
-                    <Input type="text" placeholder="YYYY-MM-DD" value={editForm.visaExpiryDate || formatDateISO(employee.visaExpiryDate)}
-                      onChange={e => setEditForm((f: any) => ({ ...f, visaExpiryDate: e.target.value }))} />
+                    <DatePicker value={editForm.visaExpiryDate ? new Date(editForm.visaExpiryDate) : undefined} onChange={d => setEditForm((f: any) => ({ ...f, visaExpiryDate: d ? formatDateISO(d) : "" }))} />
                   </div>
                   <div className="space-y-2">
                     <Label>{t("employees.detail.status.update.notes")}</Label>
@@ -1379,15 +1387,22 @@ function EmployeeDetail({ id }: { id: number }) {
                     </div>
                     <div className="space-y-2">
                       <Label>{t("employees.documents.fileMax10mb")}</Label>
-                      <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif" onChange={handleFileUpload} className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer" />
-                    </div>
-                    {uploadMutation.isPending && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                        {t("employees.documents.uploading")}
+                      <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif" onChange={handleFileSelect} className="hidden" />
+                      <div className="flex items-center gap-3">
+                        <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                          <Upload className="w-4 h-4 mr-2" />
+                          Choose File
+                        </Button>
+                        {selectedFile && <span className="text-sm text-muted-foreground">{selectedFile.name} ({(selectedFile.size / 1024).toFixed(0)} KB)</span>}
                       </div>
-                    )}
+                    </div>
                   </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>{t("common.cancel")}</Button>
+                    <Button onClick={handleConfirmUpload} disabled={!selectedFile || uploadMutation.isPending}>
+                      {uploadMutation.isPending ? "Uploading..." : "Upload"}
+                    </Button>
+                  </DialogFooter>
                 </DialogContent>
               </Dialog>
             </div>
@@ -1503,7 +1518,7 @@ function EmployeeDetail({ id }: { id: number }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t("employees.create.form.dateOfBirth")}</Label>
-                    <Input type="text" placeholder="YYYY-MM-DD" value={editForm.dateOfBirth || ""} onChange={(e) => setEditForm({ ...editForm, dateOfBirth: e.target.value })} />
+                    <DatePicker value={editForm.dateOfBirth ? new Date(editForm.dateOfBirth) : undefined} onChange={(d) => setEditForm({ ...editForm, dateOfBirth: d ? formatDateISO(d) : "" })} />
                   </div>
                   <div className="space-y-2">
                     <Label>{t("employees.edit.gender")}</Label>
@@ -1620,12 +1635,12 @@ function EmployeeDetail({ id }: { id: number }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t("employees.edit.startDateContractEffective")}</Label>
-                    <Input type="text" placeholder="YYYY-MM-DD" value={editForm.startDate || ""} onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })} />
+                    <DatePicker value={editForm.startDate ? new Date(editForm.startDate) : undefined} onChange={(d) => setEditForm({ ...editForm, startDate: d ? formatDateISO(d) : "" })} />
                   </div>
                   {(editForm.employmentType === "fixed_term") && (
                   <div className="space-y-2">
                     <Label>{t("employees.create.form.endDate")}</Label>
-                    <Input type="text" placeholder="YYYY-MM-DD" value={editForm.endDate || ""} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
+                    <DatePicker value={editForm.endDate ? new Date(editForm.endDate) : undefined} onChange={(d) => setEditForm({ ...editForm, endDate: d ? formatDateISO(d) : "" })} />
                   </div>
                   )}
                 </div>

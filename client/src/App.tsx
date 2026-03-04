@@ -26,7 +26,6 @@ import Reimbursements from "./pages/Reimbursements";
 import BillingEntities from "./pages/BillingEntities";
 import { Redirect } from "wouter";
 import AuditLogs from "./pages/AuditLogs";
-import HelpCenter from "./pages/HelpCenter";
 import KnowledgeBaseAdmin from "./pages/KnowledgeBaseAdmin";
 import AISettings from "./pages/AISettings";
 import Vendors from "./pages/Vendors";
@@ -79,6 +78,7 @@ const PortalReimbursements = lazy(() => import("./pages/portal/PortalReimburseme
 const PortalKnowledgeBase = lazy(() => import("./pages/portal/PortalKnowledgeBase"));const PortalCostSimulator = lazy(() => import("./pages/portal/CostSimulator"));
 const PortalCountryGuide = lazy(() => import("./pages/portal/CountryGuide"));
 const PortalSalaryBenchmark = lazy(() => import("./pages/portal/PortalSalaryBenchmark"));
+const PortalWallet = lazy(() => import("./pages/portal/PortalWallet"));
 
 // Worker Portal pagesSeparate QueryClient for portal (no admin auth redirect)
 const portalQueryClient = new QueryClient();
@@ -178,6 +178,7 @@ function PortalRouter() {
             <Route path={`${base}/leave`} component={PortalLeave} />
             <Route path={`${base}/invoices/:id`} component={PortalInvoiceDetail} />
             <Route path={`${base}/invoices`} component={PortalInvoices} />
+            <Route path={`${base}/wallet`} component={PortalWallet} />
             <Route path={`${base}/cost-simulator`} component={PortalCostSimulator} />
             <Route path={`${base}/country-guide`} component={PortalCountryGuide} />
             <Route path={`${base}/salary-benchmark`} component={PortalSalaryBenchmark} />
@@ -230,7 +231,6 @@ function AdminRouter() {
       <Route path="/exchange-rates">{() => <Redirect to="/settings" />}</Route>
       <Route path="/users">{() => <Redirect to="/settings" />}</Route>
       <Route path="/audit-logs">{() => <AuditLogs />}</Route>
-      <Route path="/help" component={HelpCenter} />
       <Route path="/knowledge-base-admin" component={KnowledgeBaseAdmin} />
       <Route path="/admin/knowledge/country-guides/:countryCode" component={CountryGuideEditor} />
       <Route path="/admin/knowledge/country-guides" component={CountryGuideList} />

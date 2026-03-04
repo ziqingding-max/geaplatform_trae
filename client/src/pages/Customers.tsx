@@ -5,6 +5,7 @@
 import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
 import CountrySelect from "@/components/CountrySelect";
+import DatePicker from "@/components/DatePicker";
 import { formatDate, formatDateISO } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useState, useRef, useEffect } from "react";
@@ -28,8 +29,9 @@ import {
 import {
   Building2, Plus, Search, ArrowLeft, Mail, Phone, Users, DollarSign,
   ChevronRight, Trash2, UserPlus, FileText, Upload, ExternalLink, X, Pencil,
-  Send, ShieldCheck, ShieldX, Copy, Check, KeyRound,
+  Send, ShieldCheck, ShieldX, Copy, Check, KeyRound, Wallet, ArrowUpRight, ArrowDownLeft
 } from "lucide-react";
+import { formatCurrency } from "@/lib/format";
 import { toast } from "sonner";
 
 import { useI18n } from "@/lib/i18n";
@@ -347,7 +349,7 @@ function CustomerDetail({ id }: { id: number }) {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const fromPage = new URLSearchParams(searchString).get("from_page") || "1";
-  const [activeTab, setActiveTab] = useState<"info" | "pricing" | "contacts" | "contracts" | "leavePolicy">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "pricing" | "contacts" | "contracts" | "leavePolicy" | "wallet">("info");
 
   const { data: customer, isLoading, refetch: refetchCustomer } = trpc.customers.get.useQuery({ id });
   const { data: pricing, refetch: refetchPricing } = trpc.customers.pricing.list.useQuery({ customerId: id });
@@ -1377,15 +1379,15 @@ function CustomerDetail({ id }: { id: number }) {
                     <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-2">
                         <Label>{t("customers.contracts.signedDate")}</Label>
-                        <Input type="text" placeholder="YYYY-MM-DD" value={contractForm.signedDate} onChange={(e) => setContractForm({ ...contractForm, signedDate: e.target.value })} />
+                        <DatePicker value={contractForm.signedDate ? new Date(contractForm.signedDate) : undefined} onChange={(d) => setContractForm({ ...contractForm, signedDate: d ? formatDateISO(d) : "" })} />
                       </div>
                       <div className="space-y-2">
                         <Label>{t("customers.contracts.effectiveDate")}</Label>
-                        <Input type="text" placeholder="YYYY-MM-DD" value={contractForm.effectiveDate} onChange={(e) => setContractForm({ ...contractForm, effectiveDate: e.target.value })} />
+                        <DatePicker value={contractForm.effectiveDate ? new Date(contractForm.effectiveDate) : undefined} onChange={(d) => setContractForm({ ...contractForm, effectiveDate: d ? formatDateISO(d) : "" })} />
                       </div>
                       <div className="space-y-2">
                         <Label>{t("customers.contracts.expiryDate")}</Label>
-                        <Input type="text" placeholder="YYYY-MM-DD" value={contractForm.expiryDate} onChange={(e) => setContractForm({ ...contractForm, expiryDate: e.target.value })} />
+                        <DatePicker value={contractForm.expiryDate ? new Date(contractForm.expiryDate) : undefined} onChange={(d) => setContractForm({ ...contractForm, expiryDate: d ? formatDateISO(d) : "" })} />
                       </div>
                     </div>
                     <div className="flex justify-end gap-3 pt-2">
@@ -1554,8 +1556,8 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
         <Card key={countryCode}>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">{countryCode} Leave Policies</CardTitle>
-              <Badge variant="outline">{policies.length} types</Badge>
+              <CardTitle className="text-base">{t("customers.leave.countryPolicies", { country: countryCode })}</CardTitle>
+              <Badge variant="outline">{t("customers.leave.typesCount", { count: policies.length })}</Badge>
             </div>
           </CardHeader>
           <CardContent>
@@ -1588,7 +1590,7 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
                           onChange={(e) => setEditForm({ ...editForm, annualEntitlement: parseInt(e.target.value) || 0 })}
                         />
                       ) : (
-                        <span className="text-sm">{policy.annualEntitlement} days</span>
+                        <span className="text-sm">{policy.annualEntitlement} {t("common.days")}</span>
                       )}
                     </TableCell>
                     <TableCell>
@@ -1615,17 +1617,17 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
                           onChange={(e) => setEditForm({ ...editForm, carryOverDays: parseInt(e.target.value) || 0 })}
                         />
                       ) : (
-                        <span className="text-sm">{policy.carryOverDays > 0 ? `${policy.carryOverDays} days` : "None"}</span>
+                        <span className="text-sm">{policy.carryOverDays > 0 ? `${policy.carryOverDays} ${t("common.days")}` : t("common.none")}</span>
                       )}
                     </TableCell>
                     <TableCell>
                       {editingId === policy.id ? (
                         <div className="flex gap-1">
                           <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => updateMutation.mutate({ id: policy.id, data: editForm })}>
-                            Save
+                            {t("common.save")}
                           </Button>
                           <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingId(null)}>
-                            Cancel
+                            {t("common.cancel")}
                           </Button>
                         </div>
                       ) : (
@@ -1669,7 +1671,196 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
   );
 }
 
-function InfoRow({ label, value, icon }: { label: string; value?: string | null; icon?: React.ReactNode }) {
+{/* ── Wallet Tab ── */}
+        {activeTab === "wallet" && (
+          <WalletTab customerId={id} currency={customer.settlementCurrency || "USD"} />
+        )}
+      </div>
+    </Layout>
+  );
+}
+
+function WalletTab({ customerId, currency }: { customerId: number; currency: string }) {
+  const { t } = useI18n();
+  const utils = trpc.useContext();
+  const { data: wallet, isLoading: isWalletLoading } = trpc.wallet.get.useQuery({ customerId, currency });
+  const { data: transactions, isLoading: isTxLoading } = trpc.wallet.listTransactions.useQuery(
+    { walletId: wallet?.id || 0 },
+    { enabled: !!wallet }
+  );
+
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustForm, setAdjustForm] = useState({ amount: "", direction: "credit" as "credit" | "debit", description: "", internalNote: "" });
+
+  const adjustMutation = trpc.wallet.manualAdjustment.useMutation({
+    onSuccess: () => {
+      toast.success("Wallet adjustment successful");
+      setAdjustOpen(false);
+      setAdjustForm({ amount: "", direction: "credit", description: "", internalNote: "" });
+      utils.wallet.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleAdjust = () => {
+    if (!adjustForm.amount || !adjustForm.description) return;
+    adjustMutation.mutate({
+      customerId,
+      currency,
+      amount: adjustForm.amount,
+      direction: adjustForm.direction,
+      description: adjustForm.description,
+      internalNote: adjustForm.internalNote,
+    });
+  };
+
+  if (isWalletLoading) return <div className="space-y-4"><Skeleton className="h-32" /><Skeleton className="h-64" /></div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="md:col-span-1 bg-primary/5 border-primary/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Wallet className="w-4 h-4" /> Current Balance
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold tracking-tight text-primary">
+              {formatCurrency(currency, wallet?.balance || "0")}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Available for automatic invoice deduction
+            </p>
+            <div className="mt-4">
+              <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full">
+                    Adjust Balance
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Manual Wallet Adjustment</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-2">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Direction</Label>
+                        <Select
+                          value={adjustForm.direction}
+                          onValueChange={(v: "credit" | "debit") => setAdjustForm({ ...adjustForm, direction: v })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="credit">Credit (Add Funds)</SelectItem>
+                            <SelectItem value="debit">Debit (Deduct Funds)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Amount ({currency})</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={adjustForm.amount}
+                          onChange={(e) => setAdjustForm({ ...adjustForm, amount: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Description (Visible to Client)</Label>
+                      <Input
+                        placeholder="e.g. Refund adjustment"
+                        value={adjustForm.description}
+                        onChange={(e) => setAdjustForm({ ...adjustForm, description: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Internal Note (Optional)</Label>
+                      <Textarea
+                        placeholder="Reason for adjustment..."
+                        value={adjustForm.internalNote}
+                        onChange={(e) => setAdjustForm({ ...adjustForm, internalNote: e.target.value })}
+                      />
+                    </div>
+                    <Button 
+                      className="w-full" 
+                      onClick={handleAdjust} 
+                      disabled={adjustMutation.isPending || !adjustForm.amount || !adjustForm.description}
+                    >
+                      {adjustMutation.isPending ? "Processing..." : "Confirm Adjustment"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base">Transaction History</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {isTxLoading ? (
+              <div className="p-6 space-y-2">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+              </div>
+            ) : !transactions || transactions.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">No transactions found</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.map((tx) => (
+                    <TableRow key={tx.id}>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDateISO(tx.createdAt)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs capitalize font-normal">
+                          {tx.type.replace(/_/g, " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm max-w-[200px] truncate" title={tx.description || ""}>
+                        {tx.description}
+                        {tx.referenceId && (
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            (Ref: {tx.referenceType} #{tx.referenceId})
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className={`text-sm text-right font-medium ${tx.direction === "credit" ? "text-emerald-600" : "text-red-600"}`}>
+                        {tx.direction === "credit" ? "+" : "-"}{formatCurrency(currency, tx.amount)}
+                      </TableCell>
+                      <TableCell className="text-sm text-right text-muted-foreground">
+                        {formatCurrency(currency, tx.balanceAfter)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({ label, value, icon }: { label: string, value?: string | number | null, icon?: React.ReactNode }) {
   return (
     <div className="flex items-start gap-2">
       <span className="text-xs text-muted-foreground w-36 flex-shrink-0 pt-0.5">{label}</span>

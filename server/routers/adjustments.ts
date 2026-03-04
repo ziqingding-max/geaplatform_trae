@@ -52,7 +52,7 @@ export const adjustmentsRouter = router({
     .input(
       z.object({
         employeeId: z.number(),
-        adjustmentType: z.enum(["bonus", "allowance", "reimbursement", "deduction", "other"]),
+        adjustmentType: z.enum(["bonus", "allowance", "deduction", "other"]),
         category: z.enum([
           "housing", "transport", "meals", "performance_bonus", "year_end_bonus",
           "overtime", "travel_reimbursement", "equipment_reimbursement",
@@ -131,7 +131,7 @@ export const adjustmentsRouter = router({
       z.object({
         id: z.number(),
         data: z.object({
-          adjustmentType: z.enum(["bonus", "allowance", "reimbursement", "deduction", "other"]).optional(),
+          adjustmentType: z.enum(["bonus", "allowance", "deduction", "other"]).optional(),
           category: z.enum([
             "housing", "transport", "meals", "performance_bonus", "year_end_bonus",
             "overtime", "travel_reimbursement", "equipment_reimbursement",
@@ -205,15 +205,15 @@ export const adjustmentsRouter = router({
     }),
 
   /**
-   * Admin approve — confirms a client_approved adjustment
+   * Admin approve — confirms a submitted adjustment
    */
   adminApprove: operationsManagerProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const existing = await getAdjustmentById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Adjustment not found" });
-      if (existing.status !== "client_approved") {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only client-approved adjustments can be admin-approved" });
+      if (existing.status !== "submitted") {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only submitted adjustments can be admin-approved" });
       }
 
       await updateAdjustment(input.id, {
@@ -234,7 +234,7 @@ export const adjustmentsRouter = router({
     }),
 
   /**
-   * Admin reject — rejects a client_approved adjustment
+   * Admin reject — rejects a submitted adjustment
    */
   adminReject: operationsManagerProcedure
     .input(z.object({
@@ -244,8 +244,8 @@ export const adjustmentsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const existing = await getAdjustmentById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Adjustment not found" });
-      if (existing.status !== "client_approved") {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only client-approved adjustments can be admin-rejected" });
+      if (existing.status !== "submitted") {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only submitted adjustments can be admin-rejected" });
       }
 
       await updateAdjustment(input.id, {

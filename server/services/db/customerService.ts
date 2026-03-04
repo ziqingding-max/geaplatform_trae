@@ -1,5 +1,5 @@
 
-import { eq, like, count, desc, and } from "drizzle-orm";
+import { eq, like, count, desc, and, getTableColumns } from "drizzle-orm";
 import { 
   customers, InsertCustomer, 
   customerContacts, InsertCustomerContact, 
@@ -14,7 +14,7 @@ import { getDb } from "./connection";
 export async function createCustomer(data: InsertCustomer) {
   const db = await getDb();
   if (!db) return [];
-  return await db.insert(customers).values(data);
+  return await db.insert(customers).values(data).returning();
 }
 
 export async function getCustomerById(id: number) {
@@ -133,10 +133,24 @@ export async function deleteCustomerContract(id: number) {
 }
 
 // CUSTOMER LEAVE POLICIES
-export async function listCustomerLeavePolicies(customerId: number) {
+export async function listCustomerLeavePolicies(customerId: number, countryCode?: string) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(customerLeavePolicies).where(eq(customerLeavePolicies.customerId, customerId));
+  
+  const query = db.select({
+    ...getTableColumns(customerLeavePolicies),
+    leaveTypeName: leaveTypes.leaveTypeName,
+    isPaid: leaveTypes.isPaid
+  })
+  .from(customerLeavePolicies)
+  .leftJoin(leaveTypes, eq(customerLeavePolicies.leaveTypeId, leaveTypes.id))
+  .where(
+    countryCode 
+      ? and(eq(customerLeavePolicies.customerId, customerId), eq(customerLeavePolicies.countryCode, countryCode))
+      : eq(customerLeavePolicies.customerId, customerId)
+  );
+  
+  return await query;
 }
 
 export async function createCustomerLeavePolicy(data: InsertCustomerLeavePolicy) {

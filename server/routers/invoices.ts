@@ -29,6 +29,7 @@ import { generateDepositRefund } from "../services/depositRefundService";
 import { notifyOwner } from "../_core/notification";
 import { notificationService } from "../services/notificationService";
 import { getExchangeRate } from "../services/exchangeRateService";
+import { walletService } from "../services/walletService";
 
 const invoiceItemTypeEnum = z.enum([
   "eor_service_fee",
@@ -454,12 +455,85 @@ export const invoicesRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       // Guard: credit_note and deposit_refund cannot be marked as paid
+      // NOTE: With the new wallet system, credit_note invoices are marked as paid automatically
+      // when approved via approveCreditNote service. Manual status update for CNs is restricted.
       if (input.status === "paid") {
         const invoice = await getInvoiceById(input.id);
         if (invoice && (invoice.invoiceType === "credit_note" || invoice.invoiceType === "deposit_refund")) {
           throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: `Cannot mark ${invoice.invoiceType.replace("_", " ")} as paid. Credit notes should be applied to invoices, and deposit refunds are processed separately.`,
+            code: "PRECONDITION_FAILED",
+            message: `Cannot manually mark ${invoice.invoiceType} as paid. Please use the approval workflow.`,
+          });
+        }
+      }
+
+      // Wallet Logic: Handle transitions
+      const invoice = await getInvoiceById(input.id);
+      if (!invoice) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice not found" });
+
+      const oldStatus = invoice.status;
+      const newStatus = input.status;
+
+      // 1. Draft -> Pending Review: Auto-deduct from wallet
+      if (oldStatus === "draft" && newStatus === "pending_review") {
+        const total = invoice.total;
+        const deducted = await walletService.attemptAutoDeduction(
+          invoice.id,
+          invoice.customerId,
+          invoice.currency,
+          total
+        );
+        
+        // If deduction occurred, update invoice record
+        if (parseFloat(deducted) > 0) {
+          const amountDue = (parseFloat(total) - parseFloat(deducted)).toFixed(2);
+          await updateInvoice(invoice.id, {
+            walletAppliedAmount: deducted,
+            amountDue: amountDue,
+            // If fully paid by wallet, can we auto-move to paid? 
+            // Spec says: Pending Review -> Sent shows deduction. 
+            // Let's keep it in pending_review but with reduced due amount.
+          });
+        }
+      }
+
+      // 2. Pending Review -> Draft (Rejected): Refund wallet deduction
+      if (oldStatus === "pending_review" && newStatus === "draft") {
+        const walletApplied = parseFloat(invoice.walletAppliedAmount || "0");
+        if (walletApplied > 0) {
+          await walletService.refundDeduction(
+            invoice.id,
+            invoice.customerId,
+            invoice.currency,
+            invoice.walletAppliedAmount || "0"
+          );
+          
+          // Reset invoice fields
+          await updateInvoice(invoice.id, {
+            walletAppliedAmount: "0",
+            amountDue: invoice.total, // Reset to full total
+          });
+        }
+      }
+
+      // 3. Mark as Paid: Handle Overpayment
+      if (newStatus === "paid" && input.paidAmount) {
+        const amountDue = parseFloat(invoice.amountDue || invoice.total);
+        const paid = parseFloat(input.paidAmount);
+        
+        if (paid > amountDue) {
+          const overpayment = (paid - amountDue).toFixed(2);
+          // Credit overpayment to wallet
+          const wallet = await walletService.getWallet(invoice.customerId, invoice.currency);
+          await walletService.transact({
+            walletId: wallet.id,
+            type: "overpayment_in",
+            amount: overpayment,
+            direction: "credit",
+            referenceId: invoice.id,
+            referenceType: "invoice",
+            description: `Overpayment for Invoice #${invoice.invoiceNumber}`,
+            createdBy: ctx.user.id,
           });
         }
       }
@@ -492,14 +566,17 @@ export const invoicesRouter = router({
         }
         updateData.paidDate = new Date();
         updateData.paidAmount = input.paidAmount;
+        // If paid, ensure amountDue is 0
+        updateData.amountDue = "0";
 
         // Compare paid amount with effective amount due (total minus credit applied)
         const invoice = await getInvoiceById(input.id);
         if (invoice) {
           const invoiceTotal = parseFloat(invoice.total?.toString() ?? "0");
           const creditApplied = parseFloat(invoice.creditApplied?.toString() ?? "0");
-          const effectiveAmountDue = creditApplied > 0
-            ? parseFloat(invoice.amountDue?.toString() ?? (invoiceTotal - creditApplied).toFixed(2))
+          const walletApplied = parseFloat(invoice.walletAppliedAmount?.toString() ?? "0");
+          const effectiveAmountDue = creditApplied > 0 || walletApplied > 0
+            ? parseFloat(invoice.amountDue?.toString() ?? (invoiceTotal - creditApplied - walletApplied).toFixed(2))
             : invoiceTotal;
           const paidAmt = parseFloat(input.paidAmount);
           const diff = paidAmt - effectiveAmountDue;
@@ -518,7 +595,7 @@ export const invoicesRouter = router({
 
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
-        action: "update",
+        action: "update_status",
         entityType: "invoice",
         entityId: input.id,
         changes: JSON.stringify({ status: input.status, paidAmount: input.paidAmount }),
@@ -593,38 +670,27 @@ export const invoicesRouter = router({
               }).catch((err) => console.warn("[Notification] Failed to notify about follow-up invoice:", err));
             }
           } else if (paymentResult.type === "overpayment") {
-            // Auto-generate credit note for the overpaid amount
-            const creditResult = await generateCreditNote({
-              originalInvoiceId: input.id,
-              reason: `Overpayment on invoice ${invoice.invoiceNumber}. Paid: ${invoice.currency} ${input.paidAmount}, Invoice total: ${invoice.currency} ${paymentResult.invoiceTotal}, Excess: ${invoice.currency} ${paymentResult.difference}`,
-              isFullCredit: false,
-              lineItems: [{
-                description: `Overpayment credit for invoice ${invoice.invoiceNumber}`,
-                amount: paymentResult.difference,
-              }],
+            // NOTE: With Wallet System, overpayment is already handled above (credited to wallet).
+            // We NO LONGER create a credit note for overpayment automatically.
+            // We just log it and notify.
+            
+            await logAuditAction({
+              userId: ctx.user.id, userName: ctx.user.name || null,
+              action: "auto_create",
+              entityType: "wallet_transaction",
+              entityId: invoice.id,
+              changes: JSON.stringify({
+                type: "overpayment_to_wallet",
+                originalInvoiceId: input.id,
+                excess: paymentResult.difference,
+              }),
             });
 
-            creditNoteId = creditResult.invoiceId || undefined;
-
-            if (creditNoteId) {
-              await logAuditAction({
-                userId: ctx.user.id, userName: ctx.user.name || null,
-                action: "auto_create",
-                entityType: "invoice",
-                entityId: creditNoteId,
-                changes: JSON.stringify({
-                  type: "overpayment_credit_note",
-                  originalInvoiceId: input.id,
-                  excess: paymentResult.difference,
-                }),
-              });
-
-              // Notify finance manager about credit note
-              notifyOwner({
-                title: `Credit Note Created (Overpayment)`,
-                content: `A credit note has been automatically generated for overpayment on invoice ${invoice.invoiceNumber}.\n\nOriginal Invoice: ${invoice.invoiceNumber}\nInvoice Total: ${invoice.currency} ${paymentResult.invoiceTotal}\nAmount Paid: ${invoice.currency} ${input.paidAmount}\nExcess: ${invoice.currency} ${paymentResult.difference}\nCredit Note ID: #${creditNoteId}\n\nPlease review and process the credit note accordingly.`,
-              }).catch((err) => console.warn("[Notification] Failed to notify about credit note:", err));
-            }
+            // Notify finance manager about wallet credit
+            notifyOwner({
+              title: `Overpayment Credited to Wallet`,
+              content: `An overpayment on invoice ${invoice.invoiceNumber} has been credited to the customer's wallet.\n\nOriginal Invoice: ${invoice.invoiceNumber}\nInvoice Total: ${invoice.currency} ${paymentResult.invoiceTotal}\nAmount Paid: ${invoice.currency} ${input.paidAmount}\nExcess Credited: ${invoice.currency} ${paymentResult.difference}`,
+            }).catch((err) => console.warn("[Notification] Failed to notify about wallet credit:", err));
           }
         }
       }

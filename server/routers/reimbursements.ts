@@ -11,7 +11,7 @@ import {
   logAuditAction,
   getEmployeeById,
 } from "../db";
-import { storagePut } from "../storage";
+import { storagePut, storageGet } from "../storage";
 
 export const reimbursementsRouter = router({
   list: userProcedure
@@ -27,7 +27,7 @@ export const reimbursementsRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await listReimbursements(
+      const items = await listReimbursements(
         {
           customerId: input.customerId,
           employeeId: input.employeeId,
@@ -38,6 +38,19 @@ export const reimbursementsRouter = router({
         input.limit,
         input.offset
       );
+
+      // Map to signed URLs for viewing receipts
+      return await Promise.all(items.map(async (item) => {
+        if (item.receiptFileKey) {
+          try {
+            const { url } = await storageGet(item.receiptFileKey);
+            return { ...item, receiptFileUrl: url };
+          } catch (e) {
+            return item;
+          }
+        }
+        return item;
+      }));
     }),
 
   get: userProcedure
@@ -158,15 +171,15 @@ export const reimbursementsRouter = router({
     }),
 
   /**
-   * Admin approve — confirms a client_approved reimbursement
+   * Admin approve — confirms a submitted reimbursement
    */
   adminApprove: operationsManagerProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const existing = await getReimbursementById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Reimbursement not found" });
-      if (existing.status !== "client_approved") {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only client-approved reimbursements can be admin-approved" });
+      if (existing.status !== "submitted") {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only submitted reimbursements can be admin-approved" });
       }
 
       await updateReimbursement(input.id, {
@@ -187,7 +200,7 @@ export const reimbursementsRouter = router({
     }),
 
   /**
-   * Admin reject — rejects a client_approved reimbursement
+   * Admin reject — rejects a submitted reimbursement
    */
   adminReject: operationsManagerProcedure
     .input(z.object({
@@ -197,8 +210,8 @@ export const reimbursementsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const existing = await getReimbursementById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Reimbursement not found" });
-      if (existing.status !== "client_approved") {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only client-approved reimbursements can be admin-rejected" });
+      if (existing.status !== "submitted") {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only submitted reimbursements can be admin-rejected" });
       }
 
       await updateReimbursement(input.id, {

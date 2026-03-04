@@ -1,4 +1,5 @@
-import { router, protectedProcedure } from "../_core/trpc";
+import { router } from "../_core/trpc";
+import { crmProcedure } from "../procedures";
 import { z } from "zod";
 import { quotationService } from "../services/quotationService";
 import { storageGet } from "../storage";
@@ -7,7 +8,7 @@ import { quotations } from "../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 
 export const quotationRouter = router({
-  create: protectedProcedure
+  create: crmProcedure
     .input(
       z.object({
         leadId: z.number().optional(),
@@ -36,7 +37,7 @@ export const quotationRouter = router({
       });
     }),
 
-  list: protectedProcedure
+  list: crmProcedure
     .input(
       z.object({
         limit: z.number().default(20),
@@ -64,7 +65,7 @@ export const quotationRouter = router({
       return { items, total };
     }),
 
-  get: protectedProcedure
+  get: crmProcedure
     .input(z.number())
     .query(async ({ input }) => {
       const db = getDb();
@@ -76,7 +77,7 @@ export const quotationRouter = router({
       return quotation;
     }),
 
-  downloadPdf: protectedProcedure
+  downloadPdf: crmProcedure
     .input(z.number())
     .mutation(async ({ input }) => {
       const db = getDb();

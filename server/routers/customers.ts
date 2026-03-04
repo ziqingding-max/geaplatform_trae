@@ -23,7 +23,7 @@ import {
   getCustomerByEmail,
   listCustomerPricing as listPricingForDedup,
 } from "../db";
-import { storagePut } from "../storage";
+import { storagePut, storageGet } from "../storage";
 import { TRPCError } from "@trpc/server";
 import { generateInviteToken, getInviteExpiryDate, hashPassword, signPortalToken } from "../portal/portalAuth";
 import type { PortalJwtPayload } from "../portal/portalAuth";
@@ -101,7 +101,7 @@ export const customersRouter = router({
       const result = await createCustomer({ ...input, status: "active" });
 
       // Auto-create first contact from primaryContact info
-      const customerId = (result as any)[0]?.insertId;
+      const customerId = (result as any)[0]?.id;
       if (customerId && input.primaryContactName) {
         await createCustomerContact({
           customerId,
@@ -583,7 +583,19 @@ export const customersRouter = router({
     list: userProcedure
       .input(z.object({ customerId: z.number() }))
       .query(async ({ input }) => {
-        return await listCustomerContracts(input.customerId);
+        const contracts = await listCustomerContracts(input.customerId);
+        // Map to signed URLs for viewing
+        return await Promise.all(contracts.map(async (c) => {
+          if (c.fileKey) {
+            try {
+              const { url } = await storageGet(c.fileKey);
+              return { ...c, fileUrl: url };
+            } catch (e) {
+              return c;
+            }
+          }
+          return c;
+        }));
       }),
 
     upload: customerManagerProcedure
