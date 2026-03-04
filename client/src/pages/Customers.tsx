@@ -1458,6 +1458,11 @@ function CustomerDetail({ id }: { id: number }) {
         {activeTab === "leavePolicy" && (
           <LeavePolicyTab customerId={id} customer={customer} leavePolicies={leavePolicies ?? []} refetch={refetchLeavePolicies} />
         )}
+
+        {/* ── Wallet Tab ── */}
+        {activeTab === "wallet" && (
+          <WalletTab customerId={id} currency={customer.settlementCurrency || "USD"} />
+        )}
       </div>
     </Layout>
   );
@@ -1668,15 +1673,6 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
         </Card>
       )}
     </div>
-  );
-}
-
-{/* ── Wallet Tab ── */}
-        {activeTab === "wallet" && (
-          <WalletTab customerId={id} currency={customer.settlementCurrency || "USD"} />
-        )}
-      </div>
-    </Layout>
   );
 }
 
