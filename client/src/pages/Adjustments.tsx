@@ -48,7 +48,7 @@ import { MonthPicker } from "@/components/DatePicker";
 import { exportToCsv } from "@/lib/csvExport";
 
 import { useI18n } from "@/contexts/i18n";
-const statusColors: Record<string, string> = {
+  const statusColors: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-700 border-amber-200",
   client_approved: "bg-emerald-50 text-emerald-700 border-emerald-200",
   client_rejected: "bg-red-50 text-red-700 border-red-200",
@@ -422,7 +422,7 @@ export default function Adjustments() {
   };
 
   return (
-    <Layout breadcrumb={["GEA", t("adjustments.title")]}>
+    <Layout breadcrumb={["GEA", t("nav.operations"), t("nav.adjustments")]}>
       <div className="p-6 space-y-6 page-enter">
         <div className="flex items-center justify-between">
           <div>
@@ -431,26 +431,24 @@ export default function Adjustments() {
               {t("adjustments.subtitle")}
             </p>
           </div>
-          <div className="flex-1 flex justify-center">
+          <div className="flex items-center gap-4">
             <PayrollCycleIndicator compact />
-          </div>
-          <div className="flex gap-2">
-              <Button variant="outline" disabled={adjustments.length === 0} onClick={() => {
-                exportToCsv(adjustments, [
-                  { header: "Type", accessor: (r: any) => t(`adjustments.type.${r.adjustmentType}`) || r.adjustmentType },
-                  { header: "Employee", accessor: (r: any) => { const emp = employeeMap.get(r.employeeId); return emp ? `${emp.firstName} ${emp.lastName}` : `#${r.employeeId}`; } },
-                  { header: "Category", accessor: (r: any) => t(`adjustments.category.${r.category}`) || r.category || "" },
-                  { header: "Amount", accessor: (r: any) => r.amount },
-                  { header: "Currency", accessor: (r: any) => r.currency },
-                  { header: "Effective Month", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth).toISOString().slice(0, 7) : "" },
-                  { header: "Description", accessor: (r: any) => r.description || "" },
-                  { header: "Status", accessor: (r: any) => t(`adjustments.status.${r.status}`) || r.status },
-                  { header: "Created", accessor: (r: any) => r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : "" },
-                ], `adjustments-export-${new Date().toISOString().slice(0, 10)}.csv`);
-                toast.success("CSV exported successfully");
-              }}>
-                <Download className="w-4 h-4 mr-2" />{t("common.export") || "Export CSV"}
-              </Button>
+            <Button variant="outline" disabled={adjustments.length === 0} onClick={() => {
+              exportToCsv(adjustments, [
+                { header: "Type", accessor: (r: any) => t(`adjustments.type.${r.adjustmentType}`) || r.adjustmentType },
+                { header: "Employee", accessor: (r: any) => { const emp = employeeMap.get(r.employeeId); return emp ? `${emp.firstName} ${emp.lastName}` : `#${r.employeeId}`; } },
+                { header: "Category", accessor: (r: any) => t(`adjustments.category.${r.category}`) || r.category || "" },
+                { header: "Amount", accessor: (r: any) => r.amount },
+                { header: "Currency", accessor: (r: any) => r.currency },
+                { header: "Effective Month", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth).toISOString().slice(0, 7) : "" },
+                { header: "Description", accessor: (r: any) => r.description || "" },
+                { header: "Status", accessor: (r: any) => t(`adjustments.status.${r.status}`) || r.status },
+                { header: "Created", accessor: (r: any) => r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : "" },
+              ], `adjustments-export-${new Date().toISOString().slice(0, 10)}.csv`);
+              toast.success("CSV exported successfully");
+            }}>
+              <Download className="w-4 h-4 mr-2" />{t("common.export") || "Export CSV"}
+            </Button>
             <Dialog open={createOpen} onOpenChange={(open) => {
               setCreateOpen(open);
               if (!open) { setReceiptFile(null); }

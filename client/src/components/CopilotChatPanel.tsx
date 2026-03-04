@@ -24,6 +24,7 @@ interface CopilotChatPanelProps {
   onClose: () => void;
   className?: string;
   position?: { x: number; y: number };
+  embedded?: boolean;
 }
 
 // XSS防护函数
@@ -48,7 +49,7 @@ function SafeMessageContent({ content }: { content: string }) {
   );
 }
 
-export function CopilotChatPanel({ onClose, className, position }: CopilotChatPanelProps) {
+export function CopilotChatPanel({ onClose, className, position, embedded = false }: CopilotChatPanelProps) {
   const { messages, isLoading, error, sendMessage, clearHistory } = useCopilotChat();
   const [inputValue, setInputValue] = useState('');
   const [attachments, setAttachments] = useState<Array<{ type: 'image' | 'file'; url: string; name: string; mimeType?: string }>>([]);
@@ -193,46 +194,49 @@ export function CopilotChatPanel({ onClose, className, position }: CopilotChatPa
   return (
     <div 
       className={cn(
-        "bg-white rounded-lg shadow-xl border w-96 h-[600px] flex flex-col",
+        embedded 
+          ? "flex flex-col h-full" 
+          : "bg-white rounded-lg shadow-xl border w-96 h-[600px] flex flex-col",
         className
       )}
-      style={position ? { position: 'absolute', left: position.x, top: position.y } : {}}
+      style={position && !embedded ? { position: 'absolute', left: position.x, top: position.y } : {}}
     >
-      {/* 头部 */}
-      <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
-            <span className="text-white text-sm font-bold">AI</span>
+      {!embedded && (
+        <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+              <span className="text-white text-sm font-bold">AI</span>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">欢迎使用 Copilot 助手</h3>
+              <p className="text-xs text-gray-600">智能企业助手</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold text-gray-900">欢迎使用 Copilot 助手</h3>
-            <p className="text-xs text-gray-600">智能企业助手</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportConversation}
+              className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+              title="导出对话"
+            >
+              <Download className="w-4 h-4 text-gray-600" />
+            </button>
+            <button
+              onClick={handleClearHistory}
+              className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+              title="清空历史"
+            >
+              <RefreshCw className="w-4 h-4 text-gray-600" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+              title="关闭"
+            >
+              <X className="w-4 h-4 text-gray-600" />
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleExportConversation}
-            className="p-2 hover:bg-white/50 rounded-lg transition-colors"
-            title="导出对话"
-          >
-            <Download className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            onClick={handleClearHistory}
-            className="p-2 hover:bg-white/50 rounded-lg transition-colors"
-            title="清空历史"
-          >
-            <RefreshCw className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/50 rounded-lg transition-colors"
-            title="关闭"
-          >
-            <X className="w-4 h-4 text-gray-600" />
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* 消息区域 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">

@@ -8,12 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -42,7 +42,7 @@ export default function CountryGuideEditor() {
   const countryCode = params?.countryCode;
   const [, setLocation] = useLocation();
   const { t } = useI18n();
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [editingChapter, setEditingChapter] = useState<any>(null);
   
   // Form states
@@ -63,7 +63,7 @@ export default function CountryGuideEditor() {
   const upsertMutation = trpc.countryGuides.upsertChapter.useMutation({
     onSuccess: () => {
       toast.success(t("common.saved"));
-      setIsDialogOpen(false);
+      setIsSheetOpen(false);
       setEditingChapter(null);
       setFormData({});
       refetch();
@@ -92,7 +92,7 @@ export default function CountryGuideEditor() {
     setFormData({
       ...chapter,
     });
-    setIsDialogOpen(true);
+    setIsSheetOpen(true);
   };
 
   const handleCreate = () => {
@@ -110,7 +110,7 @@ export default function CountryGuideEditor() {
     };
     setEditingChapter(null);
     setFormData(newChapter);
-    setIsDialogOpen(true);
+    setIsSheetOpen(true);
   };
 
   const handleInputChange = (field: string, value: any) => {
@@ -199,14 +199,14 @@ export default function CountryGuideEditor() {
           </div>
         )}
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
+        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+          <SheetContent className="sm:max-w-[75vw] w-[75vw] overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>
                 {editingChapter?.id ? t("country_guide_admin.edit_chapter") : t("country_guide_admin.add_chapter")}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+              </SheetTitle>
+            </SheetHeader>
+            <form onSubmit={handleSubmit} className="space-y-6 mt-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>{t("country_guide_admin.chapter_key")}</Label>
@@ -325,16 +325,16 @@ export default function CountryGuideEditor() {
                 </div>
               </div>
 
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>{t("common.cancel")}</Button>
+              <SheetFooter className="mt-8">
+                <Button type="button" variant="outline" onClick={() => setIsSheetOpen(false)}>{t("common.cancel")}</Button>
                 <Button type="submit" disabled={upsertMutation.isPending}>
                   {upsertMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {t("common.save")}
                 </Button>
-              </DialogFooter>
+              </SheetFooter>
             </form>
-          </DialogContent>
-        </Dialog>
+          </SheetContent>
+        </Sheet>
       </div>
     </Layout>
   );

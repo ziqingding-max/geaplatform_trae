@@ -48,7 +48,7 @@ import superjson from "superjson";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { Loader2 } from "lucide-react";
 import { isPortalDomain, getPortalBasePath } from "@/lib/portalBasePath";
-import { CopilotSmartAssistant } from "@/components/CopilotSmartAssistant";
+import { CopilotDrawer } from "@/components/CopilotDrawer";
 
 // Worker Portal pages
 const WorkerLogin = lazy(() => import("./pages/worker/WorkerLogin"));
@@ -278,7 +278,7 @@ function App() {
         <TooltipProvider>
           <Toaster position="top-right" richColors closeButton expand visibleToasts={8} gap={8} />
           <Router />
-          <CopilotSmartAssistant />
+          <CopilotDrawer />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
