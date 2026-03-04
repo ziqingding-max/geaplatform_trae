@@ -49,9 +49,11 @@ import {
 import { toast } from "sonner";
 import NotificationCenter from "@/components/NotificationCenter";
 
+import { useMemo } from "react";
+
 function useNavGroups() {
   const { t } = useI18n();
-  return [
+  return useMemo(() => [
     {
       label: t("nav.overview"),
       items: [
@@ -77,8 +79,7 @@ function useNavGroups() {
       label: t("nav.client_management"),
       items: [
         { label: t("nav.customers"), icon: Building2, href: "/customers" },
-        { label: t("nav.employees"), icon: Users, href: "/employees" },
-        { label: t("nav.contractors"), icon: FileText, href: "/contractors" },
+        { label: t("nav.people"), icon: Users, href: "/people" },
       ],
     },
     {
@@ -106,7 +107,7 @@ function useNavGroups() {
         { label: t("nav.settings"), icon: Settings, href: "/settings" },
       ],
     },
-  ];
+  ], [t]);
 }
 
 interface LayoutProps {

@@ -2,8 +2,9 @@ import { useLocation } from "wouter";
 import Layout from "@/components/Layout";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Globe } from "lucide-react";
+import { Loader2, Globe, PlusCircle } from "lucide-react";
 
 export default function CountryGuideList() {
   const { t } = useI18n();
@@ -11,11 +12,17 @@ export default function CountryGuideList() {
   const { data: countries, isLoading } = trpc.countries.list.useQuery();
 
   return (
-    <Layout title={t("nav.countryGuide")}>
+    <Layout breadcrumb={["GEA", t("nav.marketing"), t("nav.countryGuide")]}>
       <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">{t("country_guide_admin.title")}</h1>
-          <p className="text-muted-foreground">{t("country_guide_admin.subtitle")}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">{t("country_guide_admin.title")}</h1>
+            <p className="text-muted-foreground">{t("country_guide_admin.subtitle")}</p>
+          </div>
+          <Button onClick={() => setLocation(`/admin/knowledge/country-guides/new`)}>
+            <PlusCircle className="w-4 h-4 mr-2" />
+            {t("country_guide_admin.button.new_guide")}
+          </Button>
         </div>
 
         {isLoading ? (

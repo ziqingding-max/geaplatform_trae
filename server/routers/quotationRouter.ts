@@ -20,7 +20,7 @@ export const quotationRouter = router({
             headcount: z.number().min(1),
             salary: z.number(),
             currency: z.string().default("USD"),
-            serviceType: z.enum(["eor", "visa_eor", "aor"]),
+            serviceType: z.enum(["eor", "visa_eor"]),
             serviceFee: z.number(),
           })
         ),

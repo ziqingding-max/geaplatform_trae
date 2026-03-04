@@ -1,0 +1,180 @@
+import { useState } from "react";
+import { trpc } from "@/lib/trpc";
+import { useI18n } from "@/contexts/i18n";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
+import CountrySelect from "@/components/CountrySelect";
+import CurrencySelect from "@/components/CurrencySelect";
+import { formatCurrencyAmount } from "@/components/CurrencyAmount";
+
+export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () => void }) {
+  const { t } = useI18n();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    customerId: 0,
+    firstName: "",
+    lastName: "",
+    email: "",
+    country: "",
+    currency: "USD",
+    rateAmount: "",
+    payFrequency: "monthly" as "monthly" | "semi_monthly" | "milestone",
+    rateType: "fixed_monthly" as "fixed_monthly" | "hourly" | "daily" | "milestone_only",
+    startDate: "",
+    defaultApproverId: 0,
+  });
+
+  const utils = trpc.useUtils();
+  const { data: customers } = trpc.customers.list.useQuery({ limit: 200 });
+  const { data: approvers } = trpc.contractors.getApprovers.useQuery();
+
+  const createMutation = trpc.contractors.create.useMutation({
+    onSuccess: () => {
+      toast.success("Contractor created successfully");
+      setCreateOpen(false);
+      utils.contractors.list.invalidate(); // Invalidate list query
+      if (onSuccess) onSuccess();
+      setFormData({
+        customerId: 0,
+        firstName: "",
+        lastName: "",
+        email: "",
+        country: "",
+        currency: "USD",
+        rateAmount: "",
+        payFrequency: "monthly",
+        rateType: "fixed_monthly",
+        startDate: "",
+        defaultApproverId: 0,
+      });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  return (
+    <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <DialogTrigger asChild>
+        <Button>
+          <Plus className="w-4 h-4 mr-2" />
+          {t("contractors.actions.addContractor")}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{t("contractors.actions.addContractor")}</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+           <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <Label>First Name</Label>
+               <Input value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} />
+             </div>
+             <div className="space-y-2">
+               <Label>Last Name</Label>
+               <Input value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} />
+             </div>
+           </div>
+           
+           <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <Label>Email</Label>
+               <Input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+             </div>
+             <div className="space-y-2">
+               <Label>Start Date</Label>
+               <Input type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
+             </div>
+           </div>
+           
+           <div className="space-y-2">
+             <Label>Customer</Label>
+             <Select value={String(formData.customerId)} onValueChange={v => setFormData({...formData, customerId: parseInt(v)})}>
+               <SelectTrigger><SelectValue placeholder="Select Customer" /></SelectTrigger>
+               <SelectContent>
+                 {customers?.data?.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.companyName}</SelectItem>)}
+               </SelectContent>
+             </Select>
+           </div>
+           
+           <div className="space-y-2">
+             <Label>Country</Label>
+             <CountrySelect value={formData.country} onValueChange={v => setFormData({...formData, country: v})} showCode={false} scope="all" />
+           </div>
+
+           <div className="space-y-2">
+             <Label>Default Approver</Label>
+             <Select value={formData.defaultApproverId ? String(formData.defaultApproverId) : ""} onValueChange={v => setFormData({...formData, defaultApproverId: parseInt(v)})}>
+               <SelectTrigger><SelectValue placeholder="Select Approver" /></SelectTrigger>
+               <SelectContent>
+                 {approvers?.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.name} ({u.email})</SelectItem>)}
+               </SelectContent>
+             </Select>
+           </div>
+           
+           <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <Label>Currency</Label>
+               <CurrencySelect value={formData.currency} onValueChange={v => setFormData({...formData, currency: v})} />
+             </div>
+             <div className="space-y-2">
+                <Label>Payment Frequency</Label>
+                <Select value={formData.payFrequency} onValueChange={v => setFormData({...formData, payFrequency: v as any})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="semi_monthly">Semi-Monthly</SelectItem>
+                    <SelectItem value="milestone">Milestone</SelectItem>
+                  </SelectContent>
+                </Select>
+             </div>
+           </div>
+
+           <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <Label>Rate Type</Label>
+               <Select value={formData.rateType} onValueChange={v => setFormData({...formData, rateType: v as any})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed_monthly">Fixed Monthly</SelectItem>
+                    <SelectItem value="milestone_only">Milestone Only</SelectItem>
+                  </SelectContent>
+               </Select>
+             </div>
+             {formData.rateType !== "milestone_only" && (
+               <div className="space-y-2">
+                 <Label>{formData.payFrequency === 'semi_monthly' ? 'Semi-Monthly Amount' : 'Monthly Salary'}</Label>
+                 <Input type="number" value={formData.rateAmount} onChange={e => setFormData({...formData, rateAmount: e.target.value})} />
+                 {formData.payFrequency === 'semi_monthly' && (
+                   <p className="text-xs text-muted-foreground mt-1">Paid {formatCurrencyAmount(formData.rateAmount, formData.currency)} on 15th and EOM</p>
+                 )}
+               </div>
+             )}
+           </div>
+           
+           <div className="flex justify-end gap-3 pt-2">
+             <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
+             <Button onClick={() => {
+               const submitData: any = {
+                 ...formData,
+                 paymentFrequency: formData.payFrequency, // Map local state to backend field
+               };
+               if (!submitData.customerId) { toast.error("Customer is required"); return; }
+               if (submitData.defaultApproverId === 0) delete submitData.defaultApproverId;
+               // rateAmount is already string, handled by backend
+               createMutation.mutate(submitData);
+             }} disabled={createMutation.isPending}>
+               {createMutation.isPending ? "Creating..." : "Create Contractor"}
+             </Button>
+           </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -31,7 +31,7 @@ export default function Quotations() {
   });
 
   return (
-    <Layout breadcrumb={["GEA", t("nav.quotations")]}>
+    <Layout breadcrumb={["GEA", t("nav.sales"), t("nav.quotations")]}>
       <div className="p-6 space-y-6 page-enter">
         <div className="flex items-center justify-between">
           <div>

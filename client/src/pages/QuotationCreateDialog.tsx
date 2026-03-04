@@ -102,18 +102,18 @@ export default function QuotationCreateDialog({ open, onOpenChange, onSuccess }:
 
     setItems(updatedItems);
     setShowCostPreview(true);
-    if (!hasError) toast.success("Costs calculated successfully");
-    else toast.warning("Some costs could not be calculated");
+    if (!hasError) toast.success(t("quotations.create.calc_success"));
+    else toast.warning(t("quotations.create.calc_warning"));
   };
 
   const handleSubmit = () => {
     if (!leadId && !customerId) {
-        toast.error("Please select a Customer or Sales Lead");
+        toast.error(t("quotations.create.select_customer_error"));
         return;
     }
     // Basic validation
     if (items.some(i => !i.countryCode || i.salary <= 0)) {
-        toast.error("Please fill in all item details (Country, Salary > 0)");
+        toast.error(t("quotations.create.fill_details_error"));
         return;
     }
 
@@ -155,13 +155,13 @@ export default function QuotationCreateDialog({ open, onOpenChange, onSuccess }:
                         }
                     }}
                 >
-                    <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t("quotations.create.select_placeholder")} /></SelectTrigger>
                     <SelectContent>
                         {leads?.data.map((l: any) => (
-                            <SelectItem key={`lead-${l.id}`} value={`lead-${l.id}`}>[Lead] {l.companyName}</SelectItem>
+                            <SelectItem key={`lead-${l.id}`} value={`lead-${l.id}`}>{t("quotations.create.lead_prefix")} {l.companyName}</SelectItem>
                         ))}
                         {customers?.data.map((c: any) => (
-                            <SelectItem key={`cust-${c.id}`} value={`cust-${c.id}`}>[Customer] {c.companyName}</SelectItem>
+                            <SelectItem key={`cust-${c.id}`} value={`cust-${c.id}`}>{t("quotations.create.customer_prefix")} {c.companyName}</SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
@@ -190,9 +190,9 @@ export default function QuotationCreateDialog({ open, onOpenChange, onSuccess }:
                                 <Select value={item.serviceType} onValueChange={(v) => updateItem(index, "serviceType", v)}>
                                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="eor">EOR</SelectItem>
-                                        <SelectItem value="visa_eor">Visa EOR</SelectItem>
-                                        <SelectItem value="aor">AOR</SelectItem>
+                                        <SelectItem value="eor">{t("quotations.create.service_eor")}</SelectItem>
+                                        <SelectItem value="visa_eor">{t("quotations.create.service_visa_eor")}</SelectItem>
+                                        <SelectItem value="aor">{t("quotations.create.service_aor")}</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -218,9 +218,9 @@ export default function QuotationCreateDialog({ open, onOpenChange, onSuccess }:
                         {item.countryCode === "CN" && (
                              <div className="grid grid-cols-4 gap-3">
                                 <div className="space-y-1">
-                                    <Label className="text-xs">City / Region</Label>
+                                    <Label className="text-xs">{t("quotations.create.city_region")}</Label>
                                     <Select value={item.regionCode} onValueChange={(v) => updateItem(index, "regionCode", v)}>
-                                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select city" /></SelectTrigger>
+                                        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={t("quotations.create.select_city")} /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="CN-BJ">Beijing</SelectItem>
                                             <SelectItem value="CN-SH">Shanghai</SelectItem>
@@ -234,8 +234,8 @@ export default function QuotationCreateDialog({ open, onOpenChange, onSuccess }:
 
                         {item.employerCost !== undefined && (
                             <div className="bg-white/50 p-2 rounded text-xs flex justify-between items-center text-muted-foreground">
-                                <span>Employer Cost: {formatCurrency(item.currency, item.employerCost)}</span>
-                                <span className="font-medium text-foreground">Total Monthly: {formatCurrency(item.currency, item.totalMonthly || 0)}</span>
+                                <span>{t("quotations.create.employer_cost")}: {formatCurrency(item.currency, item.employerCost)}</span>
+                                <span className="font-medium text-foreground">{t("quotations.create.total_monthly")}: {formatCurrency(item.currency, item.totalMonthly || 0)}</span>
                             </div>
                         )}
                     </div>
@@ -245,7 +245,7 @@ export default function QuotationCreateDialog({ open, onOpenChange, onSuccess }:
             <div className="flex justify-between items-center pt-4 border-t">
                 <Button variant="secondary" size="sm" onClick={handleCalculateCosts} disabled={calculateMutation.isPending}>
                     {calculateMutation.isPending ? <Calculator className="w-4 h-4 mr-2 animate-spin" /> : <Calculator className="w-4 h-4 mr-2" />}
-                    Preview Costs
+                    {t("quotations.create.preview_costs")}
                 </Button>
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
@@ -262,16 +262,16 @@ export default function QuotationCreateDialog({ open, onOpenChange, onSuccess }:
                 <CardContent className="p-4 space-y-4">
                     <h3 className="font-medium text-sm flex items-center gap-2">
                         <Info className="w-4 h-4 text-primary" />
-                        Quotation Summary
+                        {t("quotations.create.summary_title")}
                     </h3>
                     <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Total Headcount</span>
+                            <span className="text-muted-foreground">{t("quotations.create.total_headcount")}</span>
                             <span>{items.reduce((sum, i) => sum + i.headcount, 0)}</span>
                         </div>
                         {showCostPreview && (
                             <div className="flex justify-between font-bold pt-2 border-t border-primary/10">
-                                <span>Est. Monthly Total</span>
+                                <span>{t("quotations.create.est_monthly_total")}</span>
                                 <span>{formatCurrency("USD", totalQuotationValue)}</span>
                             </div>
                         )}
@@ -287,7 +287,7 @@ export default function QuotationCreateDialog({ open, onOpenChange, onSuccess }:
                             htmlFor="include-guide" 
                             className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                         >
-                            Include Country Guide
+                            {t("quotations.create.include_guide")}
                         </label>
                     </div>
                 </CardContent>
@@ -295,7 +295,7 @@ export default function QuotationCreateDialog({ open, onOpenChange, onSuccess }:
 
              {items.length === 1 && items[0].countryCode && guideChapters && guideChapters.length > 0 && (
                  <div className="space-y-3">
-                    <h3 className="font-medium text-sm text-muted-foreground">Country Guide: {items[0].countryCode}</h3>
+                    <h3 className="font-medium text-sm text-muted-foreground">{t("quotations.create.guide_preview")}: {items[0].countryCode}</h3>
                     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
                         {guideChapters.slice(0, 3).map(chapter => (
                             <Card key={chapter.id} className="text-xs">
