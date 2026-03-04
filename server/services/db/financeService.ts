@@ -121,16 +121,30 @@ export async function getPayrollRunById(id: number) {
   return result[0];
 }
 
-export async function listPayrollRuns(page: number = 1, pageSize: number = 50) {
+export async function listPayrollRuns(
+  filters: { status?: string; countryCode?: string; payrollMonth?: string } = {},
+  limit: number = 50,
+  offset: number = 0
+) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
-  const offset = (page - 1) * pageSize;
-  
+
+  const conditions = [];
+  if (filters.status) conditions.push(eq(payrollRuns.status, filters.status));
+  if (filters.countryCode) conditions.push(eq(payrollRuns.countryCode, filters.countryCode));
+  if (filters.payrollMonth) conditions.push(eq(payrollRuns.payrollMonth, filters.payrollMonth));
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
   const [data, totalResult] = await Promise.all([
-    db.select().from(payrollRuns).limit(pageSize).offset(offset).orderBy(desc(payrollRuns.createdAt)),
-    db.select({ count: count() }).from(payrollRuns)
+    whereClause
+      ? db.select().from(payrollRuns).where(whereClause).limit(limit).offset(offset).orderBy(desc(payrollRuns.createdAt))
+      : db.select().from(payrollRuns).limit(limit).offset(offset).orderBy(desc(payrollRuns.createdAt)),
+    whereClause
+      ? db.select({ count: count() }).from(payrollRuns).where(whereClause)
+      : db.select({ count: count() }).from(payrollRuns)
   ]);
-  
+
   return { data, total: totalResult[0]?.count || 0 };
 }
 
@@ -223,20 +237,58 @@ export async function deleteAdjustment(id: number) {
   await db.delete(adjustments).where(eq(adjustments.id, id));
 }
 
-export async function getSubmittedAdjustmentsForPayroll(employeeId: number, monthStr: string) {
+export async function getSubmittedAdjustmentsForPayroll(countryCodeOrEmployeeId: string | number, monthStr: string) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(adjustments)
-    .where(and(
-      eq(adjustments.employeeId, employeeId),
-      eq(adjustments.effectiveMonth, monthStr),
-      eq(adjustments.status, 'approved')
-    ));
+  // When called with a country code (string), fetch all approved adjustments for that country+month
+  // When called with an employee ID (number), fetch for that specific employee
+  if (typeof countryCodeOrEmployeeId === 'string') {
+    // Join with employees to filter by country
+    const { employees } = await import('../../../drizzle/schema');
+    const results = await db.select({
+      id: adjustments.id,
+      employeeId: adjustments.employeeId,
+      customerId: adjustments.customerId,
+      adjustmentType: adjustments.adjustmentType,
+      category: adjustments.category,
+      description: adjustments.description,
+      amount: adjustments.amount,
+      currency: adjustments.currency,
+      status: adjustments.status,
+      effectiveMonth: adjustments.effectiveMonth,
+      createdAt: adjustments.createdAt,
+    }).from(adjustments)
+      .innerJoin(employees, eq(adjustments.employeeId, employees.id))
+      .where(and(
+        eq(employees.country, countryCodeOrEmployeeId),
+        eq(adjustments.effectiveMonth, monthStr),
+        eq(adjustments.status, 'admin_approved')
+      ));
+    return results;
+  } else {
+    return await db.select().from(adjustments)
+      .where(and(
+        eq(adjustments.employeeId, countryCodeOrEmployeeId),
+        eq(adjustments.effectiveMonth, monthStr),
+        eq(adjustments.status, 'admin_approved')
+      ));
+  }
 }
 
-export async function lockSubmittedAdjustments(payrollRunId: number, country: string, month: string) {
-  // Placeholder logic
-  return 0;
+export async function lockSubmittedAdjustments(monthStr: string, countryCode: string) {
+  const db = await getDb();
+  if (!db) return 0;
+  // Lock admin_approved adjustments for the given country+month by setting status to 'locked'
+  const { employees } = await import('../../../drizzle/schema');
+  const empRows = await db.select({ id: employees.id }).from(employees).where(eq(employees.country, countryCode));
+  const empIds = empRows.map(e => e.id);
+  if (empIds.length === 0) return 0;
+  const result = await db.update(adjustments).set({ status: 'locked' as any }).where(and(
+    inArray(adjustments.employeeId, empIds),
+    eq(adjustments.effectiveMonth, monthStr),
+    eq(adjustments.status, 'admin_approved')
+  ));
+  return (result as any).changes || 0;
 }
 
 // REIMBURSEMENTS
