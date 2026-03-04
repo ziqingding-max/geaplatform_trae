@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 
-export default function ContractorList() {
+export function ContractorListContent() {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -69,46 +69,8 @@ export default function ContractorList() {
     offset: (page - 1) * pageSize,
   });
 
-  const [createOpen, setCreateOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    customerId: 0,
-    firstName: "",
-    lastName: "",
-    email: "",
-    country: "",
-    currency: "USD",
-    rateAmount: "",
-    payFrequency: "monthly" as "monthly" | "semi_monthly" | "milestone",
-    rateType: "fixed_monthly" as "fixed_monthly" | "hourly" | "daily" | "milestone_only",
-    startDate: "",
-    defaultApproverId: 0,
-  });
-
-  const createMutation = trpc.contractors.create.useMutation({
-    onSuccess: () => {
-      toast.success("Contractor created successfully");
-      setCreateOpen(false);
-      refetch();
-      setFormData({
-        customerId: 0,
-        firstName: "",
-        lastName: "",
-        email: "",
-        country: "",
-        currency: "USD",
-        rateAmount: "",
-        payFrequency: "monthly",
-        rateType: "fixed_monthly",
-        startDate: "",
-        defaultApproverId: 0,
-      });
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
   const { data: customers } = trpc.customers.list.useQuery({ limit: 200 });
   const { data: countriesList } = trpc.countries.list.useQuery();
-  const { data: approvers } = trpc.contractors.getApprovers.useQuery();
 
   const statusColors: Record<string, string> = {
     active: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -117,133 +79,8 @@ export default function ContractorList() {
   };
 
   return (
-    <Layout>
     <div className="space-y-6">
-      {/* Header Actions */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">{t("contractors.title")}</h2>
-          <p className="text-sm text-muted-foreground">{t("contractors.description")}</p>
-        </div>
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              {t("contractors.actions.addContractor")}
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{t("contractors.actions.addContractor")}</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-               <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                   <Label>First Name</Label>
-                   <Input value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} />
-                 </div>
-                 <div className="space-y-2">
-                   <Label>Last Name</Label>
-                   <Input value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} />
-                 </div>
-               </div>
-               
-               <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                   <Label>Email</Label>
-                   <Input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
-                 </div>
-                 <div className="space-y-2">
-                   <Label>Start Date</Label>
-                   <Input type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
-                 </div>
-               </div>
-               
-               <div className="space-y-2">
-                 <Label>Customer</Label>
-                 <Select value={String(formData.customerId)} onValueChange={v => setFormData({...formData, customerId: parseInt(v)})}>
-                   <SelectTrigger><SelectValue placeholder="Select Customer" /></SelectTrigger>
-                   <SelectContent>
-                     {customers?.data?.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.companyName}</SelectItem>)}
-                   </SelectContent>
-                 </Select>
-               </div>
-               
-               <div className="space-y-2">
-                 <Label>Country</Label>
-                 <CountrySelect value={formData.country} onValueChange={v => setFormData({...formData, country: v})} showCode={false} scope="all" />
-               </div>
-
-               <div className="space-y-2">
-                 <Label>Default Approver</Label>
-                 <Select value={formData.defaultApproverId ? String(formData.defaultApproverId) : ""} onValueChange={v => setFormData({...formData, defaultApproverId: parseInt(v)})}>
-                   <SelectTrigger><SelectValue placeholder="Select Approver" /></SelectTrigger>
-                   <SelectContent>
-                     {approvers?.map((u) => <SelectItem key={u.id} value={String(u.id)}>{u.name} ({u.email})</SelectItem>)}
-                   </SelectContent>
-                 </Select>
-               </div>
-               
-               <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                   <Label>Currency</Label>
-                   <CurrencySelect value={formData.currency} onValueChange={v => setFormData({...formData, currency: v})} />
-                 </div>
-                 <div className="space-y-2">
-                    <Label>Payment Frequency</Label>
-                    <Select value={formData.payFrequency} onValueChange={v => setFormData({...formData, payFrequency: v as any})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                        <SelectItem value="semi_monthly">Semi-Monthly</SelectItem>
-                        <SelectItem value="milestone">Milestone</SelectItem>
-                      </SelectContent>
-                    </Select>
-                 </div>
-               </div>
-
-               <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-2">
-                   <Label>Rate Type</Label>
-                   <Select value={formData.rateType} onValueChange={v => setFormData({...formData, rateType: v as any})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="fixed_monthly">Fixed Monthly</SelectItem>
-                        <SelectItem value="milestone_only">Milestone Only</SelectItem>
-                      </SelectContent>
-                   </Select>
-                 </div>
-                 {formData.rateType !== "milestone_only" && (
-                   <div className="space-y-2">
-                     <Label>{formData.payFrequency === 'semi_monthly' ? 'Semi-Monthly Amount' : 'Monthly Salary'}</Label>
-                     <Input type="number" value={formData.rateAmount} onChange={e => setFormData({...formData, rateAmount: e.target.value})} />
-                     {formData.payFrequency === 'semi_monthly' && (
-                       <p className="text-xs text-muted-foreground mt-1">Paid {formatCurrencyAmount(formData.rateAmount, formData.currency)} on 15th and EOM</p>
-                     )}
-                   </div>
-                 )}
-               </div>
-               
-               <div className="flex justify-end gap-3 pt-2">
-                 <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
-                 <Button onClick={() => {
-                   const submitData: any = {
-                     ...formData,
-                     paymentFrequency: formData.payFrequency, // Map local state to backend field
-                   };
-                   if (!submitData.customerId) { toast.error("Customer is required"); return; }
-                   if (submitData.defaultApproverId === 0) delete submitData.defaultApproverId;
-                   // rateAmount is already string, handled by backend
-                   createMutation.mutate(submitData);
-                 }} disabled={createMutation.isPending}>
-                   {createMutation.isPending ? "Creating..." : "Create Contractor"}
-                 </Button>
-               </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
+      {/* Header Actions - REMOVED, Handled by Parent Page */}
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-sm">
@@ -362,6 +199,13 @@ export default function ContractorList() {
         );
       })()}
     </div>
+  );
+}
+
+export default function ContractorList() {
+  return (
+    <Layout>
+      <ContractorListContent />
     </Layout>
   );
 }

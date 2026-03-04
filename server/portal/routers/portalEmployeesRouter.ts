@@ -215,7 +215,7 @@ export const portalEmployeesRouter = portalRouter({
         postalCode: z.string().optional(),
         department: z.string().optional(),
         jobTitle: z.string().min(1),
-        serviceType: z.enum(["eor", "visa_eor", "aor"]).default("eor"),
+        serviceType: z.enum(["eor", "visa_eor"]).default("eor"),
         employmentType: z.enum(["fixed_term", "long_term"]).default("long_term"),
         startDate: z.string().min(1),
         endDate: z.string().optional(),

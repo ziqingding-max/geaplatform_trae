@@ -140,7 +140,7 @@ export default function CountryGuideEditor() {
   if (!countryCode) return null;
 
   return (
-    <Layout title={`${t("country_guide_admin.editor_title")} - ${country?.countryName || countryCode}`}>
+    <Layout breadcrumb={["GEA", t("nav.marketing"), t("nav.countryGuide"), country?.countryName || countryCode]}>
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -174,15 +174,15 @@ export default function CountryGuideEditor() {
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <Badge variant="outline">Part {chapter.part}</Badge>
+                      <Badge variant="outline">{t("country_guide_admin.part_number_label")} {chapter.part}</Badge>
                       <span className="font-semibold">{chapter.titleEn}</span>
                       <span className="text-muted-foreground text-sm">/ {chapter.titleZh}</span>
                     </div>
                     <div className="text-xs text-muted-foreground flex gap-2 items-center">
-                      <Badge variant={getStatusColor(chapter.status) as any}>{chapter.status}</Badge>
-                      <span>Key: {chapter.chapterKey}</span>
-                      <span>Ver: {chapter.version}</span>
-                      <span>Order: {chapter.sortOrder}</span>
+                      <Badge variant={getStatusColor(chapter.status) as any}>{t(`country_guide_admin.status_${chapter.status}`)}</Badge>
+                      <span>{t("country_guide_admin.chapter_key")}: {chapter.chapterKey}</span>
+                      <span>{t("country_guide_admin.version")}: {chapter.version}</span>
+                      <span>{t("country_guide_admin.sort_order")}: {chapter.sortOrder}</span>
                     </div>
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => handleEdit(chapter)}>
@@ -209,7 +209,7 @@ export default function CountryGuideEditor() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Chapter Key (Slug)</Label>
+                  <Label>{t("country_guide_admin.chapter_key")}</Label>
                   <Input 
                     value={formData.chapterKey || ""} 
                     onChange={(e) => handleInputChange("chapterKey", e.target.value)}
@@ -218,7 +218,7 @@ export default function CountryGuideEditor() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Status</Label>
+                  <Label>{t("common.status")}</Label>
                   <Select 
                     value={formData.status || "draft"} 
                     onValueChange={(val) => handleInputChange("status", val)}
@@ -227,15 +227,15 @@ export default function CountryGuideEditor() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="review">Review</SelectItem>
-                      <SelectItem value="published">Published</SelectItem>
-                      <SelectItem value="archived">Archived</SelectItem>
+                      <SelectItem value="draft">{t("country_guide_admin.status_draft")}</SelectItem>
+                      <SelectItem value="review">{t("country_guide_admin.status_review")}</SelectItem>
+                      <SelectItem value="published">{t("country_guide_admin.status_published")}</SelectItem>
+                      <SelectItem value="archived">{t("country_guide_admin.status_archived")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Part Number</Label>
+                  <Label>{t("country_guide_admin.part_number")}</Label>
                   <Input 
                     type="number" 
                     value={formData.part || ""} 
@@ -244,7 +244,7 @@ export default function CountryGuideEditor() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Sort Order</Label>
+                  <Label>{t("country_guide_admin.sort_order")}</Label>
                   <Input 
                     type="number" 
                     value={formData.sortOrder || ""} 
@@ -253,7 +253,7 @@ export default function CountryGuideEditor() {
                   />
                 </div>
                  <div className="space-y-2">
-                  <Label>Version</Label>
+                  <Label>{t("country_guide_admin.version")}</Label>
                   <Input 
                     value={formData.version || ""} 
                     onChange={(e) => handleInputChange("version", e.target.value)}
@@ -264,7 +264,7 @@ export default function CountryGuideEditor() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Title (EN)</Label>
+                  <Label>{t("country_guide_admin.title_en")}</Label>
                   <Input 
                     value={formData.titleEn || ""} 
                     onChange={(e) => handleInputChange("titleEn", e.target.value)}
@@ -272,7 +272,7 @@ export default function CountryGuideEditor() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Title (ZH)</Label>
+                  <Label>{t("country_guide_admin.title_zh")}</Label>
                   <Input 
                     value={formData.titleZh || ""} 
                     onChange={(e) => handleInputChange("titleZh", e.target.value)}
@@ -283,9 +283,9 @@ export default function CountryGuideEditor() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Content (EN) - Markdown</Label>
+                  <Label>{t("country_guide_admin.content_en_md")}</Label>
                   <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs text-muted-foreground">Supports Markdown</span>
+                    <span className="text-xs text-muted-foreground">{t("country_guide_admin.supports_markdown")}</span>
                     <Button 
                       type="button" 
                       variant="outline" 
@@ -293,7 +293,7 @@ export default function CountryGuideEditor() {
                       className="h-6 text-xs gap-1 text-purple-600 border-purple-200 hover:bg-purple-50"
                       onClick={() => {
                         if (!countryCode || !formData.titleEn) {
-                          toast.error("Please enter a country and title first");
+                          toast.error(t("country_guide_admin.error_missing_input"));
                           return;
                         }
                         generateMutation.mutate({ 
@@ -304,7 +304,7 @@ export default function CountryGuideEditor() {
                       disabled={generateMutation.isPending}
                     >
                       {generateMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                      Generate with AI
+                      {t("country_guide_admin.generate_ai")}
                     </Button>
                   </div>
                   <Textarea 
@@ -315,7 +315,7 @@ export default function CountryGuideEditor() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Content (ZH) - Markdown</Label>
+                  <Label>{t("country_guide_admin.content_zh_md")}</Label>
                   <Textarea 
                     className="h-64 font-mono" 
                     value={formData.contentZh || ""} 

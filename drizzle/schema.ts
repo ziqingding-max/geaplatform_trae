@@ -242,7 +242,7 @@ export const customerPricing = sqliteTable(
     globalDiscountPercent: text("globalDiscountPercent"),
     // For country_specific: fixed price per employee per month
     countryCode: text("countryCode", { length: 3 }),
-    serviceType: text("serviceType", { enum: ["eor", "visa_eor", "aor"] }),
+    serviceType: text("serviceType", { enum: ["eor", "visa_eor"] }),
     fixedPrice: text("fixedPrice"),
     currency: text("currency", { length: 3 }).default("USD"),
     effectiveFrom: text("effectiveFrom").notNull(),
@@ -338,7 +338,7 @@ export const employees = sqliteTable(
     // Employment details
     department: text("department", { length: 100 }),
     jobTitle: text("jobTitle", { length: 255 }).notNull(),
-    serviceType: text("serviceType", { enum: ["eor", "visa_eor", "aor"] }).default("eor").notNull(),
+    serviceType: text("serviceType", { enum: ["eor", "visa_eor"] }).default("eor").notNull(),
     employmentType: text("employmentType", { enum: ["fixed_term", "long_term"] }).default("long_term").notNull(),
     startDate: text("startDate").notNull(),
     endDate: text("endDate"),

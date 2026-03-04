@@ -195,7 +195,7 @@ export const customersRouter = router({
           pricingType: z.enum(["global_discount", "country_specific"]),
           globalDiscountPercent: z.string().optional(),
           countryCode: z.string().optional(),
-          serviceType: z.enum(["eor", "visa_eor", "aor"]).optional(),
+          serviceType: z.enum(["eor", "visa_eor"]).optional(),
           fixedPrice: z.string().optional(),
           currency: z.string().default("USD"),
           effectiveFrom: z.string(), // YYYY-MM-DD
@@ -241,7 +241,7 @@ export const customersRouter = router({
         z.object({
           customerId: z.number(),
           countryCodes: z.array(z.string()).min(1),
-          serviceType: z.enum(["eor", "visa_eor", "aor"]),
+          serviceType: z.enum(["eor", "visa_eor"]),
           fixedPrice: z.string(),
           currency: z.string().default("USD"),
           effectiveFrom: z.string(),

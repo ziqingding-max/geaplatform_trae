@@ -133,11 +133,11 @@ export default function Adjustments() {
       setReceiptFile(null);
       refetch();
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   const uploadReceiptMutation = trpc.adjustments.uploadReceipt.useMutation({
-    onError: (err: any) => toast.error("Receipt upload failed: " + err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   const updateMutation = trpc.adjustments.update.useMutation({
@@ -148,7 +148,7 @@ export default function Adjustments() {
       setEditReceiptFile(null);
       refetch();
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   const deleteMutation = trpc.adjustments.delete.useMutation({
@@ -156,7 +156,7 @@ export default function Adjustments() {
       toast.success(t("adjustments.toast.deleteSuccess"));
       refetch();
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   const adminApproveMutation = trpc.adjustments.adminApprove.useMutation({
@@ -164,7 +164,7 @@ export default function Adjustments() {
       toast.success(t("adjustments.toast.approveSuccess"));
       refetch();
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   const adminRejectMutation = trpc.adjustments.adminReject.useMutation({
@@ -172,7 +172,7 @@ export default function Adjustments() {
       toast.success(t("adjustments.toast.rejectSuccess"));
       refetch();
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: (err) => toast.error(err.message),
   });
 
   const now = new Date();
@@ -180,28 +180,28 @@ export default function Adjustments() {
 
   const [formData, setFormData] = useState({
     employeeId: 0,
-    adjustmentType: "bonus" as "bonus" | "allowance" | "reimbursement" | "deduction" | "other",
-    category: "" as string,
+    adjustmentType: "bonus",
+    category: "",
     description: "",
     amount: "",
     effectiveMonth: defaultMonth,
   });
 
   const [editFormData, setEditFormData] = useState({
-    adjustmentType: "bonus" as string,
-    category: "" as string,
+    adjustmentType: "bonus",
+    category: "",
     description: "",
     amount: "",
     effectiveMonth: "",
   });
 
   // Receipt file state for create form
-  const [receiptFile, setReceiptFile] = useState<{ file: File; base64: string } | null>(null);
-  const receiptInputRef = useRef<HTMLInputElement>(null);
+  const [receiptFile, setReceiptFile] = useState(null);
+  const receiptInputRef = useRef(null);
 
   // Receipt file state for edit form
-  const [editReceiptFile, setEditReceiptFile] = useState<{ file: File; base64: string } | null>(null);
-  const editReceiptInputRef = useRef<HTMLInputElement>(null);
+  const [editReceiptFile, setEditReceiptFile] = useState(null);
+  const editReceiptInputRef = useRef(null);
 
   // Uploading state
   const [isUploading, setIsUploading] = useState(false);
@@ -210,8 +210,8 @@ export default function Adjustments() {
   const selectedEmployee = formData.employeeId ? employeeMap.get(formData.employeeId) : null;
   const autoCurrency = selectedEmployee?.salaryCurrency || "USD";
 
-  const handleReceiptSelect = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
-    const file = e.target.files?.[0];
+  const handleReceiptSelect = (e, isEdit) => {
+    const file = e.files?.[0];
     if (!file) return;
     if (file.size > 20 * 1024 * 1024) {
       toast.error(t("adjustments.toast.fileTooLarge"));
@@ -219,7 +219,7 @@ export default function Adjustments() {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
+      const base64 = reader.result.split(",")[1];
       if (isEdit) {
         setEditReceiptFile({ file, base64 });
       } else {
@@ -239,8 +239,8 @@ export default function Adjustments() {
 
     setIsUploading(true);
     try {
-      let receiptFileUrl: string | undefined;
-      let receiptFileKey: string | undefined;
+      let receiptFileUrl;
+      let receiptFileKey;
 
       // Upload receipt if present
       if (receiptFile) {
@@ -256,7 +256,7 @@ export default function Adjustments() {
       createMutation.mutate({
         employeeId: formData.employeeId,
         adjustmentType: formData.adjustmentType,
-        category: (formData.category || undefined) as any,
+        category: formData.category || undefined,
         description: formData.description || undefined,
         amount: formData.amount,
         effectiveMonth: formData.effectiveMonth,
@@ -270,7 +270,7 @@ export default function Adjustments() {
     }
   };
 
-  const handleEdit = (adj: any) => {
+  const handleEdit = (adj) => {
     setEditingAdj(adj);
     const effMonth = adj.effectiveMonth
       ? new Date(adj.effectiveMonth).toISOString().slice(0, 7)
@@ -293,8 +293,8 @@ export default function Adjustments() {
 
     setIsUploading(true);
     try {
-      let receiptFileUrl: string | undefined;
-      let receiptFileKey: string | undefined;
+      let receiptFileUrl;
+      let receiptFileKey;
 
       if (editReceiptFile) {
         const uploadResult = await uploadReceiptMutation.mutateAsync({
@@ -309,8 +309,8 @@ export default function Adjustments() {
       updateMutation.mutate({
         id: editingAdj.id,
         data: {
-          adjustmentType: editFormData.adjustmentType as any,
-          category: (editFormData.category || undefined) as any,
+          adjustmentType: editFormData.adjustmentType,
+          category: editFormData.category || undefined,
           description: editFormData.description || undefined,
           amount: editFormData.amount,
           effectiveMonth: editFormData.effectiveMonth,
@@ -324,20 +324,20 @@ export default function Adjustments() {
     }
   };
 
-  const handleDelete = (id: number) => {
-    if (confirm("Are you sure you want to delete this adjustment?")) {
+  const handleDelete = (id) => {
+    if (confirm(t("adjustments.confirm.delete"))) {
       deleteMutation.mutate({ id });
     }
   };
 
   // Derive unique countries from employees for filter
   const availableCountries = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set();
     employeesList.forEach((e) => { if (e.country) set.add(e.country); });
     return Array.from(set).sort();
   }, [employeesList]);
 
-  const adjustments = (data?.data || []).filter((adj: any) => {
+  const adjustments = (data?.data || []).filter((adj) => {
     const emp = employeeMap.get(adj.employeeId);
     // Tab filter: active = submitted/client_approved/client_rejected/admin_rejected, history = locked/admin_approved
     const historyStatuses = ["locked", "admin_approved"];
@@ -359,7 +359,7 @@ export default function Adjustments() {
   });
 
   // Receipt upload UI component
-  const ReceiptUploadArea = ({ isEdit }: { isEdit: boolean }) => {
+  const ReceiptUploadArea = ({ isEdit }) => {
     const file = isEdit ? editReceiptFile : receiptFile;
     const inputRef = isEdit ? editReceiptInputRef : receiptInputRef;
     const existingUrl = isEdit && editingAdj?.receiptFileUrl ? editingAdj.receiptFileUrl : null;
@@ -486,7 +486,7 @@ export default function Adjustments() {
                     <Label>{t("adjustments.form.label.type")} *</Label>
                     <Select
                       value={formData.adjustmentType}
-                      onValueChange={(v) => setFormData({ ...formData, adjustmentType: v as any })}
+                      onValueChange={(v) => setFormData({ ...formData, adjustmentType: v })}
                     >
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
@@ -560,7 +560,7 @@ export default function Adjustments() {
                 <div className="flex justify-end gap-3 pt-2">
                   <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
                   <Button onClick={handleCreate} disabled={createMutation.isPending || isUploading}>
-                    {isUploading ? "Uploading..." : createMutation.isPending ? t("leave.button.submitting") : t("common.submit")}
+                    {isUploading ? t("adjustments.receipt.uploading") : createMutation.isPending ? t("leave.button.submitting") : t("common.submit")}
                   </Button>
                 </div>
               </div>
@@ -815,11 +815,11 @@ export default function Adjustments() {
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="bonus">{t("adjustments.form.type.bonus")}</SelectItem>
-                      <SelectItem value="allowance">{t("adjustments.form.type.allowance")}</SelectItem>
-                      <SelectItem value="reimbursement">{t("adjustments.form.type.reimbursement")}</SelectItem>
-                      <SelectItem value="deduction">{t("adjustments.form.type.deduction")}</SelectItem>
-                      <SelectItem value="other">{t("adjustments.form.type.other")}</SelectItem>
+                      <SelectItem value="bonus">{t("adjustments.type.bonus")}</SelectItem>
+                      <SelectItem value="allowance">{t("adjustments.type.allowance")}</SelectItem>
+                      <SelectItem value="reimbursement">{t("adjustments.type.reimbursement")}</SelectItem>
+                      <SelectItem value="deduction">{t("adjustments.type.deduction")}</SelectItem>
+                      <SelectItem value="other">{t("adjustments.type.other")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -831,9 +831,9 @@ export default function Adjustments() {
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">{t("adjustments.form.category.none")}</SelectItem>
+                      <SelectItem value="none">{t("adjustments.category.none")}</SelectItem>
                       {CATEGORIES.map((c) => (
-                        <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                        <SelectItem key={c} value={c}>{t(`adjustments.category.${c}`)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -904,12 +904,12 @@ export default function Adjustments() {
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">{t("adjustments.form.label.type")}</Label>
                     <Badge variant="outline" className={`text-xs capitalize ${typeColors[viewAdj.adjustmentType] || ''}`}>
-                      {viewAdj.adjustmentType}
+                      {t(`adjustments.type.${viewAdj.adjustmentType}`) || viewAdj.adjustmentType}
                     </Badge>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">{t("adjustments.form.label.category")}</Label>
-                    <p className="text-sm">{CATEGORIES.find(c => c.value === viewAdj.category)?.label || viewAdj.category || '—'}</p>
+                    <p className="text-sm">{CATEGORIES.includes(viewAdj.category) ? t(`adjustments.category.${viewAdj.category}`) : (viewAdj.category || '—')}</p>
                   </div>
                 </div>
 
@@ -929,10 +929,10 @@ export default function Adjustments() {
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">{t("adjustments.filters.statusPlaceholder")}</Label>
+                  <Label className="text-xs text-muted-foreground">{t("common.status")}</Label>
                   <Badge variant="outline" className={`text-xs ${statusColors[viewAdj.status] || ''}`}>
                     {viewAdj.status === 'locked' && <Lock className="w-3 h-3 mr-1 inline" />}
-                    {statusLabels[viewAdj.status] || viewAdj.status}
+                    {t(`adjustments.status.${viewAdj.status}`) || viewAdj.status}
                   </Badge>
                 </div>
 

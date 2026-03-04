@@ -37,7 +37,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import ContractorList from "./Contractors";
+import { ContractorListContent } from "./Contractors";
+import ContractorCreateDialog from "@/components/pages/ContractorCreateDialog";
 
 import { useI18n } from "@/contexts/i18n";
 const statusColors: Record<string, string> = {
@@ -76,13 +77,33 @@ const visaStatusColors: Record<string, string> = {
 /* ========== Employee List ========== */
 function EmployeeList() {
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState("employees");
+  const [location, setLocation] = useLocation();
+  const searchString = useSearch();
+  
+  const getUrlTab = () => {
+    const t = new URLSearchParams(searchString).get("tab");
+    return (t === "contractors" || t === "employees") ? t : "employees";
+  };
+  
+  const [activeTab, setActiveTab] = useState(getUrlTab);
+
+  useEffect(() => {
+    setActiveTab(getUrlTab());
+  }, [searchString]);
+
+  const handleTabChange = (val: string) => {
+    const params = new URLSearchParams(searchString);
+    params.set("tab", val);
+    params.delete("page"); // Reset page when switching tabs
+    setLocation(`${location}?${params.toString()}`);
+  };
+
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [customerFilter, setCustomerFilter] = useState<string>("all");
   const [countryFilter, setCountryFilter] = useState<string>("all");
-  const [, setLocation] = useLocation();
-  const searchString = useSearch();
+  const [, _setLocation] = useLocation();
+  // const searchString = useSearch(); // Already defined above
   const [createOpen, setCreateOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   // Initialize page from URL params (e.g. /employees?page=2)
@@ -140,7 +161,7 @@ function EmployeeList() {
     country: "",
     department: "",
     jobTitle: "",
-    serviceType: "eor" as "eor" | "visa_eor" | "aor",
+    serviceType: "eor" as "eor" | "visa_eor",
     employmentType: "long_term" as "fixed_term" | "long_term",
     startDate: "",
     endDate: "",
@@ -189,7 +210,7 @@ function EmployeeList() {
   }, [formData.country, formData.baseSalary]);
 
   useEffect(() => {
-    if (formData.serviceType === "aor") {
+    if (false) {
       // AOR service does not require visa check
       setFormData(f => ({ ...f, requiresVisa: false }));
     } else if (visaCheck) {
@@ -256,7 +277,7 @@ function EmployeeList() {
   return (
     <Layout breadcrumb={["GEA", "People"]}>
       <div className="p-6 space-y-6 page-enter">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="space-y-4">
               <div>
@@ -299,7 +320,7 @@ function EmployeeList() {
                         <SelectContent>
                           <SelectItem value="eor">{t("employees.create.form.serviceType.eor")}</SelectItem>
                           <SelectItem value="visa_eor">{t("employees.create.form.serviceType.visaEor")}</SelectItem>
-                          <SelectItem value="aor">{t("employees.create.form.serviceType.aor")}</SelectItem>
+                          {/* AOR removed from Employees - use Contractor module */}
                         </SelectContent>
                       </Select>
                     </div>
@@ -448,11 +469,9 @@ function EmployeeList() {
                 </fieldset>
 
                 {/* Section: Visa - Auto-detected, conditionally shown */}
-                {formData.serviceType === "aor" && (
-                  <p className="text-xs text-muted-foreground">{t("employees.create.form.aorVisaNotApplicable")}</p>
-                )}
+                {/* AOR logic removed */}
 
-                {formData.serviceType !== "aor" && formData.requiresVisa && (
+                {formData.requiresVisa && (
                   <fieldset className="rounded-lg border p-4 space-y-4 border-amber-200 bg-amber-50/30">
                     <legend className="text-sm font-semibold text-amber-700 px-2 uppercase tracking-wider">{t("employees.create.form.visaRequired")}</legend>
                     <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
@@ -470,7 +489,7 @@ function EmployeeList() {
                   </fieldset>
                 )}
 
-                {formData.serviceType !== "aor" && !formData.requiresVisa && formData.nationality && formData.country && (
+                {!formData.requiresVisa && formData.nationality && formData.country && (
                   <p className="text-xs text-muted-foreground">{t("employees.create.form.noVisaRequiredHint")}</p>
                 )}
 
@@ -486,6 +505,7 @@ function EmployeeList() {
             </DialogContent>
           </Dialog>
           )}
+          {activeTab === "contractors" && <ContractorCreateDialog />}
         </div>
 
         <TabsContent value="employees" className="mt-0 space-y-6">
@@ -556,7 +576,7 @@ function EmployeeList() {
                   ))
                 ) : data?.data && data.data.length > 0 ? (
                   data.data.map((emp) => (
-                    <TableRow key={emp.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/employees/${emp.id}?from_page=${page}`)}>
+                    <TableRow key={emp.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/people/${emp.id}?from_page=${page}`)}>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
@@ -668,7 +688,7 @@ function EmployeeList() {
                               </Badge>
                               {inv.employeeId && invStatus === "completed" && (
                                 <button
-                                  onClick={() => setLocation(`/employees/${inv.employeeId}`)}
+                                  onClick={() => setLocation(`/people/${inv.employeeId}`)}
                                   className="ml-2 text-xs text-primary underline hover:no-underline"
                                 >
                                   View Employee
@@ -712,7 +732,7 @@ function EmployeeList() {
         </div>
         </TabsContent>
         <TabsContent value="contractors" className="mt-0">
-          <ContractorList />
+          <ContractorListContent />
         </TabsContent>
         </Tabs>
       </div>
@@ -913,7 +933,7 @@ function EmployeeDetail({ id }: { id: number }) {
       <Layout breadcrumb={["GEA", "Employees", "Not Found"]}>
         <div className="p-6 text-center py-20">
           <p className="text-muted-foreground">{t("employees.detail.notFound")}</p>
-          <Button variant="outline" className="mt-4" onClick={() => setLocation(`/employees?page=${fromPage}`)}>{t("employees.button.backToEmployees")}</Button>
+          <Button variant="outline" className="mt-4" onClick={() => setLocation(`/people?page=${fromPage}&tab=employees`)}>{t("employees.button.backToEmployees")}</Button>
         </div>
       </Layout>
     );
@@ -973,7 +993,7 @@ function EmployeeDetail({ id }: { id: number }) {
       <div className="p-6 space-y-6 page-enter">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => setLocation(`/employees?page=${fromPage}`)}>
+          <Button variant="ghost" size="icon" onClick={() => setLocation(`/people?page=${fromPage}&tab=employees`)}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex-1">
@@ -1648,9 +1668,14 @@ function InfoRow({ label, value, icon }: { label: string; value?: string | null;
 }
 
 export default function Employees() {
-  const [matchDetail, params] = useRoute("/employees/:id");
-  if (matchDetail && params?.id) {
-    const id = parseInt(params.id, 10);
+  const [matchDetail, params] = useRoute("/people/:id");
+  // Also support legacy route
+  const [matchLegacy, paramsLegacy] = useRoute("/employees/:id");
+  
+  const effectiveParams = matchDetail ? params : (matchLegacy ? paramsLegacy : null);
+  
+  if (effectiveParams?.id) {
+    const id = parseInt(effectiveParams.id, 10);
     if (!isNaN(id)) return <EmployeeDetail id={id} />;
   }
   return <EmployeeList />;

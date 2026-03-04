@@ -13,7 +13,7 @@ interface QuotationItemInput {
   headcount: number;
   salary: number;
   currency: string;
-  serviceType: "eor" | "visa_eor" | "aor";
+  serviceType: "eor" | "visa_eor";
   serviceFee: number;
 }
 
