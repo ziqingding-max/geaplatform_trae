@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useRoute, useLocation } from "wouter";
 import Layout from "@/components/Layout";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
@@ -38,8 +38,9 @@ const getStatusColor = (status: string) => {
 };
 
 export default function CountryGuideEditor() {
-  const { countryCode } = useParams<{ countryCode: string }>();
-  const navigate = useNavigate();
+  const [, params] = useRoute("/admin/knowledge/country-guides/:countryCode");
+  const countryCode = params?.countryCode;
+  const [, setLocation] = useLocation();
   const { t } = useI18n();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingChapter, setEditingChapter] = useState<any>(null);
@@ -143,7 +144,7 @@ export default function CountryGuideEditor() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/admin/knowledge/country-guides")}>
+            <Button variant="ghost" size="icon" onClick={() => setLocation("/admin/knowledge/country-guides")}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
