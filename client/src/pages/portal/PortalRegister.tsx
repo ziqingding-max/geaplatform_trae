@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Building2, Loader2, Lock, CheckCircle, XCircle } from "lucide-react";
 
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/contexts/i18n";
 export default function PortalRegister() {
   const { t } = useI18n();
   const [, setLocation] = useLocation();

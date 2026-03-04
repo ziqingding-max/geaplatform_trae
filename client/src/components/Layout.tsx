@@ -274,11 +274,11 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
           {/* Breadcrumb */}
           <div className="flex-1 min-w-0">
             {breadcrumb && breadcrumb.length > 0 && (
-              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-sm">
                 {breadcrumb.map((crumb, i) => (
                   <span key={i} className="flex items-center gap-1.5">
-                    {i > 0 && <span>/</span>}
-                    <span className={i === breadcrumb.length - 1 ? "text-foreground font-medium" : ""}>
+                    {i > 0 && <span className="text-muted-foreground">/</span>}
+                    <span className={i === breadcrumb.length - 1 ? "text-foreground font-medium" : "text-muted-foreground"}>
                       {crumb}
                     </span>
                   </span>

@@ -34,7 +34,7 @@ import {
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/contexts/i18n";
 // ─── Glass KPI Card ─────────────────────────────────────────────────────────
 
 function StatCard({

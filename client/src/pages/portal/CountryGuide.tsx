@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { portalTrpc } from "@/lib/portalTrpc";
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/contexts/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

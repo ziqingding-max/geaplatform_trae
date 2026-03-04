@@ -21,7 +21,7 @@ import {
 import { ArrowLeft, KeyRound, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/contexts/i18n";
 export default function PortalResetPassword() {
   const { t } = useI18n();
   const searchString = useSearch();

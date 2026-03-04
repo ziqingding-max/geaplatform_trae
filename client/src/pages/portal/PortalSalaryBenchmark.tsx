@@ -16,6 +16,7 @@ export default function PortalSalaryBenchmark() {
   const [countryCode, setCountryCode] = useState<string>("");
   const [jobCategory, setJobCategory] = useState<string>("");
   const [seniority, setSeniority] = useState<"junior" | "mid" | "senior" | "lead" | "director">("mid");
+  const [year, setYear] = useState<string>(new Date().getFullYear().toString());
 
   const { data: countries } = portalTrpc.toolkit.listCountries.useQuery();
   
