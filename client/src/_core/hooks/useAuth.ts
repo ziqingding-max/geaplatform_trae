@@ -12,26 +12,9 @@ export function useAuth(options?: UseAuthOptions) {
     options ?? {};
   const utils = trpc.useUtils();
 
-  // Mock user for testing
-  const mockUser = {
-    id: 1,
-    openId: "mock-openid",
-    name: "Test Admin",
-    email: "admin@example.com",
-    role: "admin",
-    language: "en",
-    isActive: true,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastSignedIn: new Date(),
-    mustChangePassword: false,
-    loginMethod: "mock"
-  };
-
   const meQuery = trpc.auth.me.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
-    enabled: false // Disable actual query
   });
 
   const logoutMutation = trpc.auth.logout.useMutation({
@@ -41,35 +24,45 @@ export function useAuth(options?: UseAuthOptions) {
   });
 
   const logout = useCallback(async () => {
-    // Mock logout behavior
-    window.location.href = "/login";
-  }, []);
+    try {
+      await logoutMutation.mutateAsync();
+    } finally {
+      window.location.href = "/login";
+    }
+  }, [logoutMutation]);
 
   const state = useMemo(() => {
-    // Force mock user
-    const user = mockUser;
-    
-    localStorage.setItem(
-      "manus-runtime-user-info",
-      JSON.stringify(user)
-    );
-    return {
-      user: user as any, // Cast to any to avoid strict type checks against the inferred type
-      loading: false,
-      error: null,
-      isAuthenticated: true,
-    };
-  }, []);
+    const user = meQuery.data ?? null;
+    const loading = meQuery.isLoading;
+    const error =
+      meQuery.error instanceof TRPCClientError ? meQuery.error : null;
 
-  // Redirect logic disabled/modified
+    if (user) {
+      localStorage.setItem(
+        "manus-runtime-user-info",
+        JSON.stringify(user)
+      );
+    }
+
+    return {
+      user,
+      loading,
+      error,
+      isAuthenticated: !!user,
+    };
+  }, [meQuery.data, meQuery.isLoading, meQuery.error]);
+
   useEffect(() => {
-    // Since we are mocking auth, we don't need to redirect
     if (!redirectOnUnauthenticated) return;
-  }, [redirectOnUnauthenticated]);
+    if (state.loading) return;
+    if (!state.isAuthenticated) {
+      window.location.href = redirectPath;
+    }
+  }, [redirectOnUnauthenticated, state.loading, state.isAuthenticated, redirectPath]);
 
   return {
     ...state,
-    refresh: () => {}, // Mock refresh
+    refresh: () => meQuery.refetch(),
     logout,
   };
 }

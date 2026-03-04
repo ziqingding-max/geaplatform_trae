@@ -4,8 +4,8 @@
  * Creates the default admin user on first startup if it doesn't exist.
  *
  * SECURITY POLICY:
- * - Production: requires ADMIN_BOOTSTRAP_PASSWORD env var (no hardcoded default).
- * - Non-production: allows fallback default for developer convenience.
+ * - ADMIN_BOOTSTRAP_PASSWORD env var is ALWAYS required (no hardcoded fallback).
+ * - ADMIN_BOOTSTRAP_EMAIL and ADMIN_BOOTSTRAP_NAME are also required.
  */
 
 import { hashPassword } from "./_core/adminAuth";
@@ -15,18 +15,20 @@ import { eq } from "drizzle-orm";
 import crypto from "crypto";
 import { ENV } from "./_core/env";
 
-const DEFAULT_ADMIN_EMAIL = process.env.ADMIN_BOOTSTRAP_EMAIL || "simon.ding@geahr.com";
-const DEFAULT_ADMIN_NAME = process.env.ADMIN_BOOTSTRAP_NAME || "Simon Ding";
-const DEV_FALLBACK_PASSWORD = "BestGEA2026~~";
-
 function resolveBootstrapPassword(): string {
   const fromEnv = process.env.ADMIN_BOOTSTRAP_PASSWORD?.trim();
-  if (fromEnv) return fromEnv;
+  if (fromEnv && fromEnv.length >= 10) return fromEnv;
 
-  // Keep local onboarding convenient while preventing hardcoded production credential.
-  if (!ENV.isProduction) return DEV_FALLBACK_PASSWORD;
+  if (fromEnv && fromEnv.length < 10) {
+    throw new Error(
+      "ADMIN_BOOTSTRAP_PASSWORD must be at least 10 characters long for security."
+    );
+  }
 
-  throw new Error("ADMIN_BOOTSTRAP_PASSWORD is required in production for initial admin seeding");
+  throw new Error(
+    "ADMIN_BOOTSTRAP_PASSWORD environment variable is required for initial admin seeding. " +
+    "Please set a strong password (at least 10 characters) in your .env file."
+  );
 }
 
 export async function seedDefaultAdmin(): Promise<void> {
@@ -37,10 +39,18 @@ export async function seedDefaultAdmin(): Promise<void> {
       return;
     }
 
+    const adminEmail = process.env.ADMIN_BOOTSTRAP_EMAIL?.trim();
+    const adminName = process.env.ADMIN_BOOTSTRAP_NAME?.trim();
+
+    if (!adminEmail) {
+      console.warn("[Seed] ADMIN_BOOTSTRAP_EMAIL not set, skipping admin seed");
+      return;
+    }
+
     const existing = await db
       .select({ id: users.id })
       .from(users)
-      .where(eq(users.email, DEFAULT_ADMIN_EMAIL))
+      .where(eq(users.email, adminEmail))
       .limit(1);
 
     if (existing.length > 0) {
@@ -54,8 +64,8 @@ export async function seedDefaultAdmin(): Promise<void> {
 
     await db.insert(users).values({
       openId,
-      name: DEFAULT_ADMIN_NAME,
-      email: DEFAULT_ADMIN_EMAIL,
+      name: adminName || "Admin",
+      email: adminEmail,
       passwordHash,
       loginMethod: "password",
       role: "admin",
@@ -64,11 +74,10 @@ export async function seedDefaultAdmin(): Promise<void> {
       lastSignedIn: new Date(),
     });
 
-    if (ENV.isProduction) {
-      console.warn(`[Seed] Bootstrap admin created: ${DEFAULT_ADMIN_EMAIL}. Please rotate ADMIN_BOOTSTRAP_PASSWORD immediately.`);
-    } else {
-      console.log(`[Seed] Default admin created: ${DEFAULT_ADMIN_EMAIL}`);
-    }
+    console.warn(
+      `[Seed] Bootstrap admin created: ${adminEmail}. ` +
+      `Please change the password after first login and remove ADMIN_BOOTSTRAP_PASSWORD from env.`
+    );
   } catch (error) {
     console.error("[Seed] Failed to seed default admin:", error);
   }

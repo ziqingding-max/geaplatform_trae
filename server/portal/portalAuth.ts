@@ -168,16 +168,6 @@ export function getPortalTokenFromRequest(req: Request): string | null {
 // ============================================================================
 
 export async function authenticatePortalRequest(req: Request): Promise<PortalUser | null> {
-  // Bypassed for development/testing
-  return {
-    contactId: 1,
-    customerId: 1,
-    email: "portal@example.com",
-    contactName: "Mock Portal User",
-    portalRole: "admin",
-    companyName: "Mock Company"
-  };
-
   const token = getPortalTokenFromRequest(req);
   if (!token) return null;
 
