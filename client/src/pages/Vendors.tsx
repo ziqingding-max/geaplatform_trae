@@ -191,7 +191,7 @@ function VendorList() {
                   <Select value={formData.serviceType} onValueChange={(v) => setFormData({ ...formData, serviceType: v })}>
                     <SelectTrigger><SelectValue placeholder={t("vendors.form.service_type.label")} /></SelectTrigger>
                     <SelectContent>
-                      {serviceTypeOptions.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      {serviceTypeOptions.map((sType) => <SelectItem key={sType} value={sType}>{sType}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -558,7 +558,7 @@ function VendorDetail({ id }: { id: number }) {
                 <Select value={editData.serviceType || ""} onValueChange={(v) => setEditData({ ...editData, serviceType: v })}>
                   <SelectTrigger><SelectValue placeholder={t("vendors.form.service_type.label")} /></SelectTrigger>
                   <SelectContent>
-                    {serviceTypeOptions.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                    {serviceTypeOptions.map((sType) => <SelectItem key={sType} value={sType}>{sType}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
