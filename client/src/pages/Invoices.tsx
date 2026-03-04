@@ -337,10 +337,9 @@ export default function Invoices() {
       <Dialog open={showManualCreate} onOpenChange={setShowManualCreate}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{t("invoices.list.createInvoiceButton")}</DialogTitle></DialogHeader>
-          {/* Manual Create Form Content - Simplified for refactor display */}
           <div className="space-y-4">
-             {/* ... Form fields ... */}
-             <div className="space-y-2">
+            {/* Customer */}
+            <div className="space-y-2">
               <Label>{t("invoices.manual.customerLabel")}</Label>
               <Select value={manualForm.customerId ? manualForm.customerId.toString() : ""} onValueChange={(v) => {
                 const cust = customers?.data?.find((c) => c.id === parseInt(v));
@@ -354,7 +353,56 @@ export default function Invoices() {
                 </SelectContent>
               </Select>
             </div>
-            {/* Other fields omitted for brevity in this response, but would be here */}
+
+            {/* Invoice Type */}
+            <div className="space-y-2">
+              <Label>{t("invoices.list.filter.typeLabel")}</Label>
+              <Select value={manualForm.invoiceType} onValueChange={(v) => setManualForm({ ...manualForm, invoiceType: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["manual", "deposit", "monthly_eor", "monthly_visa_eor", "monthly_aor", "visa_service"].map((t_) => (
+                    <SelectItem key={t_} value={t_}>{typeLabelKeys[t_] ? t(typeLabelKeys[t_]) : t_}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Invoice Month */}
+            <div className="space-y-2">
+              <Label>{t("invoices.detail.info.invoiceMonth")}</Label>
+              <Input type="month" value={manualForm.invoiceMonth} onChange={(e) => setManualForm({ ...manualForm, invoiceMonth: e.target.value ? e.target.value + "-01" : "" })} />
+            </div>
+
+            {/* Currency */}
+            <div className="space-y-2">
+              <Label>{t("invoices.detail.info.currency")}</Label>
+              <CurrencySelect value={manualForm.currency} onChange={(v) => setManualForm({ ...manualForm, currency: v })} />
+            </div>
+
+            {/* Billing Entity */}
+            <div className="space-y-2">
+              <Label>{t("invoices.detail.info.billingEntity")}</Label>
+              <Select value={manualForm.billingEntityId ? manualForm.billingEntityId.toString() : ""} onValueChange={(v) => setManualForm({ ...manualForm, billingEntityId: v ? parseInt(v) : undefined })}>
+                <SelectTrigger><SelectValue placeholder="Select billing entity" /></SelectTrigger>
+                <SelectContent>
+                  {billingEntities?.map((be: any) => (
+                    <SelectItem key={be.id} value={be.id.toString()}>{be.entityName || be.companyName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Due Date */}
+            <div className="space-y-2">
+              <Label>{t("invoices.list.table.header.dueDate")}</Label>
+              <Input type="date" value={manualForm.dueDate} onChange={(e) => setManualForm({ ...manualForm, dueDate: e.target.value })} />
+            </div>
+
+            {/* Notes */}
+            <div className="space-y-2">
+              <Label>{t("invoices.detail.info.notes")}</Label>
+              <Input value={manualForm.notes} onChange={(e) => setManualForm({ ...manualForm, notes: e.target.value })} placeholder="Optional notes" />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowManualCreate(false)}>{t("common.cancel")}</Button>

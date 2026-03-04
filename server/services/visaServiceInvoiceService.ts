@@ -124,7 +124,8 @@ export async function generateVisaServiceInvoice(
       tax: taxAmount.toFixed(2),
       total: totalAmount.toFixed(2),
       status: "draft",
-      dueDate,
+      dueDate: dueDate.toISOString().slice(0, 10), // text column: use YYYY-MM-DD string
+      amountDue: totalAmount.toFixed(2),
       notes: `Visa & Immigration Service Fee for ${empCode} ${empName}`,
     };
 

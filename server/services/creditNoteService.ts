@@ -331,9 +331,7 @@ export async function generateCreditNote(params: {
       billingEntityId,
       invoiceNumber: creditNoteNumber,
       invoiceType: "credit_note",
-      invoiceMonth: originalInvoice.invoiceMonth
-        ? new Date(originalInvoice.invoiceMonth)
-        : undefined,
+      invoiceMonth: originalInvoice.invoiceMonth || undefined, // already a string from DB
       currency: originalInvoice.currency || "USD",
       exchangeRate: originalInvoice.exchangeRate?.toString() || "1",
       exchangeRateWithMarkup: originalInvoice.exchangeRateWithMarkup?.toString() || "1",

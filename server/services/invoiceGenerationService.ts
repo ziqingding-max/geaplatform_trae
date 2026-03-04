@@ -496,7 +496,7 @@ async function createGroupInvoice(
       billingEntityId,
       invoiceNumber,
       invoiceType: invoiceType as any,
-      invoiceMonth: payrollMonth,
+      invoiceMonth: payrollMonthStr, // text column: use YYYY-MM-DD string
       currency: settlementCurrency,
       exchangeRate: exchangeRate.toString(),
       exchangeRateWithMarkup: rateWithMarkup.toString(),
@@ -505,7 +505,8 @@ async function createGroupInvoice(
       tax: totalTax.toFixed(2),
       total: total.toFixed(2),
       status: "draft",
-      dueDate,
+      dueDate: dueDate.toISOString().slice(0, 10), // text column: use YYYY-MM-DD string
+      amountDue: total.toFixed(2),
       notes: `Auto-generated ${feeLabel.replace(" Fee", "")} invoice for ${monthLabel} — ${countryName}`,
     };
 

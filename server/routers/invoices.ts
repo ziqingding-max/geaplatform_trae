@@ -336,12 +336,15 @@ export const invoicesRouter = router({
         ? await generateDepositInvoiceNumber(input.billingEntityId)
         : await generateInvoiceNumber(input.billingEntityId, input.invoiceMonth || new Date().toISOString());
 
+      // invoiceMonth and dueDate are text columns in schema — pass strings, not Date objects
+      const invoiceMonthStr = input.invoiceMonth || new Date().toISOString().slice(0, 10);
+
       const result = await createInvoice({
         customerId: input.customerId,
         billingEntityId: input.billingEntityId,
         invoiceNumber,
         invoiceType: input.invoiceType,
-        invoiceMonth: input.invoiceMonth ? new Date(input.invoiceMonth) : new Date(),
+        invoiceMonth: invoiceMonthStr,
         currency: input.currency,
         exchangeRate: input.exchangeRate,
         exchangeRateWithMarkup: input.exchangeRateWithMarkup,
@@ -350,9 +353,10 @@ export const invoicesRouter = router({
         tax: input.tax,
         total: total.toString(),
         status: "draft",
+        amountDue: total.toString(),
         notes: input.notes,
         internalNotes: input.internalNotes,
-        dueDate: input.dueDate ? new Date(input.dueDate) : undefined,
+        dueDate: input.dueDate || undefined,
         relatedInvoiceId: input.relatedInvoiceId,
       });
 
@@ -412,12 +416,12 @@ export const invoicesRouter = router({
       if (input.data.exchangeRate !== undefined) updateData.exchangeRate = input.data.exchangeRate;
       if (input.data.exchangeRateWithMarkup !== undefined) updateData.exchangeRateWithMarkup = input.data.exchangeRateWithMarkup;
 
-      // Date fields
+      // Date fields — dueDate and invoiceMonth are text columns, pass strings directly
       if (input.data.dueDate !== undefined) {
-        updateData.dueDate = input.data.dueDate ? new Date(input.data.dueDate) : null;
+        updateData.dueDate = input.data.dueDate || null;
       }
       if (input.data.invoiceMonth !== undefined) {
-        updateData.invoiceMonth = input.data.invoiceMonth ? new Date(input.data.invoiceMonth) : null;
+        updateData.invoiceMonth = input.data.invoiceMonth || null;
       }
 
       await updateInvoice(input.id, updateData);
@@ -428,7 +432,7 @@ export const invoicesRouter = router({
         if (invoice && invoice.status === "draft") {
           const newNumber = await generateInvoiceNumber(
             input.data.billingEntityId,
-            invoice.invoiceMonth?.toISOString() || new Date().toISOString()
+            invoice.invoiceMonth || new Date().toISOString().slice(0, 10)
           );
           await updateInvoice(input.id, { invoiceNumber: newNumber });
         }
@@ -635,7 +639,7 @@ export const invoicesRouter = router({
               status: "draft",
               relatedInvoiceId: input.id,
               notes: `Outstanding balance from ${invoice.invoiceNumber}. Original total: ${invoice.currency} ${paymentResult.invoiceTotal}, Paid: ${invoice.currency} ${input.paidAmount}, Shortfall: ${invoice.currency} ${paymentResult.difference}`,
-              dueDate: new Date(followUpMonth.getTime() + 30 * 24 * 60 * 60 * 1000),
+              dueDate: new Date(followUpMonth.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
             });
 
             followUpInvoiceId = (followUpResult as any)?.insertId || (followUpResult as any)?.[0]?.insertId;
