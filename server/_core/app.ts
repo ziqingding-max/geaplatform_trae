@@ -215,7 +215,9 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
   // development mode uses Vite, production mode uses static files
   if (!options.skipStatic) {
     if (process.env.NODE_ENV === "development") {
-      const { setupVite } = await import("./vite-setup");
+      // Dynamic import vite-setup only in dev; use string concatenation to prevent esbuild from bundling it
+      const viteMod = "./vite-" + "setup";
+      const { setupVite } = await import(/* @vite-ignore */ viteMod);
       await setupVite(app, server);
     } else {
       serveStatic(app);
