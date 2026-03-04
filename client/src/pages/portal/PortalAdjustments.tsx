@@ -475,8 +475,8 @@ export default function PortalAdjustments() {
                     <Select value={form.adjustmentType} onValueChange={(v) => setForm((f) => ({ ...f, adjustmentType: v }))}>
                       <SelectTrigger><SelectValue placeholder={t("adjustments.form.label.type")} /></SelectTrigger>
                       <SelectContent>
-                        {adjustmentTypes.map((t) => (
-                          <SelectItem key={t} value={t}>{t("adjustments.type." + t)}</SelectItem>
+                        {adjustmentTypes.map((type) => (
+                          <SelectItem key={type} value={type}>{t("adjustments.type." + type)}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
