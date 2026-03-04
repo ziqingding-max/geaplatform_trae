@@ -7,7 +7,7 @@
 import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
 import CountrySelect from "@/components/CountrySelect";
-import DatePicker from "@/components/DatePicker";
+import { DatePicker } from "@/components/DatePicker";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import { formatDate, formatMonth, formatDateISO, formatDateTime } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
