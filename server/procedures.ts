@@ -2,6 +2,9 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure } from "./_core/trpc";
 import { hasAnyRole, isAdmin } from "../shared/roles";
 
+// Re-export protectedProcedure so routers can import from procedures.ts
+export { protectedProcedure };
+
 /**
  * Role-based procedure wrappers
  * Now supports multi-role: a user's role field can be "operations_manager,finance_manager"

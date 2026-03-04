@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { userProcedure, adminProcedure } from "../procedures";
-import { db } from "../db";
+import { getDb } from "../db";
 import { notifications, systemSettings } from "../../drizzle/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -34,6 +34,9 @@ export const notificationsRouter = router({
    * Get all notification rules configuration
    */
   getSettings: adminProcedure.query(async () => {
+    const db = getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
     const setting = await db.query.systemSettings.findFirst({
       where: eq(systemSettings.key, "notification_rules"),
     });
@@ -75,6 +78,9 @@ export const notificationsRouter = router({
       })
     )
     .mutation(async ({ input }) => {
+      const db = getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
       // Fetch existing settings
       const setting = await db.query.systemSettings.findFirst({
         where: eq(systemSettings.key, "notification_rules"),
@@ -123,24 +129,12 @@ export const notificationsRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
-      // User can see notifications targeted to:
-      // 1. Their specific User ID (admin portal)
-      // 2. Their specific Role (if they are admin)
-      
+      const db = getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
       const userId = ctx.user.id;
       const userRoles = (ctx.user.role || "").split(",");
 
-      // Build OR conditions for roles
-      // targetRole IS NULL OR targetRole IN userRoles
-      // Since SQLite doesn't support array overlap easily, we fetch all role-based notifs 
-      // where targetPortal='admin' and filter in memory or complex query.
-      // Better:
-      // WHERE targetPortal = 'admin' 
-      //   AND (targetUserId = userId OR targetRole IN (role1, role2))
-      //   AND isRead = false
-
-      // Note: This logic assumes admin portal context. Client portal has separate router.
-      
       const roleConditions = userRoles.map(role => eq(notifications.targetRole, role.trim()));
       
       return await db.query.notifications.findMany({
@@ -163,9 +157,9 @@ export const notificationsRouter = router({
   markAsRead: userProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      // Verify ownership (loosely - if you can see it, you can mark it read)
-      // In strict mode, we should check if the notif targets this user
-      
+      const db = getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
       await db
         .update(notifications)
         .set({ isRead: true, readAt: new Date() })
@@ -178,31 +172,10 @@ export const notificationsRouter = router({
    * Mark all visible notifications as read
    */
   markAllAsRead: userProcedure.mutation(async ({ ctx }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+
     const userId = ctx.user.id;
-    const userRoles = (ctx.user.role || "").split(",");
-    
-    // Complex update with join/subquery is hard in Drizzle/SQLite
-    // Simple approach: Update where targetPortal='admin' and targetUserId=userId
-    // For role-based, it's trickier because multiple users share the same role notification?
-    // Wait - if a notification is sent to a ROLE, does everyone see the SAME row?
-    // YES, based on current schema.
-    // If User A marks it read, User B will see it as read? 
-    // CRITICAL FLAW in schema for "Shared Role Notifications".
-    // If targetRole is set, it means "Broadcast to this role".
-    // Usually broadcast means "Insert 1 row per user" OR "Single row + read_receipts table".
-    // Given the current simple schema: 
-    // CHANGE STRATEGY: NotificationService should "Fan Out" (Insert multiple rows) 
-    // when sending to a role.
-    // Let's check NotificationService.ts...
-    //
-    // NotificationService.ts:
-    // resolveRecipients() finds all users.
-    // loops through recipients...
-    // db.insert(notifications).values({ targetUserId: recipient.id ... })
-    //
-    // PERFECT! The service ALREADY fans out (creates 1 row per user).
-    // So targetUserId is ALWAYS set. targetRole is just metadata.
-    // So we only need to query by targetUserId!
     
     await db
       .update(notifications)
