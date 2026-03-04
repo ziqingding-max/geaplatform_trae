@@ -346,7 +346,7 @@ export default function PortalHelpCenter() {
             placeholder={lang === "cn" ? "搜索帮助内容..." : "Search help content..."}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
+            className="pl-9 placeholder:text-muted-foreground/70"
           />
         </div>
 

@@ -50,7 +50,7 @@ import { Users, Search, ChevronLeft, ChevronRight, Trash2, Loader2 } from "lucid
 import { formatStatusLabel } from "@/lib/format";
 import { toast } from "sonner";
 
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/contexts/i18n";
 const statusColors: Record<string, string> = {
   active: "bg-green-100 text-green-800 border-green-200",
   onboarding: "bg-blue-100 text-blue-800 border-blue-200",

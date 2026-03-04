@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { portalTrpc } from "@/lib/portalTrpc";
-import { useI18n } from "@/lib/i18n";
+import { useI18n } from "@/contexts/i18n";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
