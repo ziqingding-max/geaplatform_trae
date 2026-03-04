@@ -126,24 +126,8 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
 
   const navRef = useRef<HTMLElement>(null);
 
-  useLayoutEffect(() => {
-    const savedScroll = sessionStorage.getItem("sidebar-scroll");
-    if (navRef.current && savedScroll) {
-      navRef.current.scrollTop = parseInt(savedScroll, 10);
-    }
-
-    const handleScroll = () => {
-      if (navRef.current) {
-        sessionStorage.setItem("sidebar-scroll", navRef.current.scrollTop.toString());
-      }
-    };
-
-    const navEl = navRef.current;
-    if (navEl) {
-      navEl.addEventListener("scroll", handleScroll);
-      return () => navEl.removeEventListener("scroll", handleScroll);
-    }
-  }, []);
+  // Removed scroll restoration logic that was causing unwanted jumps
+  // useLayoutEffect(() => { ... })
 
   const userInitials = user?.name
     ? user.name

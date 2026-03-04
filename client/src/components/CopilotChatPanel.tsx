@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Upload, Image, FileText, X, Settings, Download, Copy, RefreshCw } from 'lucide-react';
+import { Send, Upload, Image, FileText, X, Settings, Download, Copy, RefreshCw, Paperclip } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useCopilotChat } from '@/hooks/useCopilot';
-import { CopilotFileUpload } from './CopilotFileUpload';
 import { CopilotTypingIndicator } from './CopilotTypingIndicator';
 import { CopilotSuggestedActions } from './CopilotSuggestedActions';
 
@@ -24,6 +23,7 @@ interface CopilotChatPanelProps {
   onClose: () => void;
   className?: string;
   position?: { x: number; y: number };
+  embedded?: boolean;
 }
 
 // XSS防护函数
@@ -48,13 +48,14 @@ function SafeMessageContent({ content }: { content: string }) {
   );
 }
 
-export function CopilotChatPanel({ onClose, className, position }: CopilotChatPanelProps) {
+export function CopilotChatPanel({ onClose, className, position, embedded = false }: CopilotChatPanelProps) {
   const { messages, isLoading, error, sendMessage, clearHistory } = useCopilotChat();
   const [inputValue, setInputValue] = useState('');
   const [attachments, setAttachments] = useState<Array<{ type: 'image' | 'file'; url: string; name: string; mimeType?: string }>>([]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 滚动到底部
   const scrollToBottom = useCallback(() => {
@@ -157,12 +158,19 @@ export function CopilotChatPanel({ onClose, className, position }: CopilotChatPa
   };
 
   // 处理文件上传
-  const handleFileUpload = (files: File[]) => {
-    const validFiles = files.filter(file => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const validFiles: Array<{ type: 'image' | 'file'; url: string; name: string; mimeType?: string }> = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      
       // 文件大小限制：10MB
       if (file.size > 10 * 1024 * 1024) {
         alert(`文件 ${file.name} 超过10MB限制，已跳过`);
-        return false;
+        continue;
       }
       
       // 文件类型验证
@@ -172,67 +180,77 @@ export function CopilotChatPanel({ onClose, className, position }: CopilotChatPa
         'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       ];
       
-      if (!allowedTypes.includes(file.type)) {
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
+      const isAllowed = allowedTypes.includes(file.type) || 
+        ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'txt', 'csv', 'xls', 'xlsx'].includes(fileExt || '');
+      
+      if (!isAllowed) {
         alert(`文件 ${file.name} 类型不支持，已跳过`);
-        return false;
+        continue;
       }
       
-      return true;
-    });
+      validFiles.push({
+        type: file.type.startsWith('image/') ? 'image' : 'file',
+        url: URL.createObjectURL(file),
+        name: file.name,
+        mimeType: file.type
+      });
+    }
 
-    const newAttachments = validFiles.map(file => ({
-      type: file.type.startsWith('image/') ? 'image' as const : 'file' as const,
-      url: URL.createObjectURL(file),
-      name: file.name,
-      mimeType: file.type
-    }));
-
-    setAttachments(prev => [...prev, ...newAttachments]);
+    setAttachments(prev => [...prev, ...validFiles]);
+    
+    // 重置 input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   return (
     <div 
       className={cn(
-        "bg-white rounded-lg shadow-xl border w-96 h-[600px] flex flex-col",
+        embedded 
+          ? "flex flex-col h-full" 
+          : "bg-white rounded-lg shadow-xl border w-96 h-[600px] flex flex-col",
         className
       )}
-      style={position ? { position: 'absolute', left: position.x, top: position.y } : {}}
+      style={position && !embedded ? { position: 'absolute', left: position.x, top: position.y } : {}}
     >
-      {/* 头部 */}
-      <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
-            <span className="text-white text-sm font-bold">AI</span>
+      {!embedded && (
+        <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full flex items-center justify-center">
+              <span className="text-white text-sm font-bold">AI</span>
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">欢迎使用 Copilot 助手</h3>
+              <p className="text-xs text-gray-600">智能企业助手</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-semibold text-gray-900">欢迎使用 Copilot 助手</h3>
-            <p className="text-xs text-gray-600">智能企业助手</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportConversation}
+              className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+              title="导出对话"
+            >
+              <Download className="w-4 h-4 text-gray-600" />
+            </button>
+            <button
+              onClick={handleClearHistory}
+              className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+              title="清空历史"
+            >
+              <RefreshCw className="w-4 h-4 text-gray-600" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+              title="关闭"
+            >
+              <X className="w-4 h-4 text-gray-600" />
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleExportConversation}
-            className="p-2 hover:bg-white/50 rounded-lg transition-colors"
-            title="导出对话"
-          >
-            <Download className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            onClick={handleClearHistory}
-            className="p-2 hover:bg-white/50 rounded-lg transition-colors"
-            title="清空历史"
-          >
-            <RefreshCw className="w-4 h-4 text-gray-600" />
-          </button>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/50 rounded-lg transition-colors"
-            title="关闭"
-          >
-            <X className="w-4 h-4 text-gray-600" />
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* 消息区域 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -329,7 +347,22 @@ export function CopilotChatPanel({ onClose, className, position }: CopilotChatPa
         )}
         
         <div className="flex items-end gap-2">
-          <CopilotFileUpload onFileUpload={handleFileUpload} />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,.pdf,.txt,.csv,.xls,.xlsx,.doc,.docx"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500"
+            title="上传文件"
+            disabled={isLoading}
+          >
+            <Paperclip className="w-5 h-5" />
+          </button>
           <textarea
             ref={inputRef}
             value={inputValue}

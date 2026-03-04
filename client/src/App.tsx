@@ -35,6 +35,7 @@ import ProfitLossReport from "./pages/ProfitLossReport";
 // import CostAllocation from "./pages/CostAllocation"; // Removed: merged into VendorBills detail
 import SalesCRM from "./pages/SalesCRM";
 import Quotations from "./pages/Quotations";
+import QuotationCreatePage from "./pages/QuotationCreatePage";
 import AdminLogin from "./pages/AdminLogin";
 import AdminInvite from "./pages/AdminInvite";
 import CountryGuideList from "@/pages/admin/CountryGuideList";
@@ -48,7 +49,7 @@ import superjson from "superjson";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { Loader2 } from "lucide-react";
 import { isPortalDomain, getPortalBasePath } from "@/lib/portalBasePath";
-import { CopilotSmartAssistant } from "@/components/CopilotSmartAssistant";
+import { CopilotDrawer } from "@/components/CopilotDrawer";
 
 // Worker Portal pages
 const WorkerLogin = lazy(() => import("./pages/worker/WorkerLogin"));
@@ -197,6 +198,7 @@ function AdminRouter() {
       <Route path="/" component={Dashboard} />
       <Route path="/sales-crm" component={SalesCRM} />
       <Route path="/quotations" component={Quotations} />
+      <Route path="/quotations/new" component={QuotationCreatePage} />
       <Route path="/customers" component={Customers} />
       {/* <Route path="/customers/:id" component={CustomerDetail} /> */}
       <Route path="/people" component={Employees} />
@@ -278,7 +280,7 @@ function App() {
         <TooltipProvider>
           <Toaster position="top-right" richColors closeButton expand visibleToasts={8} gap={8} />
           <Router />
-          <CopilotSmartAssistant />
+          <CopilotDrawer />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
