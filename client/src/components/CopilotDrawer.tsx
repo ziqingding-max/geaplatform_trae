@@ -8,8 +8,7 @@ import {
   Sheet, 
   SheetContent, 
   SheetHeader, 
-  SheetTitle, 
-  SheetTrigger 
+  SheetTitle
 } from '@/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -85,29 +84,28 @@ export function CopilotDrawer() {
   return (
     <>
       {/* 触发按钮 - 固定在右下角 */}
+      <button
+        onClick={() => setIsOpen(true)}
+        className={cn(
+          "fixed bottom-8 right-8 w-14 h-14 rounded-full bg-gradient-to-r from-blue-500 to-purple-600",
+          "shadow-lg cursor-pointer transition-all duration-300 hover:scale-110",
+          "flex items-center justify-center text-white z-[100]"
+        )}
+      >
+        <Bot className="w-6 h-6" />
+        
+        {getNotificationCount() > 0 && (
+          <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
+            {getNotificationCount() > 9 ? '9+' : getNotificationCount()}
+          </div>
+        )}
+
+        {hasImportantNotifications() && (
+          <div className="absolute inset-0 rounded-full bg-red-500 opacity-30 animate-ping" />
+        )}
+      </button>
+
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetTrigger asChild>
-          <button
-            className={cn(
-              "fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-r from-blue-500 to-purple-600",
-              "shadow-lg cursor-pointer transition-all duration-300 hover:scale-110",
-              "flex items-center justify-center text-white relative z-40"
-            )}
-          >
-            <Bot className="w-6 h-6" />
-            
-            {getNotificationCount() > 0 && (
-              <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                {getNotificationCount() > 9 ? '9+' : getNotificationCount()}
-              </div>
-            )}
-
-            {hasImportantNotifications() && (
-              <div className="absolute inset-0 rounded-full bg-red-500 opacity-30 animate-ping" />
-            )}
-          </button>
-        </SheetTrigger>
-
         <SheetContent side="right" className="w-full sm:max-w-md p-0">
           <SheetHeader className="p-4 border-b">
             <div className="flex items-center justify-between">

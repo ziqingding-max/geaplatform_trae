@@ -35,6 +35,7 @@ import ProfitLossReport from "./pages/ProfitLossReport";
 // import CostAllocation from "./pages/CostAllocation"; // Removed: merged into VendorBills detail
 import SalesCRM from "./pages/SalesCRM";
 import Quotations from "./pages/Quotations";
+import QuotationCreatePage from "./pages/QuotationCreatePage";
 import AdminLogin from "./pages/AdminLogin";
 import AdminInvite from "./pages/AdminInvite";
 import CountryGuideList from "@/pages/admin/CountryGuideList";
@@ -197,6 +198,7 @@ function AdminRouter() {
       <Route path="/" component={Dashboard} />
       <Route path="/sales-crm" component={SalesCRM} />
       <Route path="/quotations" component={Quotations} />
+      <Route path="/quotations/new" component={QuotationCreatePage} />
       <Route path="/customers" component={Customers} />
       {/* <Route path="/customers/:id" component={CustomerDetail} /> */}
       <Route path="/people" component={Employees} />

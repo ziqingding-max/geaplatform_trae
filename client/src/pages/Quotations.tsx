@@ -11,11 +11,9 @@ import { Plus, Download, Eye, FileText, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/format";
 import { Link } from "wouter";
-import QuotationCreateDialog from "./QuotationCreateDialog";
 
 export default function Quotations() {
   const { t } = useI18n();
-  const [createOpen, setCreateOpen] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 20;
 
@@ -38,9 +36,11 @@ export default function Quotations() {
             <h1 className="text-2xl font-bold tracking-tight">{t("quotations.title")}</h1>
             <p className="text-sm text-muted-foreground mt-1">{t("quotations.subtitle")}</p>
           </div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />{t("quotations.createButton")}
-          </Button>
+          <Link href="/quotations/new">
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />{t("quotations.createButton")}
+            </Button>
+          </Link>
         </div>
 
         <Card>
@@ -96,10 +96,6 @@ export default function Quotations() {
             )}
           </CardContent>
         </Card>
-
-        {createOpen && (
-            <QuotationCreateDialog open={createOpen} onOpenChange={setCreateOpen} onSuccess={refetch} />
-        )}
       </div>
     </Layout>
   );
