@@ -518,7 +518,16 @@ function CustomerDetail({ id }: { id: number }) {
   const portalAccessMutation = trpc.customers.generatePortalToken.useMutation({
     onSuccess: (data) => {
       // Open portal in new tab with impersonation token
-      const url = `${window.location.origin}/api/portal-impersonate?token=${data.token}`;
+      // Use app.geahr.com for portal access, as admin is on admin.geahr.com
+      const hostname = window.location.hostname;
+      const isProduction = hostname.includes('geahr.com') || hostname.includes('manus.space');
+      let portalBase = window.location.origin;
+      
+      if (isProduction && hostname.includes("admin")) {
+        portalBase = window.location.origin.replace("admin", "app");
+      }
+      
+      const url = `${portalBase}/api/portal-impersonate?token=${data.token}`;
       window.open(url, "_blank");
       toast.success(`Accessing portal as ${data.contactName} (${data.contactEmail})`);
     },
@@ -639,6 +648,7 @@ function CustomerDetail({ id }: { id: number }) {
     { key: "pricing", label: t("customers.tabs.pricingWithCount", { count: pricing?.length ?? 0 }) },
     { key: "contacts", label: t("customers.tabs.contactsWithCount", { count: contacts?.length ?? 0 }) },
     { key: "contracts", label: t("customers.tabs.contractsWithCount", { count: contracts?.length ?? 0 }) },
+    { key: "wallet", label: t("customers.tabs.wallet") },
     { key: "leavePolicy", label: t("customers.tabs.leavePolicyWithCount", { count: leavePolicies?.length ?? 0 }) },
   ] as const;
 

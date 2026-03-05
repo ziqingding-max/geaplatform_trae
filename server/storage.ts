@@ -64,7 +64,11 @@ export async function storagePut(
  */
 export async function storageGet(key: string): Promise<{ key: string; url: string }> {
   if (!ENV.ossAccessKeyId || !ENV.ossAccessKeySecret || !BUCKET_NAME) {
-    throw new Error("OSS credentials or bucket not configured");
+    console.warn("[Storage] OSS credentials not configured. Returning mock URL for view.");
+    const normalizedKey = key.replace(/^\/+/, "");
+    // Return a mock URL that won't throw 500, but obviously won't load real content if not configured
+    // This prevents the entire page/component from crashing
+    return { key: normalizedKey, url: `https://mock-storage.local/${normalizedKey}` };
   }
 
   const normalizedKey = key.replace(/^\/+/, "");

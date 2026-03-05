@@ -4,6 +4,22 @@
 
 ---
 
+## [3.7.0] — 2026-03-05
+
+### Added
+
+- **Bank Details Form (Standardization)**: 新增 `BankDetailsForm` 通用组件，统一员工和供应商的银行信息录入，支持 JSON 动态字段。
+- **Frozen Wallet UI (Security Deposit)**: Customer 钱包页面新增 "Security Deposit" 分栏，支持查看押金余额、手动调整（收取/退还）及释放押金至运营余额。
+- **Credit Note Creation UI**: Invoice 页面新增 "Create Credit Note" 按钮，支持针对 Paid 发票创建全额或部分退款的贷记单。
+- **Pricing Traceability**: Customer Pricing 列表新增 "Source" 列，显示关联的 Quotation 编号并支持跳转，实现价格溯源。
+- **Backend API (Wallet)**: `walletRouter` 新增 `getFrozen`, `manualFrozenAdjustment`, `releaseFrozen` 接口。
+
+### Fixed
+
+- **Component Import Fix**: 修正 `Employees.tsx` 和 `Vendors.tsx` 中 `BankDetailsForm` 的引用方式（默认导入 -> 命名导入），解决生产构建失败问题。
+
+---
+
 ## [3.6.0] — 2026-03-05
 
 ### Changed

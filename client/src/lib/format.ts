@@ -69,7 +69,8 @@ export function formatDateTime(value: string | number | Date | null | undefined)
   }
 
   if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("en-GB", {
+  // Use toLocaleString to ensure time is included
+  return d.toLocaleString("en-GB", {
     day: "2-digit", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit", hour12: false,
   });

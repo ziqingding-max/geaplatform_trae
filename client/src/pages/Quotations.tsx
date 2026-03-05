@@ -17,7 +17,7 @@ export default function Quotations() {
   const [page, setPage] = useState(1);
   const limit = 20;
 
-  const { data, isLoading, refetch } = trpc.quotations.list.useQuery({
+  const { data, isLoading, isError, error, refetch } = trpc.quotations.list.useQuery({
     limit,
     offset: (page - 1) * limit,
   });
@@ -48,6 +48,11 @@ export default function Quotations() {
             {isLoading ? (
               <div className="p-12 flex justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : isError ? (
+              <div className="p-12 text-center text-destructive">
+                <p>Error loading quotations: {error.message}</p>
+                <Button variant="outline" className="mt-4" onClick={() => refetch()}>Retry</Button>
               </div>
             ) : !data || data.items.length === 0 ? (
               <div className="p-12 text-center text-muted-foreground">
