@@ -40,17 +40,16 @@ export const vendorBillsRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await listVendorBills(
-        {
-          vendorId: input.vendorId,
-          status: input.status,
-          category: input.category,
-          billMonth: input.billMonth,
-          search: input.search,
-        },
-        input.limit,
-        input.offset
-      );
+      const page = Math.floor(input.offset / input.limit) + 1;
+      return await listVendorBills({
+        page,
+        pageSize: input.limit,
+        vendorId: input.vendorId,
+        status: input.status,
+        category: input.category,
+        billMonth: input.billMonth,
+        search: input.search,
+      });
     }),
 
   get: userProcedure

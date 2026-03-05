@@ -14,10 +14,12 @@ export const auditLogsRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await listAuditLogs(
-        { entityType: input.entityType, userId: input.userId },
-        input.limit,
-        input.offset
-      );
+      const page = Math.floor(input.offset / input.limit) + 1;
+      return await listAuditLogs({
+        page,
+        pageSize: input.limit,
+        entityType: input.entityType,
+        userId: input.userId,
+      });
     }),
 });

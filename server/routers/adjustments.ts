@@ -29,17 +29,16 @@ export const adjustmentsRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await listAdjustments(
-        {
-          customerId: input.customerId,
-          employeeId: input.employeeId,
-          status: input.status,
-          adjustmentType: input.adjustmentType,
-          effectiveMonth: input.effectiveMonth,
-        },
-        input.limit,
-        input.offset
-      );
+      const page = Math.floor(input.offset / input.limit) + 1;
+      return await listAdjustments({
+        page,
+        pageSize: input.limit,
+        customerId: input.customerId,
+        employeeId: input.employeeId,
+        status: input.status,
+        adjustmentType: input.adjustmentType,
+        effectiveMonth: input.effectiveMonth,
+      });
     }),
 
   get: userProcedure

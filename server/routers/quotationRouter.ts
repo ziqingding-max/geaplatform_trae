@@ -6,6 +6,7 @@ import { storageGet } from "../storage";
 import { getDb } from "../db";
 import { quotations } from "../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 
 export const quotationRouter = router({
   create: crmProcedure
@@ -46,7 +47,7 @@ export const quotationRouter = router({
     )
     .query(async ({ input }) => {
       const db = getDb();
-      if (!db) throw new Error("Database connection failed");
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
 
       const items = await db.query.quotations.findMany({
         orderBy: (quotations, { desc }) => [desc(quotations.createdAt)],
@@ -69,7 +70,7 @@ export const quotationRouter = router({
     .input(z.number())
     .query(async ({ input }) => {
       const db = getDb();
-      if (!db) throw new Error("Database connection failed");
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
 
       const quotation = await db.query.quotations.findFirst({
         where: eq(quotations.id, input),
@@ -81,13 +82,13 @@ export const quotationRouter = router({
     .input(z.number())
     .mutation(async ({ input }) => {
       const db = getDb();
-      if (!db) throw new Error("Database connection failed");
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
 
       const quotation = await db.query.quotations.findFirst({
         where: eq(quotations.id, input),
       });
 
-      if (!quotation) throw new Error("Quotation not found");
+      if (!quotation) throw new TRPCError({ code: "NOT_FOUND", message: "Quotation not found" });
 
       if (!quotation.pdfKey) {
         // Try to regenerate
@@ -100,7 +101,7 @@ export const quotationRouter = router({
            }
         } catch (err) {
             console.error("Failed to regenerate PDF:", err);
-            throw new Error("PDF generation failed");
+            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "PDF generation failed" });
         }
       }
 
@@ -109,6 +110,6 @@ export const quotationRouter = router({
         return { url };
       }
       
-      throw new Error("PDF not available");
+      throw new TRPCError({ code: "NOT_FOUND", message: "PDF not available" });
     }),
 });

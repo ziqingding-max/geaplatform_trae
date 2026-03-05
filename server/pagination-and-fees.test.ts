@@ -31,12 +31,12 @@ afterAll(async () => {
 describe("Customer list pagination", () => {
   it("should return paginated results with limit and offset", async () => {
     // Use existing data - just test that pagination params work
-    const page1 = await listCustomers({}, 5, 0);
+    const page1 = await listCustomers({ pageSize: 5, page: 1 });
     expect(page1.data.length).toBeLessThanOrEqual(5);
     expect(page1.total).toBeGreaterThan(0);
 
     if (page1.total > 5) {
-      const page2 = await listCustomers({}, 5, 5);
+      const page2 = await listCustomers({ pageSize: 5, page: 2 });
       expect(page2.data.length).toBeLessThanOrEqual(5);
       // Total may vary slightly between queries due to concurrent test data changes
       expect(Math.abs(page2.total - page1.total)).toBeLessThanOrEqual(5);
@@ -46,8 +46,8 @@ describe("Customer list pagination", () => {
   });
 
   it("should return correct total regardless of pagination", async () => {
-    const allResults = await listCustomers({}, 1000, 0);
-    const pagedResults = await listCustomers({}, 3, 0);
+    const allResults = await listCustomers({ pageSize: 1000 });
+    const pagedResults = await listCustomers({ pageSize: 3 });
     // Total may vary slightly between queries due to concurrent test data changes
     expect(Math.abs(pagedResults.total - allResults.total)).toBeLessThanOrEqual(5);
   });
@@ -55,12 +55,12 @@ describe("Customer list pagination", () => {
 
 describe("Employee list pagination", () => {
   it("should return paginated results with limit and offset", async () => {
-    const page1 = await listEmployees({}, 5, 0);
+    const page1 = await listEmployees({ pageSize: 5, page: 1 });
     expect(page1.data.length).toBeLessThanOrEqual(5);
     expect(page1.total).toBeGreaterThan(0);
 
     if (page1.total > 5) {
-      const page2 = await listEmployees({}, 5, 5);
+      const page2 = await listEmployees({ pageSize: 5, page: 2 });
       expect(page2.data.length).toBeLessThanOrEqual(5);
       // Total may vary slightly between queries due to concurrent test data changes
       expect(Math.abs(page2.total - page1.total)).toBeLessThanOrEqual(5);

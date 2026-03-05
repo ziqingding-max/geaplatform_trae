@@ -4,6 +4,7 @@ import { calculationService } from "../services/calculationService";
 import { getDb } from "../db";
 import { countrySocialInsuranceItems } from "../../drizzle/schema";
 import { eq, and, isNotNull } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 
 export const calculationRouter = router({
   calculateContributions: protectedProcedure
@@ -32,7 +33,7 @@ export const calculationRouter = router({
     )
     .query(async ({ input }) => {
       const db = getDb();
-      if (!db) throw new Error("Database connection failed");
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
 
       return await db
         .select()
@@ -56,7 +57,7 @@ export const calculationRouter = router({
     )
     .query(async ({ input }) => {
       const db = getDb();
-      if (!db) throw new Error("Database connection failed");
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
 
       // Get distinct regions
       const result = await db

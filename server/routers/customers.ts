@@ -39,11 +39,13 @@ export const customersRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await listCustomers(
-        { status: input.status, search: input.search },
-        input.limit,
-        input.offset
-      );
+      const page = Math.floor(input.offset / input.limit) + 1;
+      return await listCustomers({
+        page,
+        pageSize: input.limit,
+        search: input.search,
+        status: input.status,
+      });
     }),
 
   get: userProcedure
@@ -86,7 +88,7 @@ export const customersRouter = router({
 
       // Check registrationNumber uniqueness
       if (input.registrationNumber) {
-        const allCustomers = await listCustomers({ search: input.registrationNumber }, 100, 0);
+        const allCustomers = await listCustomers({ search: input.registrationNumber, pageSize: 100 });
         const regDuplicate = allCustomers.data.find(
           (c: any) => c.registrationNumber === input.registrationNumber
         );
@@ -224,8 +226,8 @@ export const customersRouter = router({
           fixedPrice: input.fixedPrice || undefined,
           visaOneTimeFee: input.visaOneTimeFee || undefined,
           currency: input.currency,
-          effectiveFrom: new Date(input.effectiveFrom + "T00:00:00Z"),
-          effectiveTo: input.effectiveTo ? new Date(input.effectiveTo + "T00:00:00Z") : undefined,
+          effectiveFrom: input.effectiveFrom,
+          effectiveTo: input.effectiveTo,
           isActive: true,
         });
         await logAuditAction({
@@ -269,8 +271,8 @@ export const customersRouter = router({
           fixedPrice: input.fixedPrice,
           visaOneTimeFee: input.visaOneTimeFee,
           currency: input.currency,
-          effectiveFrom: new Date(input.effectiveFrom + "T00:00:00Z"),
-          effectiveTo: input.effectiveTo ? new Date(input.effectiveTo + "T00:00:00Z") : undefined,
+          effectiveFrom: input.effectiveFrom,
+          effectiveTo: input.effectiveTo,
           isActive: true,
         }));
         await batchCreateCustomerPricing(items);
@@ -626,9 +628,9 @@ export const customersRouter = router({
           contractType: input.contractType || undefined,
           fileUrl: url,
           fileKey: fileKey,
-          signedDate: input.signedDate ? new Date(input.signedDate + "T00:00:00Z") : undefined,
-          effectiveDate: input.effectiveDate ? new Date(input.effectiveDate + "T00:00:00Z") : undefined,
-          expiryDate: input.expiryDate ? new Date(input.expiryDate + "T00:00:00Z") : undefined,
+          signedDate: input.signedDate,
+          effectiveDate: input.effectiveDate,
+          expiryDate: input.expiryDate,
           status: "signed",
         });
 
@@ -658,9 +660,7 @@ export const customersRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         const updateData: any = { ...input.data };
-        if (input.data.signedDate) updateData.signedDate = new Date(input.data.signedDate + "T00:00:00Z");
-        if (input.data.effectiveDate) updateData.effectiveDate = new Date(input.data.effectiveDate + "T00:00:00Z");
-        if (input.data.expiryDate) updateData.expiryDate = new Date(input.data.expiryDate + "T00:00:00Z");
+        // Dates are already YYYY-MM-DD strings, pass directly
         await updateCustomerContract(input.id, updateData);
         await logAuditAction({
           userId: ctx.user.id, userName: ctx.user.name || null,

@@ -27,20 +27,19 @@ export const reimbursementsRouter = router({
       })
     )
     .query(async ({ input }) => {
-      const items = await listReimbursements(
-        {
-          customerId: input.customerId,
-          employeeId: input.employeeId,
-          status: input.status,
-          category: input.category,
-          effectiveMonth: input.effectiveMonth,
-        },
-        input.limit,
-        input.offset
-      );
+      const page = Math.floor(input.offset / input.limit) + 1;
+      const { data: items, total } = await listReimbursements({
+        page,
+        pageSize: input.limit,
+        customerId: input.customerId,
+        employeeId: input.employeeId,
+        status: input.status,
+        category: input.category,
+        effectiveMonth: input.effectiveMonth,
+      });
 
       // Map to signed URLs for viewing receipts
-      return await Promise.all(items.map(async (item) => {
+      const processedItems = await Promise.all(items.map(async (item) => {
         if (item.receiptFileKey) {
           try {
             const { url } = await storageGet(item.receiptFileKey);
@@ -51,6 +50,8 @@ export const reimbursementsRouter = router({
         }
         return item;
       }));
+      
+      return { data: processedItems, total };
     }),
 
   get: userProcedure
@@ -95,7 +96,7 @@ export const reimbursementsRouter = router({
         description: input.description,
         amount: input.amount,
         currency,
-        effectiveMonth: new Date(normalizedMonth),
+        effectiveMonth: normalizedMonth,
         receiptFileUrl: input.receiptFileUrl,
         receiptFileKey: input.receiptFileKey,
         status: "submitted",

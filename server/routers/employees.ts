@@ -52,17 +52,16 @@ export const employeesRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await listEmployees(
-        {
-          customerId: input.customerId,
-          status: input.status,
-          country: input.country,
-          serviceType: input.serviceType,
-          search: input.search,
-        },
-        input.limit,
-        input.offset
-      );
+      const page = Math.floor(input.offset / input.limit) + 1;
+      return await listEmployees({
+        page,
+        pageSize: input.limit,
+        customerId: input.customerId,
+        status: input.status,
+        country: input.country,
+        serviceType: input.serviceType,
+        search: input.search,
+      });
     }),
 
   get: userProcedure
@@ -104,11 +103,11 @@ export const employeesRouter = router({
     .mutation(async ({ input, ctx }) => {
       // === Email uniqueness check (same customer) ===
       const normalizedEmail = input.email.toLowerCase().trim();
-      const existingByEmail = await listEmployees(
-        { customerId: input.customerId, search: normalizedEmail },
-        100,
-        0
-      );
+      const existingByEmail = await listEmployees({
+        customerId: input.customerId,
+        search: normalizedEmail,
+        pageSize: 100
+      });
       const emailDuplicate = existingByEmail.data.find(
         (e: any) => e.email?.toLowerCase() === normalizedEmail && e.status !== 'terminated'
       );
@@ -166,9 +165,9 @@ export const employeesRouter = router({
         serviceType,
         salaryCurrency,
         requiresVisa,
-        startDate: new Date(input.startDate),
-        endDate: input.endDate ? new Date(input.endDate) : undefined,
-        dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : undefined,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        dateOfBirth: input.dateOfBirth,
         status: "pending_review",
         visaStatus: requiresVisa ? "pending_application" : "not_required",
       });
@@ -253,25 +252,17 @@ export const employeesRouter = router({
       }
 
       const updateData: any = { ...input.data };
-      // Handle date fields: convert valid strings to Date, remove empty strings to avoid SQL errors
-      if (input.data.startDate) {
-        updateData.startDate = new Date(input.data.startDate);
-      } else if (input.data.startDate === "") {
+      // Handle date fields: keep as strings (YYYY-MM-DD), remove empty strings to avoid SQL errors
+      if (input.data.startDate === "") {
         delete updateData.startDate;
       }
-      if (input.data.endDate) {
-        updateData.endDate = new Date(input.data.endDate);
-      } else if (input.data.endDate === "") {
+      if (input.data.endDate === "") {
         delete updateData.endDate;
       }
-      if (input.data.dateOfBirth) {
-        updateData.dateOfBirth = new Date(input.data.dateOfBirth);
-      } else if (input.data.dateOfBirth === "") {
+      if (input.data.dateOfBirth === "") {
         delete updateData.dateOfBirth;
       }
-      if (input.data.visaExpiryDate) {
-        updateData.visaExpiryDate = new Date(input.data.visaExpiryDate);
-      } else if (input.data.visaExpiryDate === "") {
+      if (input.data.visaExpiryDate === "") {
         delete updateData.visaExpiryDate;
       }
 
@@ -514,7 +505,13 @@ export const employeesRouter = router({
   adjustmentHistory: userProcedure
     .input(z.object({ employeeId: z.number() }))
     .query(async ({ input }) => {
-      return await listAdjustments({ employeeId: input.employeeId }, 100, 0);
+      // Note: listAdjustments needs refactoring in financeService too
+      // Assuming we will fix financeService next, we'll update this call
+      // But for now, let's wait until we fix financeService.
+      // Wait, I should update it now assuming I will fix financeService.
+      // The current code is: return await listAdjustments({ employeeId: input.employeeId }, 100, 0);
+      // I'll change it to object params.
+      return await listAdjustments({ employeeId: input.employeeId, pageSize: 100 });
     }),
 
   // Initialize leave balances for employee based on country leave types

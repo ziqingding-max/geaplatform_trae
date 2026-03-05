@@ -28,7 +28,11 @@ export const userManagementRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await listUsers(input.limit, input.offset);
+      const page = Math.floor(input.offset / input.limit) + 1;
+      return await listUsers({
+        page,
+        pageSize: input.limit,
+      });
     }),
 
   get: adminProcedure

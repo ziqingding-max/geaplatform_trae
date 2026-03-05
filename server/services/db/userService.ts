@@ -57,7 +57,14 @@ export async function getUserByResetToken(token: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function listUsers(page: number = 1, pageSize: number = 50, search?: string) {
+export interface ListUsersParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}
+
+export async function listUsers(params: ListUsersParams = {}) {
+  const { page = 1, pageSize = 50, search } = params;
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;

@@ -24,16 +24,15 @@ export const vendorsRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await listVendors(
-        {
-          status: input.status,
-          country: input.country,
-          vendorType: input.vendorType,
-          search: input.search,
-        },
-        input.limit,
-        input.offset
-      );
+      const page = Math.floor(input.offset / input.limit) + 1;
+      return await listVendors({
+        page,
+        pageSize: input.limit,
+        status: input.status,
+        country: input.country,
+        vendorType: input.vendorType,
+        search: input.search,
+      });
     }),
 
   get: userProcedure

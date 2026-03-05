@@ -14,7 +14,11 @@ export const exchangeRatesRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await listAllExchangeRates(input.limit, input.offset);
+      const page = Math.floor(input.offset / input.limit) + 1;
+      return await listAllExchangeRates({
+        page,
+        pageSize: input.limit,
+      });
     }),
 
   /** Get the current global markup percentage */

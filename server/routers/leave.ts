@@ -157,11 +157,14 @@ export const leaveRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await listLeaveRecords(
-        { employeeId: input.employeeId, status: input.status, month: input.month },
-        input.limit,
-        input.offset
-      );
+      const page = Math.floor(input.offset / input.limit) + 1;
+      return await listLeaveRecords({
+        page,
+        pageSize: input.limit,
+        employeeId: input.employeeId,
+        status: input.status,
+        month: input.month,
+      });
     }),
 
   get: userProcedure
@@ -228,8 +231,8 @@ export const leaveRouter = router({
         const result = await createLeaveRecord({
           employeeId: input.employeeId,
           leaveTypeId: input.leaveTypeId,
-          startDate: new Date(split.startDate),
-          endDate: new Date(split.endDate),
+          startDate: split.startDate,
+          endDate: split.endDate,
           days: String(split.days),
           reason: crossMonth
             ? `${input.reason || ""}${input.reason ? " | " : ""}[Split ${split.payrollMonth}: ${split.startDate} to ${split.endDate}]`.trim()
@@ -345,9 +348,8 @@ export const leaveRouter = router({
 
       // Build update data (no deduction fields)
       const updateData: any = { ...input.data };
-      if (input.data.startDate) updateData.startDate = new Date(input.data.startDate);
-      if (input.data.endDate) updateData.endDate = new Date(input.data.endDate);
-
+      // Dates are already validated strings (YYYY-MM-DD), pass directly
+      
       await updateLeaveRecord(input.id, updateData);
 
       await logAuditAction({

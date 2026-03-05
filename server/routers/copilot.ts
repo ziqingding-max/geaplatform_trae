@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { desc, eq, gte, inArray } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 import { 
   protectedProcedure, 
   adminProcedure, 
@@ -164,7 +166,7 @@ async function recordUsage(userId: number, usageType: string, cost: number): Pro
     }
   } catch (error) {
     console.error("[CopilotRouter] Failed to record usage:", error);
-    throw new Error("记录使用统计失败");
+    throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "记录使用统计失败" });
   }
 }
 
@@ -216,7 +218,7 @@ export const copilotRouter = router({
         return configs[0];
       } catch (error) {
         console.error("[CopilotRouter] Failed to get user config:", error);
-        throw new Error("获取用户配置失败");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "获取用户配置失败" });
       }
     }),
 
@@ -268,7 +270,7 @@ export const copilotRouter = router({
         return updated;
       } catch (error) {
         console.error("[CopilotRouter] Failed to update user config:", error);
-        throw new Error("更新用户配置失败");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "更新用户配置失败" });
       }
     }),
 
@@ -284,7 +286,7 @@ export const copilotRouter = router({
         if (input.attachments && input.attachments.length > 0) {
           for (const attachment of input.attachments) {
             if (!validateFileType(attachment.mimeType || '', 'general')) {
-              throw new Error(`不支持的文件类型: ${attachment.mimeType}`);
+              throw new TRPCError({ code: "BAD_REQUEST", message: `不支持的文件类型: ${attachment.mimeType}` });
             }
           }
         }
@@ -303,10 +305,10 @@ export const copilotRouter = router({
         return response;
       } catch (error) {
         console.error("[CopilotRouter] Failed to process message:", error);
-        if (error instanceof Error && error.message.includes('不支持的文件类型')) {
+        if (error instanceof TRPCError) {
           throw error;
         }
-        throw new Error("处理消息失败，请稍后重试");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "处理消息失败，请稍后重试" });
       }
     }),
 
@@ -349,7 +351,7 @@ export const copilotRouter = router({
         }));
       } catch (error) {
         console.error("[CopilotRouter] Failed to get conversation history:", error);
-        throw new Error("获取对话历史失败");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "获取对话历史失败" });
       }
     }),
 
@@ -387,7 +389,7 @@ export const copilotRouter = router({
         return { success: true };
       } catch (error) {
         console.error("[CopilotRouter] Failed to clear conversation history:", error);
-        throw new Error("清空对话历史失败");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "清空对话历史失败" });
       }
     }),
 
@@ -425,7 +427,7 @@ export const copilotRouter = router({
         return predictions.filter(p => !disabledTypes.includes(p.predictionType));
       } catch (error) {
         console.error("[CopilotRouter] Failed to get predictions:", error);
-        throw new Error("获取预测失败");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "获取预测失败" });
       }
     }),
 
@@ -451,7 +453,7 @@ export const copilotRouter = router({
         return { success: true };
       } catch (error) {
         console.error("[CopilotRouter] Failed to dismiss prediction:", error);
-        throw new Error("忽略预测失败");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "忽略预测失败" });
       }
     }),
 
@@ -492,7 +494,7 @@ export const copilotRouter = router({
         }));
       } catch (error) {
         console.error("[CopilotRouter] Failed to get shortcuts:", error);
-        throw new Error("获取快捷操作失败");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "获取快捷操作失败" });
       }
     }),
 
@@ -523,7 +525,7 @@ export const copilotRouter = router({
         return shortcut;
       } catch (error) {
         console.error("[CopilotRouter] Failed to create shortcut:", error);
-        throw new Error("创建快捷操作失败");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "创建快捷操作失败" });
       }
     }),
 
@@ -549,7 +551,7 @@ export const copilotRouter = router({
         return { success: true };
       } catch (error) {
         console.error("[CopilotRouter] Failed to update shortcut usage:", error);
-        throw new Error("更新快捷操作使用统计失败");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "更新快捷操作使用统计失败" });
       }
     }),
 
@@ -562,7 +564,7 @@ export const copilotRouter = router({
         
         // 验证文件类型
         if (!validateFileType(input.mimeType, input.analysisType)) {
-          throw new Error(`不支持的文件类型: ${input.mimeType} for analysis type: ${input.analysisType}`);
+          throw new TRPCError({ code: "BAD_REQUEST", message: `不支持的文件类型: ${input.mimeType} for analysis type: ${input.analysisType}` });
         }
         
         // 创建文件分析记录
@@ -592,10 +594,10 @@ export const copilotRouter = router({
         };
       } catch (error) {
         console.error("[CopilotRouter] Failed to create file analysis:", error);
-        if (error instanceof Error && error.message.includes('不支持的文件类型')) {
+        if (error instanceof TRPCError) {
           throw error;
         }
-        throw new Error("创建文件分析失败");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "创建文件分析失败" });
       }
     }),
 
@@ -631,7 +633,7 @@ export const copilotRouter = router({
         return stats[0];
       } catch (error) {
         console.error("[CopilotRouter] Failed to get usage stats:", error);
-        throw new Error("获取使用统计失败");
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "获取使用统计失败" });
       }
     }),
 });

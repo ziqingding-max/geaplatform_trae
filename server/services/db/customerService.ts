@@ -24,11 +24,24 @@ export async function getCustomerById(id: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function listCustomers(page: number = 1, pageSize: number = 50, search?: string) {
+export interface ListCustomersParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+}
+
+export async function listCustomers(params: ListCustomersParams = {}) {
+  const { page = 1, pageSize = 50, search, status } = params;
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
-  const where = search ? like(customers.companyName, `%${search}%`) : undefined;
+  
+  const conditions = [];
+  if (search) conditions.push(like(customers.companyName, `%${search}%`));
+  if (status) conditions.push(eq(customers.status, status as any));
+  
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
   
   const [data, totalResult] = await Promise.all([
     db.select().from(customers).where(where).limit(pageSize).offset(offset).orderBy(desc(customers.createdAt)),

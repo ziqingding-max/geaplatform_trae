@@ -113,7 +113,7 @@ export async function upsertExchangeRate(
   fromCurrency: string,
   toCurrency: string,
   rate: number,
-  effectiveDate: Date,
+  effectiveDate: Date | string,
   source?: string,
   markupPercentage?: number
 ): Promise<void> {
@@ -124,6 +124,14 @@ export async function upsertExchangeRate(
   // Markup reduces the rate so that converting back yields more USD
   const rateWithMarkup = rate * (1 - markup / 100);
 
+  // Ensure effectiveDate is stored as YYYY-MM-DD string
+  let dateStr: string;
+  if (effectiveDate instanceof Date) {
+    dateStr = effectiveDate.toISOString().split("T")[0];
+  } else {
+    dateStr = effectiveDate.split("T")[0];
+  }
+
   const data: InsertExchangeRate = {
     fromCurrency,
     toCurrency,
@@ -131,7 +139,7 @@ export async function upsertExchangeRate(
     rateWithMarkup: rateWithMarkup.toString(),
     markupPercentage: markup.toString(),
     source,
-    effectiveDate,
+    effectiveDate: dateStr,
   };
 
   try {

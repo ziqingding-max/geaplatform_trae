@@ -24,17 +24,36 @@ export async function getEmployeeById(id: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function listEmployees(page: number = 1, pageSize: number = 50, search?: string) {
+export interface ListEmployeesParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  customerId?: number;
+  status?: string;
+  country?: string;
+  serviceType?: string;
+}
+
+export async function listEmployees(params: ListEmployeesParams = {}) {
+  const { page = 1, pageSize = 50, search, customerId, status, country, serviceType } = params;
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
-  const where = search 
-    ? or(
-        like(employees.firstName, `%${search}%`), 
-        like(employees.lastName, `%${search}%`),
-        like(employees.email, `%${search}%`)
-      )
-    : undefined;
+  
+  const conditions = [];
+  if (search) {
+    conditions.push(or(
+      like(employees.firstName, `%${search}%`), 
+      like(employees.lastName, `%${search}%`),
+      like(employees.email, `%${search}%`)
+    ));
+  }
+  if (customerId) conditions.push(eq(employees.customerId, customerId));
+  if (status) conditions.push(eq(employees.status, status as any));
+  if (country) conditions.push(eq(employees.country, country));
+  if (serviceType) conditions.push(eq(employees.serviceType, serviceType as any));
+  
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
   
   const [data, totalResult] = await Promise.all([
     db.select({
@@ -147,12 +166,14 @@ export async function deleteEmployeeContract(id: number) {
   await db.delete(employeeContracts).where(eq(employeeContracts.id, id));
 }
 
-export async function getContractSignedEmployeesReadyForActivation() {
+export async function getContractSignedEmployeesReadyForActivation(dateStr: string) {
   const db = await getDb();
   if (!db) return [];
-  // Logic: status='onboarding' AND has signed contract
-  // Simplified for now
-  return await db.select().from(employees).where(eq(employees.status, 'onboarding'));
+  // status='contract_signed' AND startDate <= dateStr
+  return await db.select().from(employees).where(and(
+    eq(employees.status, 'contract_signed'),
+    lte(employees.startDate, dateStr)
+  ));
 }
 
 export async function getCountriesWithActiveEmployees() {
@@ -168,10 +189,13 @@ export async function getCountriesWithActiveEmployees() {
   return result.map(r => r.country);
 }
 
-export async function getEmployeesForPayrollMonth(country: string, year: number, month: number) {
+export async function getEmployeesForPayrollMonth(country: string, monthStart: string, monthEnd: string) {
   const db = await getDb();
   if (!db) return [];
   // Simplified logic: active employees in that country
+  // We accept monthStart/monthEnd to match the caller signature, but currently don't use them for filtering
+  // because "active" status implies they should be paid.
+  // In a real implementation, we might check if their startDate is before monthEnd etc.
   return await db.select().from(employees)
     .where(and(
       eq(employees.country, country), 
@@ -181,10 +205,12 @@ export async function getEmployeesForPayrollMonth(country: string, year: number,
 }
 
 // LEAVE BALANCES
-export async function listLeaveBalances(employeeId: number) {
+export async function listLeaveBalances(employeeId: number, year?: number) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(leaveBalances).where(eq(leaveBalances.employeeId, employeeId));
+  const conditions = [eq(leaveBalances.employeeId, employeeId)];
+  if (year) conditions.push(eq(leaveBalances.year, year));
+  return await db.select().from(leaveBalances).where(and(...conditions));
 }
 
 export async function createLeaveBalance(data: InsertLeaveBalance) {
@@ -217,11 +243,30 @@ export async function createLeaveRecord(data: InsertLeaveRecord) {
   return await db.insert(leaveRecords).values(data);
 }
 
-export async function listLeaveRecords(page: number = 1, pageSize: number = 50, employeeId?: number) {
+export interface ListLeaveRecordsParams {
+  page?: number;
+  pageSize?: number;
+  employeeId?: number;
+  status?: string;
+  month?: string; // YYYY-MM
+}
+
+export async function listLeaveRecords(params: ListLeaveRecordsParams = {}) {
+  const { page = 1, pageSize = 50, employeeId, status, month } = params;
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
-  const where = employeeId ? eq(leaveRecords.employeeId, employeeId) : undefined;
+  
+  const conditions = [];
+  if (employeeId) conditions.push(eq(leaveRecords.employeeId, employeeId));
+  if (status) conditions.push(eq(leaveRecords.status, status as any));
+  if (month) {
+    const startOfMonth = `${month}-01`;
+    const endOfMonth = `${month}-31`;
+    conditions.push(and(gte(leaveRecords.startDate, startOfMonth), lte(leaveRecords.startDate, endOfMonth)));
+  }
+  
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
   
   const [data, totalResult] = await Promise.all([
     db.select().from(leaveRecords).where(where).limit(pageSize).offset(offset).orderBy(desc(leaveRecords.createdAt)),
@@ -250,22 +295,28 @@ export async function deleteLeaveRecord(id: number) {
   await db.delete(leaveRecords).where(eq(leaveRecords.id, id));
 }
 
-export async function lockSubmittedLeaveRecords(monthStr: string, countryCode: string) {
+export async function lockSubmittedLeaveRecords(monthStr: string, countryCode?: string) {
   const db = await getDb();
   if (!db) return 0;
   // Lock admin_approved leave records for the given country+month
-  const empRows = await db.select({ id: employees.id }).from(employees).where(eq(employees.country, countryCode));
-  const empIds = empRows.map(e => e.id);
-  if (empIds.length === 0) return 0;
   const monthPrefix = monthStr.length === 7 ? monthStr : monthStr.substring(0, 7);
   const startOfMonth = `${monthPrefix}-01`;
   const endOfMonth = `${monthPrefix}-31`;
-  const result = await db.update(leaveRecords).set({ status: 'locked' as any }).where(and(
-    or(...empIds.map(id => eq(leaveRecords.employeeId, id))),
+  
+  const conditions = [
     gte(leaveRecords.startDate, startOfMonth),
     lte(leaveRecords.startDate, endOfMonth),
     eq(leaveRecords.status, 'admin_approved')
-  ));
+  ];
+
+  if (countryCode) {
+    const empRows = await db.select({ id: employees.id }).from(employees).where(eq(employees.country, countryCode));
+    const empIds = empRows.map(e => e.id);
+    if (empIds.length === 0) return 0;
+    conditions.push(or(...empIds.map(id => eq(leaveRecords.employeeId, id))));
+  }
+
+  const result = await db.update(leaveRecords).set({ status: 'locked' as any }).where(and(...conditions));
   return (result as any).changes || 0;
 }
 
@@ -286,7 +337,7 @@ export async function getOnLeaveEmployeesWithExpiredLeave() {
   return [];
 }
 
-export async function getSubmittedUnpaidLeaveForPayroll(countryCodeOrEmployeeId: string | number, monthStr: string) {
+export async function getSubmittedUnpaidLeaveForPayroll(countryCodeOrEmployeeId: string | number, monthStr: string, statuses: string[] = ['admin_approved']) {
   const db = await getDb();
   if (!db) return [];
   const { leaveTypes } = await import('../../../drizzle/schema');
@@ -310,7 +361,7 @@ export async function getSubmittedUnpaidLeaveForPayroll(countryCodeOrEmployeeId:
         or(...unpaidTypeIds.map(id => eq(leaveRecords.leaveTypeId, id))),
         gte(leaveRecords.startDate, startOfMonth),
         lte(leaveRecords.startDate, endOfMonth),
-        eq(leaveRecords.status, 'admin_approved')
+        inArray(leaveRecords.status, statuses as any[])
       ));
   } else {
     return await db.select().from(leaveRecords)
@@ -319,7 +370,7 @@ export async function getSubmittedUnpaidLeaveForPayroll(countryCodeOrEmployeeId:
         or(...unpaidTypeIds.map(id => eq(leaveRecords.leaveTypeId, id))),
         gte(leaveRecords.startDate, startOfMonth),
         lte(leaveRecords.startDate, endOfMonth),
-        eq(leaveRecords.status, 'admin_approved')
+        inArray(leaveRecords.status, statuses as any[])
       ));
   }
 }

@@ -55,15 +55,14 @@ export const salesRouter = router({
       })
     )
     .query(async ({ input }) => {
-      return await listSalesLeads(
-        {
-          status: input.status,
-          assignedTo: input.assignedTo,
-          search: input.search,
-        },
-        input.limit,
-        input.offset
-      );
+      const page = Math.floor(input.offset / input.limit) + 1;
+      return await listSalesLeads({
+        page,
+        pageSize: input.limit,
+        status: input.status,
+        assignedTo: input.assignedTo,
+        search: input.search,
+      });
     }),
 
   // ── Get single lead by ID ────────────────────────────────────────────
@@ -312,7 +311,7 @@ export const salesRouter = router({
         "onboarding", "contract_signed", "active", "on_leave", "offboarding", "terminated",
       ];
 
-      const result = await listEmployees({ customerId: lead.convertedCustomerId }, 1000, 0);
+      const result = await listEmployees({ customerId: lead.convertedCustomerId, pageSize: 1000 });
       const employees = result.data || [];
       const onboardingEmployees = employees.filter(
         (emp: any) => onboardingOrLaterStatuses.includes(emp.status)
@@ -350,7 +349,7 @@ export const salesRouter = router({
       const onboardingOrLaterStatuses = [
         "onboarding", "contract_signed", "active", "on_leave", "offboarding", "terminated",
       ];
-      const empResult = await listEmployees({ customerId: lead.convertedCustomerId }, 1000, 0);
+      const empResult = await listEmployees({ customerId: lead.convertedCustomerId, pageSize: 1000 });
       const allEmployees = empResult.data || [];
       const onboardingEmployees = allEmployees.filter(
         (emp: any) => onboardingOrLaterStatuses.includes(emp.status)
@@ -458,7 +457,7 @@ export const salesRouter = router({
 
   // ── List users for assignment dropdown ───────────────────────────────
   assignableUsers: userProcedure.query(async () => {
-    const result = await listUsers(100, 0);
+    const result = await listUsers({ pageSize: 1000 });
     return result.data.map((u) => ({
       id: u.id,
       name: u.name || u.email || `User #${u.id}`,

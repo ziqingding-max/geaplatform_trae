@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getDb } from "../db";
 import { salaryBenchmarks } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 
 export const salaryBenchmarkRouter = router({
   getBenchmark: protectedProcedure
@@ -13,7 +14,7 @@ export const salaryBenchmarkRouter = router({
     }))
     .query(async ({ input }) => {
         const db = getDb();
-        if (!db) throw new Error("Database connection failed");
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
         
         return await db.query.salaryBenchmarks.findFirst({
             where: and(
@@ -28,7 +29,7 @@ export const salaryBenchmarkRouter = router({
     .input(z.object({ countryCode: z.string() }))
     .query(async ({ input }) => {
         const db = getDb();
-        if (!db) throw new Error("Database connection failed");
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
         
         const rows = await db
             .selectDistinct({ category: salaryBenchmarks.jobCategory })
@@ -54,7 +55,7 @@ export const salaryBenchmarkRouter = router({
     }))
     .mutation(async ({ input }) => {
         const db = getDb();
-        if (!db) throw new Error("Database connection failed");
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
         
         if (input.id) {
             await db.update(salaryBenchmarks)

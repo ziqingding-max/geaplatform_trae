@@ -74,14 +74,28 @@ export async function logAuditAction(data: InsertAuditLog) {
   await db.insert(auditLogs).values(data);
 }
 
-export async function listAuditLogs(page: number = 1, pageSize: number = 50) {
+export interface ListAuditLogsParams {
+  page?: number;
+  pageSize?: number;
+  entityType?: string;
+  userId?: number;
+}
+
+export async function listAuditLogs(params: ListAuditLogsParams = {}) {
+  const { page = 1, pageSize = 50, entityType, userId } = params;
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
   
+  const conditions = [];
+  if (entityType) conditions.push(eq(auditLogs.entityType, entityType));
+  if (userId) conditions.push(eq(auditLogs.userId, userId));
+  
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  
   const [data, totalResult] = await Promise.all([
-    db.select().from(auditLogs).limit(pageSize).offset(offset).orderBy(desc(auditLogs.createdAt)),
-    db.select({ count: count() }).from(auditLogs)
+    db.select().from(auditLogs).where(where).limit(pageSize).offset(offset).orderBy(desc(auditLogs.createdAt)),
+    db.select({ count: count() }).from(auditLogs).where(where)
   ]);
   
   return { data, total: totalResult[0]?.count || 0 };
@@ -120,7 +134,13 @@ export async function getLeaveTypeById(id: number) {
 }
 
 // EXCHANGE RATES
-export async function listAllExchangeRates(page: number = 1, pageSize: number = 50) {
+export interface ListExchangeRatesParams {
+  page?: number;
+  pageSize?: number;
+}
+
+export async function listAllExchangeRates(params: ListExchangeRatesParams = {}) {
+  const { page = 1, pageSize = 50 } = params;
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
@@ -222,11 +242,26 @@ export async function getSalesLeadById(id: number) {
   return result[0];
 }
 
-export async function listSalesLeads(page: number = 1, pageSize: number = 50, search?: string) {
+export interface ListSalesLeadsParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  status?: string;
+  assignedTo?: number;
+}
+
+export async function listSalesLeads(params: ListSalesLeadsParams = {}) {
+  const { page = 1, pageSize = 50, search, status, assignedTo } = params;
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
-  const where = search ? like(salesLeads.companyName, `%${search}%`) : undefined;
+  
+  const conditions = [];
+  if (search) conditions.push(like(salesLeads.companyName, `%${search}%`));
+  if (status) conditions.push(eq(salesLeads.status, status as any));
+  if (assignedTo) conditions.push(eq(salesLeads.assignedTo, assignedTo));
+  
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
   
   const [data, totalResult] = await Promise.all([
     db.select().from(salesLeads).where(where).limit(pageSize).offset(offset).orderBy(desc(salesLeads.createdAt)),

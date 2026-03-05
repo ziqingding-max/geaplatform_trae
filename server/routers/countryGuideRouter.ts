@@ -4,6 +4,7 @@ import { getDb } from "../db";
 import { countryGuideChapters } from "../../drizzle/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { generateCountryGuideDraft } from "../services/knowledgeAiService";
+import { TRPCError } from "@trpc/server";
 
 export const countryGuideRouter = router({
   generateContent: protectedProcedure
@@ -16,7 +17,7 @@ export const countryGuideRouter = router({
     .input(z.object({ countryCode: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
-      if (!db) throw new Error("Database connection failed");
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
       
       return await db
         .select()
@@ -34,7 +35,7 @@ export const countryGuideRouter = router({
     .input(z.object({ countryCode: z.string() }))
     .query(async ({ input }) => {
       const db = getDb();
-      if (!db) throw new Error("Database connection failed");
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
       
       return await db
         .select()
@@ -47,7 +48,7 @@ export const countryGuideRouter = router({
     .input(z.number())
     .query(async ({ input }) => {
       const db = getDb();
-      if (!db) throw new Error("Database connection failed");
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
       
       const chapter = await db.query.countryGuideChapters.findFirst({
         where: eq(countryGuideChapters.id, input)
@@ -72,7 +73,7 @@ export const countryGuideRouter = router({
     }))
     .mutation(async ({ input }) => {
         const db = getDb();
-        if (!db) throw new Error("Database connection failed");
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
         
         if (input.id) {
             await db.update(countryGuideChapters)

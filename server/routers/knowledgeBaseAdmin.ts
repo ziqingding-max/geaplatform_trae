@@ -12,7 +12,7 @@ import {
 
 async function pullFromSource(url: string): Promise<Array<{ title: string; summary: string; content: string }>> {
   const res = await fetch(url, { method: "GET" });
-  if (!res.ok) throw new Error(`Failed to fetch source: ${res.status}`);
+  if (!res.ok) throw new TRPCError({ code: "BAD_REQUEST", message: `Failed to fetch source: ${res.status}` });
 
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {

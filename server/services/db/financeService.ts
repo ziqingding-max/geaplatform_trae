@@ -218,14 +218,34 @@ export async function createAdjustment(data: InsertAdjustment) {
   return await db.insert(adjustments).values(data);
 }
 
-export async function listAdjustments(page: number = 1, pageSize: number = 50) {
+export interface ListAdjustmentsParams {
+  page?: number;
+  pageSize?: number;
+  customerId?: number;
+  employeeId?: number;
+  status?: string;
+  adjustmentType?: string;
+  effectiveMonth?: string;
+}
+
+export async function listAdjustments(params: ListAdjustmentsParams = {}) {
+  const { page = 1, pageSize = 50, customerId, employeeId, status, adjustmentType, effectiveMonth } = params;
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
   
+  const conditions = [];
+  if (customerId) conditions.push(eq(adjustments.customerId, customerId));
+  if (employeeId) conditions.push(eq(adjustments.employeeId, employeeId));
+  if (status) conditions.push(eq(adjustments.status, status as any));
+  if (adjustmentType) conditions.push(eq(adjustments.adjustmentType, adjustmentType as any));
+  if (effectiveMonth) conditions.push(eq(adjustments.effectiveMonth, effectiveMonth));
+  
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  
   const [data, totalResult] = await Promise.all([
-    db.select().from(adjustments).limit(pageSize).offset(offset).orderBy(desc(adjustments.createdAt)),
-    db.select({ count: count() }).from(adjustments)
+    db.select().from(adjustments).where(where).limit(pageSize).offset(offset).orderBy(desc(adjustments.createdAt)),
+    db.select({ count: count() }).from(adjustments).where(where)
   ]);
   
   return { data, total: totalResult[0]?.count || 0 };
@@ -250,7 +270,7 @@ export async function deleteAdjustment(id: number) {
   await db.delete(adjustments).where(eq(adjustments.id, id));
 }
 
-export async function getSubmittedAdjustmentsForPayroll(countryCodeOrEmployeeId: string | number, monthStr: string) {
+export async function getSubmittedAdjustmentsForPayroll(countryCodeOrEmployeeId: string | number, monthStr: string, statuses: string[] = ['admin_approved']) {
   const db = await getDb();
   if (!db) return [];
   // When called with a country code (string), fetch all approved adjustments for that country+month
@@ -275,7 +295,7 @@ export async function getSubmittedAdjustmentsForPayroll(countryCodeOrEmployeeId:
       .where(and(
         eq(employees.country, countryCodeOrEmployeeId),
         eq(adjustments.effectiveMonth, monthStr),
-        eq(adjustments.status, 'admin_approved')
+        inArray(adjustments.status, statuses as any[])
       ));
     return results;
   } else {
@@ -283,24 +303,29 @@ export async function getSubmittedAdjustmentsForPayroll(countryCodeOrEmployeeId:
       .where(and(
         eq(adjustments.employeeId, countryCodeOrEmployeeId),
         eq(adjustments.effectiveMonth, monthStr),
-        eq(adjustments.status, 'admin_approved')
+        inArray(adjustments.status, statuses as any[])
       ));
   }
 }
 
-export async function lockSubmittedAdjustments(monthStr: string, countryCode: string) {
+export async function lockSubmittedAdjustments(monthStr: string, countryCode?: string) {
   const db = await getDb();
   if (!db) return 0;
   // Lock admin_approved adjustments for the given country+month by setting status to 'locked'
-  const { employees } = await import('../../../drizzle/schema');
-  const empRows = await db.select({ id: employees.id }).from(employees).where(eq(employees.country, countryCode));
-  const empIds = empRows.map(e => e.id);
-  if (empIds.length === 0) return 0;
-  const result = await db.update(adjustments).set({ status: 'locked' as any }).where(and(
-    inArray(adjustments.employeeId, empIds),
+  const conditions = [
     eq(adjustments.effectiveMonth, monthStr),
     eq(adjustments.status, 'admin_approved')
-  ));
+  ];
+
+  if (countryCode) {
+    const { employees } = await import('../../../drizzle/schema');
+    const empRows = await db.select({ id: employees.id }).from(employees).where(eq(employees.country, countryCode));
+    const empIds = empRows.map(e => e.id);
+    if (empIds.length === 0) return 0;
+    conditions.push(inArray(adjustments.employeeId, empIds));
+  }
+
+  const result = await db.update(adjustments).set({ status: 'locked' as any }).where(and(...conditions));
   return (result as any).changes || 0;
 }
 
@@ -311,14 +336,34 @@ export async function createReimbursement(data: InsertReimbursement) {
   return await db.insert(reimbursements).values(data);
 }
 
-export async function listReimbursements(page: number = 1, pageSize: number = 50) {
+export interface ListReimbursementsParams {
+  page?: number;
+  pageSize?: number;
+  customerId?: number;
+  employeeId?: number;
+  status?: string;
+  category?: string;
+  effectiveMonth?: string;
+}
+
+export async function listReimbursements(params: ListReimbursementsParams = {}) {
+  const { page = 1, pageSize = 50, customerId, employeeId, status, category, effectiveMonth } = params;
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
   
+  const conditions = [];
+  if (customerId) conditions.push(eq(reimbursements.customerId, customerId));
+  if (employeeId) conditions.push(eq(reimbursements.employeeId, employeeId));
+  if (status) conditions.push(eq(reimbursements.status, status as any));
+  if (category) conditions.push(eq(reimbursements.category, category as any));
+  if (effectiveMonth) conditions.push(eq(reimbursements.effectiveMonth, effectiveMonth));
+  
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  
   const [data, totalResult] = await Promise.all([
-    db.select().from(reimbursements).limit(pageSize).offset(offset).orderBy(desc(reimbursements.createdAt)),
-    db.select({ count: count() }).from(reimbursements)
+    db.select().from(reimbursements).where(where).limit(pageSize).offset(offset).orderBy(desc(reimbursements.createdAt)),
+    db.select({ count: count() }).from(reimbursements).where(where)
   ]);
   
   return { data, total: totalResult[0]?.count || 0 };
@@ -385,14 +430,32 @@ export async function getVendorById(id: number) {
   return result[0];
 }
 
-export async function listVendors(page: number = 1, pageSize: number = 50) {
+export interface ListVendorsParams {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+  country?: string;
+  vendorType?: string;
+  search?: string;
+}
+
+export async function listVendors(params: ListVendorsParams = {}) {
+  const { page = 1, pageSize = 50, status, country, vendorType, search } = params;
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
   
+  const conditions = [];
+  if (status) conditions.push(eq(vendors.status, status as any));
+  if (country) conditions.push(eq(vendors.country, country));
+  if (vendorType) conditions.push(eq(vendors.vendorType, vendorType as any));
+  if (search) conditions.push(like(vendors.vendorName, `%${search}%`));
+  
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  
   const [data, totalResult] = await Promise.all([
-    db.select().from(vendors).limit(pageSize).offset(offset).orderBy(desc(vendors.createdAt)),
-    db.select({ count: count() }).from(vendors)
+    db.select().from(vendors).where(where).limit(pageSize).offset(offset).orderBy(desc(vendors.createdAt)),
+    db.select({ count: count() }).from(vendors).where(where)
   ]);
   
   return { data, total: totalResult[0]?.count || 0 };
@@ -428,11 +491,37 @@ export async function getVendorBillById(id: number) {
   return result[0];
 }
 
-export async function listVendorBills(vendorId?: number) {
+export interface ListVendorBillsParams {
+  page?: number;
+  pageSize?: number;
+  vendorId?: number;
+  status?: string;
+  category?: string;
+  billMonth?: string;
+  search?: string;
+}
+
+export async function listVendorBills(params: ListVendorBillsParams = {}) {
+  const { page = 1, pageSize = 50, vendorId, status, category, billMonth, search } = params;
   const db = await getDb();
-  if (!db) return [];
-  const where = vendorId ? eq(vendorBills.vendorId, vendorId) : undefined;
-  return await db.select().from(vendorBills).where(where);
+  if (!db) return { data: [], total: 0 };
+  const offset = (page - 1) * pageSize;
+  
+  const conditions = [];
+  if (vendorId) conditions.push(eq(vendorBills.vendorId, vendorId));
+  if (status) conditions.push(eq(vendorBills.status, status as any));
+  if (category) conditions.push(eq(vendorBills.category, category as any));
+  if (billMonth) conditions.push(eq(vendorBills.billMonth, billMonth));
+  if (search) conditions.push(like(vendorBills.billNumber, `%${search}%`));
+  
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  
+  const [data, totalResult] = await Promise.all([
+    db.select().from(vendorBills).where(where).limit(pageSize).offset(offset).orderBy(desc(vendorBills.createdAt)),
+    db.select({ count: count() }).from(vendorBills).where(where)
+  ]);
+  
+  return { data, total: totalResult[0]?.count || 0 };
 }
 
 export async function updateVendorBill(id: number, data: Partial<InsertVendorBill>) {

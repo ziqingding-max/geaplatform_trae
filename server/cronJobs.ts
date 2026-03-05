@@ -646,7 +646,7 @@ export async function runMonthlyLeaveAccrual(): Promise<{ processed: number; upd
   console.log(`[CronJob] Running monthly leave accrual for ${currentYear}-${String(currentMonth).padStart(2, "0")}`);
 
   // Get all active employees
-  const { data: activeEmployees } = await listEmployees({ status: "active" }, 10000, 0);
+  const { data: activeEmployees } = await listEmployees({ status: "active", pageSize: 10000 });
 
   // Filter to employees who started in the current year
   const newEmployees = activeEmployees.filter(emp => {
