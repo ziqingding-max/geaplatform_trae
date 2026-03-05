@@ -98,6 +98,7 @@ export const employeesRouter = router({
         salaryCurrency: z.string().default("USD"),
         estimatedEmployerCost: z.string().optional(),
         requiresVisa: z.boolean().default(false),
+        bankDetails: z.any().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -226,6 +227,7 @@ export const employeesRouter = router({
           visaStatus: z.enum(["not_required", "pending_application", "application_submitted", "approved", "rejected", "expired"]).optional(),
           visaExpiryDate: z.string().optional(),
           visaNotes: z.string().optional(),
+          bankDetails: z.any().optional(),
         }),
       })
     )
@@ -625,9 +627,9 @@ export const employeesRouter = router({
           contractType: input.contractType,
           fileUrl: url,
           fileKey: fileKey,
-          signedDate: input.signedDate ? new Date(input.signedDate + "T00:00:00Z") : undefined,
-          effectiveDate: input.effectiveDate ? new Date(input.effectiveDate + "T00:00:00Z") : undefined,
-          expiryDate: input.expiryDate ? new Date(input.expiryDate + "T00:00:00Z") : undefined,
+          signedDate: input.signedDate,
+          effectiveDate: input.effectiveDate,
+          expiryDate: input.expiryDate,
           status: input.signedDate ? "signed" : "draft",
         });
 
@@ -656,9 +658,7 @@ export const employeesRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         const updateData: any = { ...input.data };
-        if (input.data.signedDate) updateData.signedDate = new Date(input.data.signedDate + "T00:00:00Z");
-        if (input.data.effectiveDate) updateData.effectiveDate = new Date(input.data.effectiveDate + "T00:00:00Z");
-        if (input.data.expiryDate) updateData.expiryDate = new Date(input.data.expiryDate + "T00:00:00Z");
+        // Dates are already validated strings (YYYY-MM-DD), pass directly
         await updateEmployeeContract(input.id, updateData);
         await logAuditAction({
           userId: ctx.user.id, userName: ctx.user.name || null,

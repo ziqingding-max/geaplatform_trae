@@ -202,6 +202,32 @@ export default function Invoices() {
   const { data: billingEntities } = trpc.billingEntities.list.useQuery();
   const { data: months } = trpc.invoices.monthlyOverview.useQuery({ limit: 12 });
 
+  const [showCreditNoteCreate, setShowCreditNoteCreate] = useState(false);
+  const [creditNoteForm, setCreditNoteForm] = useState({
+    customerId: 0,
+    originalInvoiceId: 0,
+    isFullCredit: true,
+    amount: "",
+    reason: "",
+  });
+
+  const createCreditNoteMut = trpc.invoices.createCreditNote.useMutation({
+    onSuccess: () => {
+      toast.success("Credit Note created and applied to wallet");
+      setShowCreditNoteCreate(false);
+      setCreditNoteForm({ customerId: 0, originalInvoiceId: 0, isFullCredit: true, amount: "", reason: "" });
+      utils.invoices.list.invalidate();
+      utils.wallet.get.invalidate(); // Update wallet balance
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  // Fetch paid invoices for the selected customer in CN dialog
+  const { data: paidInvoices } = trpc.invoices.list.useQuery(
+    { customerId: creditNoteForm.customerId, status: "paid", limit: 100 },
+    { enabled: !!creditNoteForm.customerId }
+  );
+
   return (
     <Layout breadcrumb={["GEA", "Invoices"]}>
       <div className="p-6 space-y-6 page-enter">
@@ -232,6 +258,12 @@ export default function Invoices() {
               )}
             >
               <Download className="w-4 h-4 mr-1" /> {t("invoices.list.exportCsvButton")}
+            </Button>
+            <Button variant="outline" onClick={() => {
+              setCreditNoteForm({ customerId: 0, originalInvoiceId: 0, isFullCredit: true, amount: "", reason: "" });
+              setShowCreditNoteCreate(true);
+            }}>
+              <RefreshCw className="w-4 h-4 mr-2" /> Create Credit Note
             </Button>
             <Button onClick={() => {
               setManualForm({ customerId: 0, billingEntityId: undefined, invoiceType: "manual", invoiceMonth: "", currency: "USD", notes: "", dueDate: "" });
@@ -424,6 +456,117 @@ export default function Invoices() {
         </DialogContent>
       </Dialog>
       
+      {/* Create Credit Note Dialog */}
+      <Dialog open={showCreditNoteCreate} onOpenChange={setShowCreditNoteCreate}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Create Credit Note</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>{t("invoices.manual.customerLabel")}</Label>
+              <Select value={creditNoteForm.customerId ? creditNoteForm.customerId.toString() : ""} onValueChange={(v) => setCreditNoteForm({ ...creditNoteForm, customerId: parseInt(v), originalInvoiceId: 0 })}>
+                <SelectTrigger><SelectValue placeholder={t("invoices.manual.selectCustomerPlaceholder")} /></SelectTrigger>
+                <SelectContent>
+                  {customers?.data?.map((c) => (
+                    <SelectItem key={c.id} value={c.id.toString()}>{c.companyName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Original Paid Invoice</Label>
+              <Select 
+                value={creditNoteForm.originalInvoiceId ? creditNoteForm.originalInvoiceId.toString() : ""} 
+                onValueChange={(v) => setCreditNoteForm({ ...creditNoteForm, originalInvoiceId: parseInt(v) })}
+                disabled={!creditNoteForm.customerId || !paidInvoices?.data?.length}
+              >
+                <SelectTrigger><SelectValue placeholder="Select invoice to credit" /></SelectTrigger>
+                <SelectContent>
+                  {paidInvoices?.data?.map((inv) => (
+                    <SelectItem key={inv.id} value={inv.id.toString()}>
+                      {inv.invoiceNumber} ({inv.currency} {formatAmount(inv.total)})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {creditNoteForm.customerId && (!paidInvoices?.data || paidInvoices.data.length === 0) && (
+                <p className="text-xs text-muted-foreground">No paid invoices found for this customer.</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Credit Type</Label>
+              <div className="flex gap-4 pt-1">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="creditType" 
+                    checked={creditNoteForm.isFullCredit} 
+                    onChange={() => setCreditNoteForm({ ...creditNoteForm, isFullCredit: true })} 
+                    className="accent-primary"
+                  />
+                  Full Credit
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input 
+                    type="radio" 
+                    name="creditType" 
+                    checked={!creditNoteForm.isFullCredit} 
+                    onChange={() => setCreditNoteForm({ ...creditNoteForm, isFullCredit: false })} 
+                    className="accent-primary"
+                  />
+                  Partial Credit
+                </label>
+              </div>
+            </div>
+
+            {!creditNoteForm.isFullCredit && (
+              <div className="space-y-2">
+                <Label>Credit Amount</Label>
+                <Input 
+                  type="number" 
+                  step="0.01" 
+                  value={creditNoteForm.amount} 
+                  onChange={(e) => setCreditNoteForm({ ...creditNoteForm, amount: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Reason</Label>
+              <Textarea 
+                value={creditNoteForm.reason} 
+                onChange={(e) => setCreditNoteForm({ ...creditNoteForm, reason: e.target.value })}
+                placeholder="Reason for credit note..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreditNoteCreate(false)}>{t("common.cancel")}</Button>
+            <Button 
+              onClick={() => {
+                if (!creditNoteForm.originalInvoiceId || !creditNoteForm.reason) return;
+                if (!creditNoteForm.isFullCredit && !creditNoteForm.amount) return;
+
+                createCreditNoteMut.mutate({
+                  originalInvoiceId: creditNoteForm.originalInvoiceId,
+                  reason: creditNoteForm.reason,
+                  isFullCredit: creditNoteForm.isFullCredit,
+                  lineItems: !creditNoteForm.isFullCredit ? [{
+                    description: "Partial Credit Adjustment",
+                    amount: creditNoteForm.amount,
+                  }] : undefined
+                });
+              }} 
+              disabled={createCreditNoteMut.isPending || !creditNoteForm.originalInvoiceId || !creditNoteForm.reason}
+            >
+              {createCreditNoteMut.isPending ? "Creating..." : "Create Credit Note"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Batch Paid Dialog */}
       <Dialog open={showBatchPaid} onOpenChange={(open) => { setShowBatchPaid(open); if (!open) setBatchPaidAmount(""); }}>
         <DialogContent className="max-w-md">

@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import CountrySelect from "@/components/CountrySelect";
 import CurrencySelect from "@/components/CurrencySelect";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
+import { BankDetailsForm, type BankDetails } from "@/components/forms/BankDetailsForm";
 
 export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () => void }) {
   const { t } = useI18n();
@@ -29,6 +30,7 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
     rateType: "fixed_monthly" as "fixed_monthly" | "hourly" | "daily" | "milestone_only",
     startDate: "",
     defaultApproverId: 0,
+    bankDetails: {} as Partial<BankDetails>,
   });
 
   const utils = trpc.useUtils();
@@ -53,6 +55,7 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
         rateType: "fixed_monthly",
         startDate: "",
         defaultApproverId: 0,
+        bankDetails: {},
       });
     },
     onError: (err) => toast.error(err.message),
@@ -66,7 +69,7 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
           {t("contractors.actions.addContractor")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("contractors.actions.addContractor")}</DialogTitle>
         </DialogHeader>
@@ -157,6 +160,15 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
                </div>
              )}
            </div>
+
+           <div className="space-y-2">
+             <BankDetailsForm 
+               value={formData.bankDetails} 
+               onChange={(details) => setFormData({...formData, bankDetails: details})}
+               countryCode={formData.country}
+               currency={formData.currency}
+             />
+           </div>
            
            <div className="flex justify-end gap-3 pt-2">
              <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
@@ -164,6 +176,7 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
                const submitData: any = {
                  ...formData,
                  paymentFrequency: formData.payFrequency, // Map local state to backend field
+                 bankDetails: formData.bankDetails, // Pass bank details to backend
                };
                if (!submitData.customerId) { toast.error("Customer is required"); return; }
                if (submitData.defaultApproverId === 0) delete submitData.defaultApproverId;

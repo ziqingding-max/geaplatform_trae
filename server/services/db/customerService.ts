@@ -6,7 +6,7 @@ import {
   customerPricing, InsertCustomerPricing, 
   customerContracts, InsertCustomerContract,
   customerLeavePolicies, InsertCustomerLeavePolicy,
-  leaveBalances, leaveTypes, employees
+  leaveBalances, leaveTypes, employees, quotations
 } from "../../../drizzle/schema";
 import { getDb } from "./connection";
 
@@ -68,7 +68,13 @@ export async function getCustomerByEmail(email: string) {
 export async function listCustomerPricing(customerId: number) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(customerPricing).where(eq(customerPricing.customerId, customerId));
+  return await db.select({
+    ...getTableColumns(customerPricing),
+    quotationNumber: quotations.quotationNumber
+  })
+  .from(customerPricing)
+  .leftJoin(quotations, eq(customerPricing.sourceQuotationId, quotations.id))
+  .where(eq(customerPricing.customerId, customerId));
 }
 
 export async function createCustomerPricing(data: InsertCustomerPricing) {

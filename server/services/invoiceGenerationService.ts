@@ -16,6 +16,30 @@ import { generateInvoiceNumber } from "./invoiceNumberService";
 import { getBillingEntityById } from "../db";
 
 /**
+ * Helper to get exchange rate with 3-day fallback
+ */
+async function getExchangeRateWithFallback(
+  from: string,
+  to: string,
+  date: Date
+): Promise<{ rate: number; rateWithMarkup: number; isFallback: boolean; fallbackDate?: string } | null> {
+  // Try target date
+  let rateData = await getExchangeRate(from, to, date);
+  if (rateData) return { ...rateData, isFallback: false };
+
+  // Try back 3 days
+  for (let i = 1; i <= 3; i++) {
+    const d = new Date(date);
+    d.setDate(d.getDate() - i);
+    rateData = await getExchangeRate(from, to, d);
+    if (rateData) {
+      return { ...rateData, isFallback: true, fallbackDate: rateData.effectiveDate };
+    }
+  }
+  return null;
+}
+
+/**
  * Invoice Generation Service
  *
  * Architecture:
@@ -325,9 +349,12 @@ async function getServiceFeeRate(
     const pricingCurrency = countrySpecificPricing.currency || "USD";
     let feeInSettlement = perEmployeeFee;
     if (pricingCurrency !== settlementCurrency) {
-      const feeRate = await getExchangeRate(pricingCurrency, settlementCurrency);
+      const feeRate = await getExchangeRateWithFallback(pricingCurrency, settlementCurrency, new Date());
       if (feeRate) {
         feeInSettlement = perEmployeeFee * feeRate.rate;
+        if (feeRate.isFallback) {
+          warnings.push(`Service Fee Rate: Exchange rate for ${pricingCurrency} fallback to ${feeRate.fallbackDate}`);
+        }
       }
     }
     return feeInSettlement;
@@ -356,9 +383,12 @@ async function getServiceFeeRate(
   const rateCurrency = countryConfig?.standardRateCurrency || "USD";
   let feeInSettlement = standardRate;
   if (rateCurrency !== settlementCurrency) {
-    const feeRate = await getExchangeRate(rateCurrency, settlementCurrency);
+    const feeRate = await getExchangeRateWithFallback(rateCurrency, settlementCurrency, new Date());
     if (feeRate) {
       feeInSettlement = standardRate * feeRate.rate;
+      if (feeRate.isFallback) {
+        warnings.push(`Standard Rate: Exchange rate for ${rateCurrency} fallback to ${feeRate.fallbackDate}`);
+      }
     }
   }
 
@@ -408,15 +438,22 @@ async function createGroupInvoice(
     // Get exchange rate for this local currency
     let exchangeRate = 1;
     let rateWithMarkup = 1;
+    let rateFallbackNote = "";
 
     if (localCurrency !== settlementCurrency) {
-      const rateData = await getExchangeRate(localCurrency, settlementCurrency);
+      const rateData = await getExchangeRateWithFallback(localCurrency, settlementCurrency, new Date());
       if (rateData) {
         exchangeRate = rateData.rate;
         rateWithMarkup = rateData.rateWithMarkup;
+        if (rateData.isFallback) {
+          rateFallbackNote = ` [Rate Fallback: ${rateData.fallbackDate}]`;
+          warnings.push(
+            `Exchange rate for ${localCurrency} fallback to ${rateData.fallbackDate} (3-day lookback).`
+          );
+        }
       } else {
         warnings.push(
-          `No exchange rate found for ${localCurrency} → ${settlementCurrency}. Using 1:1 rate.`
+          `No exchange rate found for ${localCurrency} → ${settlementCurrency} (checked past 3 days). Using 1:1 rate.`
         );
       }
     }
@@ -508,6 +545,7 @@ async function createGroupInvoice(
       dueDate: dueDate.toISOString().slice(0, 10), // text column: use YYYY-MM-DD string
       amountDue: total.toFixed(2),
       notes: `Auto-generated ${feeLabel.replace(" Fee", "")} invoice for ${monthLabel} — ${countryName}`,
+      internalNotes: rateFallbackNote ? `Exchange Rate Fallback: ${rateFallbackNote.trim()}` : undefined,
     };
 
     const invoiceInsertResult = await db.insert(invoices).values(invoiceData);

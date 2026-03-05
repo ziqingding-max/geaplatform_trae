@@ -248,6 +248,8 @@ export const customerPricing = sqliteTable(
     currency: text("currency", { length: 3 }).default("USD"),
     effectiveFrom: text("effectiveFrom").notNull(),
     effectiveTo: text("effectiveTo"),
+    // Traceability to source quotation
+    sourceQuotationId: integer("sourceQuotationId"), 
     isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
     createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
     updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
@@ -370,6 +372,8 @@ export const employees = sqliteTable(
     ] }).default("not_required"),
     visaExpiryDate: text("visaExpiryDate"),
     visaNotes: text("visaNotes"),
+    // Bank Details (Dynamic JSON based on country requirements)
+    bankDetails: text("bankDetails", { mode: "json" }),
     // Metadata
     createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
     updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
@@ -1849,6 +1853,70 @@ export const walletTransactions = sqliteTable(
 
 export type WalletTransaction = typeof walletTransactions.$inferSelect;
 export type InsertWalletTransaction = typeof walletTransactions.$inferInsert;
+
+/**
+ * Customer Frozen Wallets — stores deposit/security funds.
+ * Physically isolated from main wallets to prevent accidental usage.
+ */
+export const customerFrozenWallets = sqliteTable(
+  "customer_frozen_wallets",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    customerId: integer("customerId").notNull(),
+    currency: text("currency", { length: 3 }).notNull(), // USD, EUR, CNY...
+    balance: text("balance").default("0").notNull(), // Decimal string
+    version: integer("version").default(0).notNull(), // Optimistic lock
+    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    cfwCustomerCurrencyIdx: uniqueIndex("cfw_customer_currency_idx").on(table.customerId, table.currency),
+  })
+);
+
+export type CustomerFrozenWallet = typeof customerFrozenWallets.$inferSelect;
+export type InsertCustomerFrozenWallet = typeof customerFrozenWallets.$inferInsert;
+
+/**
+ * Frozen Wallet Transactions — immutable ledger of deposit funds.
+ */
+export const frozenWalletTransactions = sqliteTable(
+  "frozen_wallet_transactions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    walletId: integer("walletId").notNull(),
+    
+    type: text("type", { enum: [
+      "deposit_in",           // Deposit payment received (+)
+      "deposit_release",      // Deposit released to main wallet (-)
+      "deposit_refund",       // Deposit refunded to bank (-)
+      "deposit_deduction",    // Deposit used to cover unpaid bills (-)
+      "manual_adjustment",    // Admin manual adjustment (+/-)
+    ] }).notNull(),
+
+    amount: text("amount").notNull(), // Always positive
+    direction: text("direction", { enum: ["credit", "debit"] }).notNull(), // credit = increase balance, debit = decrease balance
+    
+    balanceBefore: text("balanceBefore").notNull(),
+    balanceAfter: text("balanceAfter").notNull(),
+    
+    // Audit Trail
+    referenceId: integer("referenceId").notNull(), // InvoiceID, PaymentID
+    referenceType: text("referenceType", { enum: ["invoice", "payment", "manual"] }).notNull(),
+    
+    description: text("description"),
+    internalNote: text("internalNote"),
+    createdBy: integer("createdBy"), // User ID
+    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    fwtWalletIdIdx: index("fwt_wallet_id_idx").on(table.walletId),
+    fwtReferenceIdx: index("fwt_reference_idx").on(table.referenceId, table.referenceType),
+    fwtCreatedIdx: index("fwt_created_idx").on(table.createdAt),
+  })
+);
+
+export type FrozenWalletTransaction = typeof frozenWalletTransactions.$inferSelect;
+export type InsertFrozenWalletTransaction = typeof frozenWalletTransactions.$inferInsert;
 
 // ============================================================================
 // 20. AOR SERVICES & WORKER PORTAL

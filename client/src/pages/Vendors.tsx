@@ -4,6 +4,7 @@
  */
 import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
+import BankDetailsForm, { BankDetails } from "@/components/forms/BankDetailsForm";
 import { formatDate, formatAmount } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
@@ -96,7 +97,7 @@ function VendorList() {
   const defaultForm = {
     name: "", legalName: "", contactName: "", contactEmail: "", contactPhone: "",
     country: "", address: "", city: "", state: "", postalCode: "",
-    serviceType: "", currency: "USD", bankDetails: "", taxId: "",
+    serviceType: "", currency: "USD", bankDetails: {} as BankDetails, taxId: "",
     paymentTermDays: 30, vendorType: "client_related" as const, status: "active" as const, notes: "",
   };
   const [formData, setFormData] = useState(defaultForm);
@@ -112,7 +113,10 @@ function VendorList() {
       return;
     }
     setFormErrors({});
-    createMutation.mutate(formData);
+    createMutation.mutate({
+      ...formData,
+      bankDetails: JSON.stringify(formData.bankDetails),
+    });
   }
 
   return (
@@ -204,8 +208,12 @@ function VendorList() {
                   <Input type="number" value={formData.paymentTermDays} onChange={(e) => setFormData({ ...formData, paymentTermDays: parseInt(e.target.value) || 30 })} />
                 </div>
                 <div className="col-span-2">
-                  <Label>{t("vendors.form.bank_details.label")}</Label>
-                  <Textarea value={formData.bankDetails} onChange={(e) => setFormData({ ...formData, bankDetails: e.target.value })} placeholder="Bank name, account number, SWIFT code, etc." rows={3} />
+                  <BankDetailsForm
+                    value={formData.bankDetails}
+                    onChange={(val) => setFormData({ ...formData, bankDetails: { ...formData.bankDetails, ...val } })}
+                    countryCode={formData.country}
+                    currency={formData.currency}
+                  />
                 </div>
                 <div className="col-span-2">
                   <Label>{t("vendors.form.notes.label")}</Label>
@@ -340,13 +348,25 @@ function VendorDetail({ id }: { id: number }) {
 
   function openEdit() {
     if (!vendor) return;
+    let parsedBankDetails: Partial<BankDetails> = {};
+    try {
+      if (vendor.bankDetails?.trim().startsWith("{")) {
+        parsedBankDetails = JSON.parse(vendor.bankDetails);
+      } else if (vendor.bankDetails) {
+        // Legacy text fallback
+        parsedBankDetails = { bankName: vendor.bankDetails };
+      }
+    } catch (e) {
+      parsedBankDetails = { bankName: vendor.bankDetails || "" };
+    }
+
     setEditData({
       name: vendor.name, legalName: vendor.legalName || "", contactName: vendor.contactName || "",
       contactEmail: vendor.contactEmail || "", contactPhone: vendor.contactPhone || "",
       country: vendor.country, address: vendor.address || "", city: vendor.city || "",
       state: vendor.state || "", postalCode: vendor.postalCode || "",
       serviceType: vendor.serviceType || "", currency: vendor.currency,
-      bankDetails: vendor.bankDetails || "", taxId: vendor.taxId || "",
+      bankDetails: parsedBankDetails, taxId: vendor.taxId || "",
       paymentTermDays: vendor.paymentTermDays, vendorType: vendor.vendorType, status: vendor.status, notes: vendor.notes || "",
     });
     setEditOpen(true);
@@ -463,16 +483,15 @@ function VendorDetail({ id }: { id: number }) {
         {/* Bank Details & Notes */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {vendor.bankDetails && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                  <Building2 className="w-4 h-4" />{t("vendors.form.bank_details.label")}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <pre className="text-sm whitespace-pre-wrap font-mono bg-muted/50 p-3 rounded-md">{vendor.bankDetails}</pre>
-              </CardContent>
-            </Card>
+            <BankDetailsForm
+              value={(() => {
+                try {
+                  return vendor.bankDetails.startsWith("{") ? JSON.parse(vendor.bankDetails) : { bankName: vendor.bankDetails };
+                } catch { return { bankName: vendor.bankDetails }; }
+              })()}
+              readOnly
+              onChange={() => {}}
+            />
           )}
           {vendor.notes && (
             <Card>
@@ -581,8 +600,12 @@ function VendorDetail({ id }: { id: number }) {
                 </Select>
               </div>
               <div className="col-span-2">
-                <Label>{t("vendors.form.bank_details.label")}</Label>
-                <Textarea value={editData.bankDetails || ""} onChange={(e) => setEditData({ ...editData, bankDetails: e.target.value })} rows={3} />
+                <BankDetailsForm
+                  value={editData.bankDetails || {}}
+                  onChange={(val) => setEditData({ ...editData, bankDetails: { ...editData.bankDetails, ...val } })}
+                  countryCode={editData.country}
+                  currency={editData.currency}
+                />
               </div>
               <div className="col-span-2">
                 <Label>{t("vendors.form.notes.label")}</Label>
@@ -591,7 +614,7 @@ function VendorDetail({ id }: { id: number }) {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditOpen(false)}>{t("common.cancel")}</Button>
-              <Button onClick={() => updateMutation.mutate({ id, ...editData })} disabled={updateMutation.isPending}>
+              <Button onClick={() => updateMutation.mutate({ id, ...editData, bankDetails: JSON.stringify(editData.bankDetails) })} disabled={updateMutation.isPending}>
                 {updateMutation.isPending ? t("common.loading") : t("common.save")}
               </Button>
             </DialogFooter>

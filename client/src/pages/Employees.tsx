@@ -40,6 +40,7 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContractorListContent } from "./Contractors";
 import ContractorCreateDialog from "@/components/pages/ContractorCreateDialog";
+import BankDetailsForm, { BankDetails } from "@/components/forms/BankDetailsForm";
 
 import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
@@ -183,6 +184,7 @@ function EmployeeList() {
     salaryCurrency: "",
     estimatedEmployerCost: "",
     requiresVisa: false,
+    bankDetails: {} as BankDetails,
   };
   const [formData, setFormData] = useState(defaultForm);
 
@@ -483,6 +485,14 @@ function EmployeeList() {
                   </div>
                   <p className="text-xs text-muted-foreground">{t("employees.create.form.leavePolicyHint")}</p>
                 </fieldset>
+
+                {/* Section: Bank Details */}
+                <BankDetailsForm 
+                  value={formData.bankDetails || {}}
+                  onChange={(val) => setFormData({ ...formData, bankDetails: { ...formData.bankDetails, ...val } })}
+                  countryCode={formData.country}
+                  currency={formData.salaryCurrency}
+                />
 
                 {/* Section: Visa - Auto-detected, conditionally shown */}
                 {/* AOR logic removed */}

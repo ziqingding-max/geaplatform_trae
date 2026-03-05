@@ -356,9 +356,12 @@ export async function generateCreditNote(params: {
       });
     }
 
+    // 9. Auto-approve and credit to wallet (Atomic operation)
+    await approveCreditNote(invoiceId);
+
     return {
       invoiceId,
-      message: `Credit note ${creditNoteNumber} created for ${(-creditTotal).toFixed(2)} ${originalInvoice.currency || "USD"} (original: ${originalInvoice.invoiceNumber})`,
+      message: `Credit note ${creditNoteNumber} created and credited to wallet (${(-creditTotal).toFixed(2)} ${originalInvoice.currency || "USD"})`,
     };
   } catch (error) {
     console.error("[CreditNote] Error generating credit note:", error);

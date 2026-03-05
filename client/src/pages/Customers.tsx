@@ -1031,6 +1031,7 @@ function CustomerDetail({ id }: { id: number }) {
                         <TableHead>{t("customers.pricing.customerPrice")}</TableHead>
                         <TableHead>{t("customers.pricing.visaSetupFee")}</TableHead>
                         <TableHead>{t("customers.pricing.effectivePeriod")}</TableHead>
+                        <TableHead>Source</TableHead>
                         <TableHead>{t("customers.table.header.status")}</TableHead>
                         <TableHead className="w-10"></TableHead>
                       </TableRow>
@@ -1060,8 +1061,23 @@ function CustomerDetail({ id }: { id: number }) {
                                 : "—"}
                             </TableCell>
                             <TableCell className="text-sm">
-{formatDate(p.effectiveFrom)}
+                               {formatDate(p.effectiveFrom)}
                                {p.effectiveTo ? ` — ${formatDate(p.effectiveTo)}` : " — ongoing"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {(p as any).quotationNumber ? (
+                                <a 
+                                  href={`/quotations/${p.sourceQuotationId}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline flex items-center gap-1"
+                                >
+                                  <FileText className="w-3 h-3" />
+                                  {(p as any).quotationNumber}
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground text-xs">Manual</span>
+                              )}
                             </TableCell>
                             <TableCell>
                               <Badge variant={p.isActive ? "default" : "secondary"} className="text-xs">{p.isActive ? "Active" : "Inactive"}</Badge>
@@ -1679,12 +1695,23 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
 function WalletTab({ customerId, currency }: { customerId: number; currency: string }) {
   const { t } = useI18n();
   const utils = trpc.useContext();
+  const [walletTab, setWalletTab] = useState<"operating" | "deposit">("operating");
+
+  // ── Operating Wallet Data ──
   const { data: wallet, isLoading: isWalletLoading } = trpc.wallet.get.useQuery({ customerId, currency });
   const { data: transactions, isLoading: isTxLoading } = trpc.wallet.listTransactions.useQuery(
     { walletId: wallet?.id || 0 },
     { enabled: !!wallet }
   );
 
+  // ── Frozen Wallet Data ──
+  const { data: frozenWallet, isLoading: isFrozenLoading } = trpc.wallet.getFrozen.useQuery({ customerId, currency });
+  const { data: frozenTransactions, isLoading: isFrozenTxLoading } = trpc.wallet.listFrozenTransactions.useQuery(
+    { walletId: frozenWallet?.id || 0 },
+    { enabled: !!frozenWallet }
+  );
+
+  // ── Mutations ──
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustForm, setAdjustForm] = useState({ amount: "", direction: "credit" as "credit" | "debit", description: "", internalNote: "" });
 
@@ -1693,6 +1720,32 @@ function WalletTab({ customerId, currency }: { customerId: number; currency: str
       toast.success("Wallet adjustment successful");
       setAdjustOpen(false);
       setAdjustForm({ amount: "", direction: "credit", description: "", internalNote: "" });
+      utils.wallet.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const [frozenAdjustOpen, setFrozenAdjustOpen] = useState(false);
+  const [frozenAdjustForm, setFrozenAdjustForm] = useState({ amount: "", direction: "credit" as "credit" | "debit", description: "", internalNote: "" });
+
+  const frozenAdjustMutation = trpc.wallet.manualFrozenAdjustment.useMutation({
+    onSuccess: () => {
+      toast.success("Security deposit adjustment successful");
+      setFrozenAdjustOpen(false);
+      setFrozenAdjustForm({ amount: "", direction: "credit", description: "", internalNote: "" });
+      utils.wallet.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const [releaseOpen, setReleaseOpen] = useState(false);
+  const [releaseForm, setReleaseForm] = useState({ amount: "", reason: "" });
+
+  const releaseMutation = trpc.wallet.releaseFrozen.useMutation({
+    onSuccess: () => {
+      toast.success("Deposit released to operating account");
+      setReleaseOpen(false);
+      setReleaseForm({ amount: "", reason: "" });
       utils.wallet.invalidate();
     },
     onError: (err) => toast.error(err.message),
@@ -1710,148 +1763,373 @@ function WalletTab({ customerId, currency }: { customerId: number; currency: str
     });
   };
 
-  if (isWalletLoading) return <div className="space-y-4"><Skeleton className="h-32" /><Skeleton className="h-64" /></div>;
+  const handleFrozenAdjust = () => {
+    if (!frozenAdjustForm.amount || !frozenAdjustForm.description) return;
+    frozenAdjustMutation.mutate({
+      customerId,
+      currency,
+      amount: frozenAdjustForm.amount,
+      direction: frozenAdjustForm.direction,
+      description: frozenAdjustForm.description,
+      internalNote: frozenAdjustForm.internalNote,
+    });
+  };
+
+  const handleRelease = () => {
+    if (!releaseForm.amount || !releaseForm.reason) return;
+    releaseMutation.mutate({
+      customerId,
+      currency,
+      amount: releaseForm.amount,
+      reason: releaseForm.reason,
+    });
+  };
+
+  if (isWalletLoading || isFrozenLoading) return <div className="space-y-4"><Skeleton className="h-32" /><Skeleton className="h-64" /></div>;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-1 bg-primary/5 border-primary/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Wallet className="w-4 h-4" /> Current Balance
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tracking-tight text-primary">
-              {formatCurrency(currency, wallet?.balance || "0")}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Available for automatic invoice deduction
-            </p>
-            <div className="mt-4">
-              <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="w-full">
-                    Adjust Balance
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Manual Wallet Adjustment</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-2">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Direction</Label>
-                        <Select
-                          value={adjustForm.direction}
-                          onValueChange={(v: "credit" | "debit") => setAdjustForm({ ...adjustForm, direction: v })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="credit">Credit (Add Funds)</SelectItem>
-                            <SelectItem value="debit">Debit (Deduct Funds)</SelectItem>
-                          </SelectContent>
-                        </Select>
+      {/* Wallet Type Tabs */}
+      <div className="flex border-b border-border w-full">
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${walletTab === "operating" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setWalletTab("operating")}
+        >
+          Operating Account
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${walletTab === "deposit" ? "border-amber-500 text-amber-700 dark:text-amber-400" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setWalletTab("deposit")}
+        >
+          Security Deposit
+        </button>
+      </div>
+
+      {walletTab === "operating" && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-left-2 duration-300">
+          <Card className="md:col-span-1 bg-primary/5 border-primary/20 h-fit">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Wallet className="w-4 h-4" /> Operating Balance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold tracking-tight text-primary">
+                {formatCurrency(currency, wallet?.balance || "0")}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Available for automatic invoice deduction
+              </p>
+              <div className="mt-4">
+                <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full">
+                      Adjust Balance
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Manual Wallet Adjustment</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Direction</Label>
+                          <Select
+                            value={adjustForm.direction}
+                            onValueChange={(v: "credit" | "debit") => setAdjustForm({ ...adjustForm, direction: v })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="credit">Credit (Add Funds)</SelectItem>
+                              <SelectItem value="debit">Debit (Deduct Funds)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Amount ({currency})</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={adjustForm.amount}
+                            onChange={(e) => setAdjustForm({ ...adjustForm, amount: e.target.value })}
+                          />
+                        </div>
                       </div>
+                      <div className="space-y-2">
+                        <Label>Description (Visible to Client)</Label>
+                        <Input
+                          placeholder="e.g. Refund adjustment"
+                          value={adjustForm.description}
+                          onChange={(e) => setAdjustForm({ ...adjustForm, description: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Internal Note (Optional)</Label>
+                        <Textarea
+                          placeholder="Reason for adjustment..."
+                          value={adjustForm.internalNote}
+                          onChange={(e) => setAdjustForm({ ...adjustForm, internalNote: e.target.value })}
+                        />
+                      </div>
+                      <Button 
+                        className="w-full" 
+                        onClick={handleAdjust} 
+                        disabled={adjustMutation.isPending || !adjustForm.amount || !adjustForm.description}
+                      >
+                        {adjustMutation.isPending ? "Processing..." : "Confirm Adjustment"}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">Transaction History</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isTxLoading ? (
+                <div className="p-6 space-y-2">
+                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+                </div>
+              ) : !transactions || transactions.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">No transactions found</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {transactions.map((tx) => (
+                      <TableRow key={tx.id}>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          {formatDateISO(tx.createdAt)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs capitalize font-normal">
+                            {tx.type.replace(/_/g, " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm max-w-[200px] truncate" title={tx.description || ""}>
+                          {tx.description}
+                          {tx.referenceId && (
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              (Ref: {tx.referenceType} #{tx.referenceId})
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className={`text-sm text-right font-medium ${tx.direction === "credit" ? "text-emerald-600" : "text-red-600"}`}>
+                          {tx.direction === "credit" ? "+" : "-"}{formatCurrency(currency, tx.amount)}
+                        </TableCell>
+                        <TableCell className="text-sm text-right text-muted-foreground">
+                          {formatCurrency(currency, tx.balanceAfter)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {walletTab === "deposit" && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-right-2 duration-300">
+          <Card className="md:col-span-1 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 h-fit">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-amber-800 dark:text-amber-400 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4" /> Security Deposit
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold tracking-tight text-amber-900 dark:text-amber-300">
+                {formatCurrency(currency, frozenWallet?.balance || "0")}
+              </div>
+              <p className="text-xs text-amber-700/80 dark:text-amber-500/80 mt-1">
+                Held as security deposit. Not available for automatic deduction.
+              </p>
+              <div className="mt-4 space-y-2">
+                <Dialog open={releaseOpen} onOpenChange={setReleaseOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="w-full bg-amber-600 hover:bg-amber-700 text-white" size="sm">
+                      Release to Operating
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Release Deposit</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <p className="text-sm text-muted-foreground">
+                        This will transfer funds from the Security Deposit (Frozen) wallet to the Operating Account wallet.
+                      </p>
                       <div className="space-y-2">
                         <Label>Amount ({currency})</Label>
                         <Input
                           type="number"
                           step="0.01"
                           placeholder="0.00"
-                          value={adjustForm.amount}
-                          onChange={(e) => setAdjustForm({ ...adjustForm, amount: e.target.value })}
+                          value={releaseForm.amount}
+                          onChange={(e) => setReleaseForm({ ...releaseForm, amount: e.target.value })}
+                        />
+                        <p className="text-xs text-muted-foreground">Max available: {frozenWallet?.balance}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Reason</Label>
+                        <Textarea
+                          placeholder="e.g. Employee termination, contract end"
+                          value={releaseForm.reason}
+                          onChange={(e) => setReleaseForm({ ...releaseForm, reason: e.target.value })}
                         />
                       </div>
+                      <Button 
+                        className="w-full" 
+                        onClick={handleRelease} 
+                        disabled={releaseMutation.isPending || !releaseForm.amount || !releaseForm.reason}
+                      >
+                        {releaseMutation.isPending ? "Processing..." : "Confirm Release"}
+                      </Button>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Description (Visible to Client)</Label>
-                      <Input
-                        placeholder="e.g. Refund adjustment"
-                        value={adjustForm.description}
-                        onChange={(e) => setAdjustForm({ ...adjustForm, description: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Internal Note (Optional)</Label>
-                      <Textarea
-                        placeholder="Reason for adjustment..."
-                        value={adjustForm.internalNote}
-                        onChange={(e) => setAdjustForm({ ...adjustForm, internalNote: e.target.value })}
-                      />
-                    </div>
-                    <Button 
-                      className="w-full" 
-                      onClick={handleAdjust} 
-                      disabled={adjustMutation.isPending || !adjustForm.amount || !adjustForm.description}
-                    >
-                      {adjustMutation.isPending ? "Processing..." : "Confirm Adjustment"}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardContent>
-        </Card>
+                  </DialogContent>
+                </Dialog>
 
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base">Transaction History</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {isTxLoading ? (
-              <div className="p-6 space-y-2">
-                {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+                <Dialog open={frozenAdjustOpen} onOpenChange={setFrozenAdjustOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="w-full border-amber-200 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/40">
+                      Adjust Deposit
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Adjust Security Deposit</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Direction</Label>
+                          <Select
+                            value={frozenAdjustForm.direction}
+                            onValueChange={(v: "credit" | "debit") => setFrozenAdjustForm({ ...frozenAdjustForm, direction: v })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="credit">Credit (Add Funds)</SelectItem>
+                              <SelectItem value="debit">Debit (Deduct Funds)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Amount ({currency})</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={frozenAdjustForm.amount}
+                            onChange={(e) => setFrozenAdjustForm({ ...frozenAdjustForm, amount: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Description</Label>
+                        <Input
+                          placeholder="e.g. Initial deposit"
+                          value={frozenAdjustForm.description}
+                          onChange={(e) => setFrozenAdjustForm({ ...frozenAdjustForm, description: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Internal Note (Optional)</Label>
+                        <Textarea
+                          placeholder="Internal reference..."
+                          value={frozenAdjustForm.internalNote}
+                          onChange={(e) => setFrozenAdjustForm({ ...frozenAdjustForm, internalNote: e.target.value })}
+                        />
+                      </div>
+                      <Button 
+                        className="w-full" 
+                        onClick={handleFrozenAdjust} 
+                        disabled={frozenAdjustMutation.isPending || !frozenAdjustForm.amount || !frozenAdjustForm.description}
+                      >
+                        {frozenAdjustMutation.isPending ? "Processing..." : "Confirm Adjustment"}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
-            ) : !transactions || transactions.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">No transactions found</div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="text-right">Balance</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.map((tx) => (
-                    <TableRow key={tx.id}>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatDateISO(tx.createdAt)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs capitalize font-normal">
-                          {tx.type.replace(/_/g, " ")}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm max-w-[200px] truncate" title={tx.description || ""}>
-                        {tx.description}
-                        {tx.referenceId && (
-                          <span className="ml-1 text-xs text-muted-foreground">
-                            (Ref: {tx.referenceType} #{tx.referenceId})
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className={`text-sm text-right font-medium ${tx.direction === "credit" ? "text-emerald-600" : "text-red-600"}`}>
-                        {tx.direction === "credit" ? "+" : "-"}{formatCurrency(currency, tx.amount)}
-                      </TableCell>
-                      <TableCell className="text-sm text-right text-muted-foreground">
-                        {formatCurrency(currency, tx.balanceAfter)}
-                      </TableCell>
+            </CardContent>
+          </Card>
+
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-base">Deposit History</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isFrozenTxLoading ? (
+                <div className="p-6 space-y-2">
+                  {[1, 2, 3].map(i => <Skeleton key={i} className="h-10 w-full" />)}
+                </div>
+              ) : !frozenTransactions || frozenTransactions.length === 0 ? (
+                <div className="p-8 text-center text-muted-foreground">No deposit transactions found</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+                  </TableHeader>
+                  <TableBody>
+                    {frozenTransactions.map((tx) => (
+                      <TableRow key={tx.id}>
+                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                          {formatDateISO(tx.createdAt)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs capitalize font-normal border-amber-200 text-amber-700 bg-amber-50">
+                            {tx.type.replace(/_/g, " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm max-w-[200px] truncate" title={tx.description || ""}>
+                          {tx.description}
+                          {tx.referenceId && (
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              (Ref: {tx.referenceType} #{tx.referenceId})
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className={`text-sm text-right font-medium ${tx.direction === "credit" ? "text-emerald-600" : "text-red-600"}`}>
+                          {tx.direction === "credit" ? "+" : "-"}{formatCurrency(currency, tx.amount)}
+                        </TableCell>
+                        <TableCell className="text-sm text-right text-muted-foreground">
+                          {formatCurrency(currency, tx.balanceAfter)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

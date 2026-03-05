@@ -1155,3 +1155,64 @@ describe("E2E: Security Tests", () => {
     });
   });
 });
+
+// ============================================================================
+// 13. FUNCTIONAL CORRECTNESS & BUSINESS LOGIC
+// ============================================================================
+describe("E2E: Functional Correctness", () => {
+  describe("Employee Management", () => {
+    it("should create employee with bank details (JSON)", async () => {
+      const caller = appRouter.createCaller(createContext("admin"));
+      // Use a unique email to avoid conflicts if DB is not reset
+      const email = `test.bank.${Date.now()}@test.com`;
+      
+      const input = {
+        customerId: 1,
+        firstName: "Bank",
+        lastName: "Tester",
+        email,
+        country: "SG",
+        serviceType: "eor" as const,
+        baseSalary: "6000",
+        salaryCurrency: "SGD",
+        startDate: "2026-04-01",
+        bankDetails: {
+          bankName: "DBS Bank",
+          accountNumber: "123-456-789",
+          swiftCode: "DBSSGSG",
+          holderName: "Bank Tester"
+        }
+      };
+
+      const result = await caller.employees.create(input);
+      expect(result).toBeDefined();
+      expect(result.id).toBeDefined();
+      
+      // Verify retrieval
+      const employee = await caller.employees.get({ id: result.id });
+      expect(employee).toBeDefined();
+      expect(employee?.bankDetails).toEqual(input.bankDetails);
+    });
+  });
+
+  describe("Customer Management", () => {
+    it("should create customer with default settings", async () => {
+      const caller = appRouter.createCaller(createContext("admin"));
+      const companyName = `Growth Corp ${Date.now()}`;
+      
+      const result = await caller.customers.create({
+        companyName,
+        country: "US",
+        paymentTermDays: 30,
+        depositMultiplier: 1,
+        pricing: { // Verify pricing structure if supported by router
+          managementFee: 500,
+          deposit: 1000
+        }
+      });
+      
+      expect(result).toBeDefined();
+      expect(result.companyName).toBe(companyName);
+    });
+  });
+});

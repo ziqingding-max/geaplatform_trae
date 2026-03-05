@@ -15,7 +15,11 @@ import {
   logAuditAction,
   listUsers,
   listEmployees,
+  getDb,
+  createCustomerPricing,
 } from "../db";
+import { quotations } from "../../drizzle/schema";
+import { desc, eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 /**
@@ -268,11 +272,54 @@ export const salesRouter = router({
           phone: lead.contactPhone || undefined,
           role: "Primary Contact",
           isPrimary: true,
-          hasPortalAccess: false,
+          hasPortalAccess: false, // Explicitly false as per new requirement: AM grants access later
         });
       }
 
-      // 3. Link lead to customer (status stays msa_signed — will become closed_won
+      // 3. Sync Pricing from Quotation
+      const db = getDb();
+      if (db) {
+        // Find latest quotation (regardless of status, but ideally accepted)
+        const latestQuotation = await db.query.quotations.findFirst({
+          where: eq(quotations.leadId, input.leadId),
+          orderBy: [desc(quotations.createdAt)],
+        });
+
+        if (latestQuotation && latestQuotation.snapshotData) {
+          try {
+            const items = JSON.parse(latestQuotation.snapshotData as string);
+            // Group by country + serviceType to avoid duplicates
+            const pricingMap = new Map<string, any>();
+            
+            for (const item of items) {
+              const key = `${item.countryCode}-${item.serviceType}`;
+              if (!pricingMap.has(key)) {
+                pricingMap.set(key, item);
+              }
+            }
+
+            for (const item of pricingMap.values()) {
+              await createCustomerPricing({
+                customerId,
+                pricingType: "country_specific",
+                countryCode: item.countryCode,
+                serviceType: item.serviceType,
+                fixedPrice: String(item.serviceFee),
+                visaOneTimeFee: item.oneTimeFee ? String(item.oneTimeFee) : undefined,
+                currency: item.currency || input.settlementCurrency,
+                effectiveFrom: new Date().toISOString().split("T")[0],
+                sourceQuotationId: latestQuotation.id,
+                isActive: true,
+              });
+            }
+          } catch (e) {
+            console.error("Failed to sync pricing from quotation", e);
+            // Log but don't fail the conversion
+          }
+        }
+      }
+
+      // 4. Link lead to customer (status stays msa_signed — will become closed_won
       //    when first employee reaches onboarding status)
       await updateSalesLead(input.leadId, {
         convertedCustomerId: customerId,

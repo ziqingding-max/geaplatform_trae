@@ -1,4 +1,4 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, lte } from "drizzle-orm";
 import { getDb } from "../db";
 import { exchangeRates, InsertExchangeRate, systemConfig } from "../../drizzle/schema";
 
@@ -50,13 +50,24 @@ export async function getExchangeRate(
   fromCurrency: string,
   toCurrency: string,
   effectiveDate?: Date
-): Promise<{ rate: number; rateWithMarkup: number; markupPercentage: number } | null> {
+): Promise<{ rate: number; rateWithMarkup: number; markupPercentage: number; effectiveDate: string } | null> {
   if (fromCurrency === toCurrency) {
-    return { rate: 1, rateWithMarkup: 1, markupPercentage: 0 };
+    return {
+      rate: 1,
+      rateWithMarkup: 1,
+      markupPercentage: 0,
+      effectiveDate: effectiveDate ? effectiveDate.toISOString().split("T")[0] : new Date().toISOString().split("T")[0]
+    };
   }
 
   const db = await getDb();
   if (!db) return null;
+
+  let dateCondition = undefined;
+  if (effectiveDate) {
+    const dateStr = effectiveDate.toISOString().split("T")[0];
+    dateCondition = lte(exchangeRates.effectiveDate, dateStr);
+  }
 
   // Try direct lookup
   const result = await db
@@ -65,7 +76,8 @@ export async function getExchangeRate(
     .where(
       and(
         eq(exchangeRates.fromCurrency, fromCurrency),
-        eq(exchangeRates.toCurrency, toCurrency)
+        eq(exchangeRates.toCurrency, toCurrency),
+        dateCondition
       )
     )
     .orderBy(desc(exchangeRates.effectiveDate))
@@ -75,7 +87,12 @@ export async function getExchangeRate(
     const rate = parseFloat(result[0].rate.toString());
     const rateWithMarkup = parseFloat(result[0].rateWithMarkup.toString());
     const markupPercentage = parseFloat(result[0].markupPercentage.toString());
-    return { rate, rateWithMarkup, markupPercentage };
+    return {
+      rate,
+      rateWithMarkup,
+      markupPercentage,
+      effectiveDate: result[0].effectiveDate
+    };
   }
 
   // Try inverse lookup (if we have USD→EUR but need EUR→USD)
@@ -85,7 +102,8 @@ export async function getExchangeRate(
     .where(
       and(
         eq(exchangeRates.fromCurrency, toCurrency),
-        eq(exchangeRates.toCurrency, fromCurrency)
+        eq(exchangeRates.toCurrency, fromCurrency),
+        dateCondition
       )
     )
     .orderBy(desc(exchangeRates.effectiveDate))
@@ -96,7 +114,12 @@ export async function getExchangeRate(
     const markupPercentage = parseFloat(inverse[0].markupPercentage.toString());
     const inverseRate = 1 / rawRate;
     const inverseRateWithMarkup = 1 / (rawRate * (1 - markupPercentage / 100));
-    return { rate: inverseRate, rateWithMarkup: inverseRateWithMarkup, markupPercentage };
+    return {
+      rate: inverseRate,
+      rateWithMarkup: inverseRateWithMarkup,
+      markupPercentage,
+      effectiveDate: inverse[0].effectiveDate
+    };
   }
 
   return null;
