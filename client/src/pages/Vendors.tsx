@@ -4,7 +4,7 @@
  */
 import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
-import BankDetailsForm, { BankDetails } from "@/components/forms/BankDetailsForm";
+import { BankDetailsForm, BankDetails } from "@/components/forms/BankDetailsForm";
 import { formatDate, formatAmount } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
