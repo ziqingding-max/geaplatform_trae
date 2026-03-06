@@ -24,7 +24,7 @@ import { invoices as invoicesTable, customers as customersTable, creditNoteAppli
 import { eq, and, sql, between } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { generateInvoiceNumber, generateDepositInvoiceNumber } from "../services/invoiceNumberService";
-import { generateCreditNote, type CreditNoteLineItem } from "../services/creditNoteService";
+import { generateCreditNote, approveCreditNote, type CreditNoteLineItem } from "../services/creditNoteService";
 import { generateDepositRefund } from "../services/depositRefundService";
 import { notifyOwner } from "../_core/notification";
 import { notificationService } from "../services/notificationService";
@@ -1246,46 +1246,13 @@ export const invoicesRouter = router({
       disposition: z.enum(["to_wallet", "to_bank"]),
     }))
     .mutation(async ({ input, ctx }) => {
-      const cn = await getInvoiceById(input.creditNoteId);
-      if (!cn) throw new TRPCError({ code: "NOT_FOUND", message: "Credit note not found" });
+      await approveCreditNote(input.creditNoteId, ctx.user.id, input.disposition);
       
-      // Allow approving Draft or Pending Review CNs
-      // Also allow 'sent' if it was just generated but not processed? 
-      // Safest is Draft/Pending.
-      if (cn.status === 'paid' || cn.status === 'void') {
-         throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Credit note is already ${cn.status}` });
-      }
-
-      const amount = parseFloat(cn.total);
-
-      if (input.disposition === 'to_wallet') {
-         // Credit to Main Wallet
-         const wallet = await walletService.getWallet(cn.customerId, cn.currency);
-         await walletService.transact({
-            walletId: wallet.id,
-            type: "credit_note_release", // or deposit_release
-            amount: amount.toFixed(2),
-            direction: "credit",
-            referenceId: cn.id,
-            referenceType: "invoice",
-            description: `Credit Note #${cn.invoiceNumber} (Deposit Release)`,
-            createdBy: ctx.user.id
-         });
-      }
-
-      // Update CN status to paid
-      await updateInvoice(cn.id, {
-         status: 'paid',
-         paidDate: new Date(),
-         paidAmount: amount.toFixed(2),
-         internalNotes: (cn.internalNotes || "") + `\n[Approved] Disposition: ${input.disposition}`
-      });
-
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
         action: "approve",
         entityType: "invoice",
-        entityId: cn.id,
+        entityId: input.creditNoteId,
         changes: JSON.stringify({ disposition: input.disposition }),
       });
 

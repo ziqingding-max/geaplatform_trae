@@ -6,7 +6,7 @@ import {
   getInvoiceGenerationStatus,
   regenerateInvoices,
   regenerateSingleInvoice,
-} from "../services/invoiceGenerationService";
+} from "../services/invoiceGenerationService.ts";
 import {
   upsertExchangeRate,
   getExchangeRate,

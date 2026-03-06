@@ -9,6 +9,7 @@ import {
   contractors,
   customerPricing,
   countriesConfig,
+  exchangeRates,
   InsertInvoice,
   InsertInvoiceItem,
   CountryConfig,
@@ -501,6 +502,106 @@ async function generateAorInvoices(
 }
 
 /**
+ * Get status of invoice generation for a specific payroll month
+ */
+export async function getInvoiceGenerationStatus(
+  payrollMonth: Date
+): Promise<{
+  totalInvoices: number;
+  byStatus: Record<string, number>;
+} | null> {
+  const db = await getDb();
+  if (!db) return null;
+
+  const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
+
+  const monthInvoices = await db
+    .select({ status: invoices.status })
+    .from(invoices)
+    .where(eq(invoices.invoiceMonth, payrollMonthStr));
+
+  const statusCounts: Record<string, number> = {};
+  for (const inv of monthInvoices) {
+    const s = inv.status || "unknown";
+    statusCounts[s] = (statusCounts[s] || 0) + 1;
+  }
+
+  return {
+    totalInvoices: monthInvoices.length,
+    byStatus: statusCounts,
+  };
+}
+
+/**
+ * Regenerate invoices for a month (deletes draft invoices and recreates)
+ */
+export async function regenerateInvoices(
+  payrollMonth: Date
+): Promise<{ success: boolean; invoiceIds?: number[]; warnings?: string[] }> {
+  const db = await getDb();
+  if (!db) return { success: false, warnings: ["Database unavailable"] };
+
+  const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
+
+  // 1. Find all DRAFT invoices for this month
+  const drafts = await db
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.invoiceMonth, payrollMonthStr),
+        eq(invoices.status, "draft")
+      )
+    );
+
+  const draftIds = drafts.map((d) => d.id);
+
+  if (draftIds.length > 0) {
+    // 2. Delete invoice items
+    await db.delete(invoiceItems).where(inArray(invoiceItems.invoiceId, draftIds));
+    
+    // 3. Delete invoices
+    await db.delete(invoices).where(inArray(invoices.id, draftIds));
+  }
+
+  // 4. Regenerate
+  return await generateInvoicesFromPayroll(payrollMonth, "Regenerated Invoices");
+}
+
+/**
+ * Regenerate a single invoice (delete and recreate from payroll data)
+ */
+export async function regenerateSingleInvoice(
+  invoiceId: number
+): Promise<{ success: boolean; invoiceIds?: number[]; message?: string }> {
+  const db = await getDb();
+  if (!db) return { success: false, message: "Database unavailable" };
+
+  // 1. Get invoice details
+  const invoice = await db.query.invoices.findFirst({
+    where: eq(invoices.id, invoiceId),
+  });
+
+  if (!invoice) return { success: false, message: "Invoice not found" };
+  if (invoice.status !== "draft") {
+    return { success: false, message: "Only draft invoices can be regenerated" };
+  }
+  if (!invoice.invoiceMonth) {
+    return { success: false, message: "Invoice does not have a month set" };
+  }
+
+  // 2. Delete invoice
+  await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
+  await db.delete(invoices).where(eq(invoices.id, invoiceId));
+
+  // 3. Regenerate for that month
+  // Since we deleted the specific invoice, generateInvoicesFromPayroll will recreate it
+  // (and skip other existing ones)
+  const payrollMonth = new Date(invoice.invoiceMonth);
+  return await generateInvoicesFromPayroll(payrollMonth, "Regenerated Single Invoice");
+}
+
+/**
  * Calculate the service fee rate for a single employee (in settlement currency)
  */
 async function getServiceFeeRate(
@@ -617,3 +718,5 @@ async function getExchangeRateWithFallback(from: string, to: string, date: Date)
   
   return null;
 }
+
+// End of file
