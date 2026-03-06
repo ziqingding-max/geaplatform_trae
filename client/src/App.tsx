@@ -27,7 +27,6 @@ import BillingEntities from "./pages/BillingEntities";
 import { Redirect } from "wouter";
 import AuditLogs from "./pages/AuditLogs";
 import KnowledgeBaseAdmin from "./pages/KnowledgeBaseAdmin";
-import AISettings from "./pages/AISettings";
 import Vendors from "./pages/Vendors";
 import VendorBills from "./pages/VendorBills";
 import ProfitLossReport from "./pages/ProfitLossReport";

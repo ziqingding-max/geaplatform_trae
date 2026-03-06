@@ -79,7 +79,6 @@ function useNavGroups(user: any) {
       items: [
         { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin", roles: ["admin"] },
         { label: t("nav.countryGuide"), icon: Globe, href: "/admin/knowledge/country-guides", roles: ["admin", "sales", "customer_manager"] },
-        { label: t("nav.ai_settings"), icon: Bot, href: "/ai-settings", roles: ["admin"] },
       ].filter(item => !item.roles || hasRole(item.roles)),
     },
     {
