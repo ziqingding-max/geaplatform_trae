@@ -25,7 +25,6 @@ import { allocationsRouter } from "./routers/allocations";
 import { pdfParsingRouter } from "./routers/pdfParsing";
 import { salesRouter } from "./routers/sales";
 import { knowledgeBaseAdminRouter } from "./routers/knowledgeBaseAdmin";
-import { aiSettingsRouter } from "./routers/aiSettings";
 import { copilotRouter } from "./routers/copilot";
 import { notificationsRouter } from "./routers/notifications";
 import { calculationRouter } from "./routers/calculationRouter";
@@ -70,7 +69,6 @@ export const appRouter = router({
   pdfParsing: pdfParsingRouter,
   sales: salesRouter,
   knowledgeBaseAdmin: knowledgeBaseAdminRouter,
-  aiSettings: aiSettingsRouter,
   copilot: copilotRouter,
   notifications: notificationsRouter,
   calculation: calculationRouter,
