@@ -234,7 +234,6 @@ function AdminRouter() {
       <Route path="/knowledge-base-admin" component={KnowledgeBaseAdmin} />
       <Route path="/admin/knowledge/country-guides/:countryCode" component={CountryGuideEditor} />
       <Route path="/admin/knowledge/country-guides" component={CountryGuideList} />
-      <Route path="/ai-settings" component={AISettings} />
       <Route path="/settings" component={Settings} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
