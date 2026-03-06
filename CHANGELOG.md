@@ -4,6 +4,30 @@
 
 ---
 
+## [3.8.0] — 2026-03-06
+
+### Added
+
+- **Sales CRM Enhancements**: 全面的销售 CRM 流程控制与功能增强。
+    - **Quotations Search**: 报价单列表页新增搜索功能，支持按报价单号模糊搜索。
+    - **CRM Restrictions (Pipeline Control)**: 实施严格的销售漏斗状态流转限制。
+        - **Pipeline Order**: 强制遵循 `Discovery` -> `Leads` -> `Quotation Sent` -> `MSA Sent` -> `MSA Signed` 顺序，禁止跳步。
+        - **Quotation Sent Prerequisite**: Lead 转 `Quotation Sent` 必须关联已发送/已接受的报价单。
+        - **MSA Signed Prerequisite**: Lead 转 `MSA Signed` 必须关联已接受的报价单且已上传 MSA 合同文件。
+    - **Sales Documents**: Lead 详情页新增文档管理模块，支持上传 Contract (MSA)、Proposal 等文件。
+    - **Automatic File Sync**: Lead 转 Customer 时，自动将 MSA 合同文件同步至新客户的 Contracts 模块。
+
+### Fixed
+
+- **PDF Download Fix (Production)**: 修复生产环境（阿里云 OSS）下 PDF 下载链接在浏览器中打开空白的问题，改为后端代理下载并返回 Base64 数据流触发下载。
+- **Quotation Logic Fixes**:
+    - **Employer Cost Calculation**: 修复中国地区 Employer Cost 计算为 0 的问题（默认选中上海地区规则）。
+    - **Currency & Totals**: 统一 Quotation 列表页 Total Monthly 显示为 USD；修复创建页中服务费与本地薪资币种混合导致的计算错误（统一转 USD 结算）。
+    - **Status Management**: 恢复 Quotations 状态手动调整功能（Draft -> Sent -> Accepted/Rejected），并增加确认弹窗防止误操作。
+    - **Draft Editing**: 允许对 Draft 状态的报价单进行二次编辑。
+
+---
+
 ## [3.7.0] — 2026-03-05
 
 ### Added

@@ -18,8 +18,9 @@ import {
   getDb,
   createCustomerPricing,
 } from "../db";
-import { quotations } from "../../drizzle/schema";
-import { desc, eq } from "drizzle-orm";
+import { storagePut, storageGet } from "../storage";
+import { quotations, salesDocuments, customerContracts } from "../../drizzle/schema";
+import { desc, eq, and, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 /**
@@ -182,6 +183,87 @@ export const salesRouter = router({
       // If advancing to "leads", intendedServices and targetCountries should be present
       // (soft validation — we log a warning but don't block)
 
+      // CRM Restrictions:
+      
+      // 1. Pipeline Order
+      // Must follow: discovery -> leads -> quotation_sent -> msa_sent -> msa_signed
+      const pipelineOrder = ["discovery", "leads", "quotation_sent", "msa_sent", "msa_signed", "closed_won", "closed_lost"];
+      if (input.data.status && input.data.status !== existing.status && input.data.status !== "closed_lost") {
+          const currentIndex = pipelineOrder.indexOf(existing.status);
+          const nextIndex = pipelineOrder.indexOf(input.data.status);
+          
+          if (nextIndex > -1 && currentIndex > -1 && nextIndex > currentIndex + 1) {
+              // Only allow skipping if current status is closed_lost (reopening)
+              if (existing.status !== "closed_lost") {
+                  throw new TRPCError({
+                      code: "BAD_REQUEST",
+                      message: `Invalid status transition. You cannot skip stages. Next stage should be '${pipelineOrder[currentIndex + 1]}'.`
+                  });
+              }
+          }
+      }
+
+      // 2. Quotation Sent Requirement
+      if (input.data.status === "quotation_sent" && existing.status !== "quotation_sent") {
+          const db = getDb();
+          if (db) {
+              const hasSentQuotation = await db.query.quotations.findFirst({
+                  where: (q, { eq, or }) => 
+                      and(
+                          eq(q.leadId, input.id),
+                          or(eq(q.status, "sent"), eq(q.status, "accepted"))
+                      )
+              });
+              
+              if (!hasSentQuotation) {
+                  throw new TRPCError({
+                      code: "PRECONDITION_FAILED",
+                      message: "Cannot move to 'Quotation Sent': No sent or accepted quotation found for this lead."
+                  });
+              }
+          }
+      }
+
+      // 3. MSA Signed Requirement
+      if (input.data.status === "msa_signed" && existing.status !== "msa_signed") {
+          const db = getDb();
+          if (db) {
+              // Check for accepted quotation
+              const hasAcceptedQuotation = await db.query.quotations.findFirst({
+                  where: and(
+                      eq(quotations.leadId, input.id),
+                      eq(quotations.status, "accepted")
+                  )
+              });
+
+              if (!hasAcceptedQuotation) {
+                  throw new TRPCError({
+                      code: "PRECONDITION_FAILED",
+                      message: "Cannot move to 'MSA Signed': No accepted quotation found."
+                  });
+              }
+
+              // Check for MSA document
+              // Since we don't have a direct 'sales_documents' query helper exposed in db/index yet,
+              // we might need to check fileUrl/fileKey if we add them to salesLeads or use raw query.
+              // For now, let's assume we add a flag or check sales_documents table.
+              // We'll query sales_documents table directly.
+              const msaDoc = await db.query.salesDocuments.findFirst({
+                  where: and(
+                      eq(salesDocuments.leadId, input.id),
+                      eq(salesDocuments.docType, "contract") // Assuming 'contract' is used for MSA
+                  )
+              });
+
+              if (!msaDoc) {
+                   throw new TRPCError({
+                      code: "PRECONDITION_FAILED",
+                      message: "Cannot move to 'MSA Signed': No signed MSA document uploaded."
+                  });
+              }
+          }
+      }
+
       const updateData: any = { ...input.data };
       if (input.data.expectedCloseDate !== undefined) {
         updateData.expectedCloseDate = input.data.expectedCloseDate || null;
@@ -321,7 +403,30 @@ export const salesRouter = router({
         convertedCustomerId: customerId,
       });
 
-      // 4. Log the conversion activity
+      // 5. Sync Sales Documents (e.g. MSA) to Customer Contracts/Documents
+      const salesDocs = await db.query.salesDocuments.findMany({
+          where: eq(salesDocuments.leadId, input.leadId)
+      });
+      
+      for (const doc of salesDocs) {
+          // If docType is 'contract', convert to customer contract
+          if (doc.docType === 'contract') {
+              await db.insert(customerContracts).values({
+                  customerId,
+                  contractName: doc.fileName,
+                  contractType: "MSA",
+                  fileUrl: doc.fileUrl,
+                  fileKey: doc.fileKey,
+                  status: "signed",
+                  createdAt: new Date(),
+                  updatedAt: new Date()
+              });
+          }
+          // We can also sync other docs to a general customer_documents table if it existed,
+          // but for now requirement specifies MSA.
+      }
+
+      // 6. Log the conversion activity
       await createSalesActivity({
         leadId: input.leadId,
         activityType: "note",
@@ -494,6 +599,92 @@ export const salesRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await deleteSalesActivity(input.id);
+        return { success: true };
+      }),
+  }),
+
+  // ── Documents sub-router ─────────────────────────────────────────────
+  documents: router({
+    list: userProcedure
+      .input(z.object({ leadId: z.number() }))
+      .query(async ({ input }) => {
+        const db = getDb();
+        if (!db) return [];
+        const docs = await db.query.salesDocuments.findMany({
+            where: eq(salesDocuments.leadId, input.leadId),
+            orderBy: [desc(salesDocuments.createdAt)]
+        });
+        
+        // Map to signed URLs for viewing
+        return await Promise.all(docs.map(async (d) => {
+          if (d.fileKey) {
+            try {
+              const { url } = await storageGet(d.fileKey);
+              return { ...d, fileUrl: url };
+            } catch (e) {
+              return d;
+            }
+          }
+          return d;
+        }));
+      }),
+
+    upload: crmProcedure
+      .input(
+        z.object({
+          leadId: z.number(),
+          docType: z.enum(["contract", "proposal", "other"]).default("other"),
+          fileName: z.string(),
+          fileBase64: z.string(), // base64-encoded file content
+          mimeType: z.string().default("application/pdf"),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        // Upload file to S3
+        const fileBuffer = Buffer.from(input.fileBase64, "base64");
+        const randomSuffix = Math.random().toString(36).substring(2, 10);
+        const fileKey = `sales/${input.leadId}/${randomSuffix}-${input.fileName}`;
+        const { url } = await storagePut(fileKey, fileBuffer, input.mimeType);
+
+        const db = getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+        // Create document record
+        const [doc] = await db.insert(salesDocuments).values({
+          leadId: input.leadId,
+          docType: input.docType,
+          fileName: input.fileName,
+          fileKey: fileKey,
+          fileUrl: url,
+          uploadedBy: ctx.user.id,
+          createdAt: new Date(),
+        }).returning();
+
+        await logAuditAction({
+          userId: ctx.user.id, userName: ctx.user.name || null,
+          action: "create",
+          entityType: "sales_document",
+          changes: JSON.stringify({ fileName: input.fileName, docType: input.docType }),
+        });
+
+        return { success: true, url, doc };
+      }),
+
+    delete: crmProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+        await db.delete(salesDocuments).where(eq(salesDocuments.id, input.id));
+
+        await logAuditAction({
+          userId: ctx.user.id, userName: ctx.user.name || null,
+          action: "delete",
+          entityType: "sales_document",
+          entityId: input.id,
+        });
+
         return { success: true };
       }),
   }),

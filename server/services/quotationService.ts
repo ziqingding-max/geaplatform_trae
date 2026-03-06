@@ -2,6 +2,7 @@ import { getDb } from "../db";
 import { quotations, customers, salesLeads, billingEntities } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { calculationService } from "./calculationService";
+import { getExchangeRate } from "./exchangeRateService";
 import { storagePut } from "../storage";
 import { createBrandedPdfDocument, drawCoverPage, drawHeader, drawFooter, smartText } from "./pdfBrandTemplateService";
 import { mergePdfs } from "./contentMergeService";
@@ -28,6 +29,11 @@ interface CreateQuotationInput {
   includeCountryGuide?: boolean; // New Flag
 }
 
+interface UpdateQuotationInput extends CreateQuotationInput {
+  id: number;
+  updatedBy: number;
+}
+
 export const quotationService = {
   createQuotation: async (input: CreateQuotationInput) => {
     const db = getDb();
@@ -36,10 +42,9 @@ export const quotationService = {
     // 1. Calculate costs for each item
     const calculatedItems = [];
     let totalMonthly = 0;
-    const currency = input.items[0]?.currency || "USD"; // Assume single currency for now
+    const quotationCurrency = "USD"; // Standardize on USD for the final quotation total
 
     // TODO: Dynamic year selection based on validity. For now using 2025 as our seed data is 2025.
-    // In production, this should fallback to the latest available rules if current year is not found.
     const year = 2025; 
 
     for (const item of input.items) {
@@ -47,18 +52,37 @@ export const quotationService = {
         countryCode: item.countryCode,
         year,
         salary: item.salary,
-        regionCode: item.regionCode, // Pass regionCode
+        regionCode: item.regionCode, 
       });
 
       const employerCost = parseFloat(calcResult.totalEmployer);
-      const totalEmploymentCost = item.salary + employerCost;
-      const subtotal = (totalEmploymentCost + item.serviceFee) * item.headcount;
+      const totalEmploymentCostLocal = item.salary + employerCost;
+      
+      // Convert Local Employment Cost to USD
+      // item.currency is the Local Currency (e.g., CNY, EUR)
+      let exchangeRate = 1;
+      let usdEmploymentCost = totalEmploymentCostLocal;
+
+      if (item.currency !== "USD") {
+        const rateData = await getExchangeRate("USD", item.currency);
+        if (rateData) {
+           // rateData.rateWithMarkup is USD -> Local (e.g. 1 USD = 7.2 CNY)
+           // To convert Local -> USD: Amount / Rate
+           exchangeRate = rateData.rateWithMarkup;
+           usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
+        }
+      }
+
+      // Total Item Monthly = USD Employment Cost + USD Service Fee
+      const subtotal = (usdEmploymentCost + item.serviceFee) * item.headcount;
 
       calculatedItems.push({
         ...item,
-        employerCost,
-        totalEmploymentCost,
-        subtotal,
+        employerCost, // Local
+        totalEmploymentCost: totalEmploymentCostLocal, // Local
+        exchangeRate,
+        usdEmploymentCost,
+        subtotal, // USD
         calcDetails: calcResult.items
       });
 
@@ -78,7 +102,7 @@ export const quotationService = {
       customerId: input.customerId,
       countries: JSON.stringify(calculatedItems),
       totalMonthly: totalMonthly.toFixed(2),
-      currency,
+      currency: quotationCurrency,
       snapshotData: calculatedItems, // Full breakdown
       validUntil: input.validUntil || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(), // Default 15 days
       status: "draft",
@@ -91,6 +115,78 @@ export const quotationService = {
     await quotationService.generatePdf(result.id, input.includeCountryGuide);
 
     return result;
+  },
+
+  updateQuotation: async (input: UpdateQuotationInput) => {
+    const db = getDb();
+    if (!db) throw new Error("Database connection failed");
+
+    // Check status
+    const existing = await db.query.quotations.findFirst({
+        where: eq(quotations.id, input.id)
+    });
+    if (!existing) throw new Error("Quotation not found");
+    if (existing.status !== "draft") throw new Error("Only draft quotations can be edited");
+
+    // 1. Recalculate
+    const calculatedItems = [];
+    let totalMonthly = 0;
+    const quotationCurrency = "USD";
+    const year = 2025; 
+
+    for (const item of input.items) {
+      const calcResult = await calculationService.calculateSocialInsurance({
+        countryCode: item.countryCode,
+        year,
+        salary: item.salary,
+        regionCode: item.regionCode, 
+      });
+
+      const employerCost = parseFloat(calcResult.totalEmployer);
+      const totalEmploymentCostLocal = item.salary + employerCost;
+      
+      let exchangeRate = 1;
+      let usdEmploymentCost = totalEmploymentCostLocal;
+
+      if (item.currency !== "USD") {
+        const rateData = await getExchangeRate("USD", item.currency);
+        if (rateData) {
+           exchangeRate = rateData.rateWithMarkup;
+           usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
+        }
+      }
+
+      const subtotal = (usdEmploymentCost + item.serviceFee) * item.headcount;
+
+      calculatedItems.push({
+        ...item,
+        employerCost, 
+        totalEmploymentCost: totalEmploymentCostLocal, 
+        exchangeRate,
+        usdEmploymentCost,
+        subtotal, 
+        calcDetails: calcResult.items
+      });
+
+      totalMonthly += subtotal;
+    }
+
+    // 2. Update Record
+    await db.update(quotations).set({
+      leadId: input.leadId,
+      customerId: input.customerId,
+      countries: JSON.stringify(calculatedItems),
+      totalMonthly: totalMonthly.toFixed(2),
+      currency: quotationCurrency,
+      snapshotData: calculatedItems,
+      validUntil: input.validUntil,
+      updatedAt: new Date()
+    }).where(eq(quotations.id, input.id));
+
+    // 3. Regenerate PDF
+    await quotationService.generatePdf(input.id, input.includeCountryGuide);
+
+    return { id: input.id };
   },
 
   generatePdf: async (quotationId: number, includeCountryGuide = false) => {

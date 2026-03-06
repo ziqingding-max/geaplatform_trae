@@ -38,18 +38,75 @@ export const quotationRouter = router({
       });
     }),
 
+  update: crmProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        leadId: z.number().optional(),
+        customerId: z.number().optional(),
+        includeCountryGuide: z.boolean().optional(),
+        items: z.array(
+          z.object({
+            countryCode: z.string(),
+            regionCode: z.string().optional(),
+            headcount: z.number().min(1),
+            salary: z.number(),
+            currency: z.string().default("USD"),
+            serviceType: z.enum(["eor", "visa_eor"]),
+            serviceFee: z.number(),
+            oneTimeFee: z.number().optional(),
+          })
+        ),
+        validUntil: z.string().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      // Re-use create logic but update existing record
+      // Ideally quotationService should have an update method
+      return await quotationService.updateQuotation({
+        ...input,
+        updatedBy: ctx.user.id,
+      });
+    }),
+
   list: crmProcedure
     .input(
       z.object({
         limit: z.number().default(20),
         offset: z.number().default(0),
+        search: z.string().optional(),
+        customerId: z.number().optional(),
+        leadId: z.number().optional(),
       })
     )
     .query(async ({ input }) => {
       const db = getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
 
+      const whereConditions = [];
+      if (input.customerId) whereConditions.push(eq(quotations.customerId, input.customerId));
+      if (input.leadId) whereConditions.push(eq(quotations.leadId, input.leadId));
+      
+      // Note: Full-text search on joined tables (customer/lead) is complex with Drizzle query builder.
+      // For now, we rely on client-side filtering or exact ID matches if provided.
+      // If 'search' is provided, we can try to filter by quotationNumber.
+      if (input.search) {
+          // whereConditions.push(like(quotations.quotationNumber, `%${input.search}%`));
+          // Using a simple workaround since 'like' import might be missing or different in this context
+      }
+
       const items = await db.query.quotations.findMany({
+        where: (quotations, { eq, or, and, like }) => {
+            const conditions = [];
+            if (input.customerId) conditions.push(eq(quotations.customerId, input.customerId));
+            if (input.leadId) conditions.push(eq(quotations.leadId, input.leadId));
+            if (input.search) {
+                // Basic search on quotation number
+                conditions.push(like(quotations.quotationNumber, `%${input.search}%`));
+            }
+            return and(...conditions);
+        },
         orderBy: (quotations, { desc }) => [desc(quotations.createdAt)],
         limit: input.limit,
         offset: input.offset,

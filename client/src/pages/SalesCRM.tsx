@@ -45,7 +45,7 @@ import {
 import {
   Briefcase, Plus, Search, ArrowLeft, Mail, Phone, Users, ChevronRight,
   Trash2, Pencil, ArrowRightLeft, ExternalLink, MessageSquare, PhoneCall,
-  Calendar, FileText, Send, MoreHorizontal, CheckCircle2, Info, X, ChevronsUpDown,
+  Upload, FileIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -133,6 +133,87 @@ function ServiceMultiSelect({ value, onChange }: { value: string; onChange: (v: 
         </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+// ── Add Document Dialog ─────────────────────────────────────────────────────
+
+function AddDocumentDialog({
+  leadId,
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  leadId: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const { t } = useI18n();
+  const [docType, setDocType] = useState<string>("contract");
+  const [file, setFile] = useState<File | null>(null);
+
+  const uploadMutation = trpc.sales.documents.upload.useMutation({
+    onSuccess: () => {
+      toast.success("Document uploaded successfully");
+      onOpenChange(false);
+      onSuccess();
+      setFile(null);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleUpload = () => {
+      if (!file) {
+          toast.error("Please select a file");
+          return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+          const result = e.target?.result as string;
+          // Extract base64 part
+          const base64 = result.split(',')[1];
+          uploadMutation.mutate({
+              leadId,
+              docType: docType as any,
+              fileName: file.name,
+              fileBase64: base64,
+              mimeType: file.type
+          });
+      };
+      reader.readAsDataURL(file);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Upload Document</DialogTitle></DialogHeader>
+        <div className="space-y-4 mt-4">
+          <div className="space-y-2">
+            <Label>Document Type</Label>
+            <Select value={docType} onValueChange={setDocType}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="contract">Contract (MSA)</SelectItem>
+                <SelectItem value="proposal">Proposal</SelectItem>
+                <SelectItem value="other">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>File</Label>
+            <Input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
+            <Button onClick={handleUpload} disabled={uploadMutation.isPending}>
+              {uploadMutation.isPending ? t("common.loading") : "Upload"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -519,9 +600,11 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
   const [closeWonOpen, setCloseWonOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [documentOpen, setDocumentOpen] = useState(false);
 
   const { data: lead, isLoading, refetch } = trpc.sales.get.useQuery({ id: leadId });
   const { data: activities, refetch: refetchActivities } = trpc.sales.activities.list.useQuery({ leadId });
+  const { data: documents, refetch: refetchDocuments } = trpc.sales.documents.list.useQuery({ leadId });
   const { data: usersData } = trpc.sales.assignableUsers.useQuery();
   // Check if customer has employees at onboarding or later stages (for Close Won eligibility)
   const { data: onboardingStatus } = trpc.sales.checkOnboardingStatus.useQuery(
@@ -709,6 +792,49 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                 )}
               </CardContent>
             </Card>
+
+            {/* Documents Card */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="text-base">Documents</CardTitle>
+                    <Button variant="outline" size="sm" onClick={() => setDocumentOpen(true)}>
+                        <Upload className="w-3.5 h-3.5 mr-1" />Upload
+                    </Button>
+                </CardHeader>
+                <CardContent>
+                    {!documents || documents.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-6">No documents uploaded</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {documents.map((doc: any) => (
+                                <div key={doc.id} className="flex items-center justify-between p-3 border rounded bg-muted/30">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-blue-50 text-blue-600 rounded">
+                                            <FileIcon className="w-4 h-4" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-medium">{doc.fileName}</p>
+                                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                <Badge variant="secondary" className="text-[10px] h-4 px-1">{doc.docType}</Badge>
+                                                <span>{formatDateTime(doc.createdAt)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {doc.fileUrl && (
+                                            <Button variant="ghost" size="icon" asChild>
+                                                <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
+                                                    <ExternalLink className="w-4 h-4" />
+                                                </a>
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
           </div>
 
           {/* Right: Activities */}
@@ -836,6 +962,16 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
             open={activityOpen}
             onOpenChange={setActivityOpen}
             onSuccess={() => refetchActivities()}
+          />
+        )}
+
+        {/* Add Document Dialog */}
+        {documentOpen && (
+          <AddDocumentDialog
+            leadId={leadId}
+            open={documentOpen}
+            onOpenChange={setDocumentOpen}
+            onSuccess={() => refetchDocuments()}
           />
         )}
       </div>

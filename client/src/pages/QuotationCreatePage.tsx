@@ -1,5 +1,5 @@
 import { useI18n } from "@/lib/i18n";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,9 +31,12 @@ interface QuotationItem {
   totalOneTime?: number; // USD
 }
 
-export default function QuotationCreatePage() {
+export default function QuotationCreatePage({ params }: { params?: { id?: string } }) {
   const { t } = useI18n();
   const [, setLocation] = useLocation();
+  const editId = params?.id ? parseInt(params.id) : undefined;
+  const isEditMode = !!editId;
+
   const [leadId, setLeadId] = useState<number | undefined>();
   const [customerId, setCustomerId] = useState<number | undefined>();
   const [validUntil, setValidUntil] = useState<string>("");
@@ -45,6 +48,41 @@ export default function QuotationCreatePage() {
 
   const { data: leads } = trpc.sales.list.useQuery({ limit: 100 });
   const { data: customers } = trpc.customers.list.useQuery({ limit: 100 });
+  const { data: existingQuotation, isLoading: isLoadingQuotation } = trpc.quotations.get.useQuery(
+     editId || 0,
+     { enabled: isEditMode }
+  );
+
+  useEffect(() => {
+    if (isEditMode && existingQuotation) {
+       setLeadId(existingQuotation.leadId || undefined);
+       setCustomerId(existingQuotation.customerId || undefined);
+       setValidUntil(existingQuotation.validUntil ? new Date(existingQuotation.validUntil).toISOString().split("T")[0] : "");
+       
+       const parsedItems = typeof existingQuotation.countries === 'string' 
+           ? JSON.parse(existingQuotation.countries) 
+           : existingQuotation.countries;
+       
+       if (Array.isArray(parsedItems)) {
+           setItems(parsedItems.map((i: any) => ({
+               countryCode: i.countryCode,
+               regionCode: i.regionCode,
+               serviceType: i.serviceType,
+               headcount: i.headcount,
+               salary: i.salary,
+               currency: i.currency,
+               exchangeRate: i.exchangeRate || 1,
+               serviceFee: i.serviceFee,
+               oneTimeFee: i.oneTimeFee,
+               employerCost: i.employerCost,
+               totalMonthly: i.totalMonthly,
+               totalOneTime: i.totalOneTime
+           })));
+           setShowCostPreview(true);
+       }
+    }
+  }, [isEditMode, existingQuotation]);
+
   const calculateMutation = trpc.calculation.calculateContributions.useMutation();
   const { data: guideChapters } = trpc.countryGuides.listChapters.useQuery(
     { countryCode: items[0].countryCode || "CN" },
@@ -56,6 +94,14 @@ export default function QuotationCreatePage() {
   const createMutation = trpc.quotations.create.useMutation({
     onSuccess: () => {
       toast.success(t("common.create") + " ✓");
+      setLocation("/quotations");
+    },
+    onError: (err) => toast.error(err.message)
+  });
+
+  const updateMutation = trpc.quotations.update.useMutation({
+    onSuccess: () => {
+      toast.success(t("common.updated") || "Updated ✓");
       setLocation("/quotations");
     },
     onError: (err) => toast.error(err.message)
@@ -83,7 +129,9 @@ export default function QuotationCreatePage() {
   const handleCountryChange = async (index: number, countryCode: string) => {
     // 1. Update country code
     const newItems = [...items];
-    newItems[index] = { ...newItems[index], countryCode, employerCost: undefined, totalMonthly: undefined, exchangeRate: 1 };
+    // Default region for China to Shanghai to avoid 0 cost calculation if user forgets
+    const defaultRegion = countryCode === "CN" ? "CN-SH" : undefined;
+    newItems[index] = { ...newItems[index], countryCode, regionCode: defaultRegion, employerCost: undefined, totalMonthly: undefined, exchangeRate: 1 };
     setItems(newItems);
 
     // 2. Fetch config
@@ -206,7 +254,7 @@ export default function QuotationCreatePage() {
         return;
     }
 
-    createMutation.mutate({
+    const payload = {
       leadId,
       customerId,
       validUntil: validUntil || undefined,
@@ -215,19 +263,25 @@ export default function QuotationCreatePage() {
         ...i,
         currency: i.currency || "USD"
       }))
-    });
+    };
+
+    if (isEditMode && editId) {
+        updateMutation.mutate({ ...payload, id: editId });
+    } else {
+        createMutation.mutate(payload);
+    }
   };
 
   const totalQuotationValue = items.reduce((sum, item) => sum + (item.totalMonthly || 0), 0);
 
   return (
-    <Layout breadcrumb={["GEA", t("nav.sales"), t("nav.quotations"), t("quotations.create.title")]}>
+    <Layout breadcrumb={["GEA", t("nav.sales"), t("nav.quotations"), isEditMode ? "Edit Quotation" : t("quotations.create.title")]}>
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => setLocation("/quotations")}>
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <h1 className="text-2xl font-bold tracking-tight">{t("quotations.create.title")}</h1>
+          <h1 className="text-2xl font-bold tracking-tight">{isEditMode ? "Edit Quotation" : t("quotations.create.title")}</h1>
         </div>
 
         <div className="grid grid-cols-3 gap-6">
@@ -408,8 +462,8 @@ export default function QuotationCreatePage() {
                     
                     <div className="pt-4 flex gap-2">
                       <Button variant="outline" className="flex-1" onClick={() => setLocation("/quotations")}>{t("common.cancel")}</Button>
-                      <Button className="flex-1" onClick={handleSubmit} disabled={createMutation.isPending}>
-                          {createMutation.isPending ? t("common.loading") : t("common.create")}
+                      <Button className="flex-1" onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
+                          {createMutation.isPending || updateMutation.isPending ? t("common.loading") : (isEditMode ? "Update" : t("common.create"))}
                       </Button>
                     </div>
                 </CardContent>

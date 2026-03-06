@@ -1,7 +1,7 @@
 import Layout from "@/components/Layout";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,26 +10,49 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Plus, Download, Eye, FileText, Loader2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { formatDateTime } from "@/lib/format";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, Download, Edit, FileText, Loader2, Search } from "lucide-react";
+import { formatDateTime, formatCurrency } from "@/lib/format";
 import { Link } from "wouter";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 
 export default function Quotations() {
   const { t } = useI18n();
   const [page, setPage] = useState(1);
   const limit = 20;
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 500);
+    return () => clearTimeout(timer);
+  }, [search]);
+  
+  // State for status change confirmation
+  const [statusConfirm, setStatusConfirm] = useState<{ id: number, status: string } | null>(null);
 
   const { data, isLoading, isError, error, refetch } = trpc.quotations.list.useQuery({
     limit,
     offset: (page - 1) * limit,
+    search: debouncedSearch || undefined
   });
 
   const updateStatusMutation = trpc.quotations.updateStatus.useMutation({
       onSuccess: () => {
           toast.success(t("common.updated") || "Updated");
           refetch();
+          setStatusConfirm(null);
       },
       onError: (err) => toast.error(err.message)
   });
@@ -46,8 +69,19 @@ export default function Quotations() {
             link.click();
             document.body.removeChild(link);
         }
-    }
+    },
+    onError: (err) => toast.error("Download failed: " + err.message)
   });
+
+  const handleStatusChange = (id: number, status: string) => {
+      setStatusConfirm({ id, status });
+  };
+
+  const confirmStatusChange = () => {
+      if (statusConfirm) {
+          updateStatusMutation.mutate({ id: statusConfirm.id, status: statusConfirm.status as any });
+      }
+  };
 
   return (
     <Layout breadcrumb={["GEA", t("nav.sales"), t("nav.quotations")]}>
@@ -57,11 +91,22 @@ export default function Quotations() {
             <h1 className="text-2xl font-bold tracking-tight">{t("quotations.title")}</h1>
             <p className="text-sm text-muted-foreground mt-1">{t("quotations.subtitle")}</p>
           </div>
-          <Link href="/quotations/new">
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />{t("quotations.createButton")}
-            </Button>
-          </Link>
+          <div className="flex items-center gap-4">
+            <div className="relative w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder={t("common.search") || "Search..."}
+                    className="pl-8"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                />
+            </div>
+            <Link href="/quotations/new">
+                <Button>
+                <Plus className="w-4 h-4 mr-2" />{t("quotations.createButton")}
+                </Button>
+            </Link>
+          </div>
         </div>
 
         <Card>
@@ -100,29 +145,48 @@ export default function Quotations() {
                         {q.customer?.companyName || q.salesLead?.companyName || "—"}
                       </TableCell>
                       <TableCell>
-                        {q.currency} {q.totalMonthly}
+                        {formatCurrency(q.currency || "USD", q.totalMonthly)}
                       </TableCell>
                       <TableCell>
                         {q.validUntil ? formatDateTime(q.validUntil) : "—"}
                       </TableCell>
                       <TableCell>
-                        <Select value={q.status} onValueChange={(v) => updateStatusMutation.mutate({ id: q.id, status: v as any })}>
+                        <Select 
+                            value={q.status} 
+                            onValueChange={(v) => handleStatusChange(q.id, v)}
+                            disabled={q.status === "expired"}
+                        >
                             <SelectTrigger className="h-8 w-[140px]">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="draft">{t("quotations.status.draft")}</SelectItem>
                                 <SelectItem value="sent">{t("quotations.status.sent")}</SelectItem>
-                                <SelectItem value="accepted">{t("quotations.status.accepted")}</SelectItem>
-                                <SelectItem value="rejected">{t("quotations.status.rejected")}</SelectItem>
-                                <SelectItem value="expired">{t("quotations.status.expired")}</SelectItem>
+                                {/* Only show Accepted/Rejected if currently Sent or already in that state */}
+                                {(q.status === "sent" || q.status === "accepted" || q.status === "rejected") && (
+                                    <>
+                                        <SelectItem value="accepted">{t("quotations.status.accepted")}</SelectItem>
+                                        <SelectItem value="rejected">{t("quotations.status.rejected")}</SelectItem>
+                                    </>
+                                )}
                             </SelectContent>
                         </Select>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          {q.status === 'draft' && (
+                              <Link href={`/quotations/edit/${q.id}`}>
+                                <Button variant="ghost" size="icon" title={t("common.edit") || "Edit"}>
+                                    <Edit className="w-4 h-4" />
+                                </Button>
+                              </Link>
+                          )}
                           <Button variant="ghost" size="icon" onClick={() => downloadMutation.mutate(q.id)} title={t("quotations.actions.download")}>
-                            <Download className="w-4 h-4" />
+                            {downloadMutation.isPending && downloadMutation.variables === q.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Download className="w-4 h-4" />
+                            )}
                           </Button>
                         </div>
                       </TableCell>
@@ -133,6 +197,21 @@ export default function Quotations() {
             )}
           </CardContent>
         </Card>
+
+        <AlertDialog open={!!statusConfirm} onOpenChange={(open) => !open && setStatusConfirm(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>{t("common.confirm") || "Confirm Action"}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {t("quotations.status.confirm_change") || "Are you sure you want to change the status of this quotation?"}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmStatusChange}>{t("common.confirm")}</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
       </div>
     </Layout>
   );

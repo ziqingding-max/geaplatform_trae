@@ -204,6 +204,7 @@ function AdminRouter() {
       <Route path="/sales-crm" component={SalesCRM} />
       <Route path="/quotations" component={Quotations} />
       <Route path="/quotations/new" component={QuotationCreatePage} />
+      <Route path="/quotations/edit/:id" component={QuotationCreatePage} />
       <Route path="/customers" component={Customers} />
       <Route path="/customers/:id" component={Customers} />
       <Route path="/people" component={Employees} />
