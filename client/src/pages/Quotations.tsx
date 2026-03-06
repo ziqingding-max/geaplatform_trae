@@ -7,10 +7,14 @@ import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Plus, Download, Eye, FileText, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/format";
 import { Link } from "wouter";
+import { toast } from "sonner";
 
 export default function Quotations() {
   const { t } = useI18n();
@@ -22,9 +26,26 @@ export default function Quotations() {
     offset: (page - 1) * limit,
   });
 
+  const updateStatusMutation = trpc.quotations.updateStatus.useMutation({
+      onSuccess: () => {
+          toast.success(t("common.updated") || "Updated");
+          refetch();
+      },
+      onError: (err) => toast.error(err.message)
+  });
+
   const downloadMutation = trpc.quotations.downloadPdf.useMutation({
-    onSuccess: (data) => {
-        window.open(data.url, "_blank");
+    onSuccess: (data: any) => {
+        if (data.url) {
+            window.open(data.url, "_blank");
+        } else if (data.content) {
+            const link = document.createElement('a');
+            link.href = `data:application/pdf;base64,${data.content}`;
+            link.download = data.filename || 'quotation.pdf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     }
   });
 
@@ -85,7 +106,18 @@ export default function Quotations() {
                         {q.validUntil ? formatDateTime(q.validUntil) : "—"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{t(`quotations.status.${q.status}`)}</Badge>
+                        <Select value={q.status} onValueChange={(v) => updateStatusMutation.mutate({ id: q.id, status: v as any })}>
+                            <SelectTrigger className="h-8 w-[140px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="draft">{t("quotations.status.draft")}</SelectItem>
+                                <SelectItem value="sent">{t("quotations.status.sent")}</SelectItem>
+                                <SelectItem value="accepted">{t("quotations.status.accepted")}</SelectItem>
+                                <SelectItem value="rejected">{t("quotations.status.rejected")}</SelectItem>
+                                <SelectItem value="expired">{t("quotations.status.expired")}</SelectItem>
+                            </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">

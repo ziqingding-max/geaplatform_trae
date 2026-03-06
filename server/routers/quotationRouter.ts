@@ -78,6 +78,22 @@ export const quotationRouter = router({
       return quotation;
     }),
 
+  updateStatus: crmProcedure
+    .input(z.object({
+      id: z.number(),
+      status: z.enum(["draft", "sent", "accepted", "expired", "rejected"]),
+    }))
+    .mutation(async ({ input }) => {
+      const db = getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+
+      await db.update(quotations)
+        .set({ status: input.status, updatedAt: new Date() })
+        .where(eq(quotations.id, input.id));
+
+      return { success: true };
+    }),
+
   downloadPdf: crmProcedure
     .input(z.number())
     .mutation(async ({ input }) => {
@@ -90,15 +106,29 @@ export const quotationRouter = router({
 
       if (!quotation) throw new TRPCError({ code: "NOT_FOUND", message: "Quotation not found" });
 
+      // Check if we are using mock storage (no OSS credentials)
+      // If so, we must regenerate the PDF and return base64 content because storagePut is mocked and doesn't save files locally.
+      const isMock = !process.env.OSS_ACCESS_KEY_ID;
+
+      if (isMock) {
+          try {
+              const { buffer } = await quotationService.generatePdf(input);
+              return { 
+                  url: null, 
+                  content: buffer.toString('base64'),
+                  filename: `Quotation-${quotation.quotationNumber}.pdf`
+              };
+          } catch (err) {
+              console.error("Failed to generate PDF in mock mode:", err);
+              throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "PDF generation failed" });
+          }
+      }
+
       if (!quotation.pdfKey) {
         // Try to regenerate
         try {
-           await quotationService.generatePdf(quotation.id);
-           const updated = await db.query.quotations.findFirst({ where: eq(quotations.id, input) });
-           if (updated?.pdfKey) {
-             const { url } = await storageGet(updated.pdfKey);
-             return { url };
-           }
+           const { url } = await quotationService.generatePdf(quotation.id);
+           return { url };
         } catch (err) {
             console.error("Failed to regenerate PDF:", err);
             throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "PDF generation failed" });

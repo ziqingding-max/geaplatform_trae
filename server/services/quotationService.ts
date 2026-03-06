@@ -255,7 +255,7 @@ export const quotationService = {
       .set({ pdfKey: key, pdfUrl: url })
       .where(eq(quotations.id, quotationId));
     
-    return { key, url };
+    return { key, url, buffer: finalPdfBuffer };
   }
 };
 

@@ -6,6 +6,7 @@ import * as schema from '../drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { socialInsuranceRules } from '../server/seed/data/socialInsuranceRules';
 
 // Initialize DB connection
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -311,6 +312,37 @@ async function verifyData() {
   if (employeeCount.length < 100) console.warn('⚠️  Warning: Employee count seems low.');
 }
 
+async function seedSocialInsurance() {
+  console.log('🛡️ Seeding Social Insurance Rules...');
+  
+  // Clear existing rules to avoid duplicates if running multiple times
+  // Or use onConflictDoUpdate if we have a unique constraint.
+  // The schema has indices but no unique constraint on (countryCode, itemKey, effectiveYear).
+  // However, let's just insert for now. Or better, delete all and re-insert since this is seed.
+  // Actually, let's check if we can use onConflict.
+  // The schema doesn't seem to enforce uniqueness on the combination of fields.
+  // Let's just delete all rules for now to be safe, or check existence.
+  
+  // For safety in production seed, maybe we should just insert if not exists.
+  
+  let count = 0;
+  for (const rule of socialInsuranceRules) {
+    const existing = await db.select().from(schema.countrySocialInsuranceItems).where(
+      and(
+        eq(schema.countrySocialInsuranceItems.countryCode, rule.countryCode),
+        eq(schema.countrySocialInsuranceItems.itemKey, rule.itemKey),
+        eq(schema.countrySocialInsuranceItems.effectiveYear, rule.effectiveYear)
+      )
+    ).limit(1);
+
+    if (existing.length === 0) {
+      await db.insert(schema.countrySocialInsuranceItems).values(rule);
+      count++;
+    }
+  }
+  console.log(`✅ Added ${count} new social insurance rules.`);
+}
+
 async function seedAIConfigs() {
   console.log('🤖 Seeding AI Configurations...');
   const providers = [
@@ -361,6 +393,7 @@ async function main() {
     await seedCountries();
     await seedLeaveTypes();
     await seedHolidays();
+    await seedSocialInsurance();
     await seedBusinessData();
     await seedAIConfigs();
     

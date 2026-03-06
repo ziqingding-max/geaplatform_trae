@@ -21,13 +21,14 @@ interface QuotationItem {
   serviceType: "eor" | "visa_eor";
   headcount: number;
   salary: number;
-  currency: string;
-  serviceFee: number;
-  oneTimeFee?: number;
+  currency: string; // Local Currency
+  exchangeRate?: number; // USD -> Local (with markup)
+  serviceFee: number; // USD
+  oneTimeFee?: number; // USD
   // Computed fields
-  employerCost?: number;
-  totalMonthly?: number;
-  totalOneTime?: number;
+  employerCost?: number; // Local Currency
+  totalMonthly?: number; // USD
+  totalOneTime?: number; // USD
 }
 
 export default function QuotationCreatePage() {
@@ -37,7 +38,7 @@ export default function QuotationCreatePage() {
   const [customerId, setCustomerId] = useState<number | undefined>();
   const [validUntil, setValidUntil] = useState<string>("");
   const [items, setItems] = useState<QuotationItem[]>([
-    { countryCode: "", serviceType: "eor", headcount: 1, salary: 0, currency: "USD", serviceFee: 0 }
+    { countryCode: "", serviceType: "eor", headcount: 1, salary: 0, currency: "USD", serviceFee: 0, exchangeRate: 1 }
   ]);
   const [showCostPreview, setShowCostPreview] = useState(false);
   const [includeCountryGuide, setIncludeCountryGuide] = useState(false);
@@ -82,7 +83,7 @@ export default function QuotationCreatePage() {
   const handleCountryChange = async (index: number, countryCode: string) => {
     // 1. Update country code
     const newItems = [...items];
-    newItems[index] = { ...newItems[index], countryCode, employerCost: undefined, totalMonthly: undefined };
+    newItems[index] = { ...newItems[index], countryCode, employerCost: undefined, totalMonthly: undefined, exchangeRate: 1 };
     setItems(newItems);
 
     // 2. Fetch config
@@ -90,11 +91,22 @@ export default function QuotationCreatePage() {
         try {
             const config = await utils.countries.get.fetch({ countryCode });
             if (config) {
+                // Fetch exchange rate
+                const localCurrency = config.localCurrency || "USD";
+                let exchangeRate = 1;
+                if (localCurrency !== "USD") {
+                   const rateData = await utils.exchangeRates.get.fetch({ from: "USD", to: localCurrency });
+                   if (rateData && rateData.rateWithMarkup) {
+                       exchangeRate = Number(rateData.rateWithMarkup);
+                   }
+                }
+
                 setItems(currentItems => {
                     const updated = [...currentItems];
                     updated[index] = { 
                         ...updated[index], 
-                        currency: config.localCurrency || "USD",
+                        currency: localCurrency,
+                        exchangeRate: exchangeRate,
                         serviceFee: updated[index].serviceType === "visa_eor" 
                             ? parseFloat(config.standardVisaEorRate || "0") 
                             : parseFloat(config.standardEorRate || "0"),
@@ -160,7 +172,16 @@ export default function QuotationCreatePage() {
                 
                 const employerCost = parseFloat(result.totalEmployer);
                 updatedItems[i].employerCost = employerCost;
-                updatedItems[i].totalMonthly = (item.salary + employerCost + item.serviceFee) * item.headcount;
+                
+                // Calculate Total in USD
+                // Salary (Local) + EmployerCost (Local) -> Convert to USD
+                // Service Fee (USD) -> Add
+                
+                const localTotal = item.salary + employerCost;
+                const rate = item.exchangeRate || 1;
+                const usdEmploymentCost = localTotal / rate;
+                
+                updatedItems[i].totalMonthly = (usdEmploymentCost + item.serviceFee) * item.headcount;
             } catch (err) {
                 console.error(`Failed to calculate for item ${i}`, err);
                 hasError = true;
@@ -285,7 +306,7 @@ export default function QuotationCreatePage() {
                             <div className="col-span-2 space-y-2">
                                 <Label className="text-xs">{t("quotations.items.fee")}</Label>
                                 <div className="relative">
-                                  <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">{item.currency || "$"}</span>
+                                  <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">$</span>
                                   <Input type="number" className="pl-12" value={item.serviceFee} onChange={(e) => updateItem(index, "serviceFee", parseFloat(e.target.value))} />
                                 </div>
                             </div>
@@ -293,7 +314,7 @@ export default function QuotationCreatePage() {
                               <div className="col-span-2 space-y-2">
                                   <Label className="text-xs">One Time Fee</Label>
                                   <div className="relative">
-                                    <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">{item.currency || "$"}</span>
+                                    <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">$</span>
                                     <Input type="number" className="pl-12" value={item.oneTimeFee || 0} onChange={(e) => updateItem(index, "oneTimeFee", parseFloat(e.target.value))} />
                                   </div>
                               </div>
@@ -326,7 +347,7 @@ export default function QuotationCreatePage() {
                       {item.employerCost !== undefined && (
                           <div className="bg-muted/50 p-3 rounded text-sm flex justify-between items-center text-muted-foreground border border-border/50">
                               <span>{t("quotations.create.employer_cost")}: <span className="font-mono text-foreground">{formatCurrency(item.currency, item.employerCost)}</span></span>
-                              <span className="font-medium text-foreground">{t("quotations.create.total_monthly")}: <span className="font-mono text-primary">{formatCurrency(item.currency, item.totalMonthly || 0)}</span></span>
+                              <span className="font-medium text-foreground">{t("quotations.create.total_monthly")}: <span className="font-mono text-primary">{formatCurrency("USD", item.totalMonthly || 0)}</span></span>
                           </div>
                       )}
                     </CardContent>

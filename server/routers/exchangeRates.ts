@@ -2,10 +2,29 @@ import { z } from "zod";
 import { router } from "../_core/trpc";
 import { adminProcedure, userProcedure } from "../procedures";
 import { listAllExchangeRates, deleteExchangeRate, logAuditAction } from "../db";
-import { upsertExchangeRate, getGlobalMarkup } from "../services/exchangeRateService";
+import { upsertExchangeRate, getGlobalMarkup, getExchangeRate } from "../services/exchangeRateService";
 import { fetchAndStoreExchangeRates, setDefaultMarkup, getDefaultMarkup } from "../services/exchangeRateFetchService";
 
 export const exchangeRatesRouter = router({
+  get: userProcedure
+    .input(
+      z.object({
+        from: z.string().min(1),
+        to: z.string().min(1),
+      })
+    )
+    .query(async ({ input }) => {
+      const rateData = await getExchangeRate(input.from, input.to);
+      if (!rateData) {
+        return { rate: null };
+      }
+      return { 
+        rate: rateData.rate,
+        rateWithMarkup: rateData.rateWithMarkup,
+        markupPercentage: rateData.markupPercentage
+      };
+    }),
+
   list: userProcedure
     .input(
       z.object({
