@@ -4,7 +4,7 @@ import { invokeLLM, type InvokeParams, type InvokeResult } from "../_core/llm";
 import { aiProviderConfigs, aiTaskExecutions, aiTaskPolicies } from "../../drizzle/schema";
 
 export type AITask = "knowledge_summarize" | "source_authority_review" | "vendor_bill_parse" | "invoice_audit";
-export type AIProvider = "manus_forge" | "openai" | "qwen" | "google";
+export type AIProvider = "manus_forge" | "openai" | "qwen" | "google" | "volcengine";
 
 function resolveEnvKey(name: string): string {
   return process.env[name] ?? "";
@@ -81,8 +81,14 @@ async function logTaskExecution(payload: {
   }
 }
 
-async function invokeOpenAICompatible(baseUrl: string, apiKey: string, model: string, params: InvokeParams): Promise<InvokeResult> {
-  const response = await fetch(`${baseUrl.replace(/\/$/, "")}/v1/chat/completions`, {
+async function invokeOpenAICompatible(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+  params: InvokeParams,
+  endpointSuffix: string = "/v1/chat/completions"
+): Promise<InvokeResult> {
+  const response = await fetch(`${baseUrl.replace(/\/$/, "")}${endpointSuffix}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -125,6 +131,7 @@ async function getProvider(provider: AIProvider) {
 async function resolveModelForProvider(provider: AIProvider, policy: Awaited<ReturnType<typeof getTaskPolicy>>): Promise<string> {
   if (policy?.modelOverride) return policy.modelOverride;
   const providerConfig = await getProvider(provider);
+  if (provider === "volcengine") return providerConfig?.model || "doubao-seed-1-6-251015";
   return providerConfig?.model || "gemini-2.5-flash";
 }
 
@@ -137,7 +144,12 @@ async function invokeByProvider(provider: AIProvider, model: string, params: Inv
   const apiKey = resolveEnvKey(providerConfig.apiKeyEnv);
   if (!apiKey) throw new Error(`Missing provider API key env: ${providerConfig.apiKeyEnv}`);
 
-  return invokeOpenAICompatible(providerConfig.baseUrl, apiKey, model, params);
+  let suffix = "/v1/chat/completions";
+  if (provider === "volcengine") {
+    suffix = "/chat/completions";
+  }
+
+  return invokeOpenAICompatible(providerConfig.baseUrl, apiKey, model, params, suffix);
 }
 
 export async function executeTaskLLM(task: AITask, params: InvokeParams): Promise<InvokeResult> {

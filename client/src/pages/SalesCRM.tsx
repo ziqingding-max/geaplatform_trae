@@ -252,6 +252,11 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
   function validateAndCreate() {
     const errors: Record<string, boolean> = {};
     if (!formData.companyName.trim()) errors.companyName = true;
+    if (formData.contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contactEmail.trim())) {
+      errors.contactEmail = true;
+      toast.error(t("sales.toast.invalidEmail") || "Invalid email address");
+      return;
+    }
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
       toast.error(t("sales.toast.companyNameRequired"));
@@ -328,7 +333,7 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
                   </div>
                   <div className="space-y-2">
                     <Label>{t("sales.contactEmail")}</Label>
-                    <Input type="email" value={formData.contactEmail} onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })} />
+                    <Input type="email" className={formErrors.contactEmail ? "border-destructive ring-destructive" : ""} value={formData.contactEmail} onChange={(e) => { setFormData({ ...formData, contactEmail: e.target.value }); if (formErrors.contactEmail) setFormErrors(prev => ({ ...prev, contactEmail: false })); }} />
                   </div>
                   <div className="space-y-2">
                     <Label>{t("sales.contactPhone")}</Label>
@@ -896,6 +901,10 @@ function EditLeadDialog({
   function handleSave() {
     if (!formData.companyName.trim()) {
       toast.error(t("sales.toast.companyNameRequired"));
+      return;
+    }
+    if (formData.contactEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contactEmail.trim())) {
+      toast.error(t("sales.toast.invalidEmail") || "Invalid email address");
       return;
     }
     updateMutation.mutate({

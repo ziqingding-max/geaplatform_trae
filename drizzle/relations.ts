@@ -369,7 +369,7 @@ export const salaryBenchmarksRelations = relations(salaryBenchmarks, ({ one }) =
 }));
 
 export const quotationsRelations = relations(quotations, ({ one, many }) => ({
-  lead: one(salesLeads, {
+  salesLead: one(salesLeads, {
     fields: [quotations.leadId],
     references: [salesLeads.id],
   }),

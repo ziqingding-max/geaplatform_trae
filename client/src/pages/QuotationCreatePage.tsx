@@ -50,6 +50,8 @@ export default function QuotationCreatePage() {
     { enabled: !!items[0].countryCode && items.length === 1 }
   );
 
+  const utils = trpc.useUtils();
+
   const createMutation = trpc.quotations.create.useMutation({
     onSuccess: () => {
       toast.success(t("common.create") + " ✓");
@@ -75,6 +77,70 @@ export default function QuotationCreatePage() {
         newItems[index].totalMonthly = undefined;
     }
     setItems(newItems);
+  };
+
+  const handleCountryChange = async (index: number, countryCode: string) => {
+    // 1. Update country code
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], countryCode, employerCost: undefined, totalMonthly: undefined };
+    setItems(newItems);
+
+    // 2. Fetch config
+    if (countryCode) {
+        try {
+            const config = await utils.countries.get.fetch({ countryCode });
+            if (config) {
+                setItems(currentItems => {
+                    const updated = [...currentItems];
+                    updated[index] = { 
+                        ...updated[index], 
+                        currency: config.localCurrency || "USD",
+                        serviceFee: updated[index].serviceType === "visa_eor" 
+                            ? parseFloat(config.standardVisaEorRate || "0") 
+                            : parseFloat(config.standardEorRate || "0"),
+                        oneTimeFee: updated[index].serviceType === "visa_eor"
+                            ? parseFloat(config.visaEorSetupFee || "0")
+                            : undefined
+                    };
+                    return updated;
+                });
+            }
+        } catch (err) {
+            console.error("Failed to fetch country config", err);
+        }
+    }
+  };
+
+  const handleServiceTypeChange = async (index: number, serviceType: "eor" | "visa_eor") => {
+      // 1. Update service type
+      const newItems = [...items];
+      newItems[index] = { ...newItems[index], serviceType, employerCost: undefined, totalMonthly: undefined };
+      setItems(newItems);
+      
+      // 2. Update fees
+      const countryCode = items[index].countryCode;
+      if (countryCode) {
+          try {
+              const config = await utils.countries.get.fetch({ countryCode });
+              if (config) {
+                  setItems(currentItems => {
+                      const updated = [...currentItems];
+                      updated[index] = {
+                          ...updated[index],
+                          serviceFee: serviceType === "visa_eor" 
+                              ? parseFloat(config.standardVisaEorRate || "0") 
+                              : parseFloat(config.standardEorRate || "0"),
+                          oneTimeFee: serviceType === "visa_eor"
+                              ? parseFloat(config.visaEorSetupFee || "0")
+                              : undefined
+                      };
+                      return updated;
+                  });
+              }
+          } catch (err) {
+              console.error("Failed to fetch country config", err);
+          }
+      }
   };
 
   const handleCalculateCosts = async () => {
@@ -126,7 +192,7 @@ export default function QuotationCreatePage() {
       includeCountryGuide,
       items: items.map(i => ({
         ...i,
-        currency: "USD" // Forcing USD for now as per schema default
+        currency: i.currency || "USD"
       }))
     });
   };
@@ -197,11 +263,11 @@ export default function QuotationCreatePage() {
                         <div className="grid grid-cols-12 gap-4 flex-1">
                             <div className="col-span-3 space-y-2">
                                 <Label className="text-xs">{t("quotations.items.country")}</Label>
-                                <CountrySelect value={item.countryCode} onValueChange={(v) => updateItem(index, "countryCode", v)} />
+                                <CountrySelect value={item.countryCode} onValueChange={(v) => handleCountryChange(index, v)} />
                             </div>
                             <div className="col-span-2 space-y-2">
                                 <Label className="text-xs">{t("quotations.items.serviceType")}</Label>
-                                <Select value={item.serviceType} onValueChange={(v) => updateItem(index, "serviceType", v as any)}>
+                                <Select value={item.serviceType} onValueChange={(v) => handleServiceTypeChange(index, v as any)}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="eor">{t("quotations.create.service_eor")}</SelectItem>
@@ -212,23 +278,23 @@ export default function QuotationCreatePage() {
                             <div className="col-span-2 space-y-2">
                                 <Label className="text-xs">{t("quotations.items.salary")}</Label>
                                 <div className="relative">
-                                  <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">$</span>
-                                  <Input type="number" className="pl-5" value={item.salary} onChange={(e) => updateItem(index, "salary", parseFloat(e.target.value))} />
+                                  <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">{item.currency || "$"}</span>
+                                  <Input type="number" className="pl-12" value={item.salary} onChange={(e) => updateItem(index, "salary", parseFloat(e.target.value))} />
                                 </div>
                             </div>
                             <div className="col-span-2 space-y-2">
                                 <Label className="text-xs">{t("quotations.items.fee")}</Label>
                                 <div className="relative">
-                                  <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">$</span>
-                                  <Input type="number" className="pl-5" value={item.serviceFee} onChange={(e) => updateItem(index, "serviceFee", parseFloat(e.target.value))} />
+                                  <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">{item.currency || "$"}</span>
+                                  <Input type="number" className="pl-12" value={item.serviceFee} onChange={(e) => updateItem(index, "serviceFee", parseFloat(e.target.value))} />
                                 </div>
                             </div>
                             {item.serviceType === "visa_eor" && (
                               <div className="col-span-2 space-y-2">
                                   <Label className="text-xs">One Time Fee</Label>
                                   <div className="relative">
-                                    <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">$</span>
-                                    <Input type="number" className="pl-5" value={item.oneTimeFee || 0} onChange={(e) => updateItem(index, "oneTimeFee", parseFloat(e.target.value))} />
+                                    <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">{item.currency || "$"}</span>
+                                    <Input type="number" className="pl-12" value={item.oneTimeFee || 0} onChange={(e) => updateItem(index, "oneTimeFee", parseFloat(e.target.value))} />
                                   </div>
                               </div>
                             )}

@@ -11,13 +11,23 @@
 
 // ─── Date Formatting ─────────────────────────────────────────────────────────
 
+// Helper to handle microsecond timestamps (common DB issue)
+function normalizeDate(value: string | number | Date): Date {
+  const d = new Date(value);
+  if (!isNaN(d.getTime()) && d.getFullYear() > 3000) {
+    // If the year is huge, it's likely microseconds treated as milliseconds
+    return new Date(d.getTime() / 1000);
+  }
+  return d;
+}
+
 /**
  * Format a date as "DD MMM YYYY" (e.g., "25 Feb 2026")
  * Handles Date objects, ISO strings, and timestamps.
  */
 export function formatDate(value: string | number | Date | null | undefined): string {
   if (!value) return "—";
-  const d = new Date(value);
+  const d = normalizeDate(value);
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
@@ -29,7 +39,8 @@ export function formatMonth(value: string | number | Date | null | undefined): s
   if (!value) return "—";
   // Handle "YYYY-MM" strings by appending "-01"
   const str = String(value);
-  const d = str.length === 7 ? new Date(str + "-01") : new Date(value);
+  // Special case for YYYY-MM strings which parse correctly but we want to be safe
+  const d = str.length === 7 ? new Date(str + "-01") : normalizeDate(value);
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en", { month: "short", year: "numeric" });
 }
@@ -40,7 +51,7 @@ export function formatMonth(value: string | number | Date | null | undefined): s
 export function formatMonthShort(value: string | number | Date | null | undefined): string {
   if (!value) return "—";
   const str = String(value);
-  const d = str.length === 7 ? new Date(str + "-01") : new Date(value);
+  const d = str.length === 7 ? new Date(str + "-01") : normalizeDate(value);
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en", { month: "short", year: "2-digit" });
 }
@@ -51,7 +62,7 @@ export function formatMonthShort(value: string | number | Date | null | undefine
 export function formatMonthLong(value: string | number | Date | null | undefined): string {
   if (!value) return "—";
   const str = String(value);
-  const d = str.length === 7 ? new Date(str + "-01") : new Date(value);
+  const d = str.length === 7 ? new Date(str + "-01") : normalizeDate(value);
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en", { month: "long", year: "numeric" });
 }
@@ -61,13 +72,8 @@ export function formatMonthLong(value: string | number | Date | null | undefined
  */
 export function formatDateTime(value: string | number | Date | null | undefined): string {
   if (!value) return "—";
-  let d = new Date(value);
+  const d = normalizeDate(value);
   
-  // Handle microsecond timestamps (if year is > 3000, likely microseconds)
-  if (!isNaN(d.getTime()) && d.getFullYear() > 3000 && typeof value === "number") {
-    d = new Date(value / 1000);
-  }
-
   if (isNaN(d.getTime())) return "—";
   // Use toLocaleString to ensure time is included
   return d.toLocaleString("en-GB", {
@@ -81,7 +87,7 @@ export function formatDateTime(value: string | number | Date | null | undefined)
  */
 export function formatDateISO(value: string | number | Date | null | undefined): string {
   if (!value) return "";
-  const d = new Date(value);
+  const d = normalizeDate(value);
   if (isNaN(d.getTime())) return "";
   return d.toISOString().split("T")[0];
 }

@@ -1440,7 +1440,7 @@ export const aiProviderConfigs = sqliteTable(
   "ai_provider_configs",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    provider: text("provider", { enum: ["manus_forge", "openai", "qwen", "google"] }).notNull(),
+    provider: text("provider", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
     displayName: text("displayName", { length: 100 }).notNull(),
     baseUrl: text("baseUrl"),
     model: text("model", { length: 100 }).notNull(),
@@ -1465,8 +1465,8 @@ export const aiTaskPolicies = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     task: text("task", { enum: ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit"] })
       .notNull(),
-    primaryProvider: text("primaryProvider", { enum: ["manus_forge", "openai", "qwen", "google"] }).default("manus_forge").notNull(),
-    fallbackProvider: text("fallbackProvider", { enum: ["manus_forge", "openai", "qwen", "google"] }),
+    primaryProvider: text("primaryProvider", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).default("manus_forge").notNull(),
+    fallbackProvider: text("fallbackProvider", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }),
     modelOverride: text("modelOverride", { length: 100 }),
     temperature: text("temperature").default("0.30"),
     maxTokens: integer("maxTokens").default(4096),
@@ -1488,8 +1488,8 @@ export const aiTaskExecutions = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     taskType: text("taskType", { enum: ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit"] }).notNull(),
-    providerPrimary: text("providerPrimary", { enum: ["manus_forge", "openai", "qwen", "google"] }).notNull(),
-    providerActual: text("providerActual", { enum: ["manus_forge", "openai", "qwen", "google"] }).notNull(),
+    providerPrimary: text("providerPrimary", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
+    providerActual: text("providerActual", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
     fallbackTriggered: integer("fallbackTriggered", { mode: "boolean" }).default(false).notNull(),
     latencyMs: integer("latencyMs").default(0).notNull(),
     tokenUsageIn: integer("tokenUsageIn").default(0).notNull(),

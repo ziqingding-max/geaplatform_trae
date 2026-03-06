@@ -258,7 +258,7 @@ export async function listSalesLeads(params: ListSalesLeadsParams = {}) {
   
   const conditions = [];
   if (search) conditions.push(like(salesLeads.companyName, `%${search}%`));
-  if (status) conditions.push(eq(salesLeads.status, status as any));
+  if (status) conditions.push(eq(salesLeads.status, status.trim() as any));
   if (assignedTo) conditions.push(eq(salesLeads.assignedTo, assignedTo));
   
   const where = conditions.length > 0 ? and(...conditions) : undefined;

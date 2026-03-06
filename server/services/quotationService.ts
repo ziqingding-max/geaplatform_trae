@@ -79,7 +79,7 @@ export const quotationService = {
       countries: JSON.stringify(calculatedItems),
       totalMonthly: totalMonthly.toFixed(2),
       currency,
-      snapshotData: JSON.stringify(calculatedItems), // Full breakdown
+      snapshotData: calculatedItems, // Full breakdown
       validUntil: input.validUntil || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(), // Default 15 days
       status: "draft",
       createdBy: input.createdBy,
@@ -123,7 +123,12 @@ export const quotationService = {
       }
     }
 
-    const items = JSON.parse(quotation.snapshotData as string);
+    // Drizzle already parses JSON columns, so we don't need to parse it again if it's an object/array
+    const items = Array.isArray(quotation.snapshotData) 
+      ? quotation.snapshotData 
+      : typeof quotation.snapshotData === 'string' 
+        ? JSON.parse(quotation.snapshotData) 
+        : [];
     
     // Step 1: Generate the Quotation PDF (Table)
     const { doc, cjkFontPath } = await createBrandedPdfDocument();

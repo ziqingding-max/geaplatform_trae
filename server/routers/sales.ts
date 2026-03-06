@@ -253,7 +253,7 @@ export const salesRouter = router({
         status: "active",
       });
 
-      const customerId = (customerResult as any)[0]?.insertId ?? (customerResult as any).insertId;
+      const customerId = (customerResult as any)[0]?.id;
 
       if (!customerId) {
         console.error("Failed to get customer ID after creation", customerResult);
