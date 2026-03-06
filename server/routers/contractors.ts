@@ -23,7 +23,13 @@ import {
   logAuditAction,
   getDb
 } from "../db";
-import { users } from "../../drizzle/schema";
+import {
+  contractors,
+  contractorInvoices,
+  contractorMilestones,
+  contractorAdjustments,
+  users
+} from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { ContractorInvoiceGenerationService } from "../services/contractorInvoiceGenerationService";
 
@@ -351,6 +357,64 @@ export const contractorsRouter = router({
         const date = input.targetDate ? new Date(input.targetDate) : new Date();
         const result = await ContractorInvoiceGenerationService.processAll(date);
         return result;
+      }),
+
+    approve: customerManagerProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+        const invoice = await getContractorInvoiceById(input.id);
+        if (!invoice) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice not found" });
+
+        if (invoice.status !== "draft" && invoice.status !== "pending_approval") {
+          throw new TRPCError({ 
+            code: "PRECONDITION_FAILED", 
+            message: `Cannot approve invoice in status ${invoice.status}` 
+          });
+        }
+
+        await db.update(contractorInvoices)
+          .set({ 
+            status: "approved", 
+            approvedBy: ctx.user.id, 
+            approvedAt: new Date() 
+          })
+          .where(eq(contractorInvoices.id, input.id));
+
+        await logAuditAction({
+          userId: ctx.user.id, userName: ctx.user.name || null,
+          action: "approve",
+          entityType: "contractor_invoice",
+          entityId: input.id,
+        });
+
+        return { success: true };
+      }),
+
+    reject: customerManagerProcedure
+      .input(z.object({ id: z.number(), reason: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+        await db.update(contractorInvoices)
+          .set({ 
+            status: "rejected", 
+            rejectedReason: input.reason 
+          })
+          .where(eq(contractorInvoices.id, input.id));
+
+        await logAuditAction({
+          userId: ctx.user.id, userName: ctx.user.name || null,
+          action: "reject",
+          entityType: "contractor_invoice",
+          entityId: input.id,
+          changes: JSON.stringify({ reason: input.reason }),
+        });
+
+        return { success: true };
       }),
   }),
 

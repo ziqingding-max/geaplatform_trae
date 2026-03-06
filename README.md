@@ -16,7 +16,7 @@
 ### 🟢 第一层：业务与合规 (For Business Stakeholders)
 *适用于产品经理、业务分析师、合规专员*
 *   **[核心业务逻辑 (Core Business Logic)](docs/01_business/CORE_BUSINESS_LOGIC.md)**: 全局业务大图，实体关系，核心流程。**必读**。
-*   **[资金与合规 (Financial Compliance)](docs/01_business/FINANCIAL_COMPLIANCE_FLOW.md)**: 钱包系统、发票流转、资金隔离、汇率风控。
+*   **[资金与合规 V2 (Finance Spec V2)](docs/01_business/FINANCE_COMPLIANCE_SPEC_V2.md)**: 全新的双钱包系统、AOR 聚合支付、押金释放与发票合规流程。
 *   **[劳动者分类规则 (Worker Classification)](docs/01_business/WORKER_CLASSIFICATION_RULES.md)**: EOR vs AOR 的合规边界与校验规则。
 
 ### 🔵 第二层：技术架构 (For Engineers)

@@ -127,6 +127,7 @@ export default function PortalInvoices() {
       return [
         { value: "all", label: t("portal_invoices.filter.all_statuses") },
         { value: "sent", label: t("portal_invoices.status.issued") },
+        { value: "partially_paid", label: "Partially Paid" },
         { value: "paid", label: t("portal_invoices.status.paid") },
         { value: "overdue", label: t("portal_invoices.status.overdue") },
       ];

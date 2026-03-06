@@ -225,7 +225,7 @@ export class WalletService {
     amount: string; // Always positive
     direction: "credit" | "debit";
     referenceId: number;
-    referenceType: FrozenWalletTransaction["referenceType"];
+    referenceType: string;
     description?: string;
     internalNote?: string;
     createdBy?: number;
@@ -317,44 +317,39 @@ export class WalletService {
   }
 
   /**
-   * Release funds from frozen wallet to main wallet (e.g. after employee termination)
+   * Release funds from frozen wallet to a credit note (e.g. after employee termination)
+   * The Credit Note will then be processed by Finance to either credit Main Wallet or refund to Bank.
    */
-  async releaseFrozenToMain(customerId: number, currency: string, amount: string, reason: string, createdBy?: number) {
+  async releaseDepositToCreditNote(customerId: number, currency: string, amount: string, creditNoteId: number, reason: string, createdBy?: number) {
     const frozenWallet = await this.getFrozenWallet(customerId, currency);
-    const mainWallet = await this.getWallet(customerId, currency);
 
-    // We can't use db.transaction across 'this.transact' because they might create their own transactions
-    // But Drizzle supports nested transactions (savepoints).
-    // However, my `transact` method creates a new transaction `db.transaction(...)`.
-    // Nesting them works fine in SQLite/Postgres/MySQL with Drizzle.
+    return await this.frozenTransact({
+      walletId: frozenWallet.id,
+      type: "deposit_release",
+      amount,
+      direction: "debit",
+      referenceId: creditNoteId,
+      referenceType: "credit_note",
+      description: `Deposit released to Credit Note #${creditNoteId}: ${reason}`,
+      createdBy,
+    });
+  }
+
+  /**
+   * Withdraw funds from main wallet (Refund Out)
+   */
+  async withdrawFromWallet(customerId: number, currency: string, amount: string, reason: string, createdBy?: number) {
+    const wallet = await this.getWallet(customerId, currency);
     
-    const db = getDb();
-    if (!db) throw new Error("Database not initialized");
-
-    return await db.transaction(async (tx) => {
-        // 1. Debit Frozen Wallet
-        await this.frozenTransact({
-            walletId: frozenWallet.id,
-            type: "deposit_release",
-            amount,
-            direction: "debit",
-            referenceId: 0, // Manual
-            referenceType: "manual",
-            description: `Deposit release: ${reason}`,
-            createdBy
-        });
-
-        // 2. Credit Main Wallet
-        await this.transact({
-            walletId: mainWallet.id,
-            type: "manual_adjustment",
-            amount,
-            direction: "credit",
-            referenceId: 0, 
-            referenceType: "manual",
-            description: `Deposit released from frozen wallet: ${reason}`,
-            createdBy
-        });
+    return await this.transact({
+      walletId: wallet.id,
+      type: "payout", // or "refund_out"
+      amount,
+      direction: "debit",
+      referenceId: 0, // Manual withdrawal request
+      referenceType: "manual",
+      description: `Withdrawal (Refund Out): ${reason}`,
+      createdBy,
     });
   }
 }

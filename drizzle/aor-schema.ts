@@ -51,7 +51,7 @@ export const contractors = sqliteTable(
     ] }).default("monthly").notNull(),
     
     // Payment Rates (Flexible based on frequency)
-    rateType: text("rateType", { enum: ["fixed_monthly", "hourly", "daily", "milestone_only"] }).default("fixed_monthly").notNull(),
+    rateType: text("rateType", { enum: ["fixed_monthly", "hourly", "milestone_only"] }).default("fixed_monthly").notNull(),
     rateAmount: text("rateAmount"), // e.g. Monthly Salary or Hourly Rate
     
     // Bank Details (Encrypted/JSON in real app, but text here for simplicity as per existing patterns)

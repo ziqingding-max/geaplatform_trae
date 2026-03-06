@@ -4,6 +4,25 @@
 
 ---
 
+## [3.9.0] — 2026-03-06
+
+### Added
+
+- **Dual-Wallet Architecture (Finance V2)**: 全新的双钱包架构，实现资金合规隔离。
+    - **Operating Wallet**: `customer_wallets` 用于日常发票支付与余额扣款。
+    - **Frozen Wallet**: `customer_frozen_wallets` 专门用于管理押金 (Security Deposit)，与运营资金物理隔离。
+- **AOR Aggregation**: 承包商发票 (AP) 审批后自动聚合为客户月度发票 (AR)，支持 `clientInvoiceId` 溯源。
+- **Partial Payment**: 发票支付逻辑重构，支持 "钱包余额 + 外部汇款" 组合支付，新增 `partially_paid` 状态。
+- **Deposit Release Workflow**: 严格的押金释放流程：员工离职 -> 释放至 Credit Note (Draft) -> 财务审批 -> 进入主钱包或退款至银行。
+- **Verification Script**: 新增 `scripts/verify-finance-workflow.ts`，用于验证从签约、开票、支付到押金释放的全链路资金流转。
+
+### Changed
+
+- **Credit Note Logic**: 贷记单 (Credit Note) 批准后直接充值到钱包余额 (Voucher Mode)，不再直接抵扣发票，确保资金流水的复式记账合规性。
+- **Invoice State Machine**: 允许 Draft 状态发票的安全删除（无关联时）；新增 `partially_paid` 状态流转。
+
+---
+
 ## [3.8.0] — 2026-03-06
 
 ### Added

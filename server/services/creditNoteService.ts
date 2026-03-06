@@ -16,7 +16,7 @@ import { eq, like, and, ne, sql } from "drizzle-orm";
 import { getInvoiceById, listInvoiceItemsByInvoice, getBillingEntityById, getCustomerById } from "../db";
 import { walletService } from "./walletService";
 
-export async function approveCreditNote(creditNoteId: number, approvedBy?: number) {
+export async function approveCreditNote(creditNoteId: number, approvedBy?: number, disposition?: "to_wallet" | "to_bank") {
   const db = getDb();
   if (!db) throw new Error("Database not initialized");
 
@@ -34,20 +34,54 @@ export async function approveCreditNote(creditNoteId: number, approvedBy?: numbe
       throw new Error("Credit note is already processed");
     }
 
-    // 2. Calculate credit amount (absolute value)
-    const creditAmount = Math.abs(parseFloat(creditNote.total));
+    // Update disposition if provided
+    const finalDisposition = disposition || creditNote.creditNoteDisposition || "to_wallet";
+    if (disposition) {
+      await tx.update(invoices).set({ creditNoteDisposition: disposition }).where(eq(invoices.id, creditNoteId));
+    }
 
-    // 3. Credit to wallet
-    await walletService.transact({
-      walletId: (await walletService.getWallet(creditNote.customerId, creditNote.currency)).id,
-      type: "credit_note_in",
-      amount: creditAmount.toFixed(2),
-      direction: "credit",
-      referenceId: creditNote.id,
-      referenceType: "credit_note",
-      description: `Credit Note #${creditNote.invoiceNumber} approved`,
-      createdBy: approvedBy,
-    });
+    // 2. Handle Deposit Release (Debit Frozen Wallet)
+    if (creditNote.relatedInvoiceId) {
+      const relatedInvoice = await getInvoiceById(creditNote.relatedInvoiceId);
+      if (relatedInvoice && relatedInvoice.invoiceType === 'deposit') {
+         // This is a Deposit Release CN. We must debit the Frozen Wallet.
+         // We use the credit note total (absolute value)
+         const releaseAmount = Math.abs(parseFloat(creditNote.total)).toFixed(2);
+         
+         await walletService.releaseDepositToCreditNote(
+            creditNote.customerId,
+            creditNote.currency,
+            releaseAmount,
+            creditNote.id,
+            "Deposit Release Approved",
+            approvedBy
+         );
+      }
+    }
+
+    // 3. Handle Disposition (Credit Main Wallet or Bank)
+    if (finalDisposition === "to_wallet") {
+      // Calculate credit amount (absolute value)
+      const creditAmount = Math.abs(parseFloat(creditNote.total));
+
+      // Credit to wallet
+      await walletService.transact({
+        walletId: (await walletService.getWallet(creditNote.customerId, creditNote.currency)).id,
+        type: "credit_note_in",
+        amount: creditAmount.toFixed(2),
+        direction: "credit",
+        referenceId: creditNote.id,
+        referenceType: "credit_note",
+        description: `Credit Note #${creditNote.invoiceNumber} approved`,
+        createdBy: approvedBy,
+      });
+    } else {
+      // to_bank: Funds leave the system (or rather, are marked for external payment).
+      // We don't touch the wallet.
+      // We might want to create a "payout" record if we want to track it, but usually CN Paid means done.
+      // Log it.
+      console.log(`Credit Note #${creditNote.invoiceNumber} approved for Bank Refund.`);
+    }
 
     // 4. Mark credit note as paid/processed
     await tx
@@ -60,7 +94,7 @@ export async function approveCreditNote(creditNoteId: number, approvedBy?: numbe
       })
       .where(eq(invoices.id, creditNoteId));
 
-    return { success: true, message: "Credit note approved and credited to wallet" };
+    return { success: true, message: `Credit note approved (${finalDisposition})` };
   });
 }
 
@@ -356,12 +390,12 @@ export async function generateCreditNote(params: {
       });
     }
 
-    // 9. Auto-approve and credit to wallet (Atomic operation)
-    await approveCreditNote(invoiceId);
+    // 9. Do NOT auto-approve. Leave as draft for Finance approval.
+    // await approveCreditNote(invoiceId);
 
     return {
       invoiceId,
-      message: `Credit note ${creditNoteNumber} created and credited to wallet (${(-creditTotal).toFixed(2)} ${originalInvoice.currency || "USD"})`,
+      message: `Credit note ${creditNoteNumber} created (Draft). Please approve to process.`,
     };
   } catch (error) {
     console.error("[CreditNote] Error generating credit note:", error);

@@ -655,6 +655,8 @@ export const invoices = sqliteTable(
       "credit_note",
       "manual",
     ] }).notNull(),
+    // Credit Note Disposition (for invoiceType = 'credit_note')
+    creditNoteDisposition: text("creditNoteDisposition", { enum: ["to_wallet", "to_bank"] }),
     invoiceMonth: text("invoiceMonth"), // For monthly invoices
     // Invoice aggregates from multiple country-based payroll runs for this customer
     // The link is: invoice -> invoiceItems -> employeeId -> payrollItems
@@ -671,6 +673,7 @@ export const invoices = sqliteTable(
       "pending_review",
       "sent",
       "paid",
+      "partially_paid",
       "overdue",
       "cancelled",
       "void",
@@ -1827,6 +1830,7 @@ export const walletTransactions = sqliteTable(
       "invoice_refund",       // Invoice rejected/voided, balance returned (+)
       "manual_adjustment",    // Admin manual adjustment (+/-)
       "payout",               // Withdrawal/Refund to bank (-)
+      "refund_out",           // Alias for payout (Withdrawal)
     ] }).notNull(),
 
     amount: text("amount").notNull(), // Always positive
@@ -1900,8 +1904,8 @@ export const frozenWalletTransactions = sqliteTable(
     balanceAfter: text("balanceAfter").notNull(),
     
     // Audit Trail
-    referenceId: integer("referenceId").notNull(), // InvoiceID, PaymentID
-    referenceType: text("referenceType", { enum: ["invoice", "payment", "manual"] }).notNull(),
+    referenceId: integer("referenceId").notNull(), // InvoiceID, PaymentID, CreditNoteID
+    referenceType: text("referenceType", { enum: ["invoice", "payment", "credit_note", "manual"] }).notNull(),
     
     description: text("description"),
     internalNote: text("internalNote"),

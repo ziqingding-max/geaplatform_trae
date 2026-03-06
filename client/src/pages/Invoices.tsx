@@ -95,7 +95,7 @@ function InvoiceGenerationPanel() {
   });
 
   const generateMutation = trpc.invoiceGeneration.generateFromPayroll.useMutation({
-    onSuccess: (result) => {
+    onSuccess: (result: any) => {
       if (result.success) {
         toast.success(t("invoices.generation.toast.generatedSuccess").replace("{count}", String(result.invoiceIds?.length || 0)));
         if (result.warnings?.length) {

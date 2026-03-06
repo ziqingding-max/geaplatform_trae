@@ -874,6 +874,107 @@ export const invoicesRouter = router({
       return { success: true };
     }),
 
+  pay: financeManagerProcedure
+    .input(z.object({
+      id: z.number(),
+      walletAmount: z.string().optional(),
+      externalAmount: z.string().optional(),
+      externalReference: z.string().optional(),
+      notes: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const invoice = await getInvoiceById(input.id);
+      if (!invoice) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice not found" });
+
+      if (invoice.status === 'paid' || invoice.status === 'cancelled' || invoice.status === 'void') {
+         throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Invoice is already ${invoice.status}` });
+      }
+
+      const walletAmt = parseFloat(input.walletAmount || "0");
+      const externalAmt = parseFloat(input.externalAmount || "0");
+      const totalPay = walletAmt + externalAmt;
+
+      if (totalPay <= 0) throw new TRPCError({ code: "BAD_REQUEST", message: "Payment amount must be greater than 0" });
+
+      // 1. Handle Wallet Deduction
+      if (walletAmt > 0) {
+         // Deduct from wallet
+         const wallet = await walletService.getWallet(invoice.customerId, invoice.currency);
+         if (parseFloat(wallet.balance) < walletAmt) {
+            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Insufficient wallet balance" });
+         }
+         
+         await walletService.transact({
+            walletId: wallet.id,
+            type: "invoice_deduction",
+            amount: walletAmt.toFixed(2),
+            direction: "debit",
+            referenceId: invoice.id,
+            referenceType: "invoice",
+            description: `Payment for Invoice #${invoice.invoiceNumber}`,
+            createdBy: ctx.user.id
+         });
+      }
+
+      // 2. Update Invoice Status & Amounts
+      const currentPaid = parseFloat(invoice.paidAmount || "0");
+      const currentWalletApplied = parseFloat(invoice.walletAppliedAmount || "0");
+      const currentCreditApplied = parseFloat(invoice.creditApplied || "0");
+      
+      const newPaid = currentPaid + externalAmt;
+      const newWalletApplied = currentWalletApplied + walletAmt;
+      
+      const total = parseFloat(invoice.total);
+      const totalPaidSoFar = newPaid + newWalletApplied + currentCreditApplied;
+      const remainingDue = total - totalPaidSoFar;
+      
+      // Determine new status
+      let newStatus = invoice.status;
+      if (remainingDue <= 0.01) { // Floating point tolerance
+         newStatus = 'paid';
+      } else {
+         newStatus = 'partially_paid';
+      }
+
+      const updateData: any = {
+         paidAmount: newPaid.toFixed(2),
+         walletAppliedAmount: newWalletApplied.toFixed(2),
+         amountDue: Math.max(0, remainingDue).toFixed(2),
+         status: newStatus,
+         paidDate: newStatus === 'paid' ? new Date() : undefined,
+      };
+
+      await updateInvoice(invoice.id, updateData);
+
+      // 3. Handle Deposit Invoice -> Frozen Wallet
+      // If it's a deposit invoice, funds should move to Frozen Wallet.
+      // We credit the Frozen Wallet with the amount just paid (totalPay).
+      if (invoice.invoiceType === 'deposit') {
+         await walletService.depositToFrozen(
+            invoice.customerId, 
+            invoice.currency, 
+            totalPay.toFixed(2), 
+            invoice.id, 
+            ctx.user.id
+         );
+      }
+
+      await logAuditAction({
+         userId: ctx.user.id, userName: ctx.user.name || null,
+         action: "pay",
+         entityType: "invoice",
+         entityId: invoice.id,
+         changes: JSON.stringify({ 
+            walletAmount: walletAmt, 
+            externalAmount: externalAmt, 
+            newStatus, 
+            remainingDue: updateData.amountDue 
+         }),
+      });
+
+      return { success: true, newStatus, remainingDue: updateData.amountDue };
+    }),
+
   /**
    * Delete invoice — any draft or cancelled invoice can be deleted
    * Auto-generated invoices can be recreated via Regenerate if needed
@@ -890,6 +991,42 @@ export const invoicesRouter = router({
           code: "BAD_REQUEST",
           message: `Only draft or cancelled invoices can be deleted. Current status: ${invoice.status}`,
         });
+      }
+
+      // Safe Delete Check: Ensure no downstream dependencies
+      
+      // 1. Check if this invoice has had credit notes applied TO it
+      if (parseFloat(invoice.creditApplied || '0') > 0) {
+         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice with credit notes applied. Remove applications first." });
+      }
+      
+      // 2. Check if this invoice has wallet funds applied
+      if (parseFloat(invoice.walletAppliedAmount || '0') > 0) {
+         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice with wallet funds applied. Void/Cancel instead." });
+      }
+
+      // 3. Check if linked to another invoice (e.g. it is a follow-up or related)
+      // Only isolated invoices can be deleted
+      if (invoice.relatedInvoiceId) {
+         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete linked invoice (has related invoice). Void/Cancel instead." });
+      }
+
+      // 4. Check if other invoices link TO this one
+      const db = getDb();
+      if (db) {
+        // Check downstream invoices
+        const children = await db.select().from(invoicesTable).where(eq(invoicesTable.relatedInvoiceId, input.id));
+        if (children.length > 0) {
+           throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice referenced by other invoices. Void/Cancel downstream invoices first." });
+        }
+        
+        // Check if it's a Credit Note that has been applied
+        if (invoice.invoiceType === 'credit_note') {
+           const apps = await db.select().from(creditNoteApplications).where(eq(creditNoteApplications.creditNoteId, input.id));
+           if (apps.length > 0) {
+             throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete Credit Note that has been applied. Void/Cancel instead." });
+           }
+        }
       }
 
       // Delete invoice items first, then the invoice

@@ -52,11 +52,11 @@ export default function PortalWallet() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">
-          {/* Balance Card */}
+          {/* Main Wallet Balance Card */}
           <Card className="md:col-span-1 bg-primary/5 border-primary/20 shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Wallet className="w-4 h-4" /> Current Balance
+                <Wallet className="w-4 h-4" /> Main Wallet (Operating)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -93,8 +93,31 @@ export default function PortalWallet() {
             </CardContent>
           </Card>
 
+          {/* Frozen Wallet (Deposits) Card */}
+          <Card className="md:col-span-1 bg-indigo-50 border-indigo-100 shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-indigo-700 flex items-center gap-2">
+                <Wallet className="w-4 h-4" /> Deposit Wallet (Frozen)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isWalletLoading ? (
+                <Skeleton className="h-10 w-32" />
+              ) : (
+                <div className="space-y-1">
+                  <div className="text-3xl font-bold tracking-tight text-indigo-700">
+                    {formatCurrency(currency, wallet?.frozenBalance || "0")}
+                  </div>
+                  <p className="text-xs text-indigo-600/80">
+                    Security deposits held. Released upon termination.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Quick Stats or Info */}
-          <Card className="md:col-span-2">
+          <Card className="md:col-span-1">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <CreditCard className="w-4 h-4" /> How it works
@@ -107,16 +130,16 @@ export default function PortalWallet() {
                 </div>
                 <div>
                   <p className="font-medium text-foreground">Refunds & Credits</p>
-                  <p>Any refunds or credit notes are automatically added to your wallet balance.</p>
+                  <p className="text-xs">Refunds/CNs go to Main Wallet.</p>
                 </div>
               </div>
               <div className="flex gap-3">
-                <div className="bg-blue-100 text-blue-700 p-2 rounded-full h-fit">
-                  <ArrowUpRight className="w-4 h-4" />
+                <div className="bg-indigo-100 text-indigo-700 p-2 rounded-full h-fit">
+                  <Wallet className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">Automatic Deduction</p>
-                  <p>New invoices will automatically use your available balance before asking for payment.</p>
+                  <p className="font-medium text-foreground">Deposits</p>
+                  <p className="text-xs">Deposit invoices fund the Frozen Wallet.</p>
                 </div>
               </div>
             </CardContent>

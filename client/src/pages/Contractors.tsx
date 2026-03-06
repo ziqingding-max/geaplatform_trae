@@ -69,6 +69,18 @@ export function ContractorListContent() {
     offset: (page - 1) * pageSize,
   });
 
+  // Contractor Invoice Hook (Fetch invoices for all contractors? No, this is Contractor List page)
+  // We need a separate ContractorInvoices page.
+  // But wait, the user asked to "Update ContractorInvoices page".
+  // Let me check if there is a separate page or if I should create one.
+  // The file I'm editing is `Contractors.tsx` which lists Contractors.
+  // I should check `routes` or `App.tsx`.
+  // If there is no `ContractorInvoices.tsx`, I should create it.
+  
+  // Wait, the task is "Update `ContractorInvoices` page". 
+  // I see `pages/Contractors.tsx` but no `pages/ContractorInvoices.tsx`.
+  // I should probably create `pages/ContractorInvoices.tsx`.
+  
   const { data: customers } = trpc.customers.list.useQuery({ limit: 200 });
   const { data: countriesList } = trpc.countries.list.useQuery();
 

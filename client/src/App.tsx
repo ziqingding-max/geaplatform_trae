@@ -29,6 +29,8 @@ import AuditLogs from "./pages/AuditLogs";
 import KnowledgeBaseAdmin from "./pages/KnowledgeBaseAdmin";
 import Vendors from "./pages/Vendors";
 import VendorBills from "./pages/VendorBills";
+import ContractorInvoices from "./pages/admin/ContractorInvoices";
+import ReleaseTasks from "./pages/admin/ReleaseTasks";
 import ProfitLossReport from "./pages/ProfitLossReport";
 // import CostAllocation from "./pages/CostAllocation"; // Removed: merged into VendorBills detail
 import SalesCRM from "./pages/SalesCRM";
@@ -226,6 +228,8 @@ function AdminRouter() {
       <Route path="/vendors/:id" component={Vendors} />
       <Route path="/vendor-bills" component={VendorBills} />
       <Route path="/vendor-bills/:id" component={VendorBills} />
+      <Route path="/admin/contractor-invoices" component={ContractorInvoices} />
+      <Route path="/admin/release-tasks" component={ReleaseTasks} />
       {/* Cost Allocation merged into VendorBills detail page */}
       <Route path="/reports/profit-loss" component={ProfitLossReport} />
       <Route path="/exchange-rates">{() => <Redirect to="/settings" />}</Route>

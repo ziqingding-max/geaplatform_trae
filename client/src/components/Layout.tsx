@@ -38,6 +38,7 @@ import {
   Briefcase,
   BookOpen,
   Bot,
+  CheckCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -101,6 +102,8 @@ function useNavGroups(user: any) {
       label: t("nav.finance"),
       items: [
         { label: t("nav.invoices"), icon: Receipt, href: "/invoices" },
+        { label: "Contractor Invoices", icon: FileText, href: "/admin/contractor-invoices" },
+        { label: "Release Tasks", icon: CheckCircle, href: "/admin/release-tasks" },
         { label: t("nav.vendors"), icon: Truck, href: "/vendors" },
         { label: t("nav.vendor_bills"), icon: FileStack, href: "/vendor-bills" },
         { label: t("nav.profit_loss"), icon: BarChart3, href: "/reports/profit-loss" },
