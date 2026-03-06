@@ -54,15 +54,15 @@ export function ContractorInvoicesContent() {
   // Let me check `server/routers/contractors.ts` content from memory or check it.
   // I'll assume I need to add it.
   
-  // For now, I will write the frontend assuming the endpoint exists as `contractors.listInvoices`.
-  const { data, isLoading, refetch } = trpc.contractors.listInvoices.useQuery({
+  // For now, I will write the frontend assuming the endpoint exists as `contractors.invoices.listAll`.
+  const { data, isLoading, refetch } = trpc.contractors.invoices.listAll.useQuery({
     search: search || undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });
 
-  const approveMut = trpc.contractors.approve.useMutation({
+  const approveMut = trpc.contractors.invoices.approve.useMutation({
     onSuccess: () => {
       toast.success("Invoice approved");
       refetch();
@@ -71,7 +71,7 @@ export function ContractorInvoicesContent() {
     onError: (err) => toast.error(err.message),
   });
 
-  const rejectMut = trpc.contractors.reject.useMutation({
+  const rejectMut = trpc.contractors.invoices.reject.useMutation({
     onSuccess: () => {
       toast.success("Invoice rejected");
       refetch();

@@ -1,5 +1,5 @@
 
-import { eq, like, count, desc, and, or, getTableColumns } from "drizzle-orm";
+import { eq, like, count, desc, and, or, getTableColumns, sql } from "drizzle-orm";
 import { 
   contractors, InsertContractor,
   customers,
@@ -256,6 +256,59 @@ export async function listContractorInvoices(contractorId: number) {
   return await db.select().from(contractorInvoices)
     .where(eq(contractorInvoices.contractorId, contractorId))
     .orderBy(desc(contractorInvoices.createdAt));
+}
+
+export async function listAllContractorInvoices(
+  filters: { customerId?: number; status?: string; search?: string } = {},
+  limit: number = 50,
+  offset: number = 0
+) {
+  const db = await getDb();
+  if (!db) return { data: [], total: 0 };
+
+  const conditions = [];
+  if (filters.customerId) conditions.push(eq(contractorInvoices.customerId, filters.customerId));
+  if (filters.status) conditions.push(eq(contractorInvoices.status, filters.status as any));
+  if (filters.search) {
+     conditions.push(or(
+      like(contractorInvoices.invoiceNumber, `%${filters.search}%`),
+      like(contractors.firstName, `%${filters.search}%`),
+      like(contractors.lastName, `%${filters.search}%`)
+    ));
+  }
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [data, totalResult] = await Promise.all([
+    db.select({
+      id: contractorInvoices.id,
+      invoiceNumber: contractorInvoices.invoiceNumber,
+      contractorId: contractorInvoices.contractorId,
+      customerId: contractorInvoices.customerId,
+      customerName: customers.companyName,
+      contractorName: sql<string>`${contractors.firstName} || ' ' || ${contractors.lastName}`,
+      status: contractorInvoices.status,
+      periodStart: contractorInvoices.periodStart,
+      periodEnd: contractorInvoices.periodEnd,
+      totalAmount: contractorInvoices.totalAmount,
+      currency: contractorInvoices.currency,
+      createdAt: contractorInvoices.createdAt,
+    })
+    .from(contractorInvoices)
+    .leftJoin(contractors, eq(contractorInvoices.contractorId, contractors.id))
+    .leftJoin(customers, eq(contractorInvoices.customerId, customers.id))
+    .where(where)
+    .limit(limit)
+    .offset(offset)
+    .orderBy(desc(contractorInvoices.createdAt)),
+
+    db.select({ count: count() })
+      .from(contractorInvoices)
+      .leftJoin(contractors, eq(contractorInvoices.contractorId, contractors.id))
+      .where(where)
+  ]);
+
+  return { data, total: totalResult[0]?.count || 0 };
 }
 
 export async function getContractorInvoiceById(id: number) {

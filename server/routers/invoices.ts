@@ -1234,6 +1234,64 @@ export const invoicesRouter = router({
       return result;
     }),
 
+  /**
+   * Approve a credit note (e.g. Deposit Release)
+   * Disposition:
+   * - to_wallet: Credit amount to Main Wallet
+   * - to_bank: Mark as refunded externally
+   */
+  approveCreditNote: financeManagerProcedure
+    .input(z.object({
+      creditNoteId: z.number(),
+      disposition: z.enum(["to_wallet", "to_bank"]),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const cn = await getInvoiceById(input.creditNoteId);
+      if (!cn) throw new TRPCError({ code: "NOT_FOUND", message: "Credit note not found" });
+      
+      // Allow approving Draft or Pending Review CNs
+      // Also allow 'sent' if it was just generated but not processed? 
+      // Safest is Draft/Pending.
+      if (cn.status === 'paid' || cn.status === 'void') {
+         throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Credit note is already ${cn.status}` });
+      }
+
+      const amount = parseFloat(cn.total);
+
+      if (input.disposition === 'to_wallet') {
+         // Credit to Main Wallet
+         const wallet = await walletService.getWallet(cn.customerId, cn.currency);
+         await walletService.transact({
+            walletId: wallet.id,
+            type: "credit_note_release", // or deposit_release
+            amount: amount.toFixed(2),
+            direction: "credit",
+            referenceId: cn.id,
+            referenceType: "invoice",
+            description: `Credit Note #${cn.invoiceNumber} (Deposit Release)`,
+            createdBy: ctx.user.id
+         });
+      }
+
+      // Update CN status to paid
+      await updateInvoice(cn.id, {
+         status: 'paid',
+         paidDate: new Date(),
+         paidAmount: amount.toFixed(2),
+         internalNotes: (cn.internalNotes || "") + `\n[Approved] Disposition: ${input.disposition}`
+      });
+
+      await logAuditAction({
+        userId: ctx.user.id, userName: ctx.user.name || null,
+        action: "approve",
+        entityType: "invoice",
+        entityId: cn.id,
+        changes: JSON.stringify({ disposition: input.disposition }),
+      });
+
+      return { success: true };
+    }),
+
   // ── Deposit Refund (manual trigger) ─────────────────────────────────
 
   /**

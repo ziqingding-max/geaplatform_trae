@@ -20,6 +20,7 @@ import {
   deleteContractorAdjustment,
   getContractorInvoiceById,
   listContractorInvoices,
+  listAllContractorInvoices,
   logAuditAction,
   getDb
 } from "../db";
@@ -341,6 +342,26 @@ export const contractorsRouter = router({
       .input(z.object({ contractorId: z.number() }))
       .query(async ({ input }) => {
         return await listContractorInvoices(input.contractorId);
+      }),
+
+    listAll: userProcedure
+      .input(z.object({
+        customerId: z.number().optional(),
+        status: z.string().optional(),
+        search: z.string().optional(),
+        limit: z.number().default(50),
+        offset: z.number().default(0),
+      }))
+      .query(async ({ input }) => {
+        return await listAllContractorInvoices(
+          {
+            customerId: input.customerId,
+            status: input.status,
+            search: input.search,
+          },
+          input.limit,
+          input.offset
+        );
       }),
 
     get: userProcedure
