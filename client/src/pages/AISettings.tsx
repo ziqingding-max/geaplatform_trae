@@ -8,11 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 
-const providers = ["manus_forge", "openai", "qwen", "google"] as const;
+const providers = ["volcengine", "openai", "qwen", "google"] as const;
 const tasks = ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit"] as const;
 
 const providerLabelKey: Record<(typeof providers)[number], string> = {
-  manus_forge: "ai_settings.provider.manus_forge",
+  volcengine: "ai_settings.provider.volcengine",
   openai: "ai_settings.provider.openai",
   qwen: "ai_settings.provider.qwen",
   google: "ai_settings.provider.google",
@@ -108,10 +108,10 @@ export default function AISettings() {
                       provider,
                       displayName: provider,
                       baseUrl,
-                      model: provider === "qwen" ? "qwen-plus" : "gemini-2.5-flash",
-                      apiKeyEnv: apiKeyEnv || "BUILT_IN_FORGE_API_KEY",
+                      model: provider === "qwen" ? "qwen-plus" : (provider === "volcengine" ? "doubao-seed-1-6-251015" : "gemini-2.5-flash"),
+                      apiKeyEnv: apiKeyEnv || "ARK_API_KEY",
                       isEnabled: true,
-                      priority: provider === "manus_forge" ? 1 : 10,
+                      priority: provider === "volcengine" ? 1 : 10,
                     })
                   }
                 >
@@ -141,7 +141,7 @@ export default function AISettings() {
                   <div>
                     <div className="font-medium">{t(taskLabelKey[task])}</div>
                     <div className="text-xs text-muted-foreground">
-                      {t("ai_settings.primary_provider")}: {t(providerLabelKey[(cur?.primaryProvider || "manus_forge") as (typeof providers)[number]])}
+                      {t("ai_settings.primary_provider")}: {t(providerLabelKey[(cur?.primaryProvider || "volcengine") as (typeof providers)[number]])}
                     </div>
                   </div>
                   <div className="flex gap-2">
@@ -154,7 +154,7 @@ export default function AISettings() {
                           upsertPolicy.mutate({
                             task,
                             primaryProvider: provider,
-                            fallbackProvider: provider === "manus_forge" ? "openai" : "manus_forge",
+                            fallbackProvider: provider === "volcengine" ? "openai" : "volcengine",
                             modelOverride: "",
                             temperature: 0.3,
                             maxTokens: 4096,

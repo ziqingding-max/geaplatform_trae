@@ -5,7 +5,7 @@ import { router } from "../_core/trpc";
 import { getDb } from "../db";
 import { aiProviderConfigs, aiTaskExecutions, aiTaskPolicies } from "../../drizzle/schema";
 
-const providerEnum = z.enum(["manus_forge", "openai", "qwen", "google"]);
+const providerEnum = z.enum(["manus_forge", "openai", "qwen", "google", "volcengine"]);
 const taskEnum = z.enum([
   "knowledge_summarize", 
   "source_authority_review", 

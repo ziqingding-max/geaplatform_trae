@@ -166,7 +166,8 @@ export async function upsertExchangeRate(
   };
 
   try {
-    await db.insert(exchangeRates).values(data).onDuplicateKeyUpdate({
+    await db.insert(exchangeRates).values(data).onConflictDoUpdate({
+      target: [exchangeRates.fromCurrency, exchangeRates.toCurrency, exchangeRates.effectiveDate],
       set: {
         rate: rate.toString(),
         rateWithMarkup: rateWithMarkup.toString(),

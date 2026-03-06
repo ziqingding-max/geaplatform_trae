@@ -116,9 +116,7 @@ export const salesRouter = router({
         createdBy: ctx.user.id,
         assignedTo: input.assignedTo ?? null,
         notes: input.notes || null,
-        expectedCloseDate: input.expectedCloseDate
-          ? new Date(input.expectedCloseDate + "T00:00:00Z")
-          : null,
+        expectedCloseDate: input.expectedCloseDate || null,
         status: "discovery",
       });
 
@@ -186,9 +184,7 @@ export const salesRouter = router({
 
       const updateData: any = { ...input.data };
       if (input.data.expectedCloseDate !== undefined) {
-        updateData.expectedCloseDate = input.data.expectedCloseDate
-          ? new Date(input.data.expectedCloseDate + "T00:00:00Z")
-          : null;
+        updateData.expectedCloseDate = input.data.expectedCloseDate || null;
       }
 
       await updateSalesLead(input.id, updateData);

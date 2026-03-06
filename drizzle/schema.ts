@@ -1465,7 +1465,7 @@ export const aiTaskPolicies = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     task: text("task", { enum: ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit"] })
       .notNull(),
-    primaryProvider: text("primaryProvider", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).default("manus_forge").notNull(),
+    primaryProvider: text("primaryProvider", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).default("volcengine").notNull(),
     fallbackProvider: text("fallbackProvider", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }),
     modelOverride: text("modelOverride", { length: 100 }),
     temperature: text("temperature").default("0.30"),

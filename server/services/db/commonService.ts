@@ -1,5 +1,5 @@
 
-import { eq, desc, count, like } from "drizzle-orm";
+import { eq, desc, count, like, sql, and } from "drizzle-orm";
 import { 
   countriesConfig, InsertCountryConfig,
   systemConfig, InsertSystemConfig,
@@ -58,7 +58,7 @@ export async function setSystemConfig(key: string, value: string) {
   if (!db) return;
   // Upsert logic
   await db.insert(systemConfig).values({ configKey: key, configValue: value })
-    .onDuplicateKeyUpdate({ set: { configValue: value } });
+    .onConflictDoUpdate({ target: systemConfig.configKey, set: { configValue: value } });
 }
 
 export async function listSystemConfigs() {
@@ -258,7 +258,10 @@ export async function listSalesLeads(params: ListSalesLeadsParams = {}) {
   
   const conditions = [];
   if (search) conditions.push(like(salesLeads.companyName, `%${search}%`));
-  if (status) conditions.push(eq(salesLeads.status, status.trim() as any));
+  if (status) {
+    // Robust status matching: trim and case-insensitive
+    conditions.push(sql`trim(lower(${salesLeads.status})) = trim(lower(${status}))`);
+  }
   if (assignedTo) conditions.push(eq(salesLeads.assignedTo, assignedTo));
   
   const where = conditions.length > 0 ? and(...conditions) : undefined;

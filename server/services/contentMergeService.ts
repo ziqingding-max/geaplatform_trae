@@ -1,4 +1,4 @@
-import { PDFDocument } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -52,21 +52,21 @@ export async function mergePdfs(buffers: Buffer[], options: {
   }
 
   // Add Page Numbers (Optional)
-  // Note: pdf-lib doesn't support complex layout easily, so we add simple text
   if (options.addPageNumbers) {
     const pages = mergedPdf.getPages();
-    const { width, height } = pages[0].getSize();
     const fontSize = 10;
-    
-    pages.forEach((page, idx) => {
-      // Skip cover page (usually page 1) if we assume cover is first
-      if (idx === 0) return; 
+    const pageCount = pages.length;
 
-      page.drawText(`${idx + 1} / ${totalPageCount}`, {
-        x: width - 50,
+    pages.forEach((page, idx) => {
+      // Skip cover page (usually page 1)
+      if (idx === 0) return;
+      
+      const { width } = page.getSize();
+      page.drawText(`${idx + 1} / ${pageCount}`, {
+        x: width - 80,
         y: 20,
         size: fontSize,
-        color: { type: 'RGB', r: 0.4, g: 0.4, b: 0.4 }, // Grey
+        color: rgb(0.4, 0.4, 0.4),
       });
     });
   }

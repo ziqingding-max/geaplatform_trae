@@ -311,6 +311,48 @@ async function verifyData() {
   if (employeeCount.length < 100) console.warn('⚠️  Warning: Employee count seems low.');
 }
 
+async function seedAIConfigs() {
+  console.log('🤖 Seeding AI Configurations...');
+  const providers = [
+    {
+      provider: "volcengine",
+      displayName: "Volcengine Doubao",
+      baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+      model: "doubao-seed-1-6-251015", 
+      apiKeyEnv: "ARK_API_KEY",
+      isEnabled: true,
+      priority: 1
+    },
+    {
+      provider: "openai",
+      displayName: "OpenAI",
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-4o",
+      apiKeyEnv: "OPENAI_API_KEY",
+      isEnabled: true,
+      priority: 10
+    }
+  ];
+
+  for (const p of providers) {
+    await db.insert(schema.aiProviderConfigs)
+      .values(p as any)
+      .onConflictDoUpdate({
+        target: schema.aiProviderConfigs.provider,
+        set: {
+          displayName: p.displayName,
+          baseUrl: p.baseUrl,
+          model: p.model,
+          apiKeyEnv: p.apiKeyEnv,
+          isEnabled: p.isEnabled,
+          priority: p.priority,
+          updatedAt: new Date()
+        }
+      });
+  }
+  console.log(`✅ Seeded ${providers.length} AI providers.`);
+}
+
 async function main() {
   try {
     console.log('🚀 Starting Production Data Seeding...');
@@ -320,6 +362,7 @@ async function main() {
     await seedLeaveTypes();
     await seedHolidays();
     await seedBusinessData();
+    await seedAIConfigs();
     
     await verifyData();
     

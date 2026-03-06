@@ -136,7 +136,17 @@ async function resolveModelForProvider(provider: AIProvider, policy: Awaited<Ret
 }
 
 async function invokeByProvider(provider: AIProvider, model: string, params: InvokeParams) {
-  if (provider === "manus_forge") return invokeLLM(params);
+  // If manus_forge is requested but we want to deprecate it, we can redirect to volcengine
+  // or keep it if invokeLLM is still needed. Since user said "no manus forge", we redirect.
+  if (provider === "manus_forge") {
+    // Redirect to Volcengine
+    const volcConfig = await getProvider("volcengine");
+    if (volcConfig) {
+       return invokeByProvider("volcengine", volcConfig.model, params);
+    }
+    // If no volcengine config, try invokeLLM as last resort or throw
+    return invokeLLM(params); 
+  }
 
   const providerConfig = await getProvider(provider);
   if (!providerConfig?.baseUrl) throw new Error(`Provider ${provider} missing baseUrl config`);
@@ -158,13 +168,18 @@ export async function executeTaskLLM(task: AITask, params: InvokeParams): Promis
   const runtimeParams = applyPolicyToParams(params, policy);
 
   if (!policy) {
+    // Default to Volcengine (Doubao) if no policy is set
+    // Fallback logic changed from Manus Forge to Volcengine as requested
+    const defaultProvider: AIProvider = "volcengine";
+    const defaultModel = await resolveModelForProvider(defaultProvider, null);
+    
     try {
-      const result = await invokeLLM(runtimeParams);
+      const result = await invokeByProvider(defaultProvider, defaultModel, runtimeParams);
       const usage = extractTokenUsage(result);
       await logTaskExecution({
         task,
-        providerPrimary: "manus_forge",
-        providerActual: "manus_forge",
+        providerPrimary: defaultProvider,
+        providerActual: defaultProvider,
         fallbackTriggered: false,
         latencyMs: Date.now() - startedAt,
         tokenUsageIn: usage.inputTokens,
@@ -176,8 +191,8 @@ export async function executeTaskLLM(task: AITask, params: InvokeParams): Promis
     } catch (error: any) {
       await logTaskExecution({
         task,
-        providerPrimary: "manus_forge",
-        providerActual: "manus_forge",
+        providerPrimary: defaultProvider,
+        providerActual: defaultProvider,
         fallbackTriggered: false,
         latencyMs: Date.now() - startedAt,
         tokenUsageIn: 0,

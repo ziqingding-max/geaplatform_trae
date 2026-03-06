@@ -163,7 +163,8 @@ export async function setDefaultMarkup(percentage: number): Promise<void> {
     configKey: "exchange_rate_markup_percentage",
     configValue: percentage.toFixed(2),
     description: "Global exchange rate markup percentage applied to all currency conversions",
-  }).onDuplicateKeyUpdate({
+  }).onConflictDoUpdate({
+    target: systemConfig.configKey,
     set: {
       configValue: percentage.toFixed(2),
     },
