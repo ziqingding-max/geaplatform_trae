@@ -87,3 +87,32 @@ export async function storageGet(key: string): Promise<{ key: string; url: strin
     throw new Error(`Storage get failed: ${error}`);
   }
 }
+
+/**
+ * Download file content from OSS
+ */
+export async function storageDownload(key: string): Promise<{ content: Buffer; contentType?: string }> {
+    if (!ENV.ossAccessKeyId || !ENV.ossAccessKeySecret || !BUCKET_NAME) {
+        throw new Error("OSS credentials not configured");
+    }
+
+    const normalizedKey = key.replace(/^\/+/, "");
+    const command = new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: normalizedKey,
+    });
+
+    try {
+        const response = await s3Client.send(command);
+        const byteArray = await response.Body?.transformToByteArray();
+        if (!byteArray) throw new Error("Empty body");
+        
+        return { 
+            content: Buffer.from(byteArray),
+            contentType: response.ContentType
+        };
+    } catch (error) {
+        console.error("[Storage] Download failed:", error);
+        throw new Error(`Storage download failed: ${error}`);
+    }
+}

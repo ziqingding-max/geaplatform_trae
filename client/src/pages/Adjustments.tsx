@@ -1,7 +1,8 @@
+
 /*
  * GEA Admin — Adjustments (异动薪酬)
  * Manage bonuses, allowances, reimbursements, and deductions
- * No approval workflow — submitted directly, locked after payroll cutoff
+ * Supports both Employees (EOR) and Contractors (AOR)
  */
 
 import Layout from "@/components/Layout";
@@ -40,19 +41,25 @@ import {
 import {
   Tabs, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
-import { ArrowUpDown, Plus, Search, Pencil, Trash2, Lock, Upload, FileText, X, Paperclip, Eye, CheckCircle2, XCircle, Download } from "lucide-react";
+import { ArrowUpDown, Plus, Search, Pencil, Trash2, Lock, Upload, FileText, X, Paperclip, Eye, CheckCircle2, XCircle, Download, Briefcase, User } from "lucide-react";
 import { toast } from "sonner";
-import EmployeeSelector from "@/components/EmployeeSelector";
+import WorkerSelector from "@/components/WorkerSelector";
 import PayrollCycleIndicator from "@/components/PayrollCycleIndicator";
 import { MonthPicker } from "@/components/DatePicker";
 import { exportToCsv } from "@/lib/csvExport";
 
 import { useI18n } from "@/lib/i18n";
-  const statusColors: Record<string, string> = {
+
+const statusColors: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-700 border-amber-200",
   admin_approved: "bg-green-50 text-green-700 border-green-200",
   admin_rejected: "bg-orange-50 text-orange-700 border-orange-200",
   locked: "bg-blue-50 text-blue-700 border-blue-200",
+  // Contractor statuses
+  pending: "bg-amber-50 text-amber-700 border-amber-200",
+  approved: "bg-green-50 text-green-700 border-green-200",
+  rejected: "bg-orange-50 text-orange-700 border-orange-200",
+  invoiced: "bg-blue-50 text-blue-700 border-blue-200",
 };
 
 const typeColors: Record<string, string> = {
@@ -60,6 +67,7 @@ const typeColors: Record<string, string> = {
   allowance: "bg-blue-50 text-blue-700",
   deduction: "bg-red-50 text-red-700",
   other: "bg-gray-50 text-gray-700",
+  expense: "bg-purple-50 text-purple-700",
 };
 
 const CATEGORIES = [
@@ -101,74 +109,84 @@ export default function Adjustments() {
     return options;
   }, [lang]);
 
-  const { data, isLoading, refetch } = trpc.adjustments.list.useQuery({
+  // Fetch Employee Adjustments
+  const { data: employeeAdjustmentsData, isLoading: isLoadingEmployees, refetch: refetchEmployees } = trpc.adjustments.list.useQuery({
     status: statusFilter !== "all" ? statusFilter : undefined,
     adjustmentType: typeFilter !== "all" ? typeFilter : undefined,
     effectiveMonth: monthFilter !== "all" ? monthFilter : undefined,
     limit: 100,
   });
 
-  // Fetch employees and customers for selectors
+  // Fetch Contractor Adjustments
+  const { data: contractorAdjustmentsData, isLoading: isLoadingContractors, refetch: refetchContractors } = trpc.contractors.adjustments.listAll.useQuery({
+    customerId: customerFilter !== "all" ? parseInt(customerFilter) : undefined,
+    status: statusFilter !== "all" ? statusFilter : undefined,
+    search: search || undefined,
+  });
+
+  const refetch = () => {
+    refetchEmployees();
+    refetchContractors();
+  };
+
+  // Fetch workers for lookup
   const { data: employeesData } = trpc.employees.list.useQuery({ limit: 500 });
   const employeesList = employeesData?.data || [];
+  
+  const { data: contractorsData } = trpc.contractors.list.useQuery({ limit: 500 });
+  const contractorsList = contractorsData?.data || [];
+
   const { data: customersData } = trpc.customers.list.useQuery({ limit: 200 });
   const customersList = customersData?.data || [];
 
-  // Build employee lookup map
-  const employeeMap = useMemo(() => {
-    const map = new Map<number, any>();
+  // Build worker lookup map
+  const workerMap = useMemo(() => {
+    const map = new Map<string, any>();
     for (const emp of employeesList) {
-      map.set(emp.id, emp);
+      map.set(`emp-${emp.id}`, { ...emp, type: "employee" });
+    }
+    for (const con of contractorsList) {
+      map.set(`con-${con.id}`, { ...con, type: "contractor" });
     }
     return map;
-  }, [employeesList]);
+  }, [employeesList, contractorsList]);
 
-  const createMutation = trpc.adjustments.create.useMutation({
-    onSuccess: () => {
-      toast.success(t("adjustments.toast.submitSuccess"));
-      setCreateOpen(false);
-      setReceiptFile(null);
-      refetch();
-    },
+  // Employee Mutations
+  const createEmployeeMutation = trpc.adjustments.create.useMutation({
+    onSuccess: () => { toast.success(t("adjustments.toast.submitSuccess")); setCreateOpen(false); setReceiptFile(null); refetch(); },
     onError: (err) => toast.error(err.message),
   });
-
+  const updateEmployeeMutation = trpc.adjustments.update.useMutation({
+    onSuccess: () => { toast.success(t("adjustments.toast.updateSuccess")); setEditOpen(false); setEditingAdj(null); setEditReceiptFile(null); refetch(); },
+    onError: (err) => toast.error(err.message),
+  });
+  const deleteEmployeeMutation = trpc.adjustments.delete.useMutation({
+    onSuccess: () => { toast.success(t("adjustments.toast.deleteSuccess")); refetch(); },
+    onError: (err) => toast.error(err.message),
+  });
+  const adminApproveEmployeeMutation = trpc.adjustments.adminApprove.useMutation({
+    onSuccess: () => { toast.success(t("adjustments.toast.approveSuccess")); refetch(); },
+    onError: (err) => toast.error(err.message),
+  });
+  const adminRejectEmployeeMutation = trpc.adjustments.adminReject.useMutation({
+    onSuccess: () => { toast.success(t("adjustments.toast.rejectSuccess")); refetch(); },
+    onError: (err) => toast.error(err.message),
+  });
   const uploadReceiptMutation = trpc.adjustments.uploadReceipt.useMutation({
     onError: (err) => toast.error(err.message),
   });
 
-  const updateMutation = trpc.adjustments.update.useMutation({
-    onSuccess: () => {
-      toast.success(t("adjustments.toast.updateSuccess"));
-      setEditOpen(false);
-      setEditingAdj(null);
-      setEditReceiptFile(null);
-      refetch();
-    },
+  // Contractor Mutations
+  const createContractorMutation = trpc.contractors.adjustments.create.useMutation({
+    onSuccess: () => { toast.success(t("adjustments.toast.submitSuccess")); setCreateOpen(false); setReceiptFile(null); refetch(); },
     onError: (err) => toast.error(err.message),
   });
-
-  const deleteMutation = trpc.adjustments.delete.useMutation({
-    onSuccess: () => {
-      toast.success(t("adjustments.toast.deleteSuccess"));
-      refetch();
-    },
+  const updateContractorMutation = trpc.contractors.adjustments.update.useMutation({
+    onSuccess: () => { toast.success(t("adjustments.toast.updateSuccess")); setEditOpen(false); setEditingAdj(null); refetch(); },
     onError: (err) => toast.error(err.message),
   });
-
-  const adminApproveMutation = trpc.adjustments.adminApprove.useMutation({
-    onSuccess: () => {
-      toast.success(t("adjustments.toast.approveSuccess"));
-      refetch();
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const adminRejectMutation = trpc.adjustments.adminReject.useMutation({
-    onSuccess: () => {
-      toast.success(t("adjustments.toast.rejectSuccess"));
-      refetch();
-    },
+  const deleteContractorMutation = trpc.contractors.adjustments.delete.useMutation({
+    onSuccess: () => { toast.success(t("adjustments.toast.deleteSuccess")); refetch(); },
     onError: (err) => toast.error(err.message),
   });
 
@@ -176,7 +194,7 @@ export default function Adjustments() {
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
   const [formData, setFormData] = useState({
-    employeeId: 0,
+    workerId: "", // "emp-123" or "con-456"
     adjustmentType: "bonus",
     category: "",
     description: "",
@@ -192,23 +210,19 @@ export default function Adjustments() {
     effectiveMonth: "",
   });
 
-  // Receipt file state for create form
-  const [receiptFile, setReceiptFile] = useState(null);
-  const receiptInputRef = useRef(null);
-
-  // Receipt file state for edit form
-  const [editReceiptFile, setEditReceiptFile] = useState(null);
-  const editReceiptInputRef = useRef(null);
-
-  // Uploading state
+  // Receipt file state
+  const [receiptFile, setReceiptFile] = useState<{ file: File, base64: string } | null>(null);
+  const receiptInputRef = useRef<HTMLInputElement>(null);
+  const [editReceiptFile, setEditReceiptFile] = useState<{ file: File, base64: string } | null>(null);
+  const editReceiptInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Auto-fill currency from selected employee
-  const selectedEmployee = formData.employeeId ? employeeMap.get(formData.employeeId) : null;
-  const autoCurrency = selectedEmployee?.salaryCurrency || "USD";
+  // Auto-fill currency
+  const selectedWorker = formData.workerId ? workerMap.get(formData.workerId) : null;
+  const autoCurrency = selectedWorker?.salaryCurrency || selectedWorker?.currency || "USD";
 
-  const handleReceiptSelect = (e, isEdit) => {
-    const file = e.files?.[0];
+  const handleReceiptSelect = (e: React.ChangeEvent<HTMLInputElement>, isEdit: boolean) => {
+    const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 20 * 1024 * 1024) {
       toast.error(t("adjustments.toast.fileTooLarge"));
@@ -216,7 +230,7 @@ export default function Adjustments() {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      const base64 = reader.result.split(",")[1];
+      const base64 = (reader.result as string).split(",")[1];
       if (isEdit) {
         setEditReceiptFile({ file, base64 });
       } else {
@@ -227,155 +241,264 @@ export default function Adjustments() {
   };
 
   const handleCreate = async () => {
-    if (!formData.employeeId || !formData.amount) {
+    if (!formData.workerId || !formData.amount) {
       toast.error(t("adjustments.toast.requiredFields"));
       return;
     }
 
-    // Receipt is optional for all adjustment types (reimbursement is now a separate module)
+    const [prefix, idStr] = formData.workerId.split("-");
+    const id = parseInt(idStr);
+    const isEmployee = prefix === "emp";
 
     setIsUploading(true);
     try {
-      let receiptFileUrl;
-      let receiptFileKey;
+      if (isEmployee) {
+        let receiptFileUrl;
+        let receiptFileKey;
+        if (receiptFile) {
+          const uploadResult = await uploadReceiptMutation.mutateAsync({
+            fileBase64: receiptFile.base64,
+            fileName: receiptFile.file.name,
+            mimeType: receiptFile.file.type || "application/octet-stream",
+          });
+          receiptFileUrl = uploadResult.url;
+          receiptFileKey = uploadResult.fileKey;
+        }
 
-      // Upload receipt if present
-      if (receiptFile) {
-        const uploadResult = await uploadReceiptMutation.mutateAsync({
-          fileBase64: receiptFile.base64,
-          fileName: receiptFile.file.name,
-          mimeType: receiptFile.file.type || "application/octet-stream",
+        createEmployeeMutation.mutate({
+          employeeId: id,
+          adjustmentType: formData.adjustmentType as any,
+          category: (formData.category || undefined) as any,
+          description: formData.description || undefined,
+          amount: formData.amount,
+          effectiveMonth: formData.effectiveMonth,
+          receiptFileUrl,
+          receiptFileKey,
         });
-        receiptFileUrl = uploadResult.url;
-        receiptFileKey = uploadResult.fileKey;
-      }
+      } else {
+        // Contractor
+        // Note: Contractors use 'date' instead of 'effectiveMonth', and type/category mapping might differ
+        // For now, we map effectiveMonth to date (first day of month)
+        const date = `${formData.effectiveMonth}-01`;
+        
+        // Upload attachment if possible (contractor API supports attachmentUrl)
+        // We reuse the same upload endpoint for convenience, or skip if backend doesn't support S3 for contractors yet?
+        // Contractor create schema has attachmentUrl.
+        let attachmentUrl;
+        if (receiptFile) {
+           const uploadResult = await uploadReceiptMutation.mutateAsync({
+            fileBase64: receiptFile.base64,
+            fileName: receiptFile.file.name,
+            mimeType: receiptFile.file.type || "application/octet-stream",
+          });
+          attachmentUrl = uploadResult.url;
+        }
 
-      createMutation.mutate({
-        employeeId: formData.employeeId,
-        adjustmentType: formData.adjustmentType,
-        category: formData.category || undefined,
-        description: formData.description || undefined,
-        amount: formData.amount,
-        effectiveMonth: formData.effectiveMonth,
-        receiptFileUrl,
-        receiptFileKey,
-      });
+        // Map adjustmentType: "bonus", "allowance", "deduction", "other" -> "bonus", "expense", "deduction"
+        let type: "bonus" | "expense" | "deduction" = "bonus";
+        if (formData.adjustmentType === "deduction") type = "deduction";
+        else if (formData.adjustmentType === "other" || formData.adjustmentType === "allowance") type = "expense"; // Map allowance/other to expense for contractors? Or bonus?
+        // Let's map allowance to bonus for now, or keep it consistent if backend allows.
+        // Backend allows: bonus, expense, deduction.
+        if (formData.adjustmentType === "allowance") type = "bonus"; 
+
+        createContractorMutation.mutate({
+          contractorId: id,
+          type: type,
+          description: formData.description || formData.category || "Adjustment",
+          amount: formData.amount,
+          currency: autoCurrency,
+          date: date,
+          attachmentUrl,
+        });
+      }
     } catch {
-      // Error handled by mutation onError
+      // Error handled
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleEdit = (adj: any) => {
-    try {
-      console.log("Editing adjustment:", adj);
-      setEditingAdj(adj);
-      const effMonth = adj.effectiveMonth
-        ? new Date(adj.effectiveMonth).toISOString().slice(0, 7)
-        : defaultMonth;
-      setEditFormData({
-        adjustmentType: adj.adjustmentType,
-        category: adj.category || "",
-        description: adj.description || "",
-        amount: adj.amount?.toString() || "",
-        effectiveMonth: effMonth,
-      });
-      setEditReceiptFile(null);
-      setEditOpen(true);
-    } catch (e) {
-      console.error("Error opening edit dialog:", e);
-      toast.error("Failed to open edit dialog");
+    setEditingAdj(adj);
+    const isEmployee = adj.workerType === "employee";
+    
+    let effMonth = "";
+    if (isEmployee) {
+      effMonth = adj.effectiveMonth ? new Date(adj.effectiveMonth).toISOString().slice(0, 7) : defaultMonth;
+    } else {
+      effMonth = adj.date ? new Date(adj.date).toISOString().slice(0, 7) : defaultMonth;
     }
+
+    setEditFormData({
+      adjustmentType: adj.adjustmentType, // For contractor, this comes normalized
+      category: adj.category || "",
+      description: adj.description || "",
+      amount: adj.amount?.toString() || "",
+      effectiveMonth: effMonth,
+    });
+    setEditReceiptFile(null);
+    setEditOpen(true);
   };
 
   const handleUpdate = async () => {
     if (!editingAdj) return;
-
-    // Receipt is optional for all adjustment types (reimbursement is now a separate module)
+    const isEmployee = editingAdj.workerType === "employee";
 
     setIsUploading(true);
     try {
-      let receiptFileUrl;
-      let receiptFileKey;
-
-      if (editReceiptFile) {
-        const uploadResult = await uploadReceiptMutation.mutateAsync({
-          fileBase64: editReceiptFile.base64,
-          fileName: editReceiptFile.file.name,
-          mimeType: editReceiptFile.file.type || "application/octet-stream",
+      if (isEmployee) {
+        let receiptFileUrl;
+        let receiptFileKey;
+        if (editReceiptFile) {
+          const uploadResult = await uploadReceiptMutation.mutateAsync({
+            fileBase64: editReceiptFile.base64,
+            fileName: editReceiptFile.file.name,
+            mimeType: editReceiptFile.file.type || "application/octet-stream",
+          });
+          receiptFileUrl = uploadResult.url;
+          receiptFileKey = uploadResult.fileKey;
+        }
+        updateEmployeeMutation.mutate({
+          id: editingAdj.id,
+          data: {
+            adjustmentType: editFormData.adjustmentType as any,
+            category: (editFormData.category || undefined) as any,
+            description: editFormData.description || undefined,
+            amount: editFormData.amount,
+            effectiveMonth: editFormData.effectiveMonth,
+            ...(receiptFileUrl ? { receiptFileUrl, receiptFileKey } : {}),
+          },
         });
-        receiptFileUrl = uploadResult.url;
-        receiptFileKey = uploadResult.fileKey;
+      } else {
+        // Contractor Update
+        const date = `${editFormData.effectiveMonth}-01`;
+        let type: "bonus" | "expense" | "deduction" = "bonus";
+        if (editFormData.adjustmentType === "deduction") type = "deduction";
+        else if (editFormData.adjustmentType === "other" || editFormData.adjustmentType === "allowance") type = "expense";
+        
+        updateContractorMutation.mutate({
+          id: editingAdj.id,
+          data: {
+            type: type,
+            description: editFormData.description || editFormData.category,
+            amount: editFormData.amount,
+            date: date,
+          }
+        });
       }
-
-      updateMutation.mutate({
-        id: editingAdj.id,
-        data: {
-          adjustmentType: editFormData.adjustmentType,
-          category: editFormData.category || undefined,
-          description: editFormData.description || undefined,
-          amount: editFormData.amount,
-          effectiveMonth: editFormData.effectiveMonth,
-          ...(receiptFileUrl ? { receiptFileUrl, receiptFileKey } : {}),
-        },
-      });
     } catch {
-      // Error handled by mutation onError
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = (adj: any) => {
     if (confirm(t("adjustments.confirm.delete"))) {
-      deleteMutation.mutate({ id });
+      if (adj.workerType === "employee") {
+        deleteEmployeeMutation.mutate({ id: adj.id });
+      } else {
+        deleteContractorMutation.mutate({ id: adj.id });
+      }
     }
   };
 
-  // Derive unique countries from employees for filter
+  const handleApprove = (adj: any) => {
+    if (adj.workerType === "employee") {
+      adminApproveEmployeeMutation.mutate({ id: adj.id });
+    } else {
+      updateContractorMutation.mutate({ id: adj.id, data: { status: "approved" } });
+    }
+  };
+
+  const handleReject = (adj: any) => {
+    if (adj.workerType === "employee") {
+      adminRejectEmployeeMutation.mutate({ id: adj.id });
+    } else {
+      updateContractorMutation.mutate({ id: adj.id, data: { status: "rejected" } });
+    }
+  };
+
+  // Combine and normalize adjustments
+  const combinedAdjustments = useMemo(() => {
+    const empAdjs = (employeeAdjustmentsData?.data || []).map((a: any) => ({
+      ...a,
+      workerType: "employee",
+      workerId: `emp-${a.employeeId}`,
+      date: a.effectiveMonth // for sorting
+    }));
+
+    const conAdjs = (contractorAdjustmentsData || []).map((a: any) => ({
+      ...a,
+      workerType: "contractor",
+      workerId: `con-${a.contractorId}`,
+      adjustmentType: a.type, // Map type
+      category: "other", // Contractors don't have detailed category yet
+      effectiveMonth: a.date, // Map date to effectiveMonth for display
+      receiptFileUrl: a.attachmentUrl,
+      currency: a.currency || "USD" // Fallback
+    }));
+
+    const all = [...empAdjs, ...conAdjs];
+    
+    // Sort by date desc
+    return all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [employeeAdjustmentsData, contractorAdjustmentsData]);
+
+  // Filter adjustments
+  const filteredAdjustments = useMemo(() => {
+    return combinedAdjustments.filter((adj) => {
+      const worker = workerMap.get(adj.workerId);
+      
+      // Status filtering
+      // Active tab: submitted, pending
+      // History tab: approved, rejected, locked, invoiced
+      const activeStatuses = ["submitted", "pending"];
+      const historyStatuses = ["locked", "admin_approved", "admin_rejected", "approved", "rejected", "invoiced"];
+      
+      if (viewTab === "active" && !activeStatuses.includes(adj.status)) return false;
+      if (viewTab === "history" && !historyStatuses.includes(adj.status)) return false;
+
+      // Other filters
+      if (customerFilter !== "all") {
+        if (!worker || String(worker.customerId) !== customerFilter) return false;
+      }
+      if (countryFilter !== "all") {
+        if (!worker || worker.country !== countryFilter) return false;
+      }
+      if (typeFilter !== "all" && adj.adjustmentType !== typeFilter) return false;
+      
+      // Search
+      if (search) {
+        const s = search.toLowerCase();
+        const workerName = worker ? `${worker.firstName} ${worker.lastName}`.toLowerCase() : "";
+        const desc = (adj.description || "").toLowerCase();
+        if (!workerName.includes(s) && !desc.includes(s) && !adj.adjustmentType.includes(s)) return false;
+      }
+      
+      return true;
+    });
+  }, [combinedAdjustments, viewTab, customerFilter, countryFilter, typeFilter, search, workerMap]);
+
+  // Available countries for filter
   const availableCountries = useMemo(() => {
-    const set = new Set();
+    const set = new Set<string>();
     employeesList.forEach((e) => { if (e.country) set.add(e.country); });
+    contractorsList.forEach((c) => { if (c.country) set.add(c.country); });
     return Array.from(set).sort();
-  }, [employeesList]);
+  }, [employeesList, contractorsList]);
 
-  const adjustments = (data?.data || []).filter((adj) => {
-    const emp = employeeMap.get(adj.employeeId);
-    // Tab filter: active = submitted/client_approved/client_rejected/admin_rejected, history = locked/admin_approved
-    const historyStatuses = ["locked", "admin_approved"];
-    if (viewTab === "active" && historyStatuses.includes(adj.status)) return false;
-    if (viewTab === "history" && !historyStatuses.includes(adj.status)) return false;
-    if (customerFilter !== "all") {
-      if (!emp || String(emp.customerId) !== customerFilter) return false;
-    }
-    if (countryFilter !== "all") {
-      if (!emp || emp.country !== countryFilter) return false;
-    }
-    if (search) {
-      const s = search.toLowerCase();
-      const empName = emp ? `${emp.firstName} ${emp.lastName}`.toLowerCase() : "";
-      const desc = (adj.description || "").toLowerCase();
-      if (!empName.includes(s) && !desc.includes(s) && !adj.adjustmentType.includes(s)) return false;
-    }
-    return true;
-  });
-
-  // Receipt upload UI component
-  const ReceiptUploadArea = ({ isEdit }) => {
+  // Receipt Upload UI
+  const ReceiptUploadArea = ({ isEdit }: { isEdit: boolean }) => {
     const file = isEdit ? editReceiptFile : receiptFile;
     const inputRef = isEdit ? editReceiptInputRef : receiptInputRef;
     const existingUrl = isEdit && editingAdj?.receiptFileUrl ? editingAdj.receiptFileUrl : null;
-    const adjType = isEdit ? editFormData.adjustmentType : formData.adjustmentType;
-    const isRequired = false; // Receipt is optional for all adjustment types
-
-    if (!isRequired && !file && !existingUrl) return null;
-
+    
     return (
       <div className="space-y-2">
         <Label className="flex items-center gap-1">
           <Paperclip className="w-3.5 h-3.5" />
-          {t("adjustments.receipt.label")} {isRequired && <span className="text-red-500">*</span>}
+          {t("adjustments.receipt.label")}
         </Label>
         {existingUrl && !file && (
           <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-md text-sm">
@@ -416,13 +539,11 @@ export default function Adjustments() {
           <Upload className="w-4 h-4 mr-2" />
           {file ? t("adjustments.receipt.replace") : existingUrl ? t("adjustments.receipt.upload_new") : t("adjustments.receipt.upload")}
         </Button>
-        <p className="text-xs text-muted-foreground">
-          {t("adjustments.receipt.hint")}
-          {isRequired && " Required for reimbursement adjustments."}
-        </p>
       </div>
     );
   };
+
+  const isLoading = isLoadingEmployees || isLoadingContractors;
 
   return (
     <Layout breadcrumb={["GEA", t("nav.operations"), t("nav.adjustments")]}>
@@ -436,21 +557,19 @@ export default function Adjustments() {
           </div>
           <div className="flex items-center gap-4">
             <PayrollCycleIndicator compact />
-            <Button variant="outline" disabled={adjustments.length === 0} onClick={() => {
-              exportToCsv(adjustments, [
+            <Button variant="outline" disabled={filteredAdjustments.length === 0} onClick={() => {
+               exportToCsv(filteredAdjustments, [
+                { header: "Worker Type", accessor: (r: any) => r.workerType },
                 { header: "Type", accessor: (r: any) => t(`adjustments.type.${r.adjustmentType}`) || r.adjustmentType },
-                { header: "Employee", accessor: (r: any) => { const emp = employeeMap.get(r.employeeId); return emp ? `${emp.firstName} ${emp.lastName}` : `#${r.employeeId}`; } },
-                { header: "Category", accessor: (r: any) => t(`adjustments.category.${r.category}`) || r.category || "" },
+                { header: "Worker", accessor: (r: any) => { const w = workerMap.get(r.workerId); return w ? `${w.firstName} ${w.lastName}` : r.workerId; } },
                 { header: "Amount", accessor: (r: any) => r.amount },
                 { header: "Currency", accessor: (r: any) => r.currency },
-                { header: "Effective Month", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth).toISOString().slice(0, 7) : "" },
-                { header: "Description", accessor: (r: any) => r.description || "" },
-                { header: "Status", accessor: (r: any) => t(`adjustments.status.${r.status}`) || r.status },
-                { header: "Created", accessor: (r: any) => r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : "" },
+                { header: "Month/Date", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth).toISOString().slice(0, 7) : "" },
+                { header: "Status", accessor: (r: any) => r.status },
               ], `adjustments-export-${new Date().toISOString().slice(0, 10)}.csv`);
               toast.success("CSV exported successfully");
             }}>
-              <Download className="w-4 h-4 mr-2" />{t("common.export") || "Export CSV"}
+              <Download className="w-4 h-4 mr-2" />{t("common.export")}
             </Button>
             <Dialog open={createOpen} onOpenChange={(open) => {
               setCreateOpen(open);
@@ -467,18 +586,18 @@ export default function Adjustments() {
                 <DialogTitle>{t("adjustments.dialog.title.new")}</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 mt-4">
-                {/* Employee Selector with customer cascading + search */}
-                <EmployeeSelector
-                  value={formData.employeeId}
-                  onValueChange={(id) => setFormData({ ...formData, employeeId: id })}
+                <WorkerSelector
+                  value={formData.workerId}
+                  onValueChange={(id) => setFormData({ ...formData, workerId: id })}
                   showCustomerFilter={true}
                   required
-                  label={t("adjustments.form.label.employee")}
-                  placeholder={t("leave.form.placeholder.employee")}
+                  label="Worker"
+                  placeholder="Select employee or contractor"
                 />
-                {selectedEmployee && (
+                
+                {selectedWorker && (
                   <p className="text-xs text-muted-foreground">
-                    {t("portal_adjustments.form.currency_label")}: <strong>{autoCurrency}</strong> · {t("adjustments.filters.customerPlaceholder")}: #{selectedEmployee.customerId}
+                    Currency: <strong>{autoCurrency}</strong> · Customer: #{selectedWorker.customerId}
                   </p>
                 )}
 
@@ -549,18 +668,12 @@ export default function Adjustments() {
                   />
                 </div>
 
-                {/* Receipt upload area — always visible for reimbursement, optional for others */}
                 <ReceiptUploadArea isEdit={false} />
-
-                {/* Payroll period info for the selected effective month */}
-                {formData.effectiveMonth && (
-                  <PayrollCycleIndicator month={formData.effectiveMonth} />
-                )}
 
                 <div className="flex justify-end gap-3 pt-2">
                   <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
-                  <Button onClick={handleCreate} disabled={createMutation.isPending || isUploading}>
-                    {isUploading ? t("adjustments.receipt.uploading") : createMutation.isPending ? t("leave.button.submitting") : t("common.submit")}
+                  <Button onClick={handleCreate} disabled={isUploading}>
+                    {isUploading ? t("adjustments.receipt.uploading") : t("common.submit")}
                   </Button>
                 </div>
               </div>
@@ -569,7 +682,6 @@ export default function Adjustments() {
           </div>
         </div>
 
-        {/* Active / History Tabs */}
         <Tabs value={viewTab} onValueChange={(v) => { setViewTab(v); setStatusFilter("all"); }} className="w-full">
           <TabsList>
             <TabsTrigger value="active">{t("adjustments.tabs.active")}</TabsTrigger>
@@ -622,19 +734,7 @@ export default function Adjustments() {
                 <SelectItem value="other">{t("adjustments.type.other")}</SelectItem>
               </SelectContent>
           </Select>
-          {viewTab === "active" && (
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder={t("adjustments.filters.statusPlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t("adjustments.filters.allStatuses")}</SelectItem>
-                <SelectItem value="submitted">{t("adjustments.status.submitted")}</SelectItem>
-                <SelectItem value="admin_approved">{t("adjustments.status.admin_approved")}</SelectItem>
-                <SelectItem value="admin_rejected">{t("adjustments.status.admin_rejected")}</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
+          
           <Select value={monthFilter} onValueChange={setMonthFilter}>
             <SelectTrigger className="w-36">
               <SelectValue placeholder={t("payroll.filters.placeholder.month")} />
@@ -648,14 +748,13 @@ export default function Adjustments() {
           </Select>
         </div>
 
-        {/* Table */}
         <Card>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Worker</TableHead>
                   <TableHead>{t("adjustments.form.label.type")}</TableHead>
-                  <TableHead>{t("adjustments.form.label.employee")}</TableHead>
                   <TableHead>{t("adjustments.form.label.category")}</TableHead>
                   <TableHead>{t("adjustments.form.label.amount")}</TableHead>
                   <TableHead>{t("adjustments.form.label.effectiveMonth")}</TableHead>
@@ -668,32 +767,41 @@ export default function Adjustments() {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-12" /></TableCell>
-                      <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                      <TableCell></TableCell>
+                      <TableCell colSpan={8}><Skeleton className="h-8 w-full" /></TableCell>
                     </TableRow>
                   ))
-                ) : adjustments.length > 0 ? (
-                  adjustments.map((adj) => {
-                    const emp = employeeMap.get(adj.employeeId);
-                    const empLabel = emp
-                      ? `${emp.firstName} ${emp.lastName}`
-                      : `${t("adjustments.form.label.employee")} #${adj.employeeId}`;
-                    const categoryLabel = CATEGORIES.includes(adj.category) ? t(`adjustments.category.${adj.category}`) : (adj.category || "—");
+                ) : filteredAdjustments.length > 0 ? (
+                  filteredAdjustments.map((adj) => {
+                    const worker = workerMap.get(adj.workerId);
+                    const workerName = worker ? `${worker.firstName} ${worker.lastName}` : adj.workerId;
+                    const isEmployee = adj.workerType === "employee";
+                    
                     return (
-                      <TableRow key={adj.id}>
+                      <TableRow key={`${adj.workerType}-${adj.id}`}>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-sm">{workerName}</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              {isEmployee ? (
+                                <Badge variant="secondary" className="text-[10px] px-1 h-4">
+                                  {worker?.serviceType === "visa_eor" ? "Visa EOR" : "EOR"}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-[10px] px-1 h-4 bg-orange-50 text-orange-700 border-orange-200">
+                                  AOR
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={`text-xs capitalize ${typeColors[adj.adjustmentType] || ""}`}>
                             {t(`adjustments.type.${adj.adjustmentType}`) || adj.adjustmentType}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm">{empLabel}</TableCell>
-                        <TableCell className="text-sm">{categoryLabel}</TableCell>
+                        <TableCell className="text-sm">
+                          {CATEGORIES.includes(adj.category) ? t(`adjustments.category.${adj.category}`) : (adj.category || adj.description || "—")}
+                        </TableCell>
                         <TableCell className="text-sm font-mono">
                           {adj.currency} {formatAmount(adj.amount)}
                         </TableCell>
@@ -717,51 +825,38 @@ export default function Adjustments() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            {adj.status === "submitted" && (
+                            {["submitted", "pending"].includes(adj.status) && (
                               <>
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                                  onClick={() => adminApproveMutation.mutate({ id: adj.id })}
-                                  disabled={adminApproveMutation.isPending}
+                                  variant="ghost" size="icon" className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                  onClick={() => handleApprove(adj)}
                                   title={t("common.approve")}
                                 >
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                 </Button>
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                                  onClick={() => adminRejectMutation.mutate({ id: adj.id })}
-                                  disabled={adminRejectMutation.isPending}
+                                  variant="ghost" size="icon" className="h-7 w-7 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                                  onClick={() => handleReject(adj)}
                                   title={t("common.reject")}
                                 >
                                   <XCircle className="w-3.5 h-3.5" />
                                 </Button>
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                                   onClick={() => handleEdit(adj)}
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                 </Button>
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                  onClick={() => handleDelete(adj.id)}
-                                  disabled={deleteMutation.isPending}
+                                  variant="ghost" size="icon" className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => handleDelete(adj)}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
                               </>
                             )}
                             <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
+                              variant="ghost" size="icon" className="h-7 w-7"
                               onClick={() => setViewAdj(adj)}
                               title={t("common.view")}
                             >
@@ -773,7 +868,7 @@ export default function Adjustments() {
                     );
                   })
                 ) : (
-                  <TableRow>
+                   <TableRow>
                     <TableCell colSpan={8} className="text-center py-12">
                       <ArrowUpDown className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
                       <p className="text-sm text-muted-foreground">{t("adjustments.table.empty")}</p>
@@ -784,11 +879,6 @@ export default function Adjustments() {
             </Table>
           </CardContent>
         </Card>
-        {data && (
-          <p className="text-xs text-muted-foreground text-right">
-            Showing {adjustments.length} of {data.total} adjustments
-          </p>
-        )}
 
         {/* Edit Dialog */}
         <Dialog open={editOpen} onOpenChange={(open) => {
@@ -865,31 +955,30 @@ export default function Adjustments() {
                 />
               </div>
 
-              {/* Receipt upload for edit */}
               <ReceiptUploadArea isEdit={true} />
 
               <div className="flex justify-end gap-3 pt-2">
                 <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-                <Button onClick={handleUpdate} disabled={updateMutation.isPending || isUploading}>
-                  {isUploading ? "Uploading..." : updateMutation.isPending ? "Saving..." : "Save Changes"}
+                <Button onClick={handleUpdate} disabled={isUploading}>
+                  {isUploading ? "Uploading..." : "Save Changes"}
                 </Button>
               </div>
             </div>
           </DialogContent>
         </Dialog>
 
-        {/* View Adjustment Detail Dialog (read-only) */}
-        <Dialog open={!!viewAdj} onOpenChange={(open) => { if (!open) setViewAdj(null); }}>
+         {/* View Adjustment Detail Dialog (read-only) */}
+         <Dialog open={!!viewAdj} onOpenChange={(open) => { if (!open) setViewAdj(null); }}>
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>{t("adjustments.dialog.title.details")}</DialogTitle></DialogHeader>
             {viewAdj && (
               <div className="space-y-4 mt-4">
                 <div className="rounded-md bg-muted/50 p-3">
                   <p className="text-sm font-medium">
-                    {(() => { const emp = employeeMap.get(viewAdj.employeeId); return emp ? `${emp.firstName} ${emp.lastName}` : `Employee #${viewAdj.employeeId}`; })()}
+                     {(() => { const w = workerMap.get(viewAdj.workerId); return w ? `${w.firstName} ${w.lastName}` : viewAdj.workerId; })()}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {(() => { const emp = employeeMap.get(viewAdj.employeeId); return emp ? `${emp.country} · ${emp.salaryCurrency || 'USD'}` : ''; })()}
+                    {(() => { const w = workerMap.get(viewAdj.workerId); return w ? `${w.country} · ${w.currency || 'USD'}` : ''; })()}
                   </p>
                 </div>
 
@@ -952,6 +1041,7 @@ export default function Adjustments() {
             )}
           </DialogContent>
         </Dialog>
+
       </div>
     </Layout>
   );

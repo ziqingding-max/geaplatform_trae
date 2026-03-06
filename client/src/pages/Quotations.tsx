@@ -154,20 +154,18 @@ export default function Quotations() {
                         <Select 
                             value={q.status} 
                             onValueChange={(v) => handleStatusChange(q.id, v)}
-                            disabled={q.status === "expired"}
+                            disabled={q.status === "expired" || q.status === "accepted" || q.status === "rejected"}
                         >
                             <SelectTrigger className="h-8 w-[140px]">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="draft">{t("quotations.status.draft")}</SelectItem>
+                                <SelectItem value="draft" disabled={q.status !== 'draft'}>{t("quotations.status.draft")}</SelectItem>
                                 <SelectItem value="sent">{t("quotations.status.sent")}</SelectItem>
-                                {/* Only show Accepted/Rejected if currently Sent or already in that state */}
-                                {(q.status === "sent" || q.status === "accepted" || q.status === "rejected") && (
-                                    <>
-                                        <SelectItem value="accepted">{t("quotations.status.accepted")}</SelectItem>
-                                        <SelectItem value="rejected">{t("quotations.status.rejected")}</SelectItem>
-                                    </>
+                                <SelectItem value="accepted">{t("quotations.status.accepted")}</SelectItem>
+                                <SelectItem value="rejected">{t("quotations.status.rejected")}</SelectItem>
+                                {q.status === "expired" && (
+                                    <SelectItem value="expired">{t("quotations.status.expired")}</SelectItem>
                                 )}
                             </SelectContent>
                         </Select>

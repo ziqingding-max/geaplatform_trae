@@ -131,6 +131,43 @@ export async function listContractorMilestones(contractorId: number) {
   .orderBy(desc(contractorMilestones.createdAt));
 }
 
+export async function listAllContractorMilestones(filters: { customerId?: number, status?: string, search?: string } = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const conditions = [];
+  
+  if (filters.customerId) {
+    conditions.push(eq(contractors.customerId, filters.customerId));
+  }
+  if (filters.status) {
+    conditions.push(eq(contractorMilestones.status, filters.status as any));
+  }
+  if (filters.search) {
+     conditions.push(or(
+      like(contractorMilestones.title, `%${filters.search}%`),
+      like(contractors.firstName, `%${filters.search}%`),
+      like(contractors.lastName, `%${filters.search}%`)
+    ));
+  }
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  return await db.select({
+      ...getTableColumns(contractorMilestones),
+      contractorFirstName: contractors.firstName,
+      contractorLastName: contractors.lastName,
+      customerId: contractors.customerId,
+      customerName: customers.companyName,
+      currency: contractors.currency
+    })
+    .from(contractorMilestones)
+    .leftJoin(contractors, eq(contractorMilestones.contractorId, contractors.id))
+    .leftJoin(customers, eq(contractors.customerId, customers.id))
+    .where(where)
+    .orderBy(desc(contractorMilestones.createdAt));
+}
+
 export async function createContractorMilestone(data: InsertContractorMilestone) {
   const db = await getDb();
   if (!db) return;
@@ -155,6 +192,42 @@ export async function listContractorAdjustments(contractorId: number) {
   if (!db) return [];
   return await db.select().from(contractorAdjustments)
     .where(eq(contractorAdjustments.contractorId, contractorId))
+    .orderBy(desc(contractorAdjustments.createdAt));
+}
+
+export async function listAllContractorAdjustments(filters: { customerId?: number, status?: string, search?: string } = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  const conditions = [];
+  
+  if (filters.customerId) {
+    conditions.push(eq(contractors.customerId, filters.customerId));
+  }
+  if (filters.status) {
+    conditions.push(eq(contractorAdjustments.status, filters.status as any));
+  }
+  if (filters.search) {
+     conditions.push(or(
+      like(contractorAdjustments.description, `%${filters.search}%`),
+      like(contractors.firstName, `%${filters.search}%`),
+      like(contractors.lastName, `%${filters.search}%`)
+    ));
+  }
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  return await db.select({
+      ...getTableColumns(contractorAdjustments),
+      contractorFirstName: contractors.firstName,
+      contractorLastName: contractors.lastName,
+      customerId: contractors.customerId,
+      customerName: customers.companyName
+    })
+    .from(contractorAdjustments)
+    .leftJoin(contractors, eq(contractorAdjustments.contractorId, contractors.id))
+    .leftJoin(customers, eq(contractors.customerId, customers.id))
+    .where(where)
     .orderBy(desc(contractorAdjustments.createdAt));
 }
 

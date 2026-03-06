@@ -20,6 +20,7 @@ import Customers from "./pages/Customers";
 // import CustomerPortal from "./pages/portal/CustomerPortal";
 import Payroll from "./pages/Payroll";
 import Invoices from "./pages/Invoices";
+import InvoiceDetail from "./pages/InvoiceDetail";
 import Adjustments from "./pages/Adjustments";
 import Leave from "./pages/Leave";
 import Reimbursements from "./pages/Reimbursements";
@@ -216,8 +217,8 @@ function AdminRouter() {
       <Route path="/payroll" component={Payroll} />
       <Route path="/payroll/:id" component={Payroll} />
       <Route path="/invoices" component={Invoices} />
-      <Route path="/invoices/:id" component={Invoices} />
-            <Route path="/adjustments" component={Adjustments} />
+      <Route path="/invoices/:id">{(params) => <InvoiceDetail id={parseInt(params.id)} />}</Route>
+      <Route path="/adjustments" component={Adjustments} />
             <Route path="/reimbursements" component={Reimbursements} />
       <Route path="/leave" component={Leave} />
       <Route path="/countries">{() => <Redirect to="/settings" />}</Route>

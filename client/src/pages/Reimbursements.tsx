@@ -1,3 +1,4 @@
+
 /**
  * GEA Admin — Reimbursements
  * Manage employee reimbursement claims with approval workflow
@@ -12,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -27,14 +28,16 @@ import {
 } from "@/components/ui/tabs";
 import {
   Plus, Search, Pencil, Trash2, Lock, Upload, Eye, ExternalLink,
-  CheckCircle2, XCircle, Receipt, Loader2, Download,
+  CheckCircle2, XCircle, Receipt, Loader2, Download, Paperclip, FileText, X
 } from "lucide-react";
 import { toast } from "sonner";
 import EmployeeSelector from "@/components/EmployeeSelector";
 import { MonthPicker } from "@/components/DatePicker";
 import { exportToCsv } from "@/lib/csvExport";
+import PayrollCycleIndicator from "@/components/PayrollCycleIndicator";
 
 import { useI18n } from "@/lib/i18n";
+
 const statusColors: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-700 border-amber-200",
   admin_approved: "bg-green-50 text-green-700 border-green-200",
@@ -269,9 +272,53 @@ export default function Reimbursements() {
     setShowCreate(false);
   }
 
+  // Receipt Upload UI Component
+  const ReceiptUploadSection = () => (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-1">
+        <Paperclip className="w-3.5 h-3.5" />
+        {t("reimbursements.dialog.field.receipt")} <span className="text-destructive">*</span>
+      </Label>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,application/pdf"
+        className="hidden"
+        onChange={handleFileUpload}
+      />
+      {formData.receiptFileUrl ? (
+        <div className="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-200 rounded-md text-sm">
+          <FileText className="w-4 h-4 text-emerald-600" />
+          <span className="flex-1 truncate text-emerald-700">Receipt Uploaded</span>
+          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => window.open(formData.receiptFileUrl, "_blank")}>
+            <Eye className="w-3.5 h-3.5 mr-1" /> View
+          </Button>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setFormData((f) => ({ ...f, receiptFileUrl: "", receiptFileKey: "" }))}>
+            <X className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadReceiptMutation.isPending}
+        >
+          {uploadReceiptMutation.isPending ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Upload className="w-4 h-4 mr-2" />
+          )}
+          {t("reimbursements.dialog.action.uploadReceipt")}
+        </Button>
+      )}
+    </div>
+  );
+
   return (
-    <Layout>
-      <div className="space-y-6">
+    <Layout breadcrumb={["GEA", t("nav.operations"), t("nav.reimbursements")]}>
+      <div className="p-6 space-y-6 page-enter">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -280,7 +327,8 @@ export default function Reimbursements() {
               {t("reimbursements.header.description")}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-4">
+              <PayrollCycleIndicator compact />
               <Button variant="outline" disabled={items.length === 0} onClick={() => {
                 exportToCsv(items, [
                   { header: "Employee", accessor: (r: any) => { const emp = employeeMap.get(r.employeeId); return emp ? `${emp.firstName} ${emp.lastName}` : `#${r.employeeId}`; } },
@@ -294,26 +342,102 @@ export default function Reimbursements() {
                 ], `reimbursements-export-${new Date().toISOString().slice(0, 10)}.csv`);
                 toast.success("CSV exported successfully");
               }}>
-                <Download className="w-4 h-4 mr-2" />{t("reimbursements.actions.export")}
+                <Download className="w-4 h-4 mr-2" />{t("common.export")}
               </Button>
-            <Button onClick={() => { resetForm(); setShowCreate(true); }}>
-              <Plus className="w-4 h-4 mr-2" /> {t("reimbursements.actions.new")}
-            </Button>
+              <Dialog open={showCreate} onOpenChange={(open) => { setShowCreate(open); if (!open) resetForm(); }}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="w-4 h-4 mr-2" /> {t("reimbursements.actions.new")}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>{editingId ? t("reimbursements.dialog.title.edit") : t("reimbursements.dialog.title.new")}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-2 mt-4">
+                    {!editingId && (
+                      <div className="space-y-2">
+                        <Label>{t("reimbursements.dialog.field.employee")} <span className="text-destructive">*</span></Label>
+                        <EmployeeSelector
+                          value={formData.employeeId}
+                          onValueChange={(v) => setFormData((f) => ({ ...f, employeeId: v }))}
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>{t("reimbursements.dialog.field.category")}</Label>
+                        <Select value={formData.category} onValueChange={(v) => setFormData((f) => ({ ...f, category: v }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {CATEGORIES.map((c) => (
+                              <SelectItem key={c} value={c}>{t(`reimbursements.category.${c}`)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>{t("reimbursements.dialog.field.amount")} <span className="text-destructive">*</span></Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={formData.amount}
+                          onChange={(e) => setFormData((f) => ({ ...f, amount: e.target.value }))}
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>{t("reimbursements.dialog.field.effectiveMonth")}</Label>
+                      <MonthPicker
+                        value={formData.effectiveMonth}
+                        onChange={(v) => setFormData((f) => ({ ...f, effectiveMonth: v }))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>{t("reimbursements.table.header.description")}</Label>
+                      <Textarea
+                        value={formData.description}
+                        onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
+                        placeholder="Description of the expense..."
+                        rows={2}
+                      />
+                    </div>
+
+                    <ReceiptUploadSection />
+                  </div>
+                  <div className="flex justify-end gap-2 mt-2">
+                    <Button variant="outline" onClick={() => setShowCreate(false)}>{t("common.cancel")}</Button>
+                    <Button
+                      onClick={editingId ? handleUpdate : handleCreate}
+                      disabled={createMutation.isPending || updateMutation.isPending}
+                    >
+                      {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                      {editingId ? t("reimbursements.dialog.action.save") : t("reimbursements.dialog.action.submit")}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
           </div>
         </div>
 
         {/* Tabs & Filters */}
-        <Tabs value={viewTab} onValueChange={(v) => { setViewTab(v); setStatusFilter("all"); }}>
-          <div className="flex items-center gap-3 flex-wrap">
-            <TabsList>
+        <Tabs value={viewTab} onValueChange={(v) => { setViewTab(v); setStatusFilter("all"); }} className="w-full">
+            <TabsList className="mb-4">
               <TabsTrigger value="active">{t("reimbursements.tabs.active")}</TabsTrigger>
               <TabsTrigger value="history">{t("reimbursements.tabs.history")}</TabsTrigger>
             </TabsList>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        </Tabs>
+
+        <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder={t("reimbursements.filters.searchPlaceholder")}
-                className="pl-9 w-48"
+                className="pl-9"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -354,7 +478,6 @@ export default function Reimbursements() {
               </SelectContent>
             </Select>
           </div>
-        </Tabs>
 
         {/* Table */}
         <Card>
@@ -382,7 +505,7 @@ export default function Reimbursements() {
                       const emp = employeeMap.get(item.employeeId);
                       return (
                         <TableRow key={item.id}>
-                          <TableCell className="font-medium">
+                          <TableCell className="font-medium text-sm">
                             {emp ? `${emp.firstName} ${emp.lastName}` : `#${item.employeeId}`}
                           </TableCell>
                           <TableCell className="capitalize text-sm">{t(`reimbursements.category.${item.category}`)}</TableCell>
@@ -400,9 +523,9 @@ export default function Reimbursements() {
                           </TableCell>
                           <TableCell>
                             {item.receiptFileUrl ? (
-                              <a href={item.receiptFileUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                <ExternalLink className="w-4 h-4" />
-                              </a>
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => window.open(item.receiptFileUrl!, "_blank")}>
+                                <Paperclip className="w-3 h-3 mr-1" /> View
+                              </Button>
                             ) : (
                               <span className="text-muted-foreground text-xs">—</span>
                             )}
@@ -474,107 +597,6 @@ export default function Reimbursements() {
         </Card>
       </div>
 
-      {/* Create/Edit Dialog */}
-      <Dialog open={showCreate} onOpenChange={(open) => { if (!open) resetForm(); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editingId ? t("reimbursements.dialog.title.edit") : t("reimbursements.dialog.title.new")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            {!editingId && (
-              <div className="space-y-2">
-                <Label>{t("reimbursements.dialog.field.employee")} <span className="text-destructive">*</span></Label>
-                <EmployeeSelector
-                  value={formData.employeeId}
-                  onValueChange={(v) => setFormData((f) => ({ ...f, employeeId: v }))}
-                />
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>{t("reimbursements.dialog.field.category")}</Label>
-              <Select value={formData.category} onValueChange={(v) => setFormData((f) => ({ ...f, category: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>{t(`reimbursements.category.${c}`)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>{t("reimbursements.dialog.field.amount")} <span className="text-destructive">*</span></Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={formData.amount}
-                onChange={(e) => setFormData((f) => ({ ...f, amount: e.target.value }))}
-                placeholder="0.00"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{t("reimbursements.dialog.field.effectiveMonth")}</Label>
-              <MonthPicker
-                value={formData.effectiveMonth}
-                onChange={(v) => setFormData((f) => ({ ...f, effectiveMonth: v }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{t("reimbursements.table.header.description")}</Label>
-              <Textarea
-                value={formData.description}
-                onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
-                placeholder="Description of the expense..."
-                rows={2}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>{t("reimbursements.dialog.field.receipt")} <span className="text-destructive">*</span></Label>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,application/pdf"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
-              {formData.receiptFileUrl ? (
-                <div className="flex items-center gap-2">
-                  <a href={formData.receiptFileUrl} target="_blank" rel="noopener noreferrer" className="text-primary text-sm hover:underline flex items-center gap-1">
-                    <ExternalLink className="w-3.5 h-3.5" /> {t("reimbursements.dialog.action.viewReceipt")}
-                  </a>
-                  <Button variant="ghost" size="sm" onClick={() => setFormData((f) => ({ ...f, receiptFileUrl: "", receiptFileKey: "" }))}>
-                    {t("reimbursements.dialog.action.removeReceipt")}
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadReceiptMutation.isPending}
-                >
-                  {uploadReceiptMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4 mr-2" />
-                  )}
-                  {t("reimbursements.dialog.action.uploadReceipt")}
-                </Button>
-              )}
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={resetForm}>{t("common.cancel")}</Button>
-            <Button
-              onClick={editingId ? handleUpdate : handleCreate}
-              disabled={createMutation.isPending || updateMutation.isPending}
-            >
-              {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {editingId ? t("reimbursements.dialog.action.save") : t("reimbursements.dialog.action.submit")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* View Detail Dialog */}
       <Dialog open={!!viewItem} onOpenChange={(open) => { if (!open) setViewItem(null); }}>
         <DialogContent className="max-w-md">
@@ -582,16 +604,26 @@ export default function Reimbursements() {
             <DialogTitle>{t("reimbursements.view.title")}</DialogTitle>
           </DialogHeader>
           {viewItem && (
-            <div className="space-y-4 py-2">
+            <div className="space-y-4 py-2 mt-2">
+              <div className="rounded-md bg-muted/50 p-3">
+                <p className="text-sm font-medium">
+                  {(() => {
+                    const emp = employeeMap.get(viewItem.employeeId);
+                    return emp ? `${emp.firstName} ${emp.lastName}` : `#${viewItem.employeeId}`;
+                  })()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                   {(() => {
+                    const emp = employeeMap.get(viewItem.employeeId);
+                    return emp ? `${emp.country}` : "";
+                  })()}
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">{t("reimbursements.table.header.employee")}</Label>
-                  <p className="text-sm font-medium">
-                    {(() => {
-                      const emp = employeeMap.get(viewItem.employeeId);
-                      return emp ? `${emp.firstName} ${emp.lastName}` : `#${viewItem.employeeId}`;
-                    })()}
-                  </p>
+                  <Label className="text-xs text-muted-foreground">{t("reimbursements.dialog.field.category")}</Label>
+                  <p className="text-sm capitalize">{t(`reimbursements.category.${viewItem.category}`)}</p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">{t("reimbursements.table.header.status")}</Label>
@@ -600,13 +632,12 @@ export default function Reimbursements() {
                     {t(`reimbursements.status.${viewItem.status}`) || viewItem.status}
                   </Badge>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">{t("reimbursements.dialog.field.category")}</Label>
-                  <p className="text-sm capitalize">{t(`reimbursements.category.${viewItem.category}`)}</p>
-                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">{t("reimbursements.table.header.amount")}</Label>
-                  <p className="text-sm font-mono">
+                  <p className="text-sm font-mono font-semibold">
                     {viewItem.currency || ""} {Number(viewItem.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </p>
                 </div>
@@ -614,21 +645,27 @@ export default function Reimbursements() {
                   <Label className="text-xs text-muted-foreground">{t("reimbursements.dialog.field.effectiveMonth")}</Label>
                   <p className="text-sm">{viewItem.effectiveMonth ? formatMonth(viewItem.effectiveMonth) : "—"}</p>
                 </div>
-                {viewItem.receiptFileUrl && (
-                  <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">{t("reimbursements.dialog.field.receipt")}</Label>
-                    <a href={viewItem.receiptFileUrl} target="_blank" rel="noopener noreferrer" className="text-primary text-sm hover:underline flex items-center gap-1">
-                      <ExternalLink className="w-3.5 h-3.5" /> {t("reimbursements.view.action.view")}
-                    </a>
-                  </div>
-                )}
               </div>
+
               {viewItem.description && (
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">{t("reimbursements.table.header.description")}</Label>
                   <p className="text-sm text-muted-foreground">{viewItem.description}</p>
                 </div>
               )}
+
+              {viewItem.receiptFileUrl && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">{t("reimbursements.dialog.field.receipt")}</Label>
+                  <Button variant="outline" size="sm" className="h-7 px-3 text-xs" onClick={() => window.open(viewItem.receiptFileUrl!, '_blank')}>
+                    <Paperclip className="w-3 h-3 mr-1" /> View Receipt
+                  </Button>
+                </div>
+              )}
+              
+              <div className="flex justify-end pt-2">
+                 <Button variant="outline" onClick={() => setViewItem(null)}>{t("common.close") || "Close"}</Button>
+              </div>
             </div>
           )}
         </DialogContent>

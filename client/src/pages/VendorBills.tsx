@@ -869,7 +869,8 @@ function VendorBillList() {
   });
 
   const { data: vendorsData, refetch: refetchVendors } = trpc.vendors.list.useQuery({ status: "active", limit: 200 });
-  const vendors = vendorsData?.data || [];
+  const vendors = useMemo(() => vendorsData?.data || [], [vendorsData]);
+
   const createMutation = trpc.vendorBills.create.useMutation({
     onSuccess: () => {
       toast.success(t("vendorBills.toast.createdSuccess"));
@@ -912,9 +913,9 @@ function VendorBillList() {
   // Summary stats
   const stats = useMemo(() => {
     if (!data) return { total: 0, paid: 0, pending: 0, overdue: 0 };
-    const bills = data;
+    const bills = data.data || [];
     return {
-      total: bills.length,
+      total: data.total,
       paid: bills.filter((b) => b.status === "paid").length,
       pending: bills.filter((b) => ["draft", "pending_approval", "approved"].includes(b.status)).length,
       overdue: bills.filter((b) => b.status === "overdue").length,
@@ -1094,8 +1095,8 @@ function VendorBillList() {
                       ))}
                     </TableRow>
                   ))
-                ) : data && data.length > 0 ? (
-                  data.map((bill) => {
+                ) : data && data.data && data.data.length > 0 ? (
+                  data.data.map((bill) => {
                     return (
                       <TableRow
                         key={bill.id}
@@ -1147,13 +1148,15 @@ function VendorBillList() {
         </Card>
 
         {/* AI Upload Dialog */}
-        <AIUploadDialog
-          open={aiUploadOpen}
-          onOpenChange={setAiUploadOpen}
-          vendors={vendors}
-          onBillCreated={() => refetch()}
-          onVendorAutoCreated={() => refetchVendors()}
-        />
+        {aiUploadOpen && (
+          <AIUploadDialog
+            open={aiUploadOpen}
+            onOpenChange={setAiUploadOpen}
+            vendors={vendors}
+            onBillCreated={() => refetch()}
+            onVendorAutoCreated={() => refetchVendors()}
+          />
+        )}
       </div>
     </Layout>
   );

@@ -9,10 +9,12 @@ import {
   listContractors,
   updateContractor,
   listContractorMilestones,
+  listAllContractorMilestones,
   createContractorMilestone,
   updateContractorMilestone,
   deleteContractorMilestone,
   listContractorAdjustments,
+  listAllContractorAdjustments,
   createContractorAdjustment,
   updateContractorAdjustment,
   deleteContractorAdjustment,
@@ -111,14 +113,8 @@ export const contractorsRouter = router({
         ...input,
         contractorCode,
         status: "active", // Default to active or pending_review? Let's say active for now as per simple flow
-        bankDetails: input.bankDetails ? JSON.parse(input.bankDetails) : undefined, // Parse if it was sent as string, but schema expects string in DB? Wait, DB is json mode text.
-        // Drizzle text({ mode: 'json' }) expects the value to be passed as object when inserting if we use $inferInsert? 
-        // No, Drizzle ORM handles the stringification if defined as mode: 'json'.
-        // Let's check schema: bankDetails: text("bankDetails", { mode: "json" })
-        // So we should pass an object.
-        // But Zod input says string (JSON string from frontend). So we parse it.
+        bankDetails: input.bankDetails ? JSON.parse(input.bankDetails) : undefined,
       } as any); 
-      // Cast to any because of complex JSON type mapping in Drizzle vs Zod
 
       const newContractor = result[0];
 
@@ -208,6 +204,16 @@ export const contractorsRouter = router({
       .query(async ({ input }) => {
         return await listContractorMilestones(input.contractorId);
       }),
+    
+    listAll: userProcedure
+      .input(z.object({
+        customerId: z.number().optional(),
+        status: z.string().optional(),
+        search: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        return await listAllContractorMilestones(input);
+      }),
 
     create: customerManagerProcedure
       .input(z.object({
@@ -268,6 +274,17 @@ export const contractorsRouter = router({
       .input(z.object({ contractorId: z.number() }))
       .query(async ({ input }) => {
         return await listContractorAdjustments(input.contractorId);
+      }),
+
+    listAll: userProcedure
+      .input(z.object({
+        customerId: z.number().optional(),
+        status: z.string().optional(),
+        search: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        // @ts-ignore
+        return await listAllContractorAdjustments(input);
       }),
 
     create: customerManagerProcedure

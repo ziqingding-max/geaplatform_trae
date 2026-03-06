@@ -16,10 +16,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, CalendarDays, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, CalendarDays, Loader2, Search, Download } from "lucide-react";
 import { toast } from "sonner";
 import { DatePicker } from "@/components/DatePicker";
 import { formatDate, formatCurrency } from "@/lib/format";
+import { exportToCsv } from "@/lib/csvExport";
 
 const statusColors: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 border-amber-200",
@@ -30,23 +31,27 @@ const statusColors: Record<string, string> = {
 
 export default function ContractorMilestones() {
   const { t } = useI18n();
-  const [selectedContractorId, setSelectedContractorId] = useState<string>("");
+  const [selectedContractorId, setSelectedContractorId] = useState<string>("all");
+  const [customerFilter, setCustomerFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<any>(null);
 
   // Load contractors
-  const { data: contractorsData, isLoading: isLoadingContractors } = trpc.contractors.list.useQuery({
-    status: "active",
-    limit: 100,
+  const { data: contractorsData } = trpc.contractors.list.useQuery({
+    limit: 500,
   });
   const contractors = contractorsData?.data || [];
 
-  // Load milestones for selected contractor
-  const { data: milestones, isLoading: isLoadingMilestones, refetch } = trpc.contractors.milestones.list.useQuery(
-    { contractorId: parseInt(selectedContractorId) },
-    { enabled: !!selectedContractorId }
-  );
+  const { data: customersData } = trpc.customers.list.useQuery({ limit: 200 });
+  const customersList = customersData?.data || [];
+
+  // Load all milestones with filters
+  const { data: milestones, isLoading, refetch } = trpc.contractors.milestones.listAll.useQuery({
+    customerId: customerFilter !== "all" ? parseInt(customerFilter) : undefined,
+    search: search || undefined,
+  });
 
   const createMutation = trpc.contractors.milestones.create.useMutation({
     onSuccess: () => {
@@ -76,6 +81,7 @@ export default function ContractorMilestones() {
   });
 
   const [formData, setFormData] = useState({
+    contractorId: "",
     title: "",
     description: "",
     amount: "",
@@ -85,6 +91,7 @@ export default function ContractorMilestones() {
 
   function resetForm() {
     setFormData({
+      contractorId: "",
       title: "",
       description: "",
       amount: "",
@@ -94,13 +101,16 @@ export default function ContractorMilestones() {
   }
 
   function handleCreate() {
-    if (!selectedContractorId) return;
+    if (!formData.contractorId) {
+      toast.error("Please select a contractor");
+      return;
+    }
     if (!formData.title || !formData.amount) {
       toast.error(t("common.required"));
       return;
     }
     createMutation.mutate({
-      contractorId: parseInt(selectedContractorId),
+      contractorId: parseInt(formData.contractorId),
       title: formData.title,
       description: formData.description,
       amount: formData.amount,
@@ -112,6 +122,7 @@ export default function ContractorMilestones() {
   function handleEdit(milestone: any) {
     setEditingMilestone(milestone);
     setFormData({
+      contractorId: String(milestone.contractorId),
       title: milestone.title,
       description: milestone.description || "",
       amount: milestone.amount,
@@ -140,17 +151,13 @@ export default function ContractorMilestones() {
     }
   }
 
-  // Determine currency from selected contractor
-  const selectedContractor = useMemo(() => {
-    return contractors.find(c => String(c.id) === selectedContractorId);
-  }, [selectedContractorId, contractors]);
-
-  // Update currency when contractor changes
-  useMemo(() => {
-    if (selectedContractor) {
-      setFormData(prev => ({ ...prev, currency: selectedContractor.currency || "USD" }));
+  const filteredMilestones = useMemo(() => {
+    let list = milestones || [];
+    if (selectedContractorId !== "all") {
+      list = list.filter(m => String(m.contractorId) === selectedContractorId);
     }
-  }, [selectedContractor]);
+    return list;
+  }, [milestones, selectedContractorId]);
 
   return (
     <div className="space-y-6">
@@ -160,30 +167,61 @@ export default function ContractorMilestones() {
           <p className="text-sm text-muted-foreground">{t("milestones.description")}</p>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={selectedContractorId} onValueChange={setSelectedContractorId}>
-            <SelectTrigger className="w-[250px]">
-              <SelectValue placeholder={t("milestones.table.header.contractor")} />
-            </SelectTrigger>
-            <SelectContent>
-              {contractors.map((c: any) => (
-                <SelectItem key={c.id} value={String(c.id)}>{c.firstName} {c.lastName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button disabled={!selectedContractorId} onClick={() => { resetForm(); setCreateOpen(true); }}>
+            <Button variant="outline" onClick={() => {
+                exportToCsv(filteredMilestones, [
+                  { header: "Contractor", accessor: (r: any) => `${r.contractorFirstName} ${r.contractorLastName}` },
+                  { header: "Title", accessor: (r: any) => r.title },
+                  { header: "Amount", accessor: (r: any) => r.amount },
+                  { header: "Currency", accessor: (r: any) => r.currency },
+                  { header: "Due Date", accessor: (r: any) => r.dueDate ? formatDate(r.dueDate) : "" },
+                  { header: "Status", accessor: (r: any) => r.status },
+                ], `milestones-export-${new Date().toISOString().slice(0, 10)}.csv`);
+            }}>
+                <Download className="w-4 h-4 mr-2" /> Export
+            </Button>
+          <Button onClick={() => { resetForm(); setCreateOpen(true); }}>
             <Plus className="w-4 h-4 mr-2" /> {t("milestones.button.new")}
           </Button>
         </div>
       </div>
 
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search milestones..."
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <Select value={customerFilter} onValueChange={setCustomerFilter}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="All Customers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Customers</SelectItem>
+            {customersList.map((c) => (
+              <SelectItem key={c.id} value={String(c.id)}>{c.companyName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={selectedContractorId} onValueChange={setSelectedContractorId}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="All Contractors" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Contractors</SelectItem>
+            {contractors.map((c: any) => (
+              <SelectItem key={c.id} value={String(c.id)}>{c.firstName} {c.lastName}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       <Card>
         <CardContent className="p-0">
-          {!selectedContractorId ? (
-            <div className="text-center py-12">
-              <CalendarDays className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">Select a contractor to view milestones</p>
-            </div>
-          ) : isLoadingMilestones ? (
+          {isLoading ? (
             <div className="flex justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
@@ -191,6 +229,7 @@ export default function ContractorMilestones() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Contractor</TableHead>
                   <TableHead>{t("milestones.table.header.title")}</TableHead>
                   <TableHead>{t("milestones.table.header.amount")}</TableHead>
                   <TableHead>{t("milestones.table.header.dueDate")}</TableHead>
@@ -199,14 +238,19 @@ export default function ContractorMilestones() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {milestones && milestones.length > 0 ? (
-                  milestones.map((m: any) => (
+                {filteredMilestones.length > 0 ? (
+                  filteredMilestones.map((m: any) => (
                     <TableRow key={m.id}>
+                      <TableCell className="font-medium">
+                        {m.contractorFirstName} {m.contractorLastName}
+                      </TableCell>
                       <TableCell>
                         <div className="font-medium">{m.title}</div>
                         {m.description && <div className="text-xs text-muted-foreground">{m.description}</div>}
                       </TableCell>
-                      <TableCell>{formatCurrency(parseFloat(m.amount), m.currency)}</TableCell>
+                      <TableCell className="font-mono">
+                        {m.currency} {parseFloat(m.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
                       <TableCell>{m.dueDate ? formatDate(m.dueDate) : "—"}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusColors[m.status] || ""}>
@@ -216,11 +260,11 @@ export default function ContractorMilestones() {
                       <TableCell>
                         {m.status === "pending" && (
                           <div className="flex items-center gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => handleEdit(m)}>
-                              <Pencil className="w-4 h-4 text-blue-500" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(m)}>
+                              <Pencil className="w-3.5 h-3.5 text-blue-500" />
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => handleDelete(m.id)}>
-                              <Trash2 className="w-4 h-4 text-red-500" />
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(m.id)}>
+                              <Trash2 className="w-3.5 h-3.5 text-red-500" />
                             </Button>
                           </div>
                         )}
@@ -229,8 +273,9 @@ export default function ContractorMilestones() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                      No milestones found
+                    <TableCell colSpan={6} className="text-center py-12">
+                      <CalendarDays className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+                      <p className="text-sm text-muted-foreground">No milestones found</p>
                     </TableCell>
                   </TableRow>
                 )}
@@ -240,13 +285,31 @@ export default function ContractorMilestones() {
         </CardContent>
       </Card>
 
-      {/* Create Dialog */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      {/* Create/Edit Dialog */}
+      <Dialog open={createOpen || editOpen} onOpenChange={(open) => { if (!open) { setCreateOpen(false); setEditOpen(false); resetForm(); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("milestones.dialog.title.new")}</DialogTitle>
+            <DialogTitle>{editOpen ? t("milestones.dialog.title.edit") : t("milestones.dialog.title.new")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 mt-2">
+            {!editOpen && (
+                <div className="space-y-2">
+                    <Label>Contractor *</Label>
+                    <Select value={formData.contractorId} onValueChange={(v) => {
+                        const c = contractors.find(c => String(c.id) === v);
+                        setFormData({ ...formData, contractorId: v, currency: c?.currency || "USD" });
+                    }}>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select contractor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {contractors.map((c: any) => (
+                                <SelectItem key={c.id} value={String(c.id)}>{c.firstName} {c.lastName}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
             <div className="space-y-2">
               <Label>{t("milestones.table.header.title")} *</Label>
               <Input value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
@@ -254,55 +317,24 @@ export default function ContractorMilestones() {
             <div className="space-y-2">
               <Label>{t("milestones.table.header.amount")} *</Label>
               <div className="flex gap-2">
-                <div className="w-20 pt-2 text-sm font-mono bg-muted text-center rounded-md border">{formData.currency}</div>
+                <div className="w-20 flex items-center justify-center text-sm font-mono bg-muted rounded-md border">{formData.currency}</div>
                 <Input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} placeholder="0.00" />
               </div>
             </div>
             <div className="space-y-2">
               <Label>{t("milestones.table.header.dueDate")}</Label>
-              <DatePicker value={formData.dueDate ? new Date(formData.dueDate) : undefined} onChange={(d) => setFormData({ ...formData, dueDate: d ? d.toISOString() : "" })} />
+              <DatePicker value={formData.dueDate} onChange={(d) => setFormData({ ...formData, dueDate: d })} />
             </div>
             <div className="space-y-2">
               <Label>Description</Label>
               <Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
-              <Button onClick={handleCreate} disabled={createMutation.isPending}>{createMutation.isPending ? "Creating..." : t("common.create")}</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("milestones.dialog.title.edit")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>{t("milestones.table.header.title")} *</Label>
-              <Input value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>{t("milestones.table.header.amount")} *</Label>
-              <div className="flex gap-2">
-                <div className="w-20 pt-2 text-sm font-mono bg-muted text-center rounded-md border">{formData.currency}</div>
-                <Input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} placeholder="0.00" />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>{t("milestones.table.header.dueDate")}</Label>
-              <DatePicker value={formData.dueDate ? new Date(formData.dueDate) : undefined} onChange={(d) => setFormData({ ...formData, dueDate: d ? d.toISOString() : "" })} />
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Input value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setEditOpen(false)}>{t("common.cancel")}</Button>
-              <Button onClick={handleUpdate} disabled={updateMutation.isPending}>{updateMutation.isPending ? "Saving..." : t("common.save")}</Button>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => { setCreateOpen(false); setEditOpen(false); }}>{t("common.cancel")}</Button>
+              <Button onClick={editOpen ? handleUpdate : handleCreate} disabled={createMutation.isPending || updateMutation.isPending}>
+                {(createMutation.isPending || updateMutation.isPending) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {editOpen ? t("common.save") : t("common.create")}
+              </Button>
             </div>
           </div>
         </DialogContent>

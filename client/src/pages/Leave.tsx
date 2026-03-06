@@ -1,8 +1,7 @@
+
 /*
- * GEA Admin — Leave Management
- * No approval workflow — submitted directly, locked after payroll cutoff
- * Supports edit/delete for submitted records, month filter
- * Deduction amounts are handled in Payroll module only
+ * GEA Admin — Time Off & Milestones
+ * Manage employee leave requests and contractor milestones
  */
 import Layout from "@/components/Layout";
 import { formatMonth, formatDate, formatDateISO } from "@/lib/format";
@@ -28,7 +27,7 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
 import ContractorMilestones from "@/components/pages/ContractorMilestones";
-import { CalendarDays, Plus, Pencil, Trash2, Lock, AlertCircle, Eye, Info, CheckCircle2, XCircle, Download } from "lucide-react";
+import { CalendarDays, Plus, Pencil, Trash2, Lock, AlertCircle, Eye, CheckCircle2, XCircle, Download } from "lucide-react";
 import { DatePicker } from "@/components/DatePicker";
 import { toast } from "sonner";
 import EmployeeSelector from "@/components/EmployeeSelector";
@@ -36,6 +35,7 @@ import PayrollCycleIndicator, { CrossMonthLeaveWarning } from "@/components/Payr
 import { exportToCsv } from "@/lib/csvExport";
 
 import { useI18n } from "@/lib/i18n";
+
 const statusColors: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-700 border-amber-200",
   client_approved: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -61,18 +61,6 @@ function calcBusinessDays(start: string, end: string): number {
     cur.setDate(cur.getDate() + 1);
   }
   return count;
-}
-
-function getMonthOptions() {
-  const options = [];
-  const now = new Date();
-  for (let i = -3; i <= 6; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const label = formatMonth(d);
-    options.push({ value, label });
-  }
-  return options;
 }
 
 export default function Leave() {
@@ -326,164 +314,18 @@ export default function Leave() {
     return list;
   }, [data, customerFilter, countryFilter, employeeMap, viewTab]);
 
-  // Active employees only for the selector
-  const activeEmployees = useMemo(() => {
-    return employees?.data?.filter((e) => e.status === "active" || e.status === "on_leave") || [];
-  }, [employees]);
-
   return (
-    <Layout breadcrumb={["GEA", t("leave.title")]}>
+    <Layout breadcrumb={["GEA", "Time Off & Milestones"]}>
       <div className="p-6 space-y-6 page-enter">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{t("leave.title")}</h1>
-            <p className="text-sm text-muted-foreground mt-1">{t("leave.header.description")}</p>
+            <h1 className="text-2xl font-bold tracking-tight">Time Off & Milestones</h1>
+            <p className="text-sm text-muted-foreground mt-1">Manage employee leave requests and contractor milestones</p>
           </div>
           <div className="flex-1 flex justify-center">
             <PayrollCycleIndicator compact />
           </div>
-          <div className="flex gap-2">
-              <Button variant="outline" disabled={leaves.length === 0} onClick={() => {
-                exportToCsv(leaves, [
-                  { header: "Employee", accessor: (r: any) => { const emp = employeeMap[r.employeeId]; return emp ? emp.name : `#${r.employeeId}`; } },
-                  { header: "Leave Type", accessor: (r: any) => r.leaveTypeName || r.leaveTypeId },
-                  { header: "Start Date", accessor: (r: any) => r.startDate ? new Date(r.startDate).toISOString().slice(0, 10) : "" },
-                  { header: "End Date", accessor: (r: any) => r.endDate ? new Date(r.endDate).toISOString().slice(0, 10) : "" },
-                  { header: "Days", accessor: (r: any) => r.days },
-                  { header: "Reason", accessor: (r: any) => r.reason || "" },
-                  { header: "Status", accessor: (r: any) => t(`leave.status.${r.status}`) || r.status },
-                  { header: "Created", accessor: (r: any) => r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : "" },
-                ], `leave-export-${new Date().toISOString().slice(0, 10)}.csv`);
-                toast.success("CSV exported successfully");
-              }}>
-                <Download className="w-4 h-4 mr-2" />{t("leave.actions.export")}
-              </Button>
-            <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormData(defaultForm); }}>
-              <DialogTrigger asChild>
-                <Button><Plus className="w-4 h-4 mr-2" />{t("leave.button.new")}</Button>
-              </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader><DialogTitle>{t("leave.dialog.title.new")}</DialogTitle></DialogHeader>
-              <div className="space-y-4 mt-4">
-                {/* Employee selector with customer cascading + search */}
-                <EmployeeSelector
-                  value={formData.employeeId}
-                  onValueChange={(id) => setFormData({ ...formData, employeeId: id, leaveTypeId: 0 })}
-                  showCustomerFilter={true}
-                  required
-                  label={t("leave.table.header.employee")}
-                  placeholder={t("leave.form.placeholder.employee")}
-                />
-
-                {/* Leave type selector */}
-                <div className="space-y-2">
-                  <Label>{t("leave.form.label.leaveType")} *</Label>
-                  <Select
-                    value={formData.leaveTypeId ? String(formData.leaveTypeId) : ""}
-                    onValueChange={(v) => setFormData({ ...formData, leaveTypeId: parseInt(v) })}
-                    disabled={!selectedEmployee}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={selectedEmployee ? t("leave.form.placeholder.selectLeaveType") : t("leave.form.placeholder.selectEmployeeFirst")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {leaveTypesData?.map((lt: any) => (
-                        <SelectItem key={lt.id} value={String(lt.id)}>
-                          {lt.leaveTypeName} {lt.isPaid ? "" : `(${t("leave.type.unpaid")})`} {lt.annualEntitlement ? `— ${lt.annualEntitlement} ${t("leave.type.daysPerYear")}` : ""}
-                        </SelectItem>
-                      ))}
-                      {(!leaveTypesData || leaveTypesData.length === 0) && selectedEmployee && (
-                        <SelectItem value="__none" disabled>{t("leave.form.noLeaveTypes", { country: selectedEmployee.country })}</SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Date range */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>{t("leave.form.label.startDate")} *</Label>
-                    <DatePicker
-                      value={formData.startDate}
-                      onChange={(v) => setFormData({ ...formData, startDate: v })}
-                      placeholder={t("leave.form.placeholder.startDate")}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t("leave.form.label.endDate")} *</Label>
-                    <DatePicker
-                      value={formData.endDate}
-                      onChange={(v) => setFormData({ ...formData, endDate: v })}
-                      placeholder={t("leave.form.placeholder.endDate")}
-                      minDate={formData.startDate || undefined}
-                    />
-                  </div>
-                </div>
-
-                {dateError && (
-                  <div className="flex items-center gap-2 text-sm text-red-600">
-                    <AlertCircle className="w-4 h-4" />{dateError}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>{t("leave.form.label.totalDays")}</Label>
-                    <Input
-                      type="text"
-                      value={formData.days}
-                      readOnly
-                      className="font-mono bg-muted"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>&nbsp;</Label>
-                    <label className="flex items-center gap-2 h-9 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.isHalfDay}
-                        onChange={(e) => setFormData({ ...formData, isHalfDay: e.target.checked })}
-                        className="rounded"
-                      />
-                      {t("leave.form.label.halfDay")}
-                    </label>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>{t("leave.form.label.reason")}</Label>
-                  <Textarea
-                    value={formData.reason}
-                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    placeholder={t("leave.form.label.reason") + "..."}
-                    rows={3}
-                  />
-                </div>
-
-                {/* Cross-month leave warning */}
-                {formData.startDate && formData.endDate && parseFloat(formData.days) > 0 && (
-                  <CrossMonthLeaveWarning
-                    startDate={formData.startDate}
-                    endDate={formData.endDate}
-                    totalDays={parseFloat(formData.days)}
-                  />
-                )}
-
-                {/* Payroll period info for the leave */}
-                {formData.endDate && (
-                  <PayrollCycleIndicator month={formData.endDate.substring(0, 7)} />
-                )}
-
-                <div className="flex justify-end gap-3 pt-2">
-                  <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
-                  <Button onClick={handleCreate} disabled={createMutation.isPending || !!dateError}>
-                    {createMutation.isPending ? t("leave.button.submitting") : t("common.submit")}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-          </div>
+          {/* Header buttons removed, moved inside tabs */}
         </div>
 
         <Tabs defaultValue="leave" className="w-full">
@@ -493,13 +335,158 @@ export default function Leave() {
           </TabsList>
 
           <TabsContent value="leave" className="space-y-6">
-            {/* Active / History Tabs */}
-            <Tabs value={viewTab} onValueChange={(v) => { setViewTab(v); setStatusFilter("all"); }} className="w-full">
-              <TabsList>
-                <TabsTrigger value="active">{t("leave.tabs.active")}</TabsTrigger>
-                <TabsTrigger value="history">{t("leave.tabs.history")}</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            {/* Active / History Tabs for Leave */}
+            <div className="flex items-center justify-between">
+                <Tabs value={viewTab} onValueChange={(v) => { setViewTab(v); setStatusFilter("all"); }} className="w-auto">
+                <TabsList>
+                    <TabsTrigger value="active">{t("leave.tabs.active")}</TabsTrigger>
+                    <TabsTrigger value="history">{t("leave.tabs.history")}</TabsTrigger>
+                </TabsList>
+                </Tabs>
+
+                <div className="flex gap-2">
+                    <Button variant="outline" disabled={leaves.length === 0} onClick={() => {
+                        exportToCsv(leaves, [
+                        { header: "Employee", accessor: (r: any) => { const emp = employeeMap[r.employeeId]; return emp ? emp.name : `#${r.employeeId}`; } },
+                        { header: "Leave Type", accessor: (r: any) => r.leaveTypeName || r.leaveTypeId },
+                        { header: "Start Date", accessor: (r: any) => r.startDate ? new Date(r.startDate).toISOString().slice(0, 10) : "" },
+                        { header: "End Date", accessor: (r: any) => r.endDate ? new Date(r.endDate).toISOString().slice(0, 10) : "" },
+                        { header: "Days", accessor: (r: any) => r.days },
+                        { header: "Reason", accessor: (r: any) => r.reason || "" },
+                        { header: "Status", accessor: (r: any) => t(`leave.status.${r.status}`) || r.status },
+                        { header: "Created", accessor: (r: any) => r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : "" },
+                        ], `leave-export-${new Date().toISOString().slice(0, 10)}.csv`);
+                        toast.success("CSV exported successfully");
+                    }}>
+                        <Download className="w-4 h-4 mr-2" />{t("leave.actions.export")}
+                    </Button>
+                    <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormData(defaultForm); }}>
+                    <DialogTrigger asChild>
+                        <Button><Plus className="w-4 h-4 mr-2" />{t("leave.button.new")}</Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-md">
+                    <DialogHeader><DialogTitle>{t("leave.dialog.title.new")}</DialogTitle></DialogHeader>
+                    <div className="space-y-4 mt-4">
+                        {/* Employee selector with customer cascading + search */}
+                        <EmployeeSelector
+                        value={formData.employeeId}
+                        onValueChange={(id) => setFormData({ ...formData, employeeId: id, leaveTypeId: 0 })}
+                        showCustomerFilter={true}
+                        required
+                        label={t("leave.table.header.employee")}
+                        placeholder={t("leave.form.placeholder.employee")}
+                        />
+
+                        {/* Leave type selector */}
+                        <div className="space-y-2">
+                        <Label>{t("leave.form.label.leaveType")} *</Label>
+                        <Select
+                            value={formData.leaveTypeId ? String(formData.leaveTypeId) : ""}
+                            onValueChange={(v) => setFormData({ ...formData, leaveTypeId: parseInt(v) })}
+                            disabled={!selectedEmployee}
+                        >
+                            <SelectTrigger>
+                            <SelectValue placeholder={selectedEmployee ? t("leave.form.placeholder.selectLeaveType") : t("leave.form.placeholder.selectEmployeeFirst")} />
+                            </SelectTrigger>
+                            <SelectContent>
+                            {leaveTypesData?.map((lt: any) => (
+                                <SelectItem key={lt.id} value={String(lt.id)}>
+                                {lt.leaveTypeName} {lt.isPaid ? "" : `(${t("leave.type.unpaid")})`} {lt.annualEntitlement ? `— ${lt.annualEntitlement} ${t("leave.type.daysPerYear")}` : ""}
+                                </SelectItem>
+                            ))}
+                            {(!leaveTypesData || leaveTypesData.length === 0) && selectedEmployee && (
+                                <SelectItem value="__none" disabled>{t("leave.form.noLeaveTypes", { country: selectedEmployee.country })}</SelectItem>
+                            )}
+                            </SelectContent>
+                        </Select>
+                        </div>
+
+                        {/* Date range */}
+                        <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>{t("leave.form.label.startDate")} *</Label>
+                            <DatePicker
+                            value={formData.startDate}
+                            onChange={(v) => setFormData({ ...formData, startDate: v })}
+                            placeholder={t("leave.form.placeholder.startDate")}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>{t("leave.form.label.endDate")} *</Label>
+                            <DatePicker
+                            value={formData.endDate}
+                            onChange={(v) => setFormData({ ...formData, endDate: v })}
+                            placeholder={t("leave.form.placeholder.endDate")}
+                            minDate={formData.startDate || undefined}
+                            />
+                        </div>
+                        </div>
+
+                        {dateError && (
+                        <div className="flex items-center gap-2 text-sm text-red-600">
+                            <AlertCircle className="w-4 h-4" />{dateError}
+                        </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label>{t("leave.form.label.totalDays")}</Label>
+                            <Input
+                            type="text"
+                            value={formData.days}
+                            readOnly
+                            className="font-mono bg-muted"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>&nbsp;</Label>
+                            <label className="flex items-center gap-2 h-9 text-sm cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={formData.isHalfDay}
+                                onChange={(e) => setFormData({ ...formData, isHalfDay: e.target.checked })}
+                                className="rounded"
+                            />
+                            {t("leave.form.label.halfDay")}
+                            </label>
+                        </div>
+                        </div>
+
+                        <div className="space-y-2">
+                        <Label>{t("leave.form.label.reason")}</Label>
+                        <Textarea
+                            value={formData.reason}
+                            onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                            placeholder={t("leave.form.label.reason") + "..."}
+                            rows={3}
+                        />
+                        </div>
+
+                        {/* Cross-month leave warning */}
+                        {formData.startDate && formData.endDate && parseFloat(formData.days) > 0 && (
+                        <CrossMonthLeaveWarning
+                            startDate={formData.startDate}
+                            endDate={formData.endDate}
+                            totalDays={parseFloat(formData.days)}
+                        />
+                        )}
+
+                        {/* Payroll period info for the leave */}
+                        {formData.endDate && (
+                        <PayrollCycleIndicator month={formData.endDate.substring(0, 7)} />
+                        )}
+
+                        <div className="flex justify-end gap-3 pt-2">
+                        <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
+                        <Button onClick={handleCreate} disabled={createMutation.isPending || !!dateError}>
+                            {createMutation.isPending ? t("leave.button.submitting") : t("common.submit")}
+                        </Button>
+                        </div>
+                    </div>
+                    </DialogContent>
+                </Dialog>
+                </div>
+            </div>
 
             {/* Filters */}
             <div className="flex items-center gap-3 flex-wrap">

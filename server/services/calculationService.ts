@@ -62,11 +62,37 @@ export const calculationService = {
           isNull(countrySocialInsuranceItems.regionCode)
         );
 
-    const rules = await db
+    const db_rules = await db
       .select()
       .from(countrySocialInsuranceItems)
       .where(whereClause)
       .orderBy(countrySocialInsuranceItems.sortOrder);
+      
+    let rules = db_rules;
+
+    // Fallback logic for countries where ALL rules might be tied to a region, 
+    // but no region was selected (e.g. US, VN, CA).
+    // In this case, we pick the first available region's rules as a representative estimate.
+    if (rules.length === 0 && !regionCode) {
+        const anyRules = await db.query.countrySocialInsuranceItems.findMany({
+            where: and(
+                eq(countrySocialInsuranceItems.countryCode, countryCode),
+                eq(countrySocialInsuranceItems.effectiveYear, year),
+                eq(countrySocialInsuranceItems.isActive, true)
+            ),
+            orderBy: [countrySocialInsuranceItems.sortOrder]
+        });
+        
+        if (anyRules.length > 0) {
+            // Pick rules from the first region found
+            const firstRegion = anyRules.find(r => r.regionCode !== null)?.regionCode;
+            if (firstRegion) {
+                rules = anyRules.filter(r => r.regionCode === firstRegion || r.regionCode === null);
+            } else {
+                rules = anyRules;
+            }
+        }
+    }
 
     const items: ContributionItem[] = [];
     let totalEmployer = 0;

@@ -2,7 +2,7 @@ import { router } from "../_core/trpc";
 import { crmProcedure } from "../procedures";
 import { z } from "zod";
 import { quotationService } from "../services/quotationService";
-import { storageGet } from "../storage";
+import { storageGet, storageDownload } from "../storage";
 import { getDb } from "../db";
 import { quotations } from "../../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
@@ -163,40 +163,32 @@ export const quotationRouter = router({
 
       if (!quotation) throw new TRPCError({ code: "NOT_FOUND", message: "Quotation not found" });
 
-      // Check if we are using mock storage (no OSS credentials)
-      // If so, we must regenerate the PDF and return base64 content because storagePut is mocked and doesn't save files locally.
-      const isMock = !process.env.OSS_ACCESS_KEY_ID;
-
-      if (isMock) {
-          try {
-              const { buffer } = await quotationService.generatePdf(input);
-              return { 
-                  url: null, 
-                  content: buffer.toString('base64'),
-                  filename: `Quotation-${quotation.quotationNumber}.pdf`
-              };
-          } catch (err) {
-              console.error("Failed to generate PDF in mock mode:", err);
-              throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "PDF generation failed" });
-          }
-      }
-
-      if (!quotation.pdfKey) {
-        // Try to regenerate
+      // Always try to serve content directly (proxy) to avoid browser blocking and mixed content issues
+      // If we have a key, try to fetch from storage
+      if (quotation.pdfKey) {
         try {
-           const { url } = await quotationService.generatePdf(quotation.id);
-           return { url };
-        } catch (err) {
-            console.error("Failed to regenerate PDF:", err);
-            throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "PDF generation failed" });
+            // Using storageDownload to get actual file content instead of just URL
+            const { content, contentType } = await storageDownload(quotation.pdfKey);
+            return {
+                content: content.toString('base64'),
+                filename: `Quotation-${quotation.quotationNumber}.pdf`,
+                contentType
+            };
+        } catch (e) {
+            console.warn("Failed to fetch existing PDF from storage, regenerating...", e);
         }
       }
 
-      if (quotation.pdfKey) {
-        const { url } = await storageGet(quotation.pdfKey);
-        return { url };
+      // If no key or fetch failed, regenerate
+      try {
+          const { buffer } = await quotationService.generatePdf(input);
+          return { 
+              content: buffer.toString('base64'),
+              filename: `Quotation-${quotation.quotationNumber}.pdf`
+          };
+      } catch (err) {
+          console.error("Failed to generate PDF:", err);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "PDF generation failed" });
       }
-      
-      throw new TRPCError({ code: "NOT_FOUND", message: "PDF not available" });
     }),
 });

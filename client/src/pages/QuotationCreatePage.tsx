@@ -339,6 +339,20 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                             <div className="col-span-3 space-y-2">
                                 <Label className="text-xs">{t("quotations.items.country")}</Label>
                                 <CountrySelect value={item.countryCode} onValueChange={(v) => handleCountryChange(index, v)} />
+                                {item.countryCode === "CN" && (
+                                   <div className="pt-2">
+                                      <Label className="text-xs mb-1.5 block">{t("quotations.create.city_region")}</Label>
+                                      <Select value={item.regionCode} onValueChange={(v) => updateItem(index, "regionCode", v)}>
+                                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder={t("quotations.create.select_city")} /></SelectTrigger>
+                                          <SelectContent>
+                                              <SelectItem value="CN-BJ">Beijing</SelectItem>
+                                              <SelectItem value="CN-SH">Shanghai</SelectItem>
+                                              <SelectItem value="CN-SZ">Shenzhen</SelectItem>
+                                              <SelectItem value="CN-GZ">Guangzhou</SelectItem>
+                                          </SelectContent>
+                                      </Select>
+                                   </div>
+                                )}
                             </div>
                             <div className="col-span-2 space-y-2">
                                 <Label className="text-xs">{t("quotations.items.serviceType")}</Label>
@@ -382,21 +396,8 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                             <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
-
-                      {item.countryCode === "CN" && (
-                         <div className="w-1/4 pr-4">
-                            <Label className="text-xs mb-1.5 block">{t("quotations.create.city_region")}</Label>
-                            <Select value={item.regionCode} onValueChange={(v) => updateItem(index, "regionCode", v)}>
-                                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder={t("quotations.create.select_city")} /></SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="CN-BJ">Beijing</SelectItem>
-                                    <SelectItem value="CN-SH">Shanghai</SelectItem>
-                                    <SelectItem value="CN-SZ">Shenzhen</SelectItem>
-                                    <SelectItem value="CN-GZ">Guangzhou</SelectItem>
-                                </SelectContent>
-                            </Select>
-                         </div>
-                      )}
+                      
+                      {/* Region selector moved inside country column above for better layout */}
 
                       {item.employerCost !== undefined && (
                           <div className="bg-muted/50 p-3 rounded text-sm flex justify-between items-center text-muted-foreground border border-border/50">
