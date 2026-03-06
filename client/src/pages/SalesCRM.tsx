@@ -45,7 +45,8 @@ import {
 import {
   Briefcase, Plus, Search, ArrowLeft, Mail, Phone, Users, ChevronRight,
   Trash2, Pencil, ArrowRightLeft, ExternalLink, MessageSquare, PhoneCall,
-  Upload, FileIcon,
+  Upload, FileIcon, Calendar, Send, MoreHorizontal, ChevronsUpDown, X,
+  CheckCircle2, Info, FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
