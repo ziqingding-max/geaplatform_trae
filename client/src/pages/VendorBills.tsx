@@ -88,6 +88,24 @@ function ConfidenceBadge({ score }: { score: number }) {
   return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300 text-[10px] px-1.5">{score}%</Badge>;
 }
 
+const safeDate = (d: string | Date | null | undefined): string => {
+  if (!d) return "";
+  try {
+    return new Date(d).toISOString().split("T")[0];
+  } catch (e) {
+    return "";
+  }
+};
+
+const safeMonth = (d: string | Date | null | undefined): string => {
+  if (!d) return "";
+  try {
+    return new Date(d).toISOString().slice(0, 7);
+  } catch (e) {
+    return "";
+  }
+};
+
 /* ========== Multi-File AI Upload & Parse Dialog ========== */
 function AIUploadDialog({
   open,
@@ -869,8 +887,7 @@ function VendorBillList() {
   });
 
   const { data: vendorsData, refetch: refetchVendors } = trpc.vendors.list.useQuery({ status: "active", limit: 200 });
-  const vendors = useMemo(() => vendorsData?.data || [], [vendorsData]);
-
+  const vendors = vendorsData?.data || [];
   const createMutation = trpc.vendorBills.create.useMutation({
     onSuccess: () => {
       toast.success(t("vendorBills.toast.createdSuccess"));
@@ -1148,15 +1165,13 @@ function VendorBillList() {
         </Card>
 
         {/* AI Upload Dialog */}
-        {aiUploadOpen && (
-          <AIUploadDialog
-            open={aiUploadOpen}
-            onOpenChange={setAiUploadOpen}
-            vendors={vendors}
-            onBillCreated={() => refetch()}
-            onVendorAutoCreated={() => refetchVendors()}
-          />
-        )}
+        <AIUploadDialog
+          open={aiUploadOpen}
+          onOpenChange={setAiUploadOpen}
+          vendors={vendors}
+          onBillCreated={() => refetch()}
+          onVendorAutoCreated={() => refetchVendors()}
+        />
       </div>
     </Layout>
   );
@@ -1225,10 +1240,10 @@ function VendorBillDetail({ id }: { id: number }) {
     setEditData({
       billNumber: bill.billNumber,
       category: bill.category,
-      billDate: bill.billDate ? new Date(bill.billDate).toISOString().split("T")[0] : "",
-      dueDate: bill.dueDate ? new Date(bill.dueDate).toISOString().split("T")[0] : "",
-      paidDate: bill.paidDate ? new Date(bill.paidDate).toISOString().split("T")[0] : "",
-      billMonth: bill.billMonth ? new Date(bill.billMonth).toISOString().slice(0, 7) : "",
+      billDate: safeDate(bill.billDate),
+      dueDate: safeDate(bill.dueDate),
+      paidDate: safeDate(bill.paidDate),
+      billMonth: safeMonth(bill.billMonth),
       currency: bill.currency,
       subtotal: bill.subtotal?.toString() || "",
       tax: bill.tax?.toString() || "0",
