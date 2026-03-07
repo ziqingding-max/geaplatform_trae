@@ -6,6 +6,7 @@ import {
   employeeContracts, InsertEmployeeContract,
   leaveBalances, InsertLeaveBalance,
   leaveRecords, InsertLeaveRecord,
+  leaveTypes,
   customers
 } from "../../../drizzle/schema";
 import { getDb } from "./connection";
@@ -269,7 +270,33 @@ export async function listLeaveRecords(params: ListLeaveRecordsParams = {}) {
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   
   const [data, totalResult] = await Promise.all([
-    db.select().from(leaveRecords).where(where).limit(pageSize).offset(offset).orderBy(desc(leaveRecords.createdAt)),
+    db.select({
+      id: leaveRecords.id,
+      employeeId: leaveRecords.employeeId,
+      leaveTypeId: leaveRecords.leaveTypeId,
+      startDate: leaveRecords.startDate,
+      endDate: leaveRecords.endDate,
+      days: leaveRecords.days,
+      reason: leaveRecords.reason,
+      status: leaveRecords.status,
+      createdAt: leaveRecords.createdAt,
+      updatedAt: leaveRecords.updatedAt,
+      submittedBy: leaveRecords.submittedBy,
+      clientApprovedBy: leaveRecords.clientApprovedBy,
+      clientApprovedAt: leaveRecords.clientApprovedAt,
+      clientRejectionReason: leaveRecords.clientRejectionReason,
+      adminApprovedBy: leaveRecords.adminApprovedBy,
+      adminApprovedAt: leaveRecords.adminApprovedAt,
+      adminRejectionReason: leaveRecords.adminRejectionReason,
+      // Join fields
+      leaveTypeName: leaveTypes.leaveTypeName,
+    })
+    .from(leaveRecords)
+    .leftJoin(leaveTypes, eq(leaveRecords.leaveTypeId, leaveTypes.id))
+    .where(where)
+    .limit(pageSize)
+    .offset(offset)
+    .orderBy(desc(leaveRecords.createdAt)),
     db.select({ count: count() }).from(leaveRecords).where(where)
   ]);
   

@@ -30,7 +30,7 @@ import {
   hasDepositBeenProcessed,
   getDb,
 } from "../db";
-import { storagePut, storageGet } from "../storage";
+import { storagePut, storageGet, storageDownload } from "../storage";
 import { generateDepositInvoice } from "../services/depositInvoiceService";
 import { generateDepositRefund } from "../services/depositRefundService";
 import { generateVisaServiceInvoice } from "../services/visaServiceInvoiceService";
@@ -177,7 +177,7 @@ export const employeesRouter = router({
       const insertId = (result as any)[0]?.insertId ?? (result as any).insertId;
       if (insertId && input.country) {
         try {
-          await initializeLeaveBalancesForEmployee(insertId, input.country, new Date().getFullYear(), input.customerId);
+          await initializeLeaveBalancesForEmployee(insertId);
         } catch (e) {
           console.error("Failed to initialize leave balances:", e);
         }
@@ -355,7 +355,7 @@ export const employeesRouter = router({
                 type: "deposit",
                 employeeId: input.id,
                 trigger: "reactivation_from_terminated",
-                previousDepositProcessedAs: depositStatus.type,
+                previousDepositProcessed: depositStatus.processed,
               }),
             });
           }
@@ -441,7 +441,7 @@ export const employeesRouter = router({
           const emp = await getEmployeeById(input.id);
           if (emp) {
             const currentYear = new Date().getFullYear();
-            await initializeLeaveBalancesForEmployee(input.id, emp.country, currentYear, emp.customerId);
+            await initializeLeaveBalancesForEmployee(input.id);
             leaveBalancesInitialized = true;
           }
         } catch (err) {
@@ -519,8 +519,8 @@ export const employeesRouter = router({
   // Initialize leave balances for employee based on country leave types
   initializeLeaveBalances: customerManagerProcedure
     .input(z.object({ employeeId: z.number(), countryCode: z.string(), year: z.number() }))
-    .mutation(async ({ input }) => {
-      return await initializeLeaveBalancesForEmployee(input.employeeId, input.countryCode, input.year);
+    .query(async ({ input }) => {
+      return await initializeLeaveBalancesForEmployee(input.employeeId);
     }),
 
   // Create a leave balance entry
@@ -533,7 +533,7 @@ export const employeesRouter = router({
       used: z.number().default(0),
       remaining: z.number(),
     }))
-    .mutation(async ({ input }) => {
+    .query(async ({ input }) => {
       return await createLeaveBalance(input);
     }),
 
@@ -546,7 +546,7 @@ export const employeesRouter = router({
         expiryDate: z.string().nullable().optional(),
       }),
     }))
-    .mutation(async ({ input }) => {
+    .query(async ({ input }) => {
       const updateData: any = { totalEntitlement: input.data.totalEntitlement };
       if (input.data.expiryDate !== undefined) {
         updateData.expiryDate = input.data.expiryDate;
@@ -557,7 +557,7 @@ export const employeesRouter = router({
   // Delete a leave balance entry
   deleteLeaveBalance: customerManagerProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .query(async ({ input }) => {
       return await deleteLeaveBalance(input.id);
     }),
 
@@ -594,6 +594,48 @@ export const employeesRouter = router({
           }
           return c;
         }));
+      }),
+
+    download: userProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        // We don't have getEmployeeContractById exposed directly, let's find it via list or add a get function
+        // For now, let's use list and filter since contracts per employee are few
+        // Wait, we need to know the employeeId to use listEmployeeContracts, but input only has id.
+        // We should probably add getEmployeeContractById to db imports.
+        // It is not imported but available in db/index.ts? 
+        // Checking imports... listEmployeeContracts is imported. getEmployeeContractById is NOT imported.
+        // But the router below has `delete` which doesn't check existence first? No, it just calls deleteEmployeeContract.
+        
+        // Let's rely on a direct DB call here for simplicity if the helper isn't available, 
+        // OR better, import the helper if it exists. 
+        // Looking at previous Read output, `getEmployeeDocumentById` is imported, but `getEmployeeContractById` is NOT.
+        // However, I can see `updateEmployeeContract` uses `id`.
+        
+        // I will use `getDb` to fetch the contract directly to be safe.
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        const { employeeContracts } = await import("../../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        
+        const contracts = await db.select().from(employeeContracts).where(eq(employeeContracts.id, input.id));
+        const contract = contracts[0];
+        
+        if (!contract || !contract.fileKey) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Contract file not found" });
+        }
+
+        try {
+          const buffer = await storageDownload(contract.fileKey);
+          return {
+            content: buffer.toString("base64"),
+            filename: contract.fileKey.split("/").pop() || "contract.pdf",
+            contentType: "application/pdf"
+          };
+        } catch (error) {
+          console.error("Failed to download contract:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to download contract" });
+        }
       }),
 
     upload: customerManagerProcedure
@@ -702,6 +744,27 @@ export const employeesRouter = router({
           }
           return d;
         }));
+      }),
+
+    download: userProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const doc = await getEmployeeDocumentById(input.id);
+        if (!doc || !doc.fileKey) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Document not found" });
+        }
+
+        try {
+          const buffer = await storageDownload(doc.fileKey);
+          return {
+            content: buffer.toString("base64"),
+            filename: doc.fileKey.split("/").pop() || "document.pdf",
+            contentType: doc.mimeType || "application/pdf"
+          };
+        } catch (error) {
+          console.error("Failed to download document:", error);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to download document" });
+        }
       }),
 
     upload: customerManagerProcedure

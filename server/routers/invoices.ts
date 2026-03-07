@@ -4,6 +4,7 @@ import { financeManagerProcedure, userProcedure } from "../procedures";
 import {
   createInvoice,
   getInvoiceById,
+  getInvoiceByNumber,
   listInvoices,
   updateInvoice,
   listInvoiceItemsByInvoice,
@@ -168,6 +169,14 @@ export const invoicesRouter = router({
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       return await getInvoiceById(input.id);
+    }),
+
+  getByNumber: userProcedure
+    .input(z.object({ invoiceNumber: z.string() }))
+    .query(async ({ input }) => {
+      const invoice = await getInvoiceByNumber(input.invoiceNumber);
+      if (!invoice) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice not found" });
+      return invoice;
     }),
 
   getItems: userProcedure

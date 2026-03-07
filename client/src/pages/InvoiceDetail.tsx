@@ -37,23 +37,46 @@ export default function InvoiceDetail() {
   const { t } = useI18n();
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const invoiceId = parseInt(params.id || "0", 10);
+  
+  const paramId = params.id || "";
+  // Check if ID is numeric
+  const isNumericId = /^\d+$/.test(paramId);
+  const numericId = isNumericId ? parseInt(paramId, 10) : 0;
+  const invoiceNumberParam = !isNumericId ? paramId : "";
+
   const [isEditing, setIsEditing] = useState(false);
 
-  const { data: invoice, isLoading: isLoadingInvoice, refetch: refetchInvoice } = trpc.invoices.get.useQuery(
-    { id: invoiceId },
-    { enabled: !!invoiceId }
+  // Query by ID if numeric
+  const { data: invoiceById, isLoading: isLoadingById, refetch: refetchById } = trpc.invoices.get.useQuery(
+    { id: numericId },
+    { enabled: isNumericId && numericId > 0 }
   );
 
-  const { data: items, isLoading: isLoadingItems, refetch: refetchItems } = trpc.invoices.getItems.useQuery(
-    { invoiceId },
-    { enabled: !!invoiceId }
+  // Query by Number if string
+  const { data: invoiceByNumber, isLoading: isLoadingByNumber, refetch: refetchByNumber } = trpc.invoices.getByNumber.useQuery(
+    { invoiceNumber: invoiceNumberParam },
+    { enabled: !isNumericId && !!invoiceNumberParam }
   );
+
+  const invoice = invoiceById || invoiceByNumber;
+   const isLoadingInvoice = isLoadingById || isLoadingByNumber;
+   
+   // Determine ID for items query and mutations
+   // If we have a numeric param, use it immediately to fetch items in parallel
+   // If we have a string param, we must wait for the invoice query to resolve to get the ID
+   const resolvedId = invoice?.id || (isNumericId ? numericId : 0);
+   const invoiceId = resolvedId;
+
+   const { data: items, isLoading: isLoadingItems, refetch: refetchItems } = trpc.invoices.getItems.useQuery(
+     { invoiceId },
+     { enabled: !!invoiceId }
+   );
 
   const isLoading = isLoadingInvoice || isLoadingItems;
 
   const refetch = () => {
-    refetchInvoice();
+    if (isNumericId) refetchById();
+    else refetchByNumber();
     refetchItems();
   };
 

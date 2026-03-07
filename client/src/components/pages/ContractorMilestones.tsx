@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { DatePicker } from "@/components/DatePicker";
 import { formatDate, formatCurrency } from "@/lib/format";
 import { exportToCsv } from "@/lib/csvExport";
+import ContractorSelector from "@/components/ContractorSelector";
 
 const statusColors: Record<string, string> = {
   pending: "bg-amber-50 text-amber-700 border-amber-200",
@@ -85,6 +86,7 @@ export default function ContractorMilestones() {
   });
 
   const [formData, setFormData] = useState({
+    customerId: "",
     contractorId: "",
     title: "",
     description: "",
@@ -95,6 +97,7 @@ export default function ContractorMilestones() {
 
   function resetForm() {
     setFormData({
+      customerId: "",
       contractorId: "",
       title: "",
       description: "",
@@ -103,6 +106,14 @@ export default function ContractorMilestones() {
       dueDate: "",
     });
   }
+
+  // Filtered contractors based on selected customer
+  const availableContractors = useMemo(() => {
+    if (!formData.contractorId && customerFilter !== "all") {
+        return contractors.filter((c: any) => String(c.customerId) === customerFilter);
+    }
+    return contractors;
+  }, [contractors, customerFilter, formData.contractorId]);
 
   function handleCreate() {
     if (!formData.contractorId) {
@@ -125,7 +136,9 @@ export default function ContractorMilestones() {
 
   function handleEdit(milestone: any) {
     setEditingMilestone(milestone);
+    const contractor = contractors.find((c: any) => c.id === milestone.contractorId);
     setFormData({
+      customerId: contractor ? String(contractor.customerId) : "",
       contractorId: String(milestone.contractorId),
       title: milestone.title,
       description: milestone.description || "",
@@ -311,22 +324,25 @@ export default function ContractorMilestones() {
           </DialogHeader>
           <div className="space-y-4 py-2 mt-2">
             {!editOpen && (
-                <div className="space-y-2">
-                    <Label>Contractor *</Label>
-                    <Select value={formData.contractorId} onValueChange={(v) => {
-                        const c = contractors.find(c => String(c.id) === v);
-                        setFormData({ ...formData, contractorId: v, currency: (c as any)?.currency || "USD" });
-                    }}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select contractor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {contractors.map((c: any) => (
-                                <SelectItem key={c.id} value={String(c.id)}>{c.firstName} {c.lastName}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
+              <ContractorSelector
+                value={formData.contractorId ? parseInt(formData.contractorId) : 0}
+                onValueChange={(v) => {
+                  const c = contractors.find((c: any) => c.id === v);
+                  setFormData({
+                    ...formData,
+                    contractorId: String(v),
+                    customerId: c ? String(c.customerId) : formData.customerId,
+                    currency: (c as any)?.currency || "USD"
+                  });
+                }}
+                showCustomerFilter={true}
+                customerId={formData.customerId ? parseInt(formData.customerId) : undefined}
+                onCustomerChange={(cid) => {
+                  setFormData({ ...formData, customerId: cid ? String(cid) : "", contractorId: "" });
+                }}
+                required
+                label="Contractor"
+              />
             )}
             <div className="space-y-2">
               <Label>{t("milestones.table.header.title")} *</Label>

@@ -11,7 +11,7 @@ import {
   logAuditAction,
   getEmployeeById,
 } from "../db";
-import { storagePut, storageGet } from "../storage";
+import { storagePut, storageGet, storageDownload } from "../storage";
 
 export const reimbursementsRouter = router({
   list: userProcedure
@@ -39,6 +39,7 @@ export const reimbursementsRouter = router({
       });
 
       // Map to signed URLs for viewing receipts
+      // Note: We also provide a separate download endpoint for proxying if signed URLs fail
       const processedItems = await Promise.all(items.map(async (item) => {
         if (item.receiptFileKey) {
           try {
@@ -52,6 +53,27 @@ export const reimbursementsRouter = router({
       }));
       
       return { data: processedItems, total };
+    }),
+
+  downloadReceipt: userProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const item = await getReimbursementById(input.id);
+      if (!item || !item.receiptFileKey) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Receipt not found" });
+      }
+
+      try {
+        const buffer = await storageDownload(item.receiptFileKey);
+        return {
+          content: buffer.toString("base64"),
+          filename: item.receiptFileKey.split("/").pop() || "receipt.pdf",
+          contentType: "application/pdf" // Simplified, ideally store mimeType
+        };
+      } catch (error) {
+        console.error("Failed to download receipt:", error);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to download receipt" });
+      }
     }),
 
   get: userProcedure

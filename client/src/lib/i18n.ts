@@ -1572,6 +1572,15 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "notifications.toast.updated": "Notification settings updated",
     "notifications.toast.error.update_failed": "Failed to update settings",
     "notifications.help.recipients": "Notifications will be sent to all users matching these roles.",
+
+    // Missing keys override
+    "customers.tabs.wallet": "Wallet",
+    "adjustments.status.pending": "Pending",
+    "employees.documentType.passport": "Passport",
+    "employees.actions.startOffboarding": "Start Offboarding",
+    "employees.actions.putOnLeave": "Put On Leave",
+    "common.bankDetails": "Bank Details",
+    "invoices.detail.info.notes": "Notes",
   },
   zh: {
     // Navigation
@@ -3117,6 +3126,15 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "notifications.toast.updated": "通知设置已更新",
     "notifications.toast.error.update_failed": "更新设置失败",
     "notifications.help.recipients": "通知将发送给所有匹配这些角色的用户。",
+
+    // Missing keys override
+    "customers.tabs.wallet": "钱包",
+    "adjustments.status.pending": "待处理",
+    "employees.documentType.passport": "护照",
+    "employees.actions.startOffboarding": "开始离职",
+    "employees.actions.putOnLeave": "设为休假",
+    "common.bankDetails": "银行信息",
+    "invoices.detail.info.notes": "备注",
   },
 };
 
@@ -5131,20 +5149,24 @@ const adminTranslations = {
     // "employees.visaStatus.expired": "Expired",
 
     // Workflow Actions
-    // "employees.actions.startOnboarding": "Start Onboarding",
-    // "employees.actions.markDocumentsIncomplete": "Documents Incomplete",
-    // "employees.actions.reject": "Reject",
-    // "employees.actions.documentsComplete": "Documents Complete → Review",
-    // "employees.actions.markContractSigned": "Mark Contract Signed",
-    // "employees.actions.rollbackToReview": "Rollback to Review",
-    // "employees.actions.activateNow": "Activate Now",
-    // "employees.actions.rollbackToOnboarding": "Rollback to Onboarding",
-    // "employees.actions.startOffboarding": "Start Offboarding",
-    // "employees.actions.putOnLeave": "Put On Leave",
-    // "employees.actions.returnToActive": "Return to Active",
-    // "employees.actions.terminate": "Terminate",
-    // "employees.actions.rollbackToActive": "Rollback to Active",
-    // "employees.actions.reactivate": "Reactivate",
+    "employees.actions.startOnboarding": "Start Onboarding",
+    "employees.actions.markDocumentsIncomplete": "Documents Incomplete",
+    "employees.actions.reject": "Reject",
+    "employees.actions.documentsComplete": "Documents Complete → Review",
+    "employees.actions.markContractSigned": "Mark Contract Signed",
+    "employees.actions.rollbackToReview": "Rollback to Review",
+    "employees.actions.activateNow": "Activate Now",
+    "employees.actions.rollbackToOnboarding": "Rollback to Onboarding",
+    "employees.actions.startOffboarding": "Start Offboarding",
+    "employees.actions.putOnLeave": "Put On Leave",
+    "employees.actions.returnToActive": "Return to Active",
+    "employees.actions.terminate": "Terminate",
+    "employees.actions.rollbackToActive": "Rollback to Active",
+    "employees.actions.reactivate": "Reactivate",
+    "customers.tabs.wallet": "Wallet",
+    "adjustments.status.pending": "Pending",
+    "employees.documentType.passport": "Passport",
+
 
     // Vendors
     // "vendors.title": "Vendors",
@@ -7452,6 +7474,10 @@ const adminTranslations = {
     "employees.actions.terminate": "终止雇佣",
     "employees.actions.rollbackToActive": "退回在职",
     "employees.actions.reactivate": "重新激活",
+    "customers.tabs.wallet": "钱包",
+    "adjustments.status.pending": "待处理",
+    "employees.documentType.passport": "护照",
+
 
     // Common (Added)
     "status.locked": "已锁定",
