@@ -18,7 +18,7 @@ import {
   getDb,
   createCustomerPricing,
 } from "../db";
-import { storagePut, storageGet } from "../storage";
+import { storagePut, storageGet, storageDownload } from "../storage";
 import { quotations, salesDocuments, customerContracts } from "../../drizzle/schema";
 import { desc, eq, and, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -653,10 +653,10 @@ export const salesRouter = router({
         const [doc] = await db.insert(salesDocuments).values({
           leadId: input.leadId,
           docType: input.docType,
-          fileName: input.fileName,
+          title: input.fileName, // Using fileName as title
           fileKey: fileKey,
           fileUrl: url,
-          uploadedBy: ctx.user.id,
+          generatedBy: ctx.user.id,
           createdAt: new Date(),
         }).returning();
 
@@ -668,6 +668,34 @@ export const salesRouter = router({
         });
 
         return { success: true, url, doc };
+      }),
+
+    download: userProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+        const doc = await db.query.salesDocuments.findFirst({
+            where: eq(salesDocuments.id, input.id)
+        });
+
+        if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Document not found" });
+
+        if (doc.fileKey) {
+            try {
+                const { content, contentType } = await storageDownload(doc.fileKey);
+                return {
+                    content: content.toString('base64'),
+                    filename: doc.title || `Document-${doc.id}`,
+                    contentType: contentType || "application/octet-stream"
+                };
+            } catch (e) {
+                console.error("Failed to download document:", e);
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to download file" });
+            }
+        }
+        throw new TRPCError({ code: "NOT_FOUND", message: "File key missing" });
       }),
 
     delete: crmProcedure

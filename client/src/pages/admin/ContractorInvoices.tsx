@@ -22,7 +22,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Search, CheckCircle, XCircle, FileText, AlertTriangle, Briefcase
+  Search, CheckCircle, XCircle, FileText, AlertCircle, Briefcase
 } from "lucide-react";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import { Textarea } from "@/components/ui/textarea";

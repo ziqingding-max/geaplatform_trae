@@ -23,7 +23,7 @@ import {
   getCustomerByEmail,
   listCustomerPricing as listPricingForDedup,
 } from "../db";
-import { storagePut, storageGet } from "../storage";
+import { storagePut, storageGet, storageDownload } from "../storage";
 import { TRPCError } from "@trpc/server";
 import { generateInviteToken, getInviteExpiryDate, hashPassword, signPortalToken } from "../portal/portalAuth";
 import type { PortalJwtPayload } from "../portal/portalAuth";
@@ -598,6 +598,37 @@ export const customersRouter = router({
           }
           return c;
         }));
+      }),
+
+    download: userProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        const { getDb } = await import("../db");
+        const { customerContracts } = await import("../../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+        const contract = await db.query.customerContracts.findFirst({
+            where: eq(customerContracts.id, input.id)
+        });
+
+        if (!contract) throw new TRPCError({ code: "NOT_FOUND", message: "Contract not found" });
+
+        if (contract.fileKey) {
+            try {
+                const { content, contentType } = await storageDownload(contract.fileKey);
+                return {
+                    content: content.toString('base64'),
+                    filename: contract.contractName || `Contract-${contract.id}.pdf`,
+                    contentType: contentType || "application/pdf"
+                };
+            } catch (e) {
+                console.error("Failed to download contract:", e);
+                throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to download file" });
+            }
+        }
+        throw new TRPCError({ code: "NOT_FOUND", message: "File key missing" });
       }),
 
     upload: customerManagerProcedure

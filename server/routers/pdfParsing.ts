@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { financeManagerProcedure } from "../procedures";
-import { executeTaskLLM } from "../services/aiGatewayService";
+import { executeTaskLLM, uploadFileToDashScope } from "../services/aiGatewayService";
 import { storagePut, storageGet, storageDownload } from "../storage";
 import {
   createVendorBill,
@@ -238,10 +238,29 @@ export const pdfParsingRouter = router({
           } else {
             // For PDFs and other non-image files, we MUST use the URL.
             // Qwen-VL-Plus supports PDF parsing via URL, but not via base64 in image_url field.
+            // However, due to "Unsupported internal OSS region" error when using OSS URLs,
+            // we must upload the file to DashScope first and use the file ID.
+            let fileBuffer: Buffer;
+            
+            if (f.fileKey) {
+               const { content } = await storageDownload(f.fileKey);
+               fileBuffer = content;
+            } else if (f.fileUrl.startsWith("data:")) {
+               const base64Content = f.fileUrl.split(",")[1];
+               fileBuffer = Buffer.from(base64Content, "base64");
+            } else {
+               const resp = await fetch(f.fileUrl);
+               const arrayBuffer = await resp.arrayBuffer();
+               fileBuffer = Buffer.from(arrayBuffer);
+            }
+
+            // Upload to DashScope to bypass OSS region issues
+            const fileId = await uploadFileToDashScope(fileBuffer, f.fileName);
+            
             fileMessages.push({
               type: "image_url" as const,
               image_url: {
-                url: f.fileUrl,
+                url: `fileid://${fileId}`,
               },
             });
           }

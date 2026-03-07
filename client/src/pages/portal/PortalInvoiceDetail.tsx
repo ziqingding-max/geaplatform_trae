@@ -23,9 +23,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  ArrowLeft, Download, FileText, CreditCard, Calendar,
-  Hash, Clock, CheckCircle2, AlertTriangle,
-  Receipt, DollarSign, Info, ExternalLink,
+  ArrowLeft, Download, FileText, CreditCard, CalendarDays,
+  Hash, Clock, CheckCircle, AlertCircle,
+  Receipt, Info, ExternalLink,
   ArrowRight, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -237,10 +237,10 @@ export default function PortalInvoiceDetail() {
             <Card>
               <CardContent className="pt-6">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-                  <MetaField icon={Calendar} label="Issue Date" value={formatDate(data.sentDate)} />
+                  <MetaField icon={CalendarDays} label="Issue Date" value={formatDate(data.sentDate)} />
                   <MetaField icon={Clock} label="Due Date" value={formatDate(data.dueDate)} />
-                  <MetaField icon={DollarSign} label={t("portal_invoice_detail.meta.currency")} value={data.currency || "USD"} />
-                  <MetaField icon={Hash} label={t("portal_invoice_detail.meta.reference")} value={data.invoiceNumber || "-"} mono />
+                  <MetaField icon={CreditCard} label={t("portal_invoice_detail.meta.currency")} value={data.currency || "USD"} />
+                  <MetaField icon={FileText} label={t("portal_invoice_detail.meta.reference")} value={data.invoiceNumber || "-"} mono />
                 </div>
               </CardContent>
             </Card>
@@ -534,7 +534,7 @@ export default function PortalInvoiceDetail() {
                 {data.isPartiallyPaid && (
                   <div className="p-3 rounded-lg bg-orange-50 border border-orange-200">
                     <div className="flex gap-2">
-                      <AlertTriangle className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
+                      <AlertCircle className="w-4 h-4 text-orange-600 flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="text-xs font-medium text-orange-800">{t("portal_invoice_detail.alert.partial_payment.title")}</p>
                         <p className="text-xs text-orange-600 mt-0.5">
@@ -549,7 +549,7 @@ export default function PortalInvoiceDetail() {
                 {data.isOverpaid && (
                   <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
                     <div className="flex gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                      <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
                       <div>
                         <p className="text-xs font-medium text-emerald-800">{t("portal_invoice_detail.alert.overpayment.title")}</p>
                         <p className="text-xs text-emerald-600 mt-0.5">

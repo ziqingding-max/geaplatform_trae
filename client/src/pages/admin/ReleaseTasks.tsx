@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, AlertTriangle, Building2, Wallet, Landmark } from "lucide-react";
+import { CheckCircle, XCircle, AlertCircle, Building2, Wallet, Landmark } from "lucide-react";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -171,7 +171,7 @@ export default function ReleaseTasks() {
               
               {disposition === 'to_bank' && (
                 <div className="flex items-start gap-2 text-amber-600 bg-amber-50 p-2 rounded text-xs">
-                  <AlertTriangle className="w-4 h-4 mt-0.5" />
+                  <AlertCircle className="w-4 h-4 mt-0.5" />
                   <span>Note: This action only records the refund in the system. You must manually process the bank transfer.</span>
                 </div>
               )}

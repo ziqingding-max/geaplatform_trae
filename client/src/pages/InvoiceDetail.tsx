@@ -10,9 +10,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  ArrowLeft, Download, FileText, CreditCard, Calendar,
-  Hash, Clock, CheckCircle2, AlertTriangle,
-  Receipt, DollarSign, Info, ExternalLink,
+  ArrowLeft, Download, FileText, CreditCard, CalendarDays,
+  Clock, Receipt, Info, ExternalLink,
   ArrowRight, Link2, Trash2, Edit, Save, Plus
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -216,10 +215,10 @@ export default function InvoiceDetail() {
             <Card>
               <CardContent className="pt-6">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-                  <MetaField icon={Calendar} label="Issue Date" value={formatDate(invoice.sentDate)} />
+                  <MetaField icon={CalendarDays} label="Issue Date" value={formatDate(invoice.sentDate)} />
                   <MetaField icon={Clock} label="Due Date" value={formatDate(invoice.dueDate)} />
-                  <MetaField icon={DollarSign} label="Currency" value={invoice.currency || "USD"} />
-                  <MetaField icon={Hash} label="Reference" value={invoice.invoiceNumber || "-"} mono />
+                  <MetaField icon={CreditCard} label="Currency" value={invoice.currency || "USD"} />
+                  <MetaField icon={FileText} label="Reference" value={invoice.invoiceNumber || "-"} mono />
                 </div>
               </CardContent>
             </Card>

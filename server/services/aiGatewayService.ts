@@ -139,3 +139,44 @@ export async function executeTaskLLM(task: AITask, params: InvokeParams): Promis
     throw error;
   }
 }
+
+/**
+ * Upload a file to DashScope for AI processing
+ * Returns the file ID (e.g. "file-feiwj...")
+ */
+export async function uploadFileToDashScope(buffer: Buffer, filename: string): Promise<string> {
+  const apiKey = resolveEnvKey("DASHSCOPE_API_KEY");
+  if (!apiKey) {
+    throw new Error("Missing DASHSCOPE_API_KEY environment variable");
+  }
+
+  const formData = new FormData();
+  // Create a Blob from the buffer
+  const blob = new Blob([new Uint8Array(buffer)]);
+  formData.append("file", blob, filename);
+  formData.append("purpose", "file-extract");
+
+  try {
+    const response = await fetch("https://dashscope.aliyuncs.com/api/v1/files", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        // Note: Do NOT set Content-Type header manually when using FormData,
+        // the browser/runtime will set it with the boundary.
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`DashScope upload failed: ${response.status} - ${errorText}`);
+    }
+
+    const data = (await response.json()) as { id: string; output?: { id: string } };
+    // The API might return { id: ... } or { output: { id: ... } } depending on version
+    return data.output?.id || data.id;
+  } catch (error) {
+    console.error("[AI Gateway] File upload failed", error);
+    throw error;
+  }
+}
