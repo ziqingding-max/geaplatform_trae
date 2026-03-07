@@ -25,7 +25,7 @@ import {
 import {
   ArrowLeft, Download, FileText, CreditCard, Calendar,
   Hash, Clock, CheckCircle2, AlertTriangle,
-  Receipt, CircleDollarSign, Info, ExternalLink,
+  Receipt, DollarSign, Info, ExternalLink,
   ArrowRight, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -239,7 +239,7 @@ export default function PortalInvoiceDetail() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
                   <MetaField icon={Calendar} label="Issue Date" value={formatDate(data.sentDate)} />
                   <MetaField icon={Clock} label="Due Date" value={formatDate(data.dueDate)} />
-                  <MetaField icon={CircleDollarSign} label={t("portal_invoice_detail.meta.currency")} value={data.currency || "USD"} />
+                  <MetaField icon={DollarSign} label={t("portal_invoice_detail.meta.currency")} value={data.currency || "USD"} />
                   <MetaField icon={Hash} label={t("portal_invoice_detail.meta.reference")} value={data.invoiceNumber || "-"} mono />
                 </div>
               </CardContent>
