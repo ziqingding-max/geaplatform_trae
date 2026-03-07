@@ -1581,6 +1581,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "employees.actions.putOnLeave": "Put On Leave",
     "common.bankDetails": "Bank Details",
     "invoices.detail.info.notes": "Notes",
+    "invoices.actions.markPaid": "Mark as Paid",
   },
   zh: {
     // Navigation
@@ -3135,6 +3136,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "employees.actions.putOnLeave": "设为休假",
     "common.bankDetails": "银行信息",
     "invoices.detail.info.notes": "备注",
+    "invoices.actions.markPaid": "标记为已支付",
   },
 };
 
