@@ -2,15 +2,45 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ENV } from "./_core/env";
 
+/**
+ * Normalize OSS region for AWS SDK compatibility.
+ * Alibaba Cloud OSS uses region IDs like "oss-ap-southeast-3",
+ * but AWS SDK expects the region without the "oss-" prefix, e.g. "ap-southeast-3".
+ */
+function normalizeRegion(region: string): string {
+  return region.replace(/^oss-/, "");
+}
+
+/**
+ * Normalize OSS endpoint to S3-compatible format.
+ * Alibaba Cloud OSS S3-compatible endpoint must use the format:
+ *   https://s3.oss-{region}.aliyuncs.com
+ * instead of:
+ *   https://oss-{region}.aliyuncs.com
+ *
+ * See: https://help.aliyun.com/zh/oss/developer-reference/use-aws-sdks-to-access-oss
+ */
+function normalizeEndpoint(endpoint: string): string {
+  // If endpoint already contains "s3.oss-", it's already in the correct format
+  if (endpoint.includes("s3.oss-")) {
+    return endpoint;
+  }
+  // Convert https://oss-{region}.aliyuncs.com → https://s3.oss-{region}.aliyuncs.com
+  return endpoint.replace(/^(https?:\/\/)(oss-)/, "$1s3.$2");
+}
+
+const ossRegion = normalizeRegion(ENV.ossRegion || "oss-cn-hangzhou");
+const ossEndpoint = normalizeEndpoint(ENV.ossEndpoint || "https://oss-cn-hangzhou.aliyuncs.com");
+
 // Initialize S3 Client (compatible with Alibaba Cloud OSS)
 const s3Client = new S3Client({
-  region: ENV.ossRegion || "oss-cn-hangzhou",
-  endpoint: ENV.ossEndpoint || `https://oss-cn-hangzhou.aliyuncs.com`,
+  region: ossRegion,
+  endpoint: ossEndpoint,
   credentials: {
     accessKeyId: ENV.ossAccessKeyId,
     secretAccessKey: ENV.ossAccessKeySecret,
   },
-  forcePathStyle: false, // OSS usually supports virtual-hosted style, but some private clouds need true
+  forcePathStyle: false, // OSS uses virtual-hosted style: https://bucket.s3.oss-region.aliyuncs.com
 });
 
 const BUCKET_NAME = ENV.ossBucket;
@@ -43,13 +73,12 @@ export async function storagePut(
   try {
     await s3Client.send(command);
     
-    // Construct a direct URL (assuming public read or for reference)
+    // Construct a direct URL using the OSS virtual-hosted style
+    // Format: https://{bucket}.oss-{region}.aliyuncs.com/{key}
     // Note: For private buckets, this URL won't be accessible directly without signing.
-    // We return it here to maintain compatibility with the previous interface.
     // Real access should go through storageGet() which signs the URL.
-    const endpoint = ENV.ossEndpoint || `https://${ENV.ossRegion}.aliyuncs.com`;
-    // Clean up endpoint to be just the hostname if it includes protocol
-    const endpointHost = endpoint.replace(/^https?:\/\//, "");
+    const rawEndpoint = ENV.ossEndpoint || `https://oss-${ossRegion}.aliyuncs.com`;
+    const endpointHost = rawEndpoint.replace(/^https?:\/\//, "").replace(/^s3\./, "");
     const url = `https://${BUCKET_NAME}.${endpointHost}/${normalizedKey}`;
 
     return { key: normalizedKey, url };
