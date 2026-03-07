@@ -167,17 +167,7 @@ async function buildSystemContext(serviceMonth?: string) {
   };
 }
 
-// Helper: Detect MIME type from file extension
-function detectMimeType(fileName: string): string {
-  const ext = fileName.toLowerCase().split(".").pop();
-  switch (ext) {
-    case "pdf": return "application/pdf";
-    case "png": return "image/png";
-    case "jpg": case "jpeg": return "image/jpeg";
-    case "webp": return "image/webp";
-    default: return "application/pdf";
-  }
-}
+
 
 export const pdfParsingRouter = router({
   // Multi-file AI parse: Upload multiple files for one vendor, cross-validate, and suggest allocations
@@ -202,10 +192,9 @@ export const pdfParsingRouter = router({
 
       // Step 2: Build file content messages for AI
       const fileMessages: Array<any> = input.files.map((f) => ({
-        type: "file_url" as const,
-        file_url: {
+        type: "image_url" as const,
+        image_url: {
           url: f.fileUrl,
-          mime_type: detectMimeType(f.fileName),
         },
       }));
 
@@ -745,8 +734,8 @@ Be precise with numbers. If a field is not found, use null.`,
             role: "user",
             content: [
               {
-                type: "file_url",
-                file_url: { url: input.fileUrl, mime_type: "application/pdf" },
+                type: "image_url",
+                image_url: { url: input.fileUrl },
               },
               { type: "text", text: "Parse this vendor invoice." },
             ],
