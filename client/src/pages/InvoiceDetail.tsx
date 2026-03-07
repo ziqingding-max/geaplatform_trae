@@ -133,7 +133,7 @@ export default function InvoiceDetail() {
 
   if (isLoading) {
     return (
-      <Layout>
+      <Layout breadcrumb={["GEA", "Invoices", `INV-${invoiceId}`]}>
         <div className="p-6 space-y-6">
             <Skeleton className="h-12 w-full" />
             <Skeleton className="h-64 w-full" />
@@ -144,7 +144,7 @@ export default function InvoiceDetail() {
 
   if (!invoice) {
     return (
-      <Layout>
+      <Layout breadcrumb={["GEA", "Invoices", "Not Found"]}>
         <div className="p-6">
             <Button variant="ghost" onClick={() => setLocation("/invoices")}>
                 <ArrowLeft className="w-4 h-4 mr-2" /> Back to Invoices
@@ -160,8 +160,8 @@ export default function InvoiceDetail() {
   const isDraft = invoice.status === "draft";
 
   return (
-    <Layout>
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <Layout breadcrumb={["GEA", "Invoices", invoice.invoiceNumber || `INV-${invoice.id}`]}>
+      <div className="p-6 max-w-5xl mx-auto space-y-6 page-enter">
         <Button
           variant="ghost"
           size="sm"
@@ -254,10 +254,10 @@ export default function InvoiceDetail() {
                           <TableCell className="pl-6">
                             {isDraft ? (
                                 <Input 
-                                    defaultValue={item.description} 
-                                    className="h-8"
-                                    onBlur={(e) => {
-                                        if (e.target.value !== item.description) {
+                                defaultValue={item.description || ""} 
+                                className="h-8"
+                                onBlur={(e) => {
+                                    if (e.target.value !== item.description) {
                                             updateItemMutation.mutate({
                                                 id: item.id,
                                                 invoiceId: invoiceId,
@@ -273,10 +273,10 @@ export default function InvoiceDetail() {
                           <TableCell className="text-right font-mono">
                             {isDraft ? (
                                 <Input 
-                                    defaultValue={item.quantity} 
-                                    className="h-8 w-20 ml-auto text-right"
-                                    onBlur={(e) => {
-                                        if (e.target.value !== item.quantity) {
+                                defaultValue={item.quantity || "1"} 
+                                className="h-8 w-20 ml-auto text-right"
+                                onBlur={(e) => {
+                                    if (e.target.value !== item.quantity) {
                                             updateItemMutation.mutate({
                                                 id: item.id,
                                                 invoiceId: invoiceId,

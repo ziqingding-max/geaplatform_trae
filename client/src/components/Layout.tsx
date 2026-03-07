@@ -264,10 +264,10 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
                     <Link key={item.href} href={item.href}>
                       <div
                         className={cn(
-                          "flex items-center gap-3 px-3 py-2 ml-4 rounded-md text-sm transition-all duration-150 cursor-pointer border-l border-transparent",
+                          "flex items-center gap-3 px-3 py-2 ml-4 rounded-md text-sm transition-all duration-150 cursor-pointer border-l-2",
                           isActive
-                            ? "bg-primary/10 text-primary border-primary"
-                            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50"
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground border-sidebar-primary font-medium shadow-sm"
+                            : "border-transparent text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/40"
                         )}
                       >
                         {/* <item.icon className="w-3.5 h-3.5 flex-shrink-0 opacity-70" /> */}

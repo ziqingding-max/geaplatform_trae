@@ -48,8 +48,8 @@ export default function ReleaseTasks() {
   });
 
   return (
-    <Layout>
-      <div className="space-y-6">
+    <Layout breadcrumb={["GEA", "Release Tasks"]}>
+      <div className="p-6 space-y-6 page-enter">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Release Tasks</h1>
           <p className="text-sm text-muted-foreground mt-1">Approve deposit releases and credit note dispositions</p>

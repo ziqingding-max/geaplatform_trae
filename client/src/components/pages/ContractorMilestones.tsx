@@ -13,6 +13,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
+  Tabs, TabsList, TabsTrigger,
+} from "@/components/ui/tabs";
+import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +36,7 @@ export default function ContractorMilestones() {
   const { t } = useI18n();
   const [selectedContractorId, setSelectedContractorId] = useState<string>("all");
   const [customerFilter, setCustomerFilter] = useState<string>("all");
+  const [viewTab, setViewTab] = useState<string>("active");
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -153,19 +157,33 @@ export default function ContractorMilestones() {
 
   const filteredMilestones = useMemo(() => {
     let list = milestones || [];
+    
+    // Status filtering based on tab
+    const activeStatuses = ["pending", "in_progress", "submitted", "changes_requested"];
+    const historyStatuses = ["approved", "paid", "cancelled", "rejected"];
+    
+    if (viewTab === "active") {
+      list = list.filter((m: any) => activeStatuses.includes(m.status));
+    } else {
+      list = list.filter((m: any) => historyStatuses.includes(m.status));
+    }
+
     if (selectedContractorId !== "all") {
-      list = list.filter(m => String(m.contractorId) === selectedContractorId);
+      list = list.filter((m: any) => String(m.contractorId) === selectedContractorId);
     }
     return list;
-  }, [milestones, selectedContractorId]);
+  }, [milestones, selectedContractorId, viewTab]);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold tracking-tight">{t("milestones.title")}</h2>
-          <p className="text-sm text-muted-foreground">{t("milestones.description")}</p>
-        </div>
+         <Tabs value={viewTab} onValueChange={setViewTab} className="w-auto">
+            <TabsList>
+                <TabsTrigger value="active">Active</TabsTrigger>
+                <TabsTrigger value="history">History</TabsTrigger>
+            </TabsList>
+         </Tabs>
+
         <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => {
                 exportToCsv(filteredMilestones, [
@@ -297,7 +315,7 @@ export default function ContractorMilestones() {
                     <Label>Contractor *</Label>
                     <Select value={formData.contractorId} onValueChange={(v) => {
                         const c = contractors.find(c => String(c.id) === v);
-                        setFormData({ ...formData, contractorId: v, currency: c?.currency || "USD" });
+                        setFormData({ ...formData, contractorId: v, currency: (c as any)?.currency || "USD" });
                     }}>
                         <SelectTrigger>
                             <SelectValue placeholder="Select contractor" />

@@ -409,7 +409,12 @@ export default function Invoices() {
             {/* Invoice Month */}
             <div className="space-y-2">
               <Label>{t("invoices.detail.info.invoiceMonth")}</Label>
-              <Input type="month" value={manualForm.invoiceMonth} onChange={(e) => setManualForm({ ...manualForm, invoiceMonth: e.target.value ? e.target.value + "-01" : "" })} />
+              <MonthPicker 
+                value={manualForm.invoiceMonth} 
+                onChange={(v) => setManualForm({ ...manualForm, invoiceMonth: v })} 
+                placeholder={t("invoices.generation.selectMonthPlaceholder")}
+                className="w-full"
+              />
             </div>
 
             {/* Currency */}
@@ -434,7 +439,11 @@ export default function Invoices() {
             {/* Due Date */}
             <div className="space-y-2">
               <Label>{t("invoices.list.table.header.dueDate")}</Label>
-              <Input type="date" value={manualForm.dueDate} onChange={(e) => setManualForm({ ...manualForm, dueDate: e.target.value })} />
+              <DatePicker 
+                value={manualForm.dueDate} 
+                onChange={(d) => setManualForm({ ...manualForm, dueDate: d })} 
+                className="w-full"
+              />
             </div>
 
             {/* Notes */}
