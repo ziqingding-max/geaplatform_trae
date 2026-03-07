@@ -172,9 +172,17 @@ export async function uploadFileToDashScope(buffer: Buffer, filename: string): P
       throw new Error(`DashScope upload failed: ${response.status} - ${errorText}`);
     }
 
-    const data = (await response.json()) as { id: string; output?: { id: string } };
-    // The API might return { id: ... } or { output: { id: ... } } depending on version
-    return data.output?.id || data.id;
+    const data = (await response.json()) as any;
+    // DashScope file upload API returns:
+    // { data: { uploaded_files: [{ name: "...", file_id: "..." }], failed_uploads: [] } }
+    // Also handle legacy formats: { id: ... } or { output: { id: ... } }
+    const fileId = data?.data?.uploaded_files?.[0]?.file_id
+      || data?.output?.id
+      || data?.id;
+    if (!fileId) {
+      throw new Error(`DashScope upload returned unexpected format: ${JSON.stringify(data)}`);
+    }
+    return fileId;
   } catch (error) {
     console.error("[AI Gateway] File upload failed", error);
     throw error;
