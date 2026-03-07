@@ -3,8 +3,7 @@ import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
-import { useRoute } from "wouter";
-import InvoiceDetail from "./InvoiceDetail";
+
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -162,11 +161,6 @@ function InvoiceGenerationPanel() {
 
 /* ========== Main Page Component ========== */
 export default function Invoices() {
-  const [match, params] = useRoute("/invoices/:id");
-  if (match && params?.id) {
-    return <InvoiceDetail />;
-  }
-
   const { t } = useI18n();
   const {
     isLoading,
