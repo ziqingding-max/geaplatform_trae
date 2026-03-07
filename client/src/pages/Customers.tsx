@@ -1405,15 +1405,15 @@ function CustomerDetail({ id }: { id: number }) {
                     <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-2">
                         <Label>{t("customers.contracts.signedDate")}</Label>
-                        <DatePicker value={contractForm.signedDate ? new Date(contractForm.signedDate) : undefined} onChange={(d) => setContractForm({ ...contractForm, signedDate: d ? formatDateISO(d) : "" })} />
+                        <DatePicker value={contractForm.signedDate} onChange={(d) => setContractForm({ ...contractForm, signedDate: d })} />
                       </div>
                       <div className="space-y-2">
                         <Label>{t("customers.contracts.effectiveDate")}</Label>
-                        <DatePicker value={contractForm.effectiveDate ? new Date(contractForm.effectiveDate) : undefined} onChange={(d) => setContractForm({ ...contractForm, effectiveDate: d ? formatDateISO(d) : "" })} />
+                        <DatePicker value={contractForm.effectiveDate} onChange={(d) => setContractForm({ ...contractForm, effectiveDate: d })} />
                       </div>
                       <div className="space-y-2">
                         <Label>{t("customers.contracts.expiryDate")}</Label>
-                        <DatePicker value={contractForm.expiryDate ? new Date(contractForm.expiryDate) : undefined} onChange={(d) => setContractForm({ ...contractForm, expiryDate: d ? formatDateISO(d) : "" })} />
+                        <DatePicker value={contractForm.expiryDate} onChange={(d) => setContractForm({ ...contractForm, expiryDate: d })} />
                       </div>
                     </div>
                     <div className="flex justify-end gap-3 pt-2">

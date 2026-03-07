@@ -2,7 +2,7 @@ import { z } from "zod";
 import { router } from "../_core/trpc";
 import { financeManagerProcedure } from "../procedures";
 import { executeTaskLLM } from "../services/aiGatewayService";
-import { storagePut } from "../storage";
+import { storagePut, storageGet, storageDownload } from "../storage";
 import {
   createVendorBill,
   createVendorBillItem,
@@ -191,12 +191,56 @@ export const pdfParsingRouter = router({
       const systemContext = await buildSystemContext(input.serviceMonth);
 
       // Step 2: Build file content messages for AI
-      const fileMessages: Array<any> = input.files.map((f) => ({
-        type: "image_url" as const,
-        image_url: {
-          url: f.fileUrl,
-        },
-      }));
+      // Get signed URLs for all files (Qwen needs publicly accessible URL)
+      // Note: If using internal/private OSS in a different region than DashScope, URL access might fail.
+      // So we download the file content and send it as base64 to ensure it works regardless of region.
+      const fileMessages: Array<any> = [];
+      for (const f of input.files) {
+        try {
+          let base64Content = "";
+          // Default mime type fallback
+          let mimeType = "application/pdf";
+          const ext = f.fileName.split(".").pop()?.toLowerCase();
+          if (ext === "png") mimeType = "image/png";
+          else if (ext === "jpg" || ext === "jpeg") mimeType = "image/jpeg";
+
+          if (f.fileKey) {
+            // Download from storage
+            const { content, contentType } = await storageDownload(f.fileKey);
+            base64Content = content.toString("base64");
+            if (contentType) mimeType = contentType;
+          } else if (f.fileUrl.startsWith("data:")) {
+            // Already base64
+            base64Content = f.fileUrl.split(",")[1];
+            const meta = f.fileUrl.split(",")[0];
+            const match = meta.match(/:(.*?);/);
+            if (match) mimeType = match[1];
+          } else {
+             // It's a remote URL, try to fetch it
+             const resp = await fetch(f.fileUrl);
+             const arrayBuffer = await resp.arrayBuffer();
+             base64Content = Buffer.from(arrayBuffer).toString("base64");
+             const ct = resp.headers.get("content-type");
+             if (ct) mimeType = ct;
+          }
+          
+          fileMessages.push({
+            type: "image_url" as const,
+            image_url: {
+              url: `data:${mimeType};base64,${base64Content}`,
+            },
+          });
+        } catch (e) {
+          console.warn(`Failed to process file ${f.fileName} for AI analysis`, e);
+          // If download fails, try falling back to the URL method, though likely to fail too if region issue
+          fileMessages.push({
+            type: "image_url" as const,
+            image_url: {
+              url: f.fileUrl,
+            },
+          });
+        }
+      }
 
       // Step 3: Call AI with all files + system context
       const response = await executeTaskLLM("vendor_bill_parse", {

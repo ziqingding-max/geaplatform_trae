@@ -5,7 +5,7 @@
  * i18n: Supports English/Chinese toggle
  */
 
-import { useState, useLayoutEffect, useRef } from "react";
+import { useState, useLayoutEffect, useRef, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -39,6 +39,10 @@ import {
   BookOpen,
   Bot,
   CheckCircle,
+  TrendingUp,
+  Activity,
+  Layers,
+  PieChart
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -47,6 +51,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import NotificationCenter from "@/components/NotificationCenter";
 
@@ -63,56 +72,63 @@ function useNavGroups(user: any) {
 
   return useMemo(() => [
     {
-      label: t("nav.overview"),
+      label: "Overview",
+      icon: LayoutDashboard,
       items: [
         { label: t("nav.dashboard"), icon: LayoutDashboard, href: "/" },
-      ],
+        { label: t("nav.profit_loss"), icon: BarChart3, href: "/reports/profit-loss" },
+      ].filter(() => hasRole(["admin", "finance_manager", "operations_manager"])),
     },
     {
-      label: t("nav.sales"),
+      label: "Sales",
+      icon: TrendingUp,
       items: [
         { label: t("nav.crm_pipeline"), icon: Briefcase, href: "/sales-crm" },
         { label: t("nav.quotations"), icon: FileText, href: "/quotations" },
+        { label: t("nav.countryGuide"), icon: Globe, href: "/admin/knowledge/country-guides" },
       ].filter(() => hasRole(["admin", "sales", "customer_manager"])),
     },
     {
-      label: t("nav.marketing"),
-      items: [
-        { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin", roles: ["admin"] },
-        { label: t("nav.countryGuide"), icon: Globe, href: "/admin/knowledge/country-guides", roles: ["admin", "sales", "customer_manager"] },
-      ].filter(item => !item.roles || hasRole(item.roles)),
-    },
-    {
-      label: t("nav.client_management"),
+      label: "Client Management",
+      icon: Users,
       items: [
         { label: t("nav.customers"), icon: Building2, href: "/customers" },
         { label: t("nav.people"), icon: Users, href: "/people" },
-      ].filter(() => hasRole(["admin", "customer_manager"])),
+      ].filter(() => hasRole(["admin", "customer_manager", "operations_manager"])),
     },
     {
-      label: t("nav.operations"),
+      label: "Operations",
+      icon: Layers,
       items: [
         { label: t("nav.payroll"), icon: DollarSign, href: "/payroll" },
         { label: t("nav.adjustments"), icon: ArrowUpDown, href: "/adjustments" },
         { label: t("nav.reimbursements"), icon: Receipt, href: "/reimbursements" },
-        { label: t("nav.leave"), icon: CalendarDays, href: "/leave" },
+        { label: "Leave & Milestones", icon: CalendarDays, href: "/leave" },
       ].filter(() => hasRole(["admin", "operations_manager"])),
     },
     {
-      label: t("nav.finance"),
+      label: "Finance",
+      icon: PieChart,
       items: [
         { label: t("nav.invoices"), icon: Receipt, href: "/invoices" },
-        { label: "Contractor Invoices", icon: FileText, href: "/admin/contractor-invoices" },
+        { label: "Contractor Invoices", icon: FileStack, href: "/admin/contractor-invoices" },
         { label: "Release Tasks", icon: CheckCircle, href: "/admin/release-tasks" },
-        { label: t("nav.vendors"), icon: Truck, href: "/vendors" },
-        { label: t("nav.vendor_bills"), icon: FileStack, href: "/vendor-bills" },
-        { label: t("nav.profit_loss"), icon: BarChart3, href: "/reports/profit-loss" },
       ].filter(() => hasRole(["admin", "finance_manager"])),
     },
     {
-      label: t("nav.system"),
+      label: "Vendor",
+      icon: Truck,
+      items: [
+        { label: t("nav.vendors"), icon: Truck, href: "/vendors" },
+        { label: t("nav.vendor_bills"), icon: Receipt, href: "/vendor-bills" },
+      ].filter(() => hasRole(["admin", "finance_manager"])),
+    },
+    {
+      label: "System",
+      icon: Settings,
       items: [
         { label: t("nav.settings"), icon: Settings, href: "/settings", roles: ["admin"] },
+        { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin", roles: ["admin"] },
       ].filter(item => !item.roles || hasRole(item.roles)),
     },
   ].filter(group => group.items.length > 0), [t, roleStr]);
@@ -128,14 +144,30 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
   const [location] = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<string[]>([]);
   const { user, logout } = useAuth();
   const { lang, setLang, t } = useI18n();
   const navGroups = useNavGroups(user);
 
   const navRef = useRef<HTMLElement>(null);
 
-  // Removed scroll restoration logic that was causing unwanted jumps
-  // useLayoutEffect(() => { ... })
+  // Auto-expand group based on current location
+  useEffect(() => {
+    const activeGroup = navGroups.find(group => 
+      group.items.some(item => location === item.href || (item.href !== "/" && location.startsWith(item.href)))
+    );
+    if (activeGroup && !openGroups.includes(activeGroup.label)) {
+      setOpenGroups(prev => [...prev, activeGroup.label]);
+    }
+  }, [location, navGroups]);
+
+  const toggleGroup = (label: string) => {
+    setOpenGroups(prev => 
+      prev.includes(label) 
+        ? prev.filter(l => l !== label) 
+        : [...prev, label]
+    );
+  };
 
   const userInitials = user?.name
     ? user.name
@@ -169,41 +201,85 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
       </div>
 
       {/* Navigation */}
-      <nav ref={navRef} className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
-        {navGroups.map((group) => (
-          <div key={group.label}>
-            {!collapsed && (
-              <div className="px-3 mb-1">
-                <span className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-                  {group.label}
-                </span>
-              </div>
-            )}
-            <div className="space-y-0.5">
-              {group.items.map((item) => {
-                const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
-                return (
-                  <Link key={item.href} href={item.href}>
-                    <div
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 cursor-pointer",
-                        collapsed ? "justify-center" : "",
+      <nav ref={navRef} className="flex-1 overflow-y-auto py-3 px-2 space-y-2">
+        {navGroups.map((group) => {
+          const isOpen = openGroups.includes(group.label);
+          const isActiveGroup = group.items.some(item => location === item.href || (item.href !== "/" && location.startsWith(item.href)));
+
+          if (collapsed) {
+             // Collapsed mode: Show group icon with tooltip/popover logic could be added here
+             // For now, we just show the items flat or icons if we want strictly 64px
+             // But to keep it simple and usable:
+             return (
+               <div key={group.label} className="mb-2">
+                 <div className="flex justify-center p-2 text-muted-foreground">
+                   <group.icon className="w-5 h-5" />
+                 </div>
+                 {group.items.map(item => {
+                   const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+                   return (
+                    <Link key={item.href} href={item.href}>
+                      <div className={cn(
+                        "flex justify-center py-2 rounded-md transition-all duration-150 cursor-pointer mb-1",
                         isActive
                           ? "bg-primary text-primary-foreground"
                           : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      )}
-                    >
-                      <item.icon className={cn("flex-shrink-0", collapsed ? "w-5 h-5" : "w-4 h-4")} />
-                      {!collapsed && (
-                        <span className="flex-1">{item.label}</span>
-                      )}
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+                      )} title={item.label}>
+                        <item.icon className="w-4 h-4" />
+                      </div>
+                    </Link>
+                   );
+                 })}
+               </div>
+             );
+          }
+
+          return (
+            <Collapsible
+              key={group.label}
+              open={isOpen}
+              onOpenChange={() => toggleGroup(group.label)}
+              className="space-y-1"
+            >
+              <CollapsibleTrigger asChild>
+                <div className={cn(
+                  "flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors",
+                  "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  isActiveGroup && !isOpen && "bg-sidebar-accent/50"
+                )}>
+                  <div className="flex items-center gap-3">
+                    <group.icon className="w-4 h-4 text-muted-foreground" />
+                    <span>{group.label}</span>
+                  </div>
+                  <ChevronRight className={cn(
+                    "w-4 h-4 text-muted-foreground transition-transform duration-200",
+                    isOpen && "rotate-90"
+                  )} />
+                </div>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-1">
+                {group.items.map((item) => {
+                  const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+                  return (
+                    <Link key={item.href} href={item.href}>
+                      <div
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-2 ml-4 rounded-md text-sm transition-all duration-150 cursor-pointer border-l border-transparent",
+                          isActive
+                            ? "bg-primary/10 text-primary border-primary"
+                            : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50"
+                        )}
+                      >
+                        {/* <item.icon className="w-3.5 h-3.5 flex-shrink-0 opacity-70" /> */}
+                        <span className="flex-1 truncate">{item.label}</span>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </CollapsibleContent>
+            </Collapsible>
+          );
+        })}
       </nav>
 
       {/* Bottom section */}
