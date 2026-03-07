@@ -359,7 +359,7 @@ function EmployeeList() {
                     </div>
                     <div className="space-y-2">
                       <Label>{t("employees.create.form.dateOfBirth")}</Label>
-                      <DatePicker value={formData.dateOfBirth ? new Date(formData.dateOfBirth) : undefined} onChange={(d) => setFormData({ ...formData, dateOfBirth: d ? formatDateISO(d) : "" })} />
+                      <DatePicker value={formData.dateOfBirth} onChange={(d) => setFormData({ ...formData, dateOfBirth: d })} />
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-4">
@@ -420,14 +420,14 @@ function EmployeeList() {
                     <div className="space-y-2">
                       <Label>{t("employees.create.form.startDate")} <span className="text-red-500">*</span></Label>
                       <div className={errors.startDate ? "rounded-md ring-1 ring-red-500" : ""}>
-                        <DatePicker value={formData.startDate ? new Date(formData.startDate) : undefined} onChange={(d) => { setFormData({ ...formData, startDate: d ? formatDateISO(d) : "" }); setErrors({ ...errors, startDate: false }); }} />
+                        <DatePicker value={formData.startDate} onChange={(d) => { setFormData({ ...formData, startDate: d }); setErrors({ ...errors, startDate: false }); }} />
                       </div>
                       {errors.startDate && <p className="text-xs text-red-500">{t("common.required")}</p>}
                     </div>
                     {formData.employmentType === "fixed_term" && (
                     <div className="space-y-2">
                       <Label>{t("employees.create.form.endDate")}</Label>
-                      <DatePicker value={formData.endDate ? new Date(formData.endDate) : undefined} onChange={(d) => setFormData({ ...formData, endDate: d ? formatDateISO(d) : "" })} />
+                      <DatePicker value={formData.endDate} onChange={(d) => setFormData({ ...formData, endDate: d })} />
                     </div>
                     )}
                   </div>
@@ -1309,7 +1309,7 @@ function EmployeeDetail({ id }: { id: number }) {
                   </div>
                   <div className="space-y-2">
                     <Label>{t("employees.detail.visa.status.labels.expiryDate")}</Label>
-                    <DatePicker value={editForm.visaExpiryDate ? new Date(editForm.visaExpiryDate) : undefined} onChange={d => setEditForm((f: any) => ({ ...f, visaExpiryDate: d ? formatDateISO(d) : "" }))} />
+                    <DatePicker value={editForm.visaExpiryDate} onChange={d => setEditForm((f: any) => ({ ...f, visaExpiryDate: d }))} />
                   </div>
                   <div className="space-y-2">
                     <Label>{t("employees.detail.status.update.notes")}</Label>
@@ -1528,7 +1528,7 @@ function EmployeeDetail({ id }: { id: number }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t("employees.create.form.dateOfBirth")}</Label>
-                    <DatePicker value={editForm.dateOfBirth ? new Date(editForm.dateOfBirth) : undefined} onChange={(d) => setEditForm({ ...editForm, dateOfBirth: d ? formatDateISO(d) : "" })} />
+                    <DatePicker value={editForm.dateOfBirth} onChange={(d) => setEditForm({ ...editForm, dateOfBirth: d })} />
                   </div>
                   <div className="space-y-2">
                     <Label>{t("employees.edit.gender")}</Label>
@@ -1645,12 +1645,12 @@ function EmployeeDetail({ id }: { id: number }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t("employees.edit.startDateContractEffective")}</Label>
-                    <DatePicker value={editForm.startDate ? new Date(editForm.startDate) : undefined} onChange={(d) => setEditForm({ ...editForm, startDate: d ? formatDateISO(d) : "" })} />
+                    <DatePicker value={editForm.startDate} onChange={(d) => setEditForm({ ...editForm, startDate: d })} />
                   </div>
                   {(editForm.employmentType === "fixed_term") && (
                   <div className="space-y-2">
                     <Label>{t("employees.create.form.endDate")}</Label>
-                    <DatePicker value={editForm.endDate ? new Date(editForm.endDate) : undefined} onChange={(d) => setEditForm({ ...editForm, endDate: d ? formatDateISO(d) : "" })} />
+                    <DatePicker value={editForm.endDate} onChange={(d) => setEditForm({ ...editForm, endDate: d })} />
                   </div>
                   )}
                 </div>
