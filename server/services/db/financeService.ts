@@ -26,15 +26,91 @@ export async function createInvoice(data: InsertInvoice) {
 export async function getInvoiceById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
-  return result[0];
+  try {
+    const result = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
+    return result[0];
+  } catch (error: any) {
+    // Fallback: if SELECT * fails (e.g. missing column in DB), use explicit column list
+    if (error?.message?.includes('no such column') || error?.message?.includes('SQLITE_ERROR')) {
+      console.warn('[financeService] SELECT * failed, using explicit columns:', error.message);
+      const result = await db.select({
+        id: invoices.id,
+        customerId: invoices.customerId,
+        billingEntityId: invoices.billingEntityId,
+        invoiceNumber: invoices.invoiceNumber,
+        invoiceType: invoices.invoiceType,
+        invoiceMonth: invoices.invoiceMonth,
+        currency: invoices.currency,
+        exchangeRate: invoices.exchangeRate,
+        exchangeRateWithMarkup: invoices.exchangeRateWithMarkup,
+        subtotal: invoices.subtotal,
+        serviceFeeTotal: invoices.serviceFeeTotal,
+        tax: invoices.tax,
+        total: invoices.total,
+        status: invoices.status,
+        dueDate: invoices.dueDate,
+        sentDate: invoices.sentDate,
+        paidDate: invoices.paidDate,
+        paidAmount: invoices.paidAmount,
+        creditApplied: invoices.creditApplied,
+        walletAppliedAmount: invoices.walletAppliedAmount,
+        amountDue: invoices.amountDue,
+        costAllocated: invoices.costAllocated,
+        relatedInvoiceId: invoices.relatedInvoiceId,
+        notes: invoices.notes,
+        internalNotes: invoices.internalNotes,
+        createdAt: invoices.createdAt,
+        updatedAt: invoices.updatedAt,
+      }).from(invoices).where(eq(invoices.id, id)).limit(1);
+      return result[0];
+    }
+    throw error;
+  }
 }
 
 export async function getInvoiceByNumber(invoiceNumber: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(invoices).where(eq(invoices.invoiceNumber, invoiceNumber)).limit(1);
-  return result[0];
+  try {
+    const result = await db.select().from(invoices).where(eq(invoices.invoiceNumber, invoiceNumber)).limit(1);
+    return result[0];
+  } catch (error: any) {
+    // Fallback: if SELECT * fails (e.g. missing column in DB), use explicit column list
+    if (error?.message?.includes('no such column') || error?.message?.includes('SQLITE_ERROR')) {
+      console.warn('[financeService] SELECT * failed, using explicit columns:', error.message);
+      const result = await db.select({
+        id: invoices.id,
+        customerId: invoices.customerId,
+        billingEntityId: invoices.billingEntityId,
+        invoiceNumber: invoices.invoiceNumber,
+        invoiceType: invoices.invoiceType,
+        invoiceMonth: invoices.invoiceMonth,
+        currency: invoices.currency,
+        exchangeRate: invoices.exchangeRate,
+        exchangeRateWithMarkup: invoices.exchangeRateWithMarkup,
+        subtotal: invoices.subtotal,
+        serviceFeeTotal: invoices.serviceFeeTotal,
+        tax: invoices.tax,
+        total: invoices.total,
+        status: invoices.status,
+        dueDate: invoices.dueDate,
+        sentDate: invoices.sentDate,
+        paidDate: invoices.paidDate,
+        paidAmount: invoices.paidAmount,
+        creditApplied: invoices.creditApplied,
+        walletAppliedAmount: invoices.walletAppliedAmount,
+        amountDue: invoices.amountDue,
+        costAllocated: invoices.costAllocated,
+        relatedInvoiceId: invoices.relatedInvoiceId,
+        notes: invoices.notes,
+        internalNotes: invoices.internalNotes,
+        createdAt: invoices.createdAt,
+        updatedAt: invoices.updatedAt,
+      }).from(invoices).where(eq(invoices.invoiceNumber, invoiceNumber)).limit(1);
+      return result[0];
+    }
+    throw error;
+  }
 }
 
 export async function listInvoices(

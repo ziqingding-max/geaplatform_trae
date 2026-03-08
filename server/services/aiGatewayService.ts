@@ -20,11 +20,10 @@ function extractTokenUsage(result: InvokeResult): { inputTokens: number; outputT
 }
 
 function estimateCost(task: AITask, inputTokens: number, outputTokens: number): number {
-  // Qwen-Plus pricing (approx): Input $0.0004/1k, Output $0.0012/1k
-  // Qwen-VL-Plus pricing (approx): Input $0.0012/1k, Output $0.0036/1k
-  const isVisual = task === "vendor_bill_parse";
-  const inRate = isVisual ? 0.0000012 : 0.0000004;
-  const outRate = isVisual ? 0.0000036 : 0.0000012;
+  // Qwen-Plus pricing (approx): Input ¥0.0005/1k, Output ¥0.002/1k
+  // Qwen-Long pricing (approx): Input ¥0.0005/1k, Output ¥0.002/1k
+  const inRate = 0.0000005;
+  const outRate = 0.000002;
   return Number((inputTokens * inRate + outputTokens * outRate).toFixed(6));
 }
 
@@ -61,6 +60,16 @@ async function logTaskExecution(payload: {
   }
 }
 
+/**
+ * Invoke OpenAI-compatible chat completions API.
+ * 
+ * For qwen-long model, the messages format is:
+ *   - 1st system message: role definition
+ *   - 2nd system message: fileid://xxx references (for document content)
+ *   - user message: the actual question/prompt
+ * 
+ * For other models (qwen-plus), standard messages format is used.
+ */
 async function invokeOpenAICompatible(
   baseUrl: string,
   apiKey: string,
@@ -99,10 +108,12 @@ export async function executeTaskLLM(task: AITask, params: InvokeParams): Promis
   }
 
   // Automatic Model Selection
-  // vendor_bill_parse requires vision capabilities -> qwen-vl-max
-  // qwen-vl-max supports PDF parsing via fileid:// and structured output (json_schema)
-  // all other tasks use standard text model -> qwen-plus
-  const model = task === "vendor_bill_parse" ? "qwen-vl-max" : "qwen-plus";
+  // vendor_bill_parse: uses qwen-long for document understanding (PDF, Excel, images)
+  //   - Files are uploaded via DashScope Files API and referenced via fileid:// in system messages
+  //   - Supports structured output (json_schema) via response_format
+  //   - 10M token context window, ideal for large vendor bills
+  // All other tasks: use standard text model qwen-plus
+  const model = task === "vendor_bill_parse" ? "qwen-long" : "qwen-plus";
   
   // Use Alibaba Cloud compatible-mode endpoint
   const baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
@@ -142,8 +153,17 @@ export async function executeTaskLLM(task: AITask, params: InvokeParams): Promis
 }
 
 /**
- * Upload a file to DashScope for AI processing
- * Returns the file ID (e.g. "file-feiwj...")
+ * Upload a file to DashScope for AI processing via OpenAI-compatible Files API.
+ * Returns the file ID (e.g. "file-fe-xxx...")
+ * 
+ * Qwen-Long uses the OpenAI-compatible file upload endpoint:
+ *   POST https://dashscope.aliyuncs.com/compatible-mode/v1/files
+ * 
+ * The returned file_id can be referenced in system messages as:
+ *   fileid://<file_id>
+ * 
+ * Supported formats: TXT, DOCX, PDF, XLSX, EPUB, MOBI, MD, CSV, JSON, BMP, PNG, JPG/JPEG, GIF
+ * File size limits: Images ≤ 20MB, Others ≤ 150MB
  */
 export async function uploadFileToDashScope(buffer: Buffer, filename: string): Promise<string> {
   const apiKey = resolveEnvKey("DASHSCOPE_API_KEY");
@@ -158,7 +178,8 @@ export async function uploadFileToDashScope(buffer: Buffer, filename: string): P
   formData.append("purpose", "file-extract");
 
   try {
-    const response = await fetch("https://dashscope.aliyuncs.com/api/v1/files", {
+    // Use OpenAI-compatible file upload endpoint (works with both qwen-long and qwen-vl)
+    const response = await fetch("https://dashscope.aliyuncs.com/compatible-mode/v1/files", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -174,12 +195,11 @@ export async function uploadFileToDashScope(buffer: Buffer, filename: string): P
     }
 
     const data = (await response.json()) as any;
-    // DashScope file upload API returns:
-    // { data: { uploaded_files: [{ name: "...", file_id: "..." }], failed_uploads: [] } }
-    // Also handle legacy formats: { id: ... } or { output: { id: ... } }
-    const fileId = data?.data?.uploaded_files?.[0]?.file_id
-      || data?.output?.id
-      || data?.id;
+    // OpenAI-compatible endpoint returns: { id: "file-xxx", object: "file", ... }
+    // Legacy DashScope endpoint returns: { data: { uploaded_files: [...] } }
+    const fileId = data?.id
+      || data?.data?.uploaded_files?.[0]?.file_id
+      || data?.output?.id;
     if (!fileId) {
       throw new Error(`DashScope upload returned unexpected format: ${JSON.stringify(data)}`);
     }
