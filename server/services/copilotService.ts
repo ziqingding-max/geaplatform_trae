@@ -20,8 +20,8 @@ import { hasAnyRole } from "../../shared/roles";
 import { storagePut } from "../storage";
 import { ENV } from "../_core/env";
 import { getCopilotCacheManager } from "./copilotCache";
-import { executeTaskLLM } from "./aiGatewayService";
-import type { InvokeParams, AITask } from "../_core/llm";
+import { executeTaskLLM, type AITask } from "./aiGatewayService";
+import type { InvokeParams } from "../_core/llm";
 
 // 类型定义
 interface Attachment {
@@ -243,11 +243,17 @@ export class CopilotService {
 
       const result = await executeTaskLLM(taskType, invokeParams);
 
+      // Extract text content from OpenAI-compatible response format
+      const responseText = result.choices?.[0]?.message?.content;
+      if (!responseText || typeof responseText !== "string") {
+        throw new Error("AI returned empty or invalid response");
+      }
+
       // 提取建议操作
-      const suggestedActions = this.extractSuggestedActions(result.content, sanitizedMessage, dataContext);
+      const suggestedActions = this.extractSuggestedActions(responseText, sanitizedMessage, dataContext);
 
       return {
-        text: sanitizeContent(result.content), // 对AI响应也进行安全验证
+        text: sanitizeContent(responseText), // 对AI响应也进行安全验证
         suggestedActions,
         confidence: 85, // 默认置信度
         providerUsed: "ai_gateway",

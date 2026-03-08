@@ -359,9 +359,63 @@ export async function getActiveLeaveRecordsForDate(employeeId: number, date: Dat
     ));
 }
 
-export async function getOnLeaveEmployeesWithExpiredLeave() {
-  // Placeholder logic
-  return [];
+/**
+ * Get all approved leave records that are active on a given date (across all employees).
+ * Used by cronJobs for daily leave status transitions.
+ * @param dateStr - Date string in YYYY-MM-DD format
+ */
+export async function getAllActiveLeaveRecordsForDate(dateStr: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(leaveRecords)
+    .where(and(
+      lte(leaveRecords.startDate, dateStr),
+      gte(leaveRecords.endDate, dateStr),
+      or(
+        eq(leaveRecords.status, 'approved'),
+        eq(leaveRecords.status, 'admin_approved'),
+        eq(leaveRecords.status, 'locked')
+      )
+    ));
+}
+
+/**
+ * Get on_leave employees whose all leave records have ended (endDate < today).
+ * Used by cronJobs to transition employees back to active status.
+ * @param todayStr - Date string in YYYY-MM-DD format
+ */
+export async function getOnLeaveEmployeesWithExpiredLeave(todayStr?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const dateStr = todayStr || new Date().toISOString().split('T')[0];
+  
+  // Find employees with status 'on_leave' who have NO active leave records for today
+  const onLeaveEmps = await db.select({ id: employees.id, employeeCode: employees.employeeCode })
+    .from(employees)
+    .where(eq(employees.status, 'on_leave'));
+  
+  const result: Array<{ id: number; employeeCode: string | null }> = [];
+  for (const emp of onLeaveEmps) {
+    // Check if they have any active leave records covering today
+    const activeLeaves = await db.select().from(leaveRecords)
+      .where(and(
+        eq(leaveRecords.employeeId, emp.id),
+        lte(leaveRecords.startDate, dateStr),
+        gte(leaveRecords.endDate, dateStr),
+        or(
+          eq(leaveRecords.status, 'approved'),
+          eq(leaveRecords.status, 'admin_approved'),
+          eq(leaveRecords.status, 'locked')
+        )
+      ))
+      .limit(1);
+    
+    if (activeLeaves.length === 0) {
+      // No active leave records covering today - employee should return to active
+      result.push(emp);
+    }
+  }
+  return result;
 }
 
 export async function getSubmittedUnpaidLeaveForPayroll(countryCodeOrEmployeeId: string | number, monthStr: string, statuses: string[] = ['admin_approved']) {

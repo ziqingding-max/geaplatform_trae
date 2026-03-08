@@ -477,7 +477,7 @@ IMPORTANT RULES:
       // Step 4: Try to match or auto-create vendor
       parsed.vendorMatch = null;
       if (parsed.vendor?.name && !input.vendorId) {
-        const vendorList = await listVendors({ search: parsed.vendor.name }, 5, 0);
+        const vendorList = await listVendors({ search: parsed.vendor.name, pageSize: 5 });
         if (vendorList.data.length > 0) {
           parsed.vendorMatch = {
             status: "matched",
@@ -535,7 +535,7 @@ IMPORTANT RULES:
           }
         }
       } else if (input.vendorId) {
-        const vendorList = await listVendors({}, 1, 0);
+        const vendorList = await listVendors({ pageSize: 1 });
         const db = await getDb();
         if (db) {
           const vRows = await db.select().from(vendors).where(eq(vendors.id, input.vendorId)).limit(1);
@@ -647,7 +647,7 @@ IMPORTANT RULES:
             vendorBillId: billId,
             ...item,
           });
-          itemIds.push(itemId);
+          if (itemId) itemIds.push(itemId);
         }
       }
 
@@ -852,7 +852,7 @@ Be precise with numbers. If a field is not found, use null.`,
 
       // Try to match vendor
       if (parsed.vendorName && !input.vendorId) {
-        const vendorList = await listVendors({ search: parsed.vendorName }, 5, 0);
+        const vendorList = await listVendors({ search: parsed.vendorName, pageSize: 5 });
         parsed.matchedVendors = vendorList.data.map((v: any) => ({
           id: v.id,
           name: v.name,

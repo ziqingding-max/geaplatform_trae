@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { desc, eq, gte, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { 
   protectedProcedure, 
@@ -20,7 +19,7 @@ import {
   copilotShortcuts, 
   copilotMetrics 
 } from "../../drizzle/schema";
-import { eq, and, desc, sql, count, sum, avg } from "drizzle-orm";
+import { eq, and, desc, gte, inArray, sql, count, sum, avg } from "drizzle-orm";
 import { getDb } from "../db";
 import { hasAnyRole } from "../../shared/roles";
 import { storagePut } from "../storage";

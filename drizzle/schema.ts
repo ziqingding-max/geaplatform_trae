@@ -1490,7 +1490,7 @@ export const aiTaskExecutions = sqliteTable(
   "ai_task_executions",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    taskType: text("taskType", { enum: ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit"] }).notNull(),
+    taskType: text("taskType", { enum: ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit", "knowledge_generate_guide", "copilot_chat"] }).notNull(),
     providerPrimary: text("providerPrimary", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
     providerActual: text("providerActual", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
     fallbackTriggered: integer("fallbackTriggered", { mode: "boolean" }).default(false).notNull(),

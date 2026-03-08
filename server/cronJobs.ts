@@ -34,7 +34,7 @@ import {
   getSubmittedAdjustmentsForPayroll,
   getSubmittedUnpaidLeaveForPayroll,
   updatePayrollRun,
-  getActiveLeaveRecordsForDate,
+  getAllActiveLeaveRecordsForDate,
   getOnLeaveEmployeesWithExpiredLeave,
   initializeLeaveBalancesForEmployee,
   listEmployees,
@@ -148,7 +148,7 @@ export async function runEmployeeAutoActivation(): Promise<{ activated: number; 
 
     // Auto-initialize leave balances for newly activated employee
     try {
-      await initializeLeaveBalancesForEmployee(emp.id, emp.country, currentYear, emp.customerId);
+      await initializeLeaveBalancesForEmployee(emp.id);
       console.log(`[CronJob] Initialized leave balances for ${emp.employeeCode}`);
     } catch (err) {
       console.error(`[CronJob] Failed to initialize leave balances for ${emp.employeeCode}:`, err);
@@ -489,7 +489,7 @@ export async function runLeaveStatusTransition(): Promise<{ toOnLeave: number; t
   let toActive = 0;
 
   // 1. Find active employees who have leave records starting today or earlier
-  const activeLeaves = await getActiveLeaveRecordsForDate(todayStr);
+  const activeLeaves = await getAllActiveLeaveRecordsForDate(todayStr);
   
   // Group by employee to avoid duplicate transitions
   const employeesWithActiveLeave = new Set<number>();
@@ -567,18 +567,16 @@ export async function runOverdueInvoiceDetection(): Promise<{ overdueCount: numb
   const { invoices } = await import("../drizzle/schema");
   const { eq, and, lt, isNotNull } = await import("drizzle-orm");
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
+   const todayStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
   // Find all sent invoices with dueDate < today
   const overdueInvoices = await db
     .select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber, dueDate: invoices.dueDate, customerId: invoices.customerId })
     .from(invoices)
     .where(
       and(
-        eq(invoices.status, "sent"),
+        eq(invoices.status, "sent" as any),
         isNotNull(invoices.dueDate),
-        lt(invoices.dueDate, today)
+        lt(invoices.dueDate, todayStr)
       )
     );
 
@@ -715,7 +713,7 @@ export async function runMonthlyLeaveAccrual(): Promise<{ processed: number; upd
           });
           updated++;
           console.log(`[CronJob] Updated leave balance for ${emp.firstName} ${emp.lastName} (${emp.employeeCode}): ` +
-            `leaveType=${balance.leaveTypeName}, months=${fullMonthsServed}, accrued=${finalAccrued}/${annualEntitlement}`);
+            `leaveTypeId=${balance.leaveTypeId}, months=${fullMonthsServed}, accrued=${finalAccrued}/${annualEntitlement}`);
         }
       }
     } catch (err) {
