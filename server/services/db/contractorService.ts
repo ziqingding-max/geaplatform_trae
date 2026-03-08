@@ -39,7 +39,7 @@ export async function getContractorById(id: number) {
   
   const result = await db.select({
     ...getTableColumns(contractors),
-    defaultApproverName: users.displayName,
+    defaultApproverName: users.name,
     customerName: customers.companyName,
   })
   .from(contractors)
@@ -123,7 +123,7 @@ export async function listContractorMilestones(contractorId: number) {
   if (!db) return [];
   return await db.select({
     ...getTableColumns(contractorMilestones),
-    approverName: users.displayName
+    approverName: users.name
   })
   .from(contractorMilestones)
   .leftJoin(users, eq(contractorMilestones.approvedBy, users.id))

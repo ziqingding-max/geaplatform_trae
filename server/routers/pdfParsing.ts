@@ -167,6 +167,30 @@ async function buildSystemContext(serviceMonth?: string) {
   };
 }
 
+/**
+ * Helper: Download file content from various sources (storage key, data URL, or remote URL)
+ * and upload to DashScope Files API to get a file-id for Qwen-Long.
+ */
+async function uploadFileForAI(fileUrl: string, fileKey: string, fileName: string): Promise<string> {
+  let fileBuffer: Buffer;
+
+  if (fileKey) {
+    const { content } = await storageDownload(fileKey);
+    fileBuffer = content;
+  } else if (fileUrl.startsWith("data:")) {
+    const base64Content = fileUrl.split(",")[1];
+    fileBuffer = Buffer.from(base64Content, "base64");
+  } else {
+    const resp = await fetch(fileUrl);
+    const arrayBuffer = await resp.arrayBuffer();
+    fileBuffer = Buffer.from(arrayBuffer);
+  }
+
+  // Upload to DashScope Files API (OpenAI-compatible endpoint)
+  // Returns a file-id that can be referenced as fileid://<id> in system messages
+  return await uploadFileToDashScope(fileBuffer, fileName);
+}
+
 
 
 export const pdfParsingRouter = router({
@@ -190,93 +214,36 @@ export const pdfParsingRouter = router({
       // Step 1: Build system context
       const systemContext = await buildSystemContext(input.serviceMonth);
 
-      // Step 2: Build file content messages for AI
-      // Get signed URLs for all files (Qwen needs publicly accessible URL)
-      // Note: If using internal/private OSS in a different region than DashScope, URL access might fail.
-      // So we download the file content and send it as base64 to ensure it works regardless of region.
-      // However, Qwen-VL only supports base64 for IMAGES. For PDFs, we must use the URL.
-      const fileMessages: Array<any> = [];
+      // Step 2: Upload ALL files to DashScope and collect file-ids
+      // Qwen-Long uses fileid:// references in system messages for document understanding.
+      // This works for ALL file types: PDF, Excel, images, etc.
+      const fileIds: string[] = [];
+      const fileUploadErrors: string[] = [];
+      
       for (const f of input.files) {
         try {
-          const ext = f.fileName.split(".").pop()?.toLowerCase();
-          const isImage = ["png", "jpg", "jpeg", "webp", "gif", "bmp"].includes(ext || "");
-
-          if (isImage) {
-            let base64Content = "";
-            let mimeType = "image/jpeg"; // Default for images
-            
-            if (ext === "png") mimeType = "image/png";
-            else if (ext === "webp") mimeType = "image/webp";
-            else if (ext === "gif") mimeType = "image/gif";
-
-            if (f.fileKey) {
-              // Download from storage
-              const { content, contentType } = await storageDownload(f.fileKey);
-              base64Content = content.toString("base64");
-              if (contentType) mimeType = contentType;
-            } else if (f.fileUrl.startsWith("data:")) {
-              // Already base64
-              base64Content = f.fileUrl.split(",")[1];
-              const meta = f.fileUrl.split(",")[0];
-              const match = meta.match(/:(.*?);/);
-              if (match) mimeType = match[1];
-            } else {
-               // It's a remote URL, try to fetch it
-               const resp = await fetch(f.fileUrl);
-               const arrayBuffer = await resp.arrayBuffer();
-               base64Content = Buffer.from(arrayBuffer).toString("base64");
-               const ct = resp.headers.get("content-type");
-               if (ct) mimeType = ct;
-            }
-            
-            fileMessages.push({
-              type: "image_url" as const,
-              image_url: {
-                url: `data:${mimeType};base64,${base64Content}`,
-              },
-            });
-          } else {
-            // For PDFs and other non-image files, we MUST use the URL.
-            // Qwen-VL-Plus supports PDF parsing via URL, but not via base64 in image_url field.
-            // However, due to "Unsupported internal OSS region" error when using OSS URLs,
-            // we must upload the file to DashScope first and use the file ID.
-            let fileBuffer: Buffer;
-            
-            if (f.fileKey) {
-               const { content } = await storageDownload(f.fileKey);
-               fileBuffer = content;
-            } else if (f.fileUrl.startsWith("data:")) {
-               const base64Content = f.fileUrl.split(",")[1];
-               fileBuffer = Buffer.from(base64Content, "base64");
-            } else {
-               const resp = await fetch(f.fileUrl);
-               const arrayBuffer = await resp.arrayBuffer();
-               fileBuffer = Buffer.from(arrayBuffer);
-            }
-
-            // Upload to DashScope to bypass OSS region issues
-            const fileId = await uploadFileToDashScope(fileBuffer, f.fileName);
-            
-            fileMessages.push({
-              type: "image_url" as const,
-              image_url: {
-                url: `fileid://${fileId}`,
-              },
-            });
-          }
-        } catch (e) {
-          console.warn(`Failed to process file ${f.fileName} for AI analysis`, e);
-          // Fallback to URL
-          fileMessages.push({
-            type: "image_url" as const,
-            image_url: {
-              url: f.fileUrl,
-            },
-          });
+          const fileId = await uploadFileForAI(f.fileUrl, f.fileKey, f.fileName);
+          fileIds.push(fileId);
+        } catch (e: any) {
+          console.warn(`Failed to upload file ${f.fileName} to DashScope:`, e?.message);
+          fileUploadErrors.push(`${f.fileName}: ${e?.message || "upload failed"}`);
         }
       }
 
-      // Step 3: Call AI with all files + system context
+      if (fileIds.length === 0) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `All file uploads failed: ${fileUploadErrors.join("; ")}`,
+        });
+      }
+
+      // Step 3: Build Qwen-Long messages
+      // Qwen-Long message format:
+      //   - 1st system message: role definition + task instructions + system data
+      //   - 2nd system message: fileid:// references (document content)
+      //   - user message: the actual question (max 9,000 tokens when 2nd system msg exists)
+      const fileIdReferences = fileIds.map((id) => `fileid://${id}`).join(",");
+
       const response = await executeTaskLLM("vendor_bill_parse", {
         messages: [
           {
@@ -373,14 +340,14 @@ IMPORTANT RULES:
 - For operational costs (bank fees, office rent, etc.), set vendorType to "operational" and skip allocation suggestions.`,
           },
           {
+            // 2nd system message: document content via fileid:// references
+            // Qwen-Long will parse and understand all referenced files (PDF, Excel, images, etc.)
+            role: "system",
+            content: fileIdReferences,
+          },
+          {
             role: "user",
-            content: [
-              ...fileMessages,
-              {
-                type: "text",
-                text: `I'm uploading ${input.files.length} document(s) from a single vendor for service month ${input.serviceMonth}. File types: ${input.files.map((f) => `${f.fileName} (${f.fileType})`).join(", ")}. Please analyze all documents together, cross-validate the information, and provide structured extraction with confidence scores and allocation suggestions.`,
-              },
-            ],
+            content: `I'm uploading ${input.files.length} document(s) from a single vendor for service month ${input.serviceMonth}. File types: ${input.files.map((f) => `${f.fileName} (${f.fileType})`).join(", ")}. Please analyze all documents together, cross-validate the information, and provide structured extraction with confidence scores and allocation suggestions.`,
           },
         ],
         response_format: {
@@ -773,6 +740,7 @@ IMPORTANT RULES:
     }),
 
   // Legacy: Single file parse (kept for backward compatibility)
+  // Now uses Qwen-Long with fileid:// for document understanding
   parseVendorInvoice: financeManagerProcedure
     .input(
       z.object({
@@ -782,7 +750,17 @@ IMPORTANT RULES:
       })
     )
     .mutation(async ({ input, ctx }) => {
-      // Redirect to multi-file parse with single file
+      // Upload file to DashScope for Qwen-Long processing
+      let fileId: string;
+      try {
+        fileId = await uploadFileForAI(input.fileUrl, input.fileKey, "vendor-invoice");
+      } catch (e: any) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Failed to upload file for AI processing: ${e?.message}`,
+        });
+      }
+
       const response = await executeTaskLLM("vendor_bill_parse", {
         messages: [
           {
@@ -809,14 +787,13 @@ Return a JSON object with these fields:
 Be precise with numbers. If a field is not found, use null.`,
           },
           {
+            // 2nd system message: document content via fileid://
+            role: "system",
+            content: `fileid://${fileId}`,
+          },
+          {
             role: "user",
-            content: [
-              {
-                type: "image_url",
-                image_url: { url: input.fileUrl },
-              },
-              { type: "text", text: "Parse this vendor invoice." },
-            ],
+            content: "Parse this vendor invoice.",
           },
         ],
         response_format: {
