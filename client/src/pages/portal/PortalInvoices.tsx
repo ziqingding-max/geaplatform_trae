@@ -8,13 +8,12 @@
  * - Color system: green=client-favorable, yellow=pending, red=urgent, grey=inactive
  * - Balance Due column with proper accounting logic
  * - Credit Note remaining balance display
- * - Account Summary with net deposit balance
  */
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -27,8 +26,7 @@ import {
 } from "@/components/ui/select";
 import {
   Receipt, Download, ChevronLeft, ChevronRight, FileText,
-  CreditCard, Wallet, Info, ArrowUpRight, AlertTriangle,
-  CheckCircle2, Clock, Eye, BarChart3, Archive,
+  ArrowUpRight, Eye, Archive,
 } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -106,8 +104,6 @@ export default function PortalInvoices() {
     status: statusFilter === "all" ? undefined : statusFilter,
   });
 
-  const { data: summary } = portalTrpc.invoices.accountSummary.useQuery();
-
   const items = listData?.items ?? [];
   const total = listData?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
@@ -141,18 +137,9 @@ export default function PortalInvoices() {
     ];
   }, [mainTab]);
 
-  // Quick stats from current data
-  const quickStats = useMemo(() => {
-    if (!summary) return null;
-    return {
-      outstanding: summary.outstandingBalance,
-      overdue: items.filter((i: any) => i.status === "overdue").length,
-    };
-  }, [summary, items]);
-
   return (
     <PortalLayout title={t("portal_invoices.title")}>
-      <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+      <div className="p-6 space-y-6">
         {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -162,19 +149,6 @@ export default function PortalInvoices() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {quickStats && quickStats.outstanding > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-50 border border-amber-200">
-                <AlertTriangle className="w-4 h-4 text-amber-600" />
-                <span className="text-sm font-medium text-amber-800">
-                  Outstanding: {formatCurrency(undefined, quickStats.outstanding)}
-                </span>
-                {quickStats.overdue > 0 && (
-                  <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs ml-1">
-                    {quickStats.overdue} overdue
-                  </Badge>
-                )}
-              </div>
-            )}
             <Button
               variant="outline"
               size="sm"
@@ -197,7 +171,7 @@ export default function PortalInvoices() {
           </div>
         </div>
 
-        {/* Main Tabs: Active / History / Summary */}
+        {/* Main Tabs: Active / History */}
         <Tabs value={mainTab} onValueChange={handleMainTabChange}>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <TabsList className="h-10">
@@ -207,37 +181,32 @@ export default function PortalInvoices() {
               <TabsTrigger value="history" className="gap-1.5 px-4">
                 <Archive className="w-4 h-4" /> History
               </TabsTrigger>
-              <TabsTrigger value="summary" className="gap-1.5 px-4">
-                <BarChart3 className="w-4 h-4" /> Summary
-              </TabsTrigger>
             </TabsList>
 
-            {/* Filters — only show for Active and History tabs */}
-            {mainTab !== "summary" && (
-              <div className="flex items-center gap-2">
-                <Select value={typeCategory} onValueChange={handleTypeCategoryChange}>
-                  <SelectTrigger className="w-[140px] h-9 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{t("portal_invoices.filter.all_types")}</SelectItem>
-                    <SelectItem value="receivables">{t("portal_invoices.filter.receivables")}</SelectItem>
-                    <SelectItem value="credits">{t("portal_invoices.filter.credits")}</SelectItem>
-                    <SelectItem value="deposits">{t("portal_invoices.filter.deposits")}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
-                  <SelectTrigger className="w-[140px] h-9 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map(opt => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            {/* Filters */}
+            <div className="flex items-center gap-2">
+              <Select value={typeCategory} onValueChange={handleTypeCategoryChange}>
+                <SelectTrigger className="w-[140px] h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t("portal_invoices.filter.all_types")}</SelectItem>
+                  <SelectItem value="receivables">{t("portal_invoices.filter.receivables")}</SelectItem>
+                  <SelectItem value="credits">{t("portal_invoices.filter.credits")}</SelectItem>
+                  <SelectItem value="deposits">{t("portal_invoices.filter.deposits")}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+                <SelectTrigger className="w-[140px] h-9 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Active & History Tabs — share the same table layout */}
@@ -307,96 +276,6 @@ export default function PortalInvoices() {
               )}
             </TabsContent>
           ))}
-
-          {/* Account Summary Tab */}
-          <TabsContent value="summary" className="space-y-6 mt-4">
-            {!summary ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <SummaryCard
-                    icon={FileText}
-                    iconBg="bg-blue-50"
-                    iconColor="text-blue-600"
-                    label="Total Invoiced"
-                    value={formatCurrency(undefined, summary.totalInvoiced)}
-                  />
-                  <SummaryCard
-                    icon={CheckCircle2}
-                    iconBg="bg-emerald-50"
-                    iconColor="text-emerald-600"
-                    label="Total Paid"
-                    value={formatCurrency(undefined, summary.totalPaid)}
-                    valueColor="text-emerald-700"
-                  />
-                  <SummaryCard
-                    icon={AlertTriangle}
-                    iconBg="bg-amber-50"
-                    iconColor="text-amber-600"
-                    label="Outstanding Balance"
-                    value={formatCurrency(undefined, summary.outstandingBalance)}
-                    valueColor={summary.outstandingBalance > 0 ? "text-amber-700" : undefined}
-                  />
-                  <SummaryCard
-                    icon={CreditCard}
-                    iconBg={summary.creditBalance === 0 && summary.totalCreditNotes > 0 ? "bg-gray-100" : "bg-emerald-50"}
-                    iconColor={summary.creditBalance === 0 && summary.totalCreditNotes > 0 ? "text-gray-400" : "text-emerald-600"}
-                    label="Credit Balance"
-                    value={formatCurrency(undefined, summary.creditBalance ?? 0)}
-                    valueColor={summary.creditBalance === 0 ? "text-gray-400" : "text-emerald-700"}
-                    subtitle={
-                      summary.totalCreditNotes === 0
-                        ? "No credit notes issued"
-                        : summary.creditBalance === 0
-                          ? `All credits fully applied (Total issued: ${formatCurrency(undefined, summary.totalCreditNotes)})`
-                          : `Remaining from ${formatCurrency(undefined, summary.totalCreditNotes)} issued`
-                    }
-                  />
-                  <SummaryCard
-                    icon={Wallet}
-                    iconBg="bg-indigo-50"
-                    iconColor="text-indigo-600"
-                    label="Deposit Balance"
-                    value={formatCurrency(undefined, summary.totalDeposits)}
-                    valueColor="text-indigo-700"
-                    subtitle={summary.totalDeposits === 0 ? "All deposits converted or refunded" : undefined}
-                  />
-                </div>
-
-                {/* Understanding Finance */}
-                <Card className="border shadow-sm">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <Info className="w-4 h-4 text-muted-foreground" /> Understanding Your Finance
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <InfoCard
-                        title="Monthly Invoices"
-                        description="Recurring invoices for EOR/AOR services, including employee salary costs, employer contributions, and service fees."
-                      />
-                      <InfoCard
-                        title="Credit Notes"
-                        description="Issued when adjustments reduce your balance. Shown in green with remaining balance. Once fully applied, status changes to Applied (grey)."
-                      />
-                      <InfoCard
-                        title="Deposit Balance"
-                        description="Security deposits held for onboarding. The balance reflects deposits minus any converted credit notes or refunds."
-                      />
-                      <InfoCard
-                        title="Balance Due"
-                        description="The remaining amount payable on each document. For credit notes, it shows the unused balance available for future application."
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              </>
-            )}
-          </TabsContent>
         </Tabs>
       </div>
     </PortalLayout>
@@ -554,51 +433,5 @@ function InvoiceRow({
         </div>
       </TableCell>
     </TableRow>
-  );
-}
-
-/* ─── Sub-components ─────────────────────────────────────────────────────── */
-
-function SummaryCard({
-  icon: Icon,
-  iconBg,
-  iconColor,
-  label,
-  value,
-  valueColor,
-  subtitle,
-}: {
-  icon: typeof FileText;
-  iconBg: string;
-  iconColor: string;
-  label: string;
-  value: string;
-  valueColor?: string;
-  subtitle?: string;
-}) {
-  return (
-    <Card className="border shadow-sm hover:shadow-md transition-shadow">
-      <CardContent className="pt-6">
-        <div className="flex items-start gap-4">
-          <div className={cn("p-2.5 rounded-xl", iconBg)}>
-            <Icon className={cn("w-5 h-5", iconColor)} />
-          </div>
-          <div className="space-y-1 min-w-0">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-            <p className={cn("text-xl font-bold tabular-nums font-mono", valueColor)}>{value}</p>
-            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function InfoCard({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="p-4 rounded-xl border bg-muted/20 hover:bg-muted/40 transition-colors">
-      <p className="font-medium text-sm text-foreground mb-1.5">{title}</p>
-      <p className="text-sm text-muted-foreground leading-relaxed">{description}</p>
-    </div>
   );
 }

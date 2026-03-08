@@ -42,8 +42,8 @@ export default function PortalWallet() {
   );
 
   return (
-    <PortalLayout>
-      <div className="space-y-6">
+    <PortalLayout title="Wallet">
+      <div className="p-6 space-y-6">
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight">Wallet</h1>
           <p className="text-muted-foreground">

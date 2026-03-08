@@ -62,7 +62,7 @@ export default function PortalSalaryBenchmark() {
 
   return (
     <PortalLayout title={t("nav.salaryBenchmark") || "Salary Benchmark"}>
-      <div className="space-y-6">
+      <div className="p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-white p-4 rounded-lg border shadow-sm">
           <div className="space-y-2">
             <Label>Country</Label>

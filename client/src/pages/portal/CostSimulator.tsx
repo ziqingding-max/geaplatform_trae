@@ -35,7 +35,7 @@ export default function CostSimulator() {
 
   return (
     <PortalLayout title={t("nav.costSimulator")}>
-      <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <div className="p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("nav.costSimulator")}</h1>
           <p className="text-muted-foreground">Calculate employer costs and social insurance contributions instantly.</p>
