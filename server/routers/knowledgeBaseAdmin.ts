@@ -148,7 +148,8 @@ export const knowledgeBaseAdminRouter = router({
           latestAt: row.createdAt,
         };
         current.hits += 1;
-        for (const topic of row.topics || []) current.topics.add(topic);
+        const topicsArr = Array.isArray(row.topics) ? row.topics : [];
+        for (const topic of topicsArr) current.topics.add(String(topic));
         if (row.createdAt > current.latestAt) current.latestAt = row.createdAt;
         bucket.set(key, current);
       }

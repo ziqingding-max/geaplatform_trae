@@ -150,7 +150,7 @@ export async function listPayrollRuns(
   if (!db) return { data: [], total: 0 };
 
   const conditions = [];
-  if (filters.status) conditions.push(eq(payrollRuns.status, filters.status));
+  if (filters.status) conditions.push(eq(payrollRuns.status, filters.status as any));
   if (filters.countryCode) conditions.push(eq(payrollRuns.countryCode, filters.countryCode));
   if (filters.payrollMonth) conditions.push(eq(payrollRuns.payrollMonth, filters.payrollMonth));
 
@@ -411,7 +411,7 @@ export async function listCreditNoteApplications() {
 export async function listApplicationsForInvoice(invoiceId: number) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(creditNoteApplications).where(eq(creditNoteApplications.invoiceId, invoiceId));
+  return await db.select().from(creditNoteApplications).where(eq(creditNoteApplications.appliedToInvoiceId, invoiceId));
 }
 
 export async function getCreditNoteRemainingBalance(creditNoteId: number) {
@@ -424,10 +424,11 @@ export async function hasDepositBeenProcessed(depositInvoiceId: number) {
 }
 
 // VENDORS
-export async function createVendor(data: InsertVendor) {
+export async function createVendor(data: InsertVendor): Promise<number | undefined> {
   const db = await getDb();
-  if (!db) return;
-  return await db.insert(vendors).values(data);
+  if (!db) return undefined;
+  const result = await db.insert(vendors).values(data).returning({ id: vendors.id });
+  return result[0]?.id;
 }
 
 export async function getVendorById(id: number) {
@@ -456,7 +457,7 @@ export async function listVendors(params: ListVendorsParams = {}) {
   if (status) conditions.push(eq(vendors.status, status as any));
   if (country) conditions.push(eq(vendors.country, country));
   if (vendorType) conditions.push(eq(vendors.vendorType, vendorType as any));
-  if (search) conditions.push(like(vendors.vendorName, `%${search}%`));
+  if (search) conditions.push(like(vendors.name, `%${search}%`));
   
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   
@@ -485,10 +486,11 @@ export async function getVendorProfitAnalysis(vendorId: number) {
 }
 
 // VENDOR BILLS
-export async function createVendorBill(data: InsertVendorBill) {
+export async function createVendorBill(data: InsertVendorBill): Promise<number | undefined> {
   const db = await getDb();
-  if (!db) return;
-  return await db.insert(vendorBills).values(data);
+  if (!db) return undefined;
+  const result = await db.insert(vendorBills).values(data).returning({ id: vendorBills.id });
+  return result[0]?.id;
 }
 
 export async function getVendorBillById(id: number) {
@@ -543,16 +545,17 @@ export async function deleteVendorBill(id: number) {
   await db.delete(vendorBills).where(eq(vendorBills.id, id));
 }
 
-export async function createVendorBillItem(data: InsertVendorBillItem) {
+export async function createVendorBillItem(data: InsertVendorBillItem): Promise<number | undefined> {
   const db = await getDb();
-  if (!db) return;
-  await db.insert(vendorBillItems).values(data);
+  if (!db) return undefined;
+  const result = await db.insert(vendorBillItems).values(data).returning({ id: vendorBillItems.id });
+  return result[0]?.id;
 }
 
 export async function listVendorBillItems(billId?: number) {
   const db = await getDb();
   if (!db) return [];
-  const where = billId ? eq(vendorBillItems.billId, billId) : undefined;
+  const where = billId ? eq(vendorBillItems.vendorBillId, billId) : undefined;
   return await db.select().from(vendorBillItems).where(where);
 }
 

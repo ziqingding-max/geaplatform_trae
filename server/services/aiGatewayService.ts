@@ -2,7 +2,7 @@ import { getDb } from "../db";
 import { type InvokeParams, type InvokeResult } from "../_core/llm";
 import { aiTaskExecutions } from "../../drizzle/schema";
 
-export type AITask = "knowledge_summarize" | "source_authority_review" | "vendor_bill_parse" | "invoice_audit";
+export type AITask = "knowledge_summarize" | "source_authority_review" | "vendor_bill_parse" | "invoice_audit" | "knowledge_generate_guide" | "copilot_chat";
 export type AIProvider = "qwen";
 
 function resolveEnvKey(name: string): string {
@@ -63,12 +63,16 @@ async function logTaskExecution(payload: {
 /**
  * Invoke OpenAI-compatible chat completions API.
  * 
- * For qwen-long model, the messages format is:
+ * For qwen-long-latest model, the messages format is:
  *   - 1st system message: role definition
  *   - 2nd system message: fileid://xxx references (for document content)
  *   - user message: the actual question/prompt
  * 
  * For other models (qwen-plus), standard messages format is used.
+ * 
+ * IMPORTANT: Per DashScope docs, do NOT specify max_tokens when using
+ * structured output (response_format with json_schema), as it may cause
+ * incomplete JSON output or API errors.
  */
 async function invokeOpenAICompatible(
   baseUrl: string,
@@ -76,23 +80,46 @@ async function invokeOpenAICompatible(
   model: string,
   params: InvokeParams
 ): Promise<InvokeResult> {
+  // Extract response_format from params (supports both camelCase and snake_case)
+  const responseFormat = (params as any).responseFormat || (params as any).response_format;
+  const hasStructuredOutput = responseFormat?.type === "json_schema";
+
+  // Build request body
+  const body: Record<string, unknown> = {
+    model,
+    messages: params.messages,
+  };
+
+  // Add response_format if present
+  if (responseFormat) {
+    body.response_format = responseFormat;
+  }
+
+  // Per DashScope docs: "Do not specify max_tokens when you enable structured output"
+  // Only set max_tokens when NOT using structured output (json_schema)
+  if (!hasStructuredOutput) {
+    body.max_tokens = (params as any).maxTokens || (params as any).max_tokens || 4096;
+  }
+
+  // Add temperature if specified
+  if ((params as any).temperature !== undefined) {
+    body.temperature = (params as any).temperature;
+  }
+
+  console.log(`[AI Gateway] Invoking ${model} with${hasStructuredOutput ? "" : "out"} structured output`);
+
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model,
-      messages: params.messages,
-      response_format: (params as any).responseFormat || (params as any).response_format,
-      max_tokens: (params as any).maxTokens || (params as any).max_tokens || 4096,
-      temperature: (params as any).temperature,
-    }),
+    body: JSON.stringify(body),
   });
   
   if (!response.ok) {
     const errorText = await response.text();
+    console.error(`[AI Gateway] API error ${response.status}:`, errorText);
     throw new Error(`Provider call failed: ${response.status} - ${errorText}`);
   }
   return (await response.json()) as InvokeResult;
@@ -108,15 +135,18 @@ export async function executeTaskLLM(task: AITask, params: InvokeParams): Promis
   }
 
   // Automatic Model Selection
-  // vendor_bill_parse: uses qwen-long for document understanding (PDF, Excel, images)
+  // vendor_bill_parse: uses qwen-long-latest for document understanding (PDF, Excel, images)
   //   - Files are uploaded via DashScope Files API and referenced via fileid:// in system messages
   //   - Supports structured output (json_schema) via response_format
   //   - 10M token context window, ideal for large vendor bills
+  //   - MUST use "qwen-long-latest" (not "qwen-long") per DashScope docs for JSON Schema support
   // All other tasks: use standard text model qwen-plus
-  const model = task === "vendor_bill_parse" ? "qwen-long" : "qwen-plus";
+  const model = task === "vendor_bill_parse" ? "qwen-long-latest" : "qwen-plus";
   
   // Use Alibaba Cloud compatible-mode endpoint
   const baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+
+  console.log(`[AI Gateway] Task: ${task}, Model: ${model}`);
 
   try {
     const result = await invokeOpenAICompatible(baseUrl, apiKey, model, params);
