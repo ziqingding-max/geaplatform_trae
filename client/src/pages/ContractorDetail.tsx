@@ -1,5 +1,5 @@
 import Layout from "@/components/Layout";
-import { useRoute, useLocation } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -98,7 +98,7 @@ function InvoiceDetailDialog({ invoiceId, open, onOpenChange }: { invoiceId: num
 export default function ContractorDetail() {
   const { t } = useI18n();
   const [, setLocation] = useLocation();
-  const [match, params] = useRoute("/contractors/:id");
+  const params = useParams<{ id: string }>();
   const id = params?.id ? parseInt(params.id, 10) : 0;
   const [activeTab, setActiveTab] = useState("overview");
 

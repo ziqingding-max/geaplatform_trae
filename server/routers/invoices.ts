@@ -168,7 +168,9 @@ export const invoicesRouter = router({
   get: userProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
-      return await getInvoiceById(input.id);
+      const invoice = await getInvoiceById(input.id);
+      if (!invoice) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice not found" });
+      return invoice;
     }),
 
   getByNumber: userProcedure
