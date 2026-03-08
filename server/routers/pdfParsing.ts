@@ -354,6 +354,7 @@ IMPORTANT RULES:
           type: "json_schema",
           json_schema: {
             name: "multi_file_vendor_parse",
+            description: "Structured extraction from multiple vendor documents including invoice details, payment info, line items, and cross-validation results.",
             strict: true,
             schema: {
               type: "object",
@@ -800,6 +801,7 @@ Be precise with numbers. If a field is not found, use null.`,
           type: "json_schema",
           json_schema: {
             name: "vendor_invoice_parse",
+            description: "Structured extraction from a single vendor invoice including vendor info, amounts, line items, and categorization.",
             strict: true,
             schema: {
               type: "object",

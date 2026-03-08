@@ -5,6 +5,7 @@ import { createApp } from "./app";
 import { scheduleCronJobs } from "../cronJobs";
 import { seedDefaultAdmin } from "../seedAdmin";
 import { seedMigration } from "../seedMigration";
+import { runAutoMigrations } from "../autoMigrate";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -37,6 +38,8 @@ async function startServer() {
 
   server.listen(port, async () => {
     console.log(`Server running on http://localhost:${port}/`);
+    // Auto-migrate: add any missing columns to the database
+    await runAutoMigrations();
     // Seed default admin user
     await seedDefaultAdmin();
     // Seed migration data
