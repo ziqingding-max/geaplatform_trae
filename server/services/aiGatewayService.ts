@@ -99,9 +99,10 @@ export async function executeTaskLLM(task: AITask, params: InvokeParams): Promis
   }
 
   // Automatic Model Selection
-  // vendor_bill_parse requires vision capabilities -> qwen-vl-plus
+  // vendor_bill_parse requires vision capabilities -> qwen-vl-max
+  // qwen-vl-max supports PDF parsing via fileid:// and structured output (json_schema)
   // all other tasks use standard text model -> qwen-plus
-  const model = task === "vendor_bill_parse" ? "qwen-vl-plus" : "qwen-plus";
+  const model = task === "vendor_bill_parse" ? "qwen-vl-max" : "qwen-plus";
   
   // Use Alibaba Cloud compatible-mode endpoint
   const baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";

@@ -14,24 +14,28 @@ import CountrySelect from "@/components/CountrySelect";
 import CurrencySelect from "@/components/CurrencySelect";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import { BankDetailsForm, type BankDetails } from "@/components/forms/BankDetailsForm";
+import { DatePicker } from "@/components/DatePicker";
+
+const initialFormData = {
+  customerId: 0,
+  firstName: "",
+  lastName: "",
+  email: "",
+  jobTitle: "",
+  country: "",
+  currency: "USD",
+  rateAmount: "",
+  payFrequency: "monthly" as "monthly" | "semi_monthly" | "milestone",
+  rateType: "fixed_monthly" as "fixed_monthly" | "hourly" | "daily" | "milestone_only",
+  startDate: "",
+  defaultApproverId: 0,
+  bankDetails: {} as Partial<BankDetails>,
+};
 
 export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () => void }) {
   const { t } = useI18n();
   const [createOpen, setCreateOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    customerId: 0,
-    firstName: "",
-    lastName: "",
-    email: "",
-    country: "",
-    currency: "USD",
-    rateAmount: "",
-    payFrequency: "monthly" as "monthly" | "semi_monthly" | "milestone",
-    rateType: "fixed_monthly" as "fixed_monthly" | "hourly" | "daily" | "milestone_only",
-    startDate: "",
-    defaultApproverId: 0,
-    bankDetails: {} as Partial<BankDetails>,
-  });
+  const [formData, setFormData] = useState({ ...initialFormData });
 
   const utils = trpc.useUtils();
   const { data: customers } = trpc.customers.list.useQuery({ limit: 200 });
@@ -43,20 +47,7 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
       setCreateOpen(false);
       utils.contractors.list.invalidate(); // Invalidate list query
       if (onSuccess) onSuccess();
-      setFormData({
-        customerId: 0,
-        firstName: "",
-        lastName: "",
-        email: "",
-        country: "",
-        currency: "USD",
-        rateAmount: "",
-        payFrequency: "monthly",
-        rateType: "fixed_monthly",
-        startDate: "",
-        defaultApproverId: 0,
-        bankDetails: {},
-      });
+      setFormData({ ...initialFormData });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -91,19 +82,25 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
                <Input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
              </div>
              <div className="space-y-2">
-               <Label>Start Date</Label>
-               <Input type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
+               <Label>Job Title <span className="text-red-500">*</span></Label>
+               <Input value={formData.jobTitle} onChange={e => setFormData({...formData, jobTitle: e.target.value})} placeholder="e.g. Software Engineer" />
              </div>
            </div>
-           
-           <div className="space-y-2">
-             <Label>Customer</Label>
-             <Select value={String(formData.customerId)} onValueChange={v => setFormData({...formData, customerId: parseInt(v)})}>
-               <SelectTrigger><SelectValue placeholder="Select Customer" /></SelectTrigger>
-               <SelectContent>
-                 {customers?.data?.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.companyName}</SelectItem>)}
-               </SelectContent>
-             </Select>
+
+           <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <Label>Start Date</Label>
+               <DatePicker value={formData.startDate} onChange={(d) => setFormData({...formData, startDate: d})} />
+             </div>
+             <div className="space-y-2">
+               <Label>Customer</Label>
+               <Select value={String(formData.customerId)} onValueChange={v => setFormData({...formData, customerId: parseInt(v)})}>
+                 <SelectTrigger><SelectValue placeholder="Select Customer" /></SelectTrigger>
+                 <SelectContent>
+                   {customers?.data?.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.companyName}</SelectItem>)}
+                 </SelectContent>
+               </Select>
+             </div>
            </div>
            
            <div className="space-y-2">
@@ -176,9 +173,12 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
                const submitData: any = {
                  ...formData,
                  paymentFrequency: formData.payFrequency, // Map local state to backend field
-                 bankDetails: formData.bankDetails, // Pass bank details to backend
+                 bankDetails: Object.keys(formData.bankDetails).length > 0
+                   ? JSON.stringify(formData.bankDetails)
+                   : undefined, // Serialize bank details to JSON string for backend
                };
                if (!submitData.customerId) { toast.error("Customer is required"); return; }
+               if (!submitData.jobTitle) { toast.error("Job Title is required"); return; }
                if (submitData.defaultApproverId === 0) delete submitData.defaultApproverId;
                // rateAmount is already string, handled by backend
                createMutation.mutate(submitData);
