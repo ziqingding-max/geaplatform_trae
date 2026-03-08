@@ -67,7 +67,7 @@ function buildPortalNavGroups(): NavGroup[] {
       labelKey: "nav.people",
       items: [
         { labelKey: "nav.onboarding", icon: UserPlus, href: portalPath("/onboarding") },
-        { labelKey: "nav.employees", icon: Users, href: portalPath("/employees") },
+        { labelKey: "nav.people", icon: Users, href: portalPath("/people") },
       ],
     },
     {

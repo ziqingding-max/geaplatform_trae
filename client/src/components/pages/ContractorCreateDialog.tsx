@@ -26,7 +26,6 @@ const initialFormData = {
   currency: "USD",
   rateAmount: "",
   payFrequency: "monthly" as "monthly" | "semi_monthly" | "milestone",
-  rateType: "fixed_monthly" as "fixed_monthly" | "hourly" | "daily" | "milestone_only",
   startDate: "",
   defaultApproverId: 0,
   bankDetails: {} as Partial<BankDetails>,
@@ -136,27 +135,17 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
              </div>
            </div>
 
-           <div className="grid grid-cols-2 gap-4">
-             <div className="space-y-2">
-               <Label>Rate Type</Label>
-               <Select value={formData.rateType} onValueChange={v => setFormData({...formData, rateType: v as any})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="fixed_monthly">Fixed Monthly</SelectItem>
-                    <SelectItem value="milestone_only">Milestone Only</SelectItem>
-                  </SelectContent>
-               </Select>
-             </div>
-             {formData.rateType !== "milestone_only" && (
+           {formData.payFrequency !== "milestone" && (
+             <div className="grid grid-cols-2 gap-4">
                <div className="space-y-2">
-                 <Label>{formData.payFrequency === 'semi_monthly' ? 'Semi-Monthly Amount' : 'Monthly Salary'}</Label>
+                 <Label>{formData.payFrequency === 'semi_monthly' ? 'Semi-Monthly Amount' : 'Monthly Amount'}</Label>
                  <Input type="number" value={formData.rateAmount} onChange={e => setFormData({...formData, rateAmount: e.target.value})} />
                  {formData.payFrequency === 'semi_monthly' && (
                    <p className="text-xs text-muted-foreground mt-1">Paid {formatCurrencyAmount(formData.rateAmount, formData.currency)} on 15th and EOM</p>
                  )}
                </div>
-             )}
-           </div>
+             </div>
+           )}
 
            <div className="space-y-2">
              <BankDetailsForm 

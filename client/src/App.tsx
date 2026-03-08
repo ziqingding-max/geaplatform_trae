@@ -66,6 +66,8 @@ const PortalRegister = lazy(() => import("./pages/portal/PortalRegister"));
 const PortalDashboard = lazy(() => import("./pages/portal/PortalDashboard"));
 const PortalOnboarding = lazy(() => import("./pages/portal/PortalOnboarding"));
 const PortalEmployees = lazy(() => import("./pages/portal/PortalEmployees"));
+const PortalPeople = lazy(() => import("./pages/portal/PortalPeople"));
+const PortalContractorDetail = lazy(() => import("./pages/portal/PortalContractorDetail"));
 const PortalAdjustments = lazy(() => import("./pages/portal/PortalAdjustments"));
 const PortalLeave = lazy(() => import("./pages/portal/PortalLeave"));
 const PortalInvoices = lazy(() => import("./pages/portal/PortalInvoices"));
@@ -172,7 +174,9 @@ function PortalRouter() {
             <Route path={base || "/"} component={PortalDashboard} />
             <Route path={`${base}/onboarding`} component={PortalOnboarding} />
             <Route path={`${base}/employees/:id`} component={PortalEmployeeDetail} />
-            <Route path={`${base}/employees`} component={PortalEmployees} />
+            <Route path={`${base}/employees`} component={PortalPeople} />
+            <Route path={`${base}/people`} component={PortalPeople} />
+            <Route path={`${base}/contractors/:id`} component={PortalContractorDetail} />
             <Route path={`${base}/payroll`} component={PortalPayroll} />
             <Route path={`${base}/self-onboarding`} component={PortalSelfOnboarding} />
             <Route path={`${base}/adjustments`} component={PortalAdjustments} />

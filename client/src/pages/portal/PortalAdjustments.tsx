@@ -36,6 +36,7 @@ import { toast } from "sonner";
 import { exportToCsv } from "@/lib/csvExport";
 import { cn } from "@/lib/utils";
 import { MonthPicker } from "@/components/DatePicker";
+import CurrencySelect from "@/components/CurrencySelect";
 
 import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
@@ -512,7 +513,7 @@ export default function PortalAdjustments() {
               {!editingId && (
                 <div className="space-y-2">
                   <Label>{t("portal_adjustments.form.currency_label")}</Label>
-                  <Input value={form.currency} onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))} placeholder="USD" />
+                  <CurrencySelect value={form.currency} onValueChange={(v) => setForm((f) => ({ ...f, currency: v }))} />
                 </div>
               )}
             </div>

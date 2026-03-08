@@ -32,7 +32,9 @@ import {
 import {
   CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2,
   Loader2, Calendar, Sun, TreePalm, CheckCircle2, XCircle, Download,
+  Briefcase, Target, DollarSign,
 } from "lucide-react";
+import CurrencySelect from "@/components/CurrencySelect";
 import { usePortalAuth } from "@/hooks/usePortalAuth";
 import { toast } from "sonner";
 import { exportToCsv } from "@/lib/csvExport";
@@ -67,6 +69,250 @@ const emptyForm: LeaveForm = {
   days: "",
   reason: "",
 };
+
+// ── Milestones Sub-Tab Component ──
+function PortalMilestonesTab() {
+  const [statusFilter, setStatusFilter] = useState("active");
+  const [showCreate, setShowCreate] = useState(false);
+  const [milestoneForm, setMilestoneForm] = useState({
+    contractorId: "",
+    title: "",
+    description: "",
+    amount: "",
+    currency: "USD",
+    dueDate: "",
+  });
+
+  const utils = portalTrpc.useUtils();
+
+  // Get contractors for selector
+  const { data: contractorsData } = portalTrpc.contractors.list.useQuery({ page: 1, pageSize: 200 });
+  const contractorsList = contractorsData?.items ?? [];
+
+  // Get milestones
+  const { data: milestones, isLoading } = portalTrpc.milestones.list.useQuery({
+    status: statusFilter === "active" ? "pending" : statusFilter === "history" ? "approved" : undefined,
+  });
+
+  const createMutation = portalTrpc.milestones.create.useMutation({
+    onSuccess: () => {
+      toast.success("Milestone created");
+      setShowCreate(false);
+      setMilestoneForm({ contractorId: "", title: "", description: "", amount: "", currency: "USD", dueDate: "" });
+      utils.milestones.list.invalidate();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const approveMutation = portalTrpc.milestones.approve.useMutation({
+    onSuccess: () => {
+      toast.success("Milestone approved");
+      utils.milestones.list.invalidate();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const rejectMutation = portalTrpc.milestones.reject.useMutation({
+    onSuccess: () => {
+      toast.success("Milestone rejected");
+      utils.milestones.list.invalidate();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const activeStatuses = ["pending", "in_progress", "submitted", "changes_requested"];
+  const historyStatuses = ["approved", "paid", "cancelled", "rejected"];
+
+  const filteredMilestones = (milestones || []).filter((m: any) => {
+    if (statusFilter === "active") return activeStatuses.includes(m.status);
+    if (statusFilter === "history") return historyStatuses.includes(m.status);
+    return true;
+  });
+
+  const milestoneStatusColors: Record<string, string> = {
+    pending: "bg-amber-50 text-amber-700 border-amber-200",
+    in_progress: "bg-blue-50 text-blue-700 border-blue-200",
+    submitted: "bg-purple-50 text-purple-700 border-purple-200",
+    approved: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    paid: "bg-green-50 text-green-700 border-green-200",
+    cancelled: "bg-gray-50 text-gray-700 border-gray-200",
+    changes_requested: "bg-orange-50 text-orange-700 border-orange-200",
+  };
+
+  function handleCreateMilestone() {
+    if (!milestoneForm.contractorId || !milestoneForm.title || !milestoneForm.amount) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    createMutation.mutate({
+      contractorId: parseInt(milestoneForm.contractorId),
+      title: milestoneForm.title,
+      description: milestoneForm.description || undefined,
+      amount: milestoneForm.amount,
+      currency: milestoneForm.currency,
+      dueDate: milestoneForm.dueDate || undefined,
+    });
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-auto">
+          <TabsList>
+            <TabsTrigger value="active">Active</TabsTrigger>
+            <TabsTrigger value="history">History</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <Button onClick={() => setShowCreate(true)}>
+          <Plus className="w-4 h-4 mr-2" /> New Milestone
+        </Button>
+      </div>
+
+      <Card>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-4 space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : filteredMilestones.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+              <Target className="w-10 h-10 mb-3" />
+              <p className="text-lg font-medium">No milestones found</p>
+              <p className="text-sm mt-1">
+                {contractorsList.length === 0
+                  ? "Onboard a contractor first to create milestones."
+                  : "Create a milestone to track contractor deliverables."}
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Contractor</TableHead>
+                  <TableHead>Milestone</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredMilestones.map((m: any) => (
+                  <TableRow key={m.id}>
+                    <TableCell className="font-medium">{m.contractorName}</TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium text-sm">{m.title}</p>
+                        {m.description && <p className="text-xs text-muted-foreground truncate max-w-[200px]">{m.description}</p>}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {m.currency} {Number(m.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell>
+                      {m.dueDate ? new Date(m.dueDate).toLocaleDateString() : "-"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={milestoneStatusColors[m.status] || ""}>
+                        {m.status.replace("_", " ")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {m.status === "submitted" && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                              onClick={() => approveMutation.mutate({ id: m.id })}
+                              disabled={approveMutation.isPending}
+                            >
+                              <CheckCircle2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => rejectMutation.mutate({ id: m.id })}
+                              disabled={rejectMutation.isPending}
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Create Milestone Dialog */}
+      <Dialog open={showCreate} onOpenChange={(open) => {
+        if (!open) {
+          setShowCreate(false);
+          setMilestoneForm({ contractorId: "", title: "", description: "", amount: "", currency: "USD", dueDate: "" });
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Milestone</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Contractor <span className="text-destructive">*</span></Label>
+              <Select value={milestoneForm.contractorId} onValueChange={(v) => setMilestoneForm((f) => ({ ...f, contractorId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select contractor" /></SelectTrigger>
+                <SelectContent>
+                  {contractorsList.map((c: any) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.firstName} {c.lastName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Title <span className="text-destructive">*</span></Label>
+              <Input value={milestoneForm.title} onChange={(e) => setMilestoneForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Phase 1 Delivery" />
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea value={milestoneForm.description} onChange={(e) => setMilestoneForm((f) => ({ ...f, description: e.target.value }))} placeholder="Describe the deliverable..." rows={2} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Amount <span className="text-destructive">*</span></Label>
+                <Input type="number" step="0.01" value={milestoneForm.amount} onChange={(e) => setMilestoneForm((f) => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
+              </div>
+              <div className="space-y-2">
+                <Label>Currency</Label>
+                <CurrencySelect value={milestoneForm.currency} onChange={(v) => setMilestoneForm((f) => ({ ...f, currency: v }))} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Due Date</Label>
+              <DatePicker value={milestoneForm.dueDate} onChange={(v) => setMilestoneForm((f) => ({ ...f, dueDate: v }))} placeholder="Select due date" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button onClick={handleCreateMilestone} disabled={createMutation.isPending}>
+              {createMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Create Milestone
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 export default function PortalLeave() {
   const { t, lang } = useI18n();
@@ -226,6 +472,9 @@ export default function PortalLeave() {
             <TabsTrigger value="requests">{t("portal_leave.tabs.requests")}</TabsTrigger>
             <TabsTrigger value="balances">{t("portal_leave.tabs.balances")}</TabsTrigger>
             <TabsTrigger value="holidays">{t("portal_leave.tabs.holidays")}</TabsTrigger>
+            <TabsTrigger value="milestones" className="gap-1.5">
+              <Target className="w-3.5 h-3.5" /> Milestones
+            </TabsTrigger>
           </TabsList>
 
           {/* Leave Requests Tab */}
@@ -476,6 +725,11 @@ export default function PortalLeave() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Milestones Tab */}
+          <TabsContent value="milestones" className="space-y-4">
+            <PortalMilestonesTab />
           </TabsContent>
         </Tabs>
       </div>

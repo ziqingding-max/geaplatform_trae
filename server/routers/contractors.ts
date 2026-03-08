@@ -97,7 +97,6 @@ export const contractorsRouter = router({
         // Financials
         currency: z.string().default("USD"),
         paymentFrequency: z.enum(["monthly", "semi_monthly", "milestone"]).default("monthly"),
-        rateType: z.enum(["fixed_monthly", "hourly", "daily", "milestone_only"]).default("fixed_monthly"),
         rateAmount: z.string().optional(),
         
         defaultApproverId: z.number().optional(),
@@ -162,7 +161,6 @@ export const contractorsRouter = router({
           
           currency: z.string().optional(),
           paymentFrequency: z.enum(["monthly", "semi_monthly", "milestone"]).optional(),
-          rateType: z.enum(["fixed_monthly", "hourly", "daily", "milestone_only"]).optional(),
           rateAmount: z.string().optional(),
           
           defaultApproverId: z.number().optional(),
