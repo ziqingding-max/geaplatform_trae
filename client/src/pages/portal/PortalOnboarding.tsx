@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/DatePicker";
 import { ALL_COUNTRIES } from "@/components/CountrySelect";
+import CurrencySelect from "@/components/CurrencySelect";
 import { toast } from "sonner";
 import {
   UserPlus,
@@ -114,12 +115,19 @@ const SERVICE_TYPES = [
 ];
 
 // ── Wizard Steps ──
-const EMPLOYER_FILL_STEPS = [
+const EMPLOYER_FILL_STEPS_EOR = [
   { id: 1, title: "Service", icon: Globe, description: "Choose service type" },
   { id: 2, title: "Personal Info", icon: User, description: "Basic details" },
   { id: 3, title: "Employment", icon: Briefcase, description: "Job & contract" },
   { id: 4, title: "Compensation", icon: DollarSign, description: "Salary details" },
   { id: 5, title: "Documents", icon: FileCheck, description: "Upload files" },
+];
+
+const EMPLOYER_FILL_STEPS_AOR = [
+  { id: 1, title: "Service", icon: Globe, description: "Choose service type" },
+  { id: 2, title: "Basic Info", icon: User, description: "Contractor details" },
+  { id: 3, title: "Engagement", icon: Briefcase, description: "Scope & contract" },
+  { id: 4, title: "Payment", icon: DollarSign, description: "Payment terms" },
 ];
 
 const INVITE_STEPS = [
@@ -152,6 +160,10 @@ interface OnboardingFormData {
   baseSalary: string;
   salaryCurrency: string;
   requiresVisa: boolean;
+  // AOR-specific fields
+  paymentFrequency: string;
+  rateAmount: string;
+  contractorCurrency: string;
 }
 
 interface DocumentFile {
@@ -186,6 +198,9 @@ const initialFormData: OnboardingFormData = {
   baseSalary: "",
   salaryCurrency: "USD",
   requiresVisa: false,
+  paymentFrequency: "monthly",
+  rateAmount: "",
+  contractorCurrency: "USD",
 };
 
 // ── Glass Card Component ──
@@ -222,6 +237,8 @@ export default function PortalOnboarding() {
   const [activeFilter, setActiveFilter] = useState<"all" | "requests" | "invites">("all");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  const isAor = formData.serviceType === "aor";
+
   // ── Queries ──
   const { data: pendingReview, isLoading: loadingPending } = portalTrpc.employees.list.useQuery({
     status: "pending_review",
@@ -239,6 +256,15 @@ export default function PortalOnboarding() {
   const utils = portalTrpc.useUtils();
 
   // ── Mutations ──
+  const submitAorMutation = portalTrpc.contractors.submitOnboarding.useMutation({
+    onSuccess: () => {
+      toast.success("Contractor onboarding submitted successfully");
+      utils.contractors.list.invalidate();
+      resetAll();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const submitMutation = portalTrpc.employees.submitOnboarding.useMutation({
     onSuccess: () => {
       toast.success(t("portal_onboarding.toast.onboarding_success"));
@@ -424,49 +450,74 @@ export default function PortalOnboarding() {
       toast.error("Please enter a valid email address");
       return;
     }
-    // Validation: salary must be positive
-    if (formData.baseSalary && Number(formData.baseSalary) <= 0) {
+    // Validation: salary/amount must be positive
+    if (!isAor && formData.baseSalary && Number(formData.baseSalary) <= 0) {
       toast.error("Base salary must be a positive number");
       return;
     }
+    if (isAor && formData.rateAmount && Number(formData.rateAmount) <= 0) {
+      toast.error("Payment amount must be a positive number");
+      return;
+    }
     try {
-      const result = await submitMutation.mutateAsync({
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        phone: formData.phone || undefined,
-        dateOfBirth: formData.dateOfBirth || undefined,
-        gender: (formData.gender || undefined) as any,
-        nationality: formData.nationality || undefined,
-        idType: formData.idType || undefined,
-        idNumber: formData.idNumber || undefined,
-        address: formData.address || undefined,
-        country: formData.country,
-        city: formData.city || undefined,
-        state: formData.state || undefined,
-        postalCode: formData.postalCode || undefined,
-        department: formData.department || undefined,
-        jobTitle: formData.jobTitle,
-        serviceType: (formData.serviceType as any) || "eor",
-        employmentType: (formData.employmentType as any) || "long_term",
-        startDate: formData.startDate,
-        endDate: formData.endDate || undefined,
-        baseSalary: formData.baseSalary,
-        salaryCurrency: formData.salaryCurrency || "USD",
-        requiresVisa: needsVisa || formData.requiresVisa,
-      });
+      if (isAor) {
+        // AOR → create contractor
+        await submitAorMutation.mutateAsync({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          phone: formData.phone || undefined,
+          nationality: formData.nationality || undefined,
+          country: formData.country,
+          city: formData.city || undefined,
+          department: formData.department || undefined,
+          jobTitle: formData.jobTitle,
+          startDate: formData.startDate,
+          endDate: formData.endDate || undefined,
+          paymentFrequency: (formData.paymentFrequency as any) || "monthly",
+          rateAmount: formData.rateAmount || undefined,
+          currency: formData.contractorCurrency || "USD",
+        });
+      } else {
+        // EOR / Visa EOR → create employee
+        const result = await submitMutation.mutateAsync({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          phone: formData.phone || undefined,
+          dateOfBirth: formData.dateOfBirth || undefined,
+          gender: (formData.gender || undefined) as any,
+          nationality: formData.nationality || undefined,
+          idType: formData.idType || undefined,
+          idNumber: formData.idNumber || undefined,
+          address: formData.address || undefined,
+          country: formData.country,
+          city: formData.city || undefined,
+          state: formData.state || undefined,
+          postalCode: formData.postalCode || undefined,
+          department: formData.department || undefined,
+          jobTitle: formData.jobTitle,
+          serviceType: (formData.serviceType as any) || "eor",
+          employmentType: (formData.employmentType as any) || "long_term",
+          startDate: formData.startDate,
+          endDate: formData.endDate || undefined,
+          baseSalary: formData.baseSalary,
+          salaryCurrency: formData.salaryCurrency || "USD",
+          requiresVisa: needsVisa || formData.requiresVisa,
+        });
 
-      if (documents.length > 0 && result.employeeId) {
-        for (const doc of documents) {
-          await uploadDocMutation.mutateAsync({
-            employeeId: result.employeeId,
-            documentType: doc.type as any,
-            documentName: doc.name,
-            fileBase64: doc.base64,
-            fileName: doc.file?.name || doc.name,
-            mimeType: doc.mimeType,
-            fileSize: doc.file?.size,
-          });
+        if (documents.length > 0 && result.employeeId) {
+          for (const doc of documents) {
+            await uploadDocMutation.mutateAsync({
+              employeeId: result.employeeId,
+              documentType: doc.type as any,
+              documentName: doc.name,
+              fileBase64: doc.base64,
+              fileName: doc.file?.name || doc.name,
+              mimeType: doc.mimeType,
+              fileSize: doc.file?.size,
+            });
+          }
         }
       }
     } catch (err) {
@@ -569,24 +620,26 @@ export default function PortalOnboarding() {
           <Input value={formData.phone} onChange={(e) => updateField("phone", e.target.value)} placeholder="+65 9123 4567" className="h-10 rounded-xl" />
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.dob")}</Label>
-          <DatePicker value={formData.dateOfBirth} onChange={(v: string) => updateField("dateOfBirth", v)} placeholder="Select date" />
+      {!isAor && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.dob")}</Label>
+            <DatePicker value={formData.dateOfBirth} onChange={(v: string) => updateField("dateOfBirth", v)} placeholder="Select date" />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.gender")}</Label>
+            <Select value={formData.gender} onValueChange={(v) => updateField("gender", v)}>
+              <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select gender" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">{t("portal_onboarding.personal_info.gender.male")}</SelectItem>
+                <SelectItem value="female">{t("portal_onboarding.personal_info.gender.female")}</SelectItem>
+                <SelectItem value="other">{t("portal_onboarding.personal_info.gender.other")}</SelectItem>
+                <SelectItem value="prefer_not_to_say">{t("portal_onboarding.personal_info.gender.prefer_not_to_say")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.gender")}</Label>
-          <Select value={formData.gender} onValueChange={(v) => updateField("gender", v)}>
-            <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select gender" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="male">{t("portal_onboarding.personal_info.gender.male")}</SelectItem>
-              <SelectItem value="female">{t("portal_onboarding.personal_info.gender.female")}</SelectItem>
-              <SelectItem value="other">{t("portal_onboarding.personal_info.gender.other")}</SelectItem>
-              <SelectItem value="prefer_not_to_say">{t("portal_onboarding.personal_info.gender.prefer_not_to_say")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.nationality")}</Label>
@@ -599,29 +652,33 @@ export default function PortalOnboarding() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.id_type")}</Label>
-          <Select value={formData.idType} onValueChange={(v) => updateField("idType", v)}>
-            <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select ID type" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="national_id">{t("portal_onboarding.personal_info.id_type.national_id")}</SelectItem>
-              <SelectItem value="passport">{t("portal_onboarding.personal_info.id_type.passport")}</SelectItem>
-              <SelectItem value="driver_license">{t("portal_onboarding.personal_info.id_type.drivers_license")}</SelectItem>
-              <SelectItem value="other">{t("portal_onboarding.personal_info.gender.other")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {!isAor && (
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.id_type")}</Label>
+            <Select value={formData.idType} onValueChange={(v) => updateField("idType", v)}>
+              <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select ID type" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="national_id">{t("portal_onboarding.personal_info.id_type.national_id")}</SelectItem>
+                <SelectItem value="passport">{t("portal_onboarding.personal_info.id_type.passport")}</SelectItem>
+                <SelectItem value="driver_license">{t("portal_onboarding.personal_info.id_type.drivers_license")}</SelectItem>
+                <SelectItem value="other">{t("portal_onboarding.personal_info.gender.other")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
-      {formData.idType && (
+      {!isAor && formData.idType && (
         <div className="space-y-2">
           <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.id_number")}</Label>
           <Input value={formData.idNumber} onChange={(e) => updateField("idNumber", e.target.value)} placeholder="Enter ID number" className="h-10 rounded-xl" />
         </div>
       )}
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.address")}</Label>
-        <Textarea value={formData.address} onChange={(e) => updateField("address", e.target.value)} placeholder="Full residential address" rows={2} className="rounded-xl" />
-      </div>
+      {!isAor && (
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.address")}</Label>
+          <Textarea value={formData.address} onChange={(e) => updateField("address", e.target.value)} placeholder="Full residential address" rows={2} className="rounded-xl" />
+        </div>
+      )}
     </div>
   );
 
@@ -651,7 +708,7 @@ export default function PortalOnboarding() {
           <Input value={formData.city} onChange={(e) => updateField("city", e.target.value)} placeholder={t("portal_onboarding.employment.label.city")} className="h-10 rounded-xl" />
         </div>
       </div>
-      {needsVisa && (
+      {!isAor && needsVisa && (
         <div className="rounded-2xl border border-amber-200/60 bg-amber-50/50 backdrop-blur-sm p-4">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -666,8 +723,8 @@ export default function PortalOnboarding() {
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.job_title")} <span className="text-destructive">*</span></Label>
-          <Input value={formData.jobTitle} onChange={(e) => updateField("jobTitle", e.target.value)} placeholder="e.g. Software Engineer" className="h-10 rounded-xl" />
+          <Label className="text-sm font-medium">{isAor ? "Role / Scope" : t("portal_onboarding.employment.label.job_title")} <span className="text-destructive">*</span></Label>
+          <Input value={formData.jobTitle} onChange={(e) => updateField("jobTitle", e.target.value)} placeholder={isAor ? "e.g. Frontend Developer" : "e.g. Software Engineer"} className="h-10 rounded-xl" />
         </div>
         <div className="space-y-2">
           <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.department")}</Label>
@@ -675,26 +732,28 @@ export default function PortalOnboarding() {
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {!isAor && (
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.employment_type")}</Label>
+            <Select value={formData.employmentType} onValueChange={(v) => updateField("employmentType", v)}>
+              <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="long_term">{t("portal_onboarding.employment.employment_type.permanent")}</SelectItem>
+                <SelectItem value="fixed_term">{t("portal_onboarding.employment.employment_type.fixed_term")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.employment_type")}</Label>
-          <Select value={formData.employmentType} onValueChange={(v) => updateField("employmentType", v)}>
-            <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="long_term">{t("portal_onboarding.employment.employment_type.permanent")}</SelectItem>
-              <SelectItem value="fixed_term">{t("portal_onboarding.employment.employment_type.fixed_term")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.start_date")} <span className="text-destructive">*</span></Label>
+          <Label className="text-sm font-medium">{isAor ? "Contract Start Date" : t("portal_onboarding.employment.label.start_date")} <span className="text-destructive">*</span></Label>
           <DatePicker value={formData.startDate} onChange={(v: string) => updateField("startDate", v)} placeholder="Select start date" />
           {fieldErrors.startDate && <p className="text-xs text-destructive mt-1">{fieldErrors.startDate}</p>}
         </div>
       </div>
-      {formData.employmentType === "fixed_term" && (
+      {(isAor || formData.employmentType === "fixed_term") && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.end_date")}</Label>
+            <Label className="text-sm font-medium">{isAor ? "Contract End Date" : t("portal_onboarding.employment.label.end_date")}</Label>
             <DatePicker value={formData.endDate} onChange={(v: string) => updateField("endDate", v)} placeholder="Select end date" />
             {fieldErrors.endDate && <p className="text-xs text-destructive mt-1">{fieldErrors.endDate}</p>}
           </div>
@@ -706,43 +765,100 @@ export default function PortalOnboarding() {
   // ═══════════════════════════════════════════════════
   // EMPLOYER FILL: Compensation (Step 4)
   // ═══════════════════════════════════════════════════
-  const renderCompensation = () => (
-    <div className="space-y-6 animate-page-in">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.compensation.label.base_salary")} <span className="text-destructive">*</span></Label>
-          <div className="flex gap-2">
-            <Input
-              type="number"
-              value={formData.baseSalary}
-              onChange={(e) => updateField("baseSalary", e.target.value)}
-              placeholder="0.00"
-              className="flex-1 h-10 rounded-xl"
-            />
-            <div className="flex items-center px-3 bg-muted/50 rounded-xl border text-sm font-medium min-w-[60px] justify-center">
-              {formData.salaryCurrency || "USD"}
+  const renderCompensation = () => {
+    if (isAor) {
+      // AOR: Payment Frequency + Amount
+      return (
+        <div className="space-y-6 animate-page-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Payment Frequency <span className="text-destructive">*</span></Label>
+              <Select value={formData.paymentFrequency} onValueChange={(v) => updateField("paymentFrequency", v)}>
+                <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select frequency" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="semi_monthly">Semi-monthly</SelectItem>
+                  <SelectItem value="milestone">Milestone-based</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Currency</Label>
+              <CurrencySelect value={formData.contractorCurrency} onValueChange={(v) => updateField("contractorCurrency", v)} />
             </div>
           </div>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.compensation.label.salary_currency")}</Label>
-          <div className="flex items-center h-10 px-3 bg-muted/30 rounded-xl border text-sm font-medium">
-            {formData.salaryCurrency || "USD"}
-            {selectedCountry && (
-              <span className="ml-2 text-xs text-muted-foreground">(locked to {selectedCountry.countryName})</span>
-            )}
+          {formData.paymentFrequency !== "milestone" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  {formData.paymentFrequency === "semi_monthly" ? "Semi-monthly Amount" : "Monthly Amount"}
+                  <span className="text-destructive"> *</span>
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    value={formData.rateAmount}
+                    onChange={(e) => updateField("rateAmount", e.target.value)}
+                    placeholder="0.00"
+                    className="flex-1 h-10 rounded-xl"
+                  />
+                  <div className="flex items-center px-3 bg-muted/50 rounded-xl border text-sm font-medium min-w-[60px] justify-center">
+                    {formData.contractorCurrency || "USD"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="rounded-2xl border border-border/50 bg-muted/20 backdrop-blur-sm p-4">
+            <p className="text-sm text-muted-foreground">
+              {formData.paymentFrequency === "milestone"
+                ? "Payment will be made based on milestone completion. You can define milestones after onboarding through the Milestones module."
+                : "The amount entered is the gross payment per period. Additional adjustments can be made through the Adjustments module after onboarding."}
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">{t("portal_onboarding.compensation.currency_auto_set_message")}</p>
+        </div>
+      );
+    }
+
+    // EOR: Base Salary
+    return (
+      <div className="space-y-6 animate-page-in">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t("portal_onboarding.compensation.label.base_salary")} <span className="text-destructive">*</span></Label>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                value={formData.baseSalary}
+                onChange={(e) => updateField("baseSalary", e.target.value)}
+                placeholder="0.00"
+                className="flex-1 h-10 rounded-xl"
+              />
+              <div className="flex items-center px-3 bg-muted/50 rounded-xl border text-sm font-medium min-w-[60px] justify-center">
+                {formData.salaryCurrency || "USD"}
+              </div>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t("portal_onboarding.compensation.label.salary_currency")}</Label>
+            <div className="flex items-center h-10 px-3 bg-muted/30 rounded-xl border text-sm font-medium">
+              {formData.salaryCurrency || "USD"}
+              {selectedCountry && (
+                <span className="ml-2 text-xs text-muted-foreground">(locked to {selectedCountry.countryName})</span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{t("portal_onboarding.compensation.currency_auto_set_message")}</p>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-border/50 bg-muted/20 backdrop-blur-sm p-4">
+          <p className="text-sm text-muted-foreground">
+            The salary entered here is the gross monthly base salary before any deductions.
+            Additional compensation items (bonuses, allowances) can be added through the Adjustments module after onboarding.
+          </p>
         </div>
       </div>
-      <div className="rounded-2xl border border-border/50 bg-muted/20 backdrop-blur-sm p-4">
-        <p className="text-sm text-muted-foreground">
-          The salary entered here is the gross monthly base salary before any deductions.
-          Additional compensation items (bonuses, allowances) can be added through the Adjustments module after onboarding.
-        </p>
-      </div>
-    </div>
-  );
+    );
+  };
 
   // ═══════════════════════════════════════════════════
   // EMPLOYER FILL: Documents (Step 5)
@@ -1015,7 +1131,9 @@ export default function PortalOnboarding() {
   // ═══════════════════════════════════════════════════
   // WIZARD NAVIGATION LOGIC
   // ═══════════════════════════════════════════════════
-  const steps = mode === "employer-fill" ? EMPLOYER_FILL_STEPS : INVITE_STEPS;
+  const steps = mode === "employer-fill"
+    ? (isAor ? EMPLOYER_FILL_STEPS_AOR : EMPLOYER_FILL_STEPS_EOR)
+    : INVITE_STEPS;
   const totalSteps = steps.length;
 
   function canProceedStep(): boolean {
@@ -1024,8 +1142,14 @@ export default function PortalOnboarding() {
         case 1: return !!formData.serviceType;
         case 2: return !!(formData.firstName && formData.lastName && formData.email);
         case 3: return !!(formData.country && formData.jobTitle && formData.startDate);
-        case 4: return !!formData.baseSalary;
-        case 5: return true;
+        case 4:
+          if (isAor) {
+            // Milestone-based doesn't require amount
+            if (formData.paymentFrequency === "milestone") return true;
+            return !!formData.rateAmount;
+          }
+          return !!formData.baseSalary;
+        case 5: return true; // Documents step (EOR only)
         default: return false;
       }
     } else {
@@ -1046,7 +1170,7 @@ export default function PortalOnboarding() {
         case 2: return renderPersonalInfo();
         case 3: return renderEmployment();
         case 4: return renderCompensation();
-        case 5: return renderDocuments();
+        case 5: return isAor ? null : renderDocuments(); // AOR has no step 5
       }
     } else {
       switch (currentStep) {
@@ -1128,7 +1252,7 @@ export default function PortalOnboarding() {
   if (mode === "employer-fill" || mode === "invite-flow") {
     const isLastStep = currentStep === totalSteps;
     const isSubmitting = mode === "employer-fill"
-      ? submitMutation.isPending || uploadDocMutation.isPending
+      ? (isAor ? submitAorMutation.isPending : submitMutation.isPending || uploadDocMutation.isPending)
       : sendInviteMutation.isPending;
 
     return (

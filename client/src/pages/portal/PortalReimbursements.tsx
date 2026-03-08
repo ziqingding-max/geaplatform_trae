@@ -36,6 +36,7 @@ import {
 import { toast } from "sonner";
 import { exportToCsv } from "@/lib/csvExport";
 import { MonthPicker } from "@/components/DatePicker";
+import CurrencySelect from "@/components/CurrencySelect";
 
 import { useI18n } from "@/lib/i18n";
 
@@ -494,7 +495,7 @@ export default function PortalReimbursements() {
               {!editingId && (
                 <div className="space-y-2">
                   <Label>{t("portal_reimbursements.table.header.currency")}</Label>
-                  <Input value={form.currency} onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))} placeholder="USD" />
+                  <CurrencySelect value={form.currency} onValueChange={(v) => setForm((f) => ({ ...f, currency: v }))} />
                 </div>
               )}
             </div>
