@@ -1818,6 +1818,7 @@ export const customerWallets = sqliteTable(
     customerId: integer("customerId").notNull(),
     currency: text("currency", { length: 3 }).notNull(), // USD, EUR, CNY...
     balance: text("balance").default("0").notNull(), // Decimal string
+    frozenBalance: text("frozenBalance").default("0").notNull(), // Decimal string — funds reserved for pending invoices/applications
     version: integer("version").default(0).notNull(), // Optimistic lock
     updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },

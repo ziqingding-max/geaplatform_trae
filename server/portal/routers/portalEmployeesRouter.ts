@@ -270,7 +270,7 @@ export const portalEmployeesRouter = portalRouter({
         }
       }).catch(err => console.error("Failed to send new employee notification:", err));
 
-      return { success: true, employeeId: result[0].insertId };
+      return { success: true, employeeId: result[0].id };
     }),
 
   /**

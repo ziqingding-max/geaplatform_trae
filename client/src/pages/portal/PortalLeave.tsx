@@ -163,7 +163,7 @@ function PortalMilestonesTab() {
             <TabsTrigger value="history">History</TabsTrigger>
           </TabsList>
         </Tabs>
-        <Button onClick={() => setShowCreate(true)}>
+        <Button size="sm" onClick={() => setShowCreate(true)}>
           <Plus className="w-4 h-4 mr-2" /> New Milestone
         </Button>
       </div>
@@ -293,7 +293,7 @@ function PortalMilestonesTab() {
               </div>
               <div className="space-y-2">
                 <Label>Currency</Label>
-                <CurrencySelect value={milestoneForm.currency} onChange={(v) => setMilestoneForm((f) => ({ ...f, currency: v }))} />
+                <CurrencySelect value={milestoneForm.currency} onValueChange={(v: string) => setMilestoneForm((f) => ({ ...f, currency: v }))} />
               </div>
             </div>
             <div className="space-y-2">
@@ -437,15 +437,15 @@ export default function PortalLeave() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight">{t("portal_leave.header.title")}</h2>
+            <h2 className="text-2xl font-bold tracking-tight">
+              {activeTab === "milestones" ? t("portal_leave.header.title_milestones") : t("portal_leave.header.title")}
+            </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              {t("portal_leave.header.description")}
+              {activeTab === "milestones" ? t("portal_leave.header.description_milestones") : t("portal_leave.header.description")}
             </p>
           </div>
-          <div className="flex gap-2">
-            {activeTab === "milestones" ? (
-              <></>
-            ) : (
+          <div className="flex items-center gap-2">
+            {activeTab !== "milestones" && (
             <>
             <Button
               variant="outline"
@@ -468,8 +468,8 @@ export default function PortalLeave() {
             <Button onClick={() => { setForm({ ...emptyForm }); setShowCreate(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t("portal_leave.buttons.new_request")}
             </Button>
-            </>)
-            }
+            </>
+            )}
           </div>
         </div>
 

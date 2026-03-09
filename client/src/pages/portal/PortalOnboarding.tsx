@@ -130,10 +130,16 @@ const EMPLOYER_FILL_STEPS_AOR = [
   { id: 4, title: "Payment", icon: DollarSign, description: "Payment terms" },
 ];
 
-const INVITE_STEPS = [
+const INVITE_STEPS_EOR = [
   { id: 1, title: "Service", icon: Globe, description: "Choose service type" },
   { id: 2, title: "Employer Info", icon: Briefcase, description: "Job & compensation" },
-  { id: 3, title: "Send Invite", icon: Send, description: "Employee details" },
+  { id: 3, title: "Send Invite", icon: Send, description: "Worker details" },
+];
+
+const INVITE_STEPS_AOR = [
+  { id: 1, title: "Service", icon: Globe, description: "Choose service type" },
+  { id: 2, title: "Service Details", icon: Briefcase, description: "Scope & payment" },
+  { id: 3, title: "Send Invite", icon: Send, description: "Worker details" },
 ];
 
 interface OnboardingFormData {
@@ -956,7 +962,7 @@ export default function PortalOnboarding() {
   };
 
   // ═══════════════════════════════════════════════════
-  // INVITE FLOW: Employer Info (Step 2)
+  // INVITE FLOW: Service / Employer Info (Step 2)
   // ═══════════════════════════════════════════════════
   const renderInviteEmployerInfo = () => (
     <div className="space-y-6 animate-page-in">
@@ -964,16 +970,18 @@ export default function PortalOnboarding() {
         <div className="flex items-start gap-3">
           <Briefcase className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-blue-800">{t("portal_onboarding.wizard.invite_flow.step2.title")}</p>
+            <p className="text-sm font-medium text-blue-800">
+              {isAor ? t("portal_onboarding.wizard.invite_flow.step2.title_aor") : t("portal_onboarding.wizard.invite_flow.step2.title")}
+            </p>
             <p className="text-sm text-blue-700 mt-1">
-              {t("portal_onboarding.invite_flow.step2.description")}
+              {isAor ? t("portal_onboarding.invite_flow.step2.description_aor") : t("portal_onboarding.invite_flow.step2.description")}
             </p>
           </div>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.country")} <span className="text-destructive">*</span></Label>
+          <Label className="text-sm font-medium">{isAor ? t("portal_onboarding.employment.label.country_aor") : t("portal_onboarding.employment.label.country")} <span className="text-destructive">*</span></Label>
           <Select value={formData.country} onValueChange={(v) => {
             updateField("country", v);
             const c = countries?.find((c) => c.countryCode === v);
@@ -988,8 +996,8 @@ export default function PortalOnboarding() {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.job_title")} <span className="text-destructive">*</span></Label>
-          <Input value={formData.jobTitle} onChange={(e) => updateField("jobTitle", e.target.value)} placeholder="e.g. Software Engineer" className="h-10 rounded-xl" />
+          <Label className="text-sm font-medium">{isAor ? t("portal_onboarding.employment.label.job_title_aor") : t("portal_onboarding.employment.label.job_title")} <span className="text-destructive">*</span></Label>
+          <Input value={formData.jobTitle} onChange={(e) => updateField("jobTitle", e.target.value)} placeholder={isAor ? "e.g. Frontend Developer" : "e.g. Software Engineer"} className="h-10 rounded-xl" />
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -997,6 +1005,7 @@ export default function PortalOnboarding() {
           <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.department")}</Label>
           <Input value={formData.department} onChange={(e) => updateField("department", e.target.value)} placeholder="e.g. Engineering" className="h-10 rounded-xl" />
         </div>
+        {!isAor && (
         <div className="space-y-2">
           <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.employment_type")}</Label>
           <Select value={formData.employmentType} onValueChange={(v) => updateField("employmentType", v)}>
@@ -1007,16 +1016,17 @@ export default function PortalOnboarding() {
             </SelectContent>
           </Select>
         </div>
+        )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.start_date")} <span className="text-destructive">*</span></Label>
+          <Label className="text-sm font-medium">{isAor ? t("portal_onboarding.employment.label.start_date_aor") : t("portal_onboarding.employment.label.start_date")} <span className="text-destructive">*</span></Label>
           <DatePicker value={formData.startDate} onChange={(v: string) => updateField("startDate", v)} placeholder="Select start date" />
           {fieldErrors.startDate && <p className="text-xs text-destructive mt-1">{fieldErrors.startDate}</p>}
         </div>
-        {formData.employmentType === "fixed_term" && (
+        {(isAor || formData.employmentType === "fixed_term") && (
           <div className="space-y-2">
-            <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.end_date")}</Label>
+            <Label className="text-sm font-medium">{isAor ? t("portal_onboarding.employment.label.end_date_aor") : t("portal_onboarding.employment.label.end_date")}</Label>
             <DatePicker value={formData.endDate} onChange={(v: string) => updateField("endDate", v)} placeholder="Select end date" />
             {fieldErrors.endDate && <p className="text-xs text-destructive mt-1">{fieldErrors.endDate}</p>}
           </div>
@@ -1025,7 +1035,7 @@ export default function PortalOnboarding() {
       <div className="border-t border-border/40 pt-4">
         <h4 className="text-sm font-semibold mb-4 flex items-center gap-2">
           <DollarSign className="w-4 h-4 text-primary" />
-          {t("portal_onboarding.compensation.title")}
+          {isAor ? t("portal_onboarding.compensation.title_aor") : t("portal_onboarding.compensation.title")}
         </h4>
         {isAor ? (
           /* AOR: Payment Frequency + Rate Amount */
@@ -1209,7 +1219,7 @@ export default function PortalOnboarding() {
   // ═══════════════════════════════════════════════════
   const steps = mode === "employer-fill"
     ? (isAor ? EMPLOYER_FILL_STEPS_AOR : EMPLOYER_FILL_STEPS_EOR)
-    : INVITE_STEPS;
+    : (isAor ? INVITE_STEPS_AOR : INVITE_STEPS_EOR);
   const totalSteps = steps.length;
 
   function canProceedStep(): boolean {
