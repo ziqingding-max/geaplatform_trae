@@ -124,7 +124,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "contractors.detail.tabs.overview": "Overview",
     "contractors.detail.tabs.milestones": "Milestones",
     "contractors.detail.tabs.invoices": "Invoices",
-    "contractors.detail.tabs.settings": "Settings",
+    "contractors.detail.tabs.adjustments": "Adjustments",
     "contractors.overview.personalInfo": "Personal Information",
     "contractors.overview.serviceInfo": "Service Details",
     "contractors.overview.financialConfig": "Financial Configuration",
@@ -133,7 +133,6 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "contractors.milestones.empty": "No milestones found",
     "contractors.invoices.title": "Invoices",
     "contractors.invoices.empty": "No invoices found",
-    "contractors.settings.title": "Contractor Settings",
 
     // Employees
     "employees.title": "Employees",
@@ -3367,7 +3366,7 @@ const adminTranslations = {
     "contractors.detail.tabs.overview": "Overview",
     "contractors.detail.tabs.milestones": "Milestones",
     "contractors.detail.tabs.invoices": "Invoices",
-    "contractors.detail.tabs.settings": "Settings",
+    "contractors.detail.tabs.adjustments": "Adjustments",
     "contractors.overview.personalInfo": "Personal Information",
     "contractors.overview.serviceInfo": "Service Details",
     "contractors.overview.financialConfig": "Financial Configuration",
@@ -3376,7 +3375,6 @@ const adminTranslations = {
     "contractors.milestones.empty": "No milestones found",
     "contractors.invoices.title": "Invoices",
     "contractors.invoices.empty": "No invoices found",
-    "contractors.settings.title": "Contractor Settings",
 
     // Employees
     "employees.title": "Employees",
@@ -5600,7 +5598,7 @@ const adminTranslations = {
     "contractors.detail.tabs.overview": "概览",
     "contractors.detail.tabs.milestones": "里程碑",
     "contractors.detail.tabs.invoices": "发票",
-    "contractors.detail.tabs.settings": "设置",
+    "contractors.detail.tabs.adjustments": "调整项",
     "contractors.overview.personalInfo": "个人信息",
     "contractors.overview.serviceInfo": "服务详情",
     "contractors.overview.financialConfig": "财务配置",
@@ -5609,7 +5607,6 @@ const adminTranslations = {
     "contractors.milestones.empty": "未找到里程碑",
     "contractors.invoices.title": "发票",
     "contractors.invoices.empty": "未找到发票",
-    "contractors.settings.title": "承包商设置",
 
     // Employees
     "employees.title": "员工管理",

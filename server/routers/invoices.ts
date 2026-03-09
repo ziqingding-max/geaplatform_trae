@@ -531,27 +531,8 @@ export const invoicesRouter = router({
         }
       }
 
-      // 3. Mark as Paid: Handle Overpayment
-      if (newStatus === "paid" && input.paidAmount) {
-        const amountDue = parseFloat(invoice.amountDue || invoice.total);
-        const paid = parseFloat(input.paidAmount);
-        
-        if (paid > amountDue) {
-          const overpayment = (paid - amountDue).toFixed(2);
-          // Credit overpayment to wallet
-          const wallet = await walletService.getWallet(invoice.customerId, invoice.currency);
-          await walletService.transact({
-            walletId: wallet.id,
-            type: "overpayment_in",
-            amount: overpayment,
-            direction: "credit",
-            referenceId: invoice.id,
-            referenceType: "invoice",
-            description: `Overpayment for Invoice #${invoice.invoiceNumber}`,
-            createdBy: ctx.user.id,
-          });
-        }
-      }
+      // 3. Mark as Paid: Overpayment wallet credit is handled below after paymentResult calculation
+      // to ensure consistent effectiveAmountDue baseline.
 
       const updateData: any = { status: input.status };
       let paymentResult: { type: "exact" | "underpayment" | "overpayment"; difference: string; invoiceTotal: string } | undefined;
@@ -685,9 +666,19 @@ export const invoicesRouter = router({
               }).catch((err) => console.warn("[Notification] Failed to notify about follow-up invoice:", err));
             }
           } else if (paymentResult.type === "overpayment") {
-            // NOTE: With Wallet System, overpayment is already handled above (credited to wallet).
-            // We NO LONGER create a credit note for overpayment automatically.
-            // We just log it and notify.
+            // Credit overpayment to customer's wallet using the unified effectiveAmountDue baseline
+            const overpaymentAmount = paymentResult.difference;
+            const wallet = await walletService.getWallet(invoice.customerId, invoice.currency);
+            await walletService.transact({
+              walletId: wallet.id,
+              type: "overpayment_in",
+              amount: overpaymentAmount,
+              direction: "credit",
+              referenceId: invoice.id,
+              referenceType: "invoice",
+              description: `Overpayment for Invoice #${invoice.invoiceNumber}`,
+              createdBy: ctx.user.id,
+            });
             
             await logAuditAction({
               userId: ctx.user.id, userName: ctx.user.name || null,
