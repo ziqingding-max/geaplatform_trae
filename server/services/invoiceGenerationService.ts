@@ -276,8 +276,12 @@ export async function generateInvoicesFromPayroll(
         internalNotes: rateFallbackNote ? `Exchange Rate Fallback: ${rateFallbackNote.trim()}` : undefined,
       };
 
-      const invoiceInsertResult = await db.insert(invoices).values(invoiceData);
-      const invoiceId = (invoiceInsertResult as any)[0]?.insertId as number;
+      const invoiceInsertResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+      const invoiceId = invoiceInsertResult[0]?.id;
+      if (!invoiceId) {
+        warnings.push(`Failed to get invoice ID after insert for customer ${customerId}`);
+        continue;
+      }
       invoiceIds.push(invoiceId);
 
       // Insert Items
@@ -481,8 +485,12 @@ async function generateAorInvoices(
       internalNotes: rateFallbackNote ? `Exchange Rate Fallback: ${rateFallbackNote.trim()}` : undefined,
     };
 
-    const invoiceInsertResult = await db.insert(invoices).values(invoiceData);
-    const invoiceId = (invoiceInsertResult as any)[0]?.insertId as number;
+    const invoiceInsertResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+    const invoiceId = invoiceInsertResult[0]?.id;
+    if (!invoiceId) {
+      warnings.push(`Failed to get invoice ID after insert for AOR customer ${customerId}`);
+      continue;
+    }
     invoiceIds.push(invoiceId);
 
     // Insert Items

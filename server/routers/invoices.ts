@@ -634,7 +634,7 @@ export const invoicesRouter = router({
               dueDate: new Date(followUpMonth.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
             });
 
-            followUpInvoiceId = (followUpResult as any)?.insertId || (followUpResult as any)?.[0]?.insertId;
+            followUpInvoiceId = (followUpResult as any)?.[0]?.id;
 
             // Add a single line item for the outstanding balance
             if (followUpInvoiceId) {

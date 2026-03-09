@@ -153,8 +153,62 @@ function InvoiceGenerationPanel() {
         <p className="text-xs text-muted-foreground mt-2">{t("invoices.generation.description")}</p>
       </CardContent>
 
-      {/* Dialogs would go here - omitted for brevity in refactor but should be included */}
-      {/* Keeping minimal for now to focus on list refactor */}
+      {/* Regenerate Confirmation Dialog */}
+      <Dialog open={showRegenConfirm} onOpenChange={setShowRegenConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" /> {t("invoices.generation.regenerateConfirmTitle") || "Confirm Regenerate"}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {t("invoices.generation.regenerateConfirmMessage") || "This will delete all DRAFT invoices for the selected month and recreate them from payroll data. Non-draft invoices (sent, paid, overdue) will NOT be affected. Continue?"}
+          </p>
+          {preCheck.data && (preCheck.data as any).warnings?.map((w: string, i: number) => (
+            <p key={i} className="text-xs text-amber-600 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" /> {w}
+            </p>
+          ))}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRegenConfirm(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => regenerateMutation.mutate({ payrollMonth: month })}
+              disabled={regenerateMutation.isPending}
+            >
+              {regenerateMutation.isPending ? "Regenerating..." : "Confirm Regenerate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Generate Confirmation Dialog (when non-draft invoices exist) */}
+      <Dialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" /> {t("invoices.generation.generateConfirmTitle") || "Confirm Generate"}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {t("invoices.generation.generateConfirmMessage") || "Invoices already exist for this month. Generating will create additional invoices. Continue?"}
+          </p>
+          {preCheck.data && (preCheck.data as any).warnings?.map((w: string, i: number) => (
+            <p key={i} className="text-xs text-amber-600 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" /> {w}
+            </p>
+          ))}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowGenerateConfirm(false)}>Cancel</Button>
+            <Button
+              onClick={() => { generateMutation.mutate({ payrollMonth: month }); setShowGenerateConfirm(false); }}
+              disabled={generateMutation.isPending}
+            >
+              {generateMutation.isPending ? "Generating..." : "Confirm Generate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

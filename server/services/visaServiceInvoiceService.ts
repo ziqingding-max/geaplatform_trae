@@ -129,8 +129,9 @@ export async function generateVisaServiceInvoice(
       notes: `Visa & Immigration Service Fee for ${empCode} ${empName}`,
     };
 
-    const invoiceInsertResult = await db.insert(invoices).values(invoiceData);
-    const invoiceId = (invoiceInsertResult as any)[0]?.insertId as number;
+    const invoiceInsertResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+    const invoiceId = invoiceInsertResult[0]?.id;
+    if (!invoiceId) throw new Error("Failed to get visa service invoice ID after insert");
 
     // Create line item
     const lineItem: InsertInvoiceItem = {

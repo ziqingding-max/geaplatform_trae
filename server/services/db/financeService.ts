@@ -20,7 +20,7 @@ import { getDb } from "./connection";
 export async function createInvoice(data: InsertInvoice) {
   const db = await getDb();
   if (!db) return [];
-  return await db.insert(invoices).values(data);
+  return await db.insert(invoices).values(data).returning({ id: invoices.id });
 }
 
 export async function getInvoiceById(id: number) {
