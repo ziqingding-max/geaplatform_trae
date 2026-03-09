@@ -3,7 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Calendar, DollarSign, User, Briefcase, FileText, Settings, CreditCard, Pencil, MapPin } from "lucide-react";
+import { ArrowLeft, Plus, Calendar, DollarSign, User, Briefcase, FileText, CreditCard, Pencil, MapPin } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -469,7 +469,7 @@ export default function ContractorDetail() {
             <TabsTrigger value="milestones">{t("contractors.detail.tabs.milestones")}</TabsTrigger>
             <TabsTrigger value="adjustments">{t("contractors.detail.tabs.adjustments") || "Adjustments"}</TabsTrigger>
             <TabsTrigger value="invoices">{t("contractors.detail.tabs.invoices")}</TabsTrigger>
-            <TabsTrigger value="settings">{t("contractors.detail.tabs.settings")}</TabsTrigger>
+
           </TabsList>
 
           {/* Overview Tab */}
@@ -730,15 +730,6 @@ export default function ContractorDetail() {
             />
           </TabsContent>
 
-          {/* Settings Tab - Placeholder for now */}
-          <TabsContent value="settings">
-            <Card>
-              <CardHeader><CardTitle>{t("contractors.settings.title")}</CardTitle></CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">Contractor settings and configuration coming soon.</p>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
         </Tabs>
 

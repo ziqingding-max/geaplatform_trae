@@ -282,7 +282,12 @@ export default function InvoiceDetail() {
   const creditApplied = parseFloat(invoice.creditApplied?.toString() || "0");
   const totalNum = parseFloat(invoice.total?.toString() || "0");
   const paidNum = parseFloat(invoice.paidAmount?.toString() || "0");
-  const amountDueNum = parseFloat(invoice.amountDue?.toString() || totalNum.toString());
+  // Calculate effectiveAmountDue consistent with backend logic:
+  // When wallet/credit applied, use invoice.amountDue (which reflects deductions);
+  // Otherwise, use totalNum (the full invoice total) as the baseline.
+  const amountDueNum = (walletApplied > 0 || creditApplied > 0)
+    ? parseFloat(invoice.amountDue?.toString() || (totalNum - creditApplied - walletApplied).toFixed(2))
+    : totalNum;
 
   // ── Handlers ──
   const handleDelete = () => {
@@ -381,39 +386,26 @@ export default function InvoiceDetail() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <SummaryCard label="Subtotal" value={`${invoice.currency || "USD"} ${fmtAmt(invoice.subtotal)}`} />
           <SummaryCard label="VAT / Tax" value={`${invoice.currency || "USD"} ${fmtAmt(invoice.tax)}`} />
-          <SummaryCard label="Total Due" value={`${invoice.currency || "USD"} ${fmtAmt(invoice.total)}`} highlight />
-          <SummaryCard
-            label={isPaid ? "Paid" : "Amount Due"}
-            value={`${invoice.currency || "USD"} ${fmtAmt(isPaid ? invoice.paidAmount : invoice.amountDue || invoice.total)}`}
-            className={isPaid ? "border-emerald-200 bg-emerald-50/50" : ""}
-          />
+          <SummaryCard label="Total" value={`${invoice.currency || "USD"} ${fmtAmt(invoice.total)}`} highlight />
+          {isPaid ? (
+            <SummaryCard
+              label="Paid"
+              value={`${invoice.currency || "USD"} ${fmtAmt(invoice.paidAmount)}`}
+              className="border-emerald-200 bg-emerald-50/50"
+            />
+          ) : (walletApplied > 0 || creditApplied > 0) ? (
+            <SummaryCard
+              label="Amount Due"
+              value={`${invoice.currency || "USD"} ${fmtAmt(amountDueNum)}`}
+              className="border-blue-200 bg-blue-50/50"
+            />
+          ) : (
+            <SummaryCard
+              label="Due Date"
+              value={invoice.dueDate ? formatDate(invoice.dueDate) : "Not set"}
+            />
+          )}
         </div>
-
-        {/* Wallet / Credit deductions */}
-        {(walletApplied > 0 || creditApplied > 0) && (
-          <Card className="border-blue-200 bg-blue-50/30">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex flex-wrap gap-6 text-sm">
-                {walletApplied > 0 && (
-                  <div>
-                    <span className="text-muted-foreground">Wallet Applied: </span>
-                    <span className="font-mono font-medium text-blue-700">- {invoice.currency} {fmtAmt(walletApplied)}</span>
-                  </div>
-                )}
-                {creditApplied > 0 && (
-                  <div>
-                    <span className="text-muted-foreground">Credit Applied: </span>
-                    <span className="font-mono font-medium text-purple-700">- {invoice.currency} {fmtAmt(creditApplied)}</span>
-                  </div>
-                )}
-                <div>
-                  <span className="text-muted-foreground">Net Amount Due: </span>
-                  <span className="font-mono font-bold">{invoice.currency} {fmtAmt(amountDueNum)}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         {/* ── Exchange Rate Intelligence (Finance Manager only) ── */}
         {isFinanceManager && rateRef && rateRef.foreignCurrency && rateRef.liveRate && (
@@ -485,8 +477,18 @@ export default function InvoiceDetail() {
                     <TableBody>
                       {(items || []).length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={isEditable ? 8 : 7} className="text-center py-8 text-muted-foreground">
-                            No line items yet. {isEditable && "Click \"Add Item\" to get started."}
+                          <TableCell colSpan={isEditable ? 8 : 7} className="text-center py-8">
+                            <div className="space-y-2">
+                              <p className="text-muted-foreground">
+                                No line items yet. {isEditable && "Click \"Add Item\" to get started."}
+                              </p>
+                              {totalNum > 0 && (
+                                <p className="text-xs text-amber-600 flex items-center justify-center gap-1">
+                                  <AlertTriangle className="w-3.5 h-3.5" />
+                                  This invoice has a total amount ({invoice.currency} {fmtAmt(totalNum)}) but no line items. Consider regenerating or adding items manually.
+                                </p>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -537,30 +539,7 @@ export default function InvoiceDetail() {
                     </TableBody>
                   </Table>
                 </div>
-                {/* Totals Footer */}
-                {(items || []).length > 0 && (
-                  <div className="border-t px-6 py-4 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Subtotal</span>
-                      <span className="font-mono">{invoice.currency} {fmtAmt(invoice.subtotal)}</span>
-                    </div>
-                    {parseFloat(invoice.serviceFeeTotal?.toString() || "0") > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Service Fee Total</span>
-                        <span className="font-mono">{invoice.currency} {fmtAmt(invoice.serviceFeeTotal)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Tax / VAT</span>
-                      <span className="font-mono">{invoice.currency} {fmtAmt(invoice.tax)}</span>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between font-bold text-base">
-                      <span>Total Due</span>
-                      <span className="font-mono">{invoice.currency} {fmtAmt(invoice.total)}</span>
-                    </div>
-                  </div>
-                )}
+
               </CardContent>
             </Card>
 
@@ -614,8 +593,14 @@ export default function InvoiceDetail() {
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="font-mono">{invoice.currency} {fmtAmt(invoice.subtotal)}</span>
                 </div>
+                {parseFloat(invoice.serviceFeeTotal?.toString() || "0") > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Service Fee</span>
+                    <span className="font-mono">{invoice.currency} {fmtAmt(invoice.serviceFeeTotal)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Tax</span>
+                  <span className="text-muted-foreground">Tax / VAT</span>
                   <span className="font-mono">{invoice.currency} {fmtAmt(invoice.tax)}</span>
                 </div>
                 <Separator />
@@ -648,6 +633,12 @@ export default function InvoiceDetail() {
                   <div className="flex justify-between text-sm text-emerald-600 font-medium">
                     <span>Paid</span>
                     <span className="font-mono">{invoice.currency} {fmtAmt(invoice.paidAmount)}</span>
+                  </div>
+                )}
+                {invoice.dueDate && !isPaid && (
+                  <div className="flex justify-between text-sm pt-1">
+                    <span className="text-muted-foreground">Due Date</span>
+                    <span className="font-mono">{formatDate(invoice.dueDate)}</span>
                   </div>
                 )}
               </CardContent>
