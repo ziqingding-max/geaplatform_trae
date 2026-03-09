@@ -485,9 +485,23 @@ export const invoicesRouter = router({
       // Wallet Logic: Handle transitions
       const invoice = await getInvoiceById(input.id);
       if (!invoice) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice not found" });
-
       const oldStatus = invoice.status;
       const newStatus = input.status;
+
+      // Validate status transition
+      const validTransitions: Record<string, string[]> = {
+        draft: ["pending_review", "cancelled"],
+        pending_review: ["sent", "draft", "cancelled"],
+        sent: ["paid", "cancelled"],
+        overdue: ["paid", "cancelled"],
+      };
+      const allowed = validTransitions[oldStatus || "draft"] || [];
+      if (!allowed.includes(newStatus)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Cannot transition from '${oldStatus}' to '${newStatus}'`,
+        });
+      };
 
       // 1. Draft -> Pending Review: Auto-deduct from wallet
       if (oldStatus === "draft" && newStatus === "pending_review") {
@@ -1314,7 +1328,7 @@ export const invoicesRouter = router({
       // Cancel allowed for all pre-paid statuses; overdue is system-only (auto-detected)
       const validTransitions: Record<string, string[]> = {
         draft: ["pending_review", "cancelled"],
-        pending_review: ["sent", "cancelled"],
+        pending_review: ["sent", "draft", "cancelled"],
         sent: ["paid", "cancelled"],
         overdue: ["paid", "cancelled"],
       };
