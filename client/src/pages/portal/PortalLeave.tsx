@@ -443,6 +443,10 @@ export default function PortalLeave() {
             </p>
           </div>
           <div className="flex gap-2">
+            {activeTab === "milestones" ? (
+              <></>
+            ) : (
+            <>
             <Button
               variant="outline"
               size="sm"
@@ -464,6 +468,8 @@ export default function PortalLeave() {
             <Button onClick={() => { setForm({ ...emptyForm }); setShowCreate(true); }}>
               <Plus className="w-4 h-4 mr-2" /> {t("portal_leave.buttons.new_request")}
             </Button>
+            </>)
+            }
           </div>
         </div>
 
@@ -473,7 +479,7 @@ export default function PortalLeave() {
             <TabsTrigger value="balances">{t("portal_leave.tabs.balances")}</TabsTrigger>
             <TabsTrigger value="holidays">{t("portal_leave.tabs.holidays")}</TabsTrigger>
             <TabsTrigger value="milestones" className="gap-1.5">
-              <Target className="w-3.5 h-3.5" /> Milestones
+              <Target className="w-3.5 h-3.5" /> {t("portal_leave.tabs.milestones")}
             </TabsTrigger>
           </TabsList>
 
@@ -599,13 +605,13 @@ export default function PortalLeave() {
             {totalPages > 1 && (
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
-                  Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
+                  {t("common.showing")} {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} {t("common.of")} {total}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
                     <ChevronLeft className="w-4 h-4" />
                   </Button>
-                  <span className="text-sm">Page {page} of {totalPages}</span>
+                  <span className="text-sm">{t("common.page")} {page} {t("common.of")} {totalPages}</span>
                   <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
                     <ChevronRight className="w-4 h-4" />
                   </Button>

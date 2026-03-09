@@ -24,9 +24,14 @@ import {
   Phone,
   Globe,
   FileText,
+  Building2,
+  Hash,
+  Coins,
+  StickyNote,
 } from "lucide-react";
 import { formatStatusLabel } from "@/lib/format";
 import { portalPath } from "@/lib/portalBasePath";
+import { useI18n } from "@/lib/i18n";
 
 const statusColors: Record<string, string> = {
   active: "bg-green-100 text-green-800 border-green-200",
@@ -47,6 +52,7 @@ function InfoRow({ label, value, icon: Icon }: { label: string; value: string | 
 }
 
 export default function PortalContractorDetail() {
+  const { t } = useI18n();
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const contractorId = Number(params.id);
@@ -58,7 +64,7 @@ export default function PortalContractorDetail() {
 
   if (isLoading) {
     return (
-      <PortalLayout title="Contractor Detail">
+      <PortalLayout title={t("portal_contractor_detail.title")}>
         <div className="p-6 space-y-6">
           <Skeleton className="h-8 w-48" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -72,12 +78,12 @@ export default function PortalContractorDetail() {
 
   if (!contractor) {
     return (
-      <PortalLayout title="Contractor Detail">
+      <PortalLayout title={t("portal_contractor_detail.title")}>
         <div className="p-6 flex flex-col items-center justify-center py-20 text-muted-foreground">
           <FileText className="w-10 h-10 mb-3" />
-          <p className="text-lg font-medium">Contractor not found</p>
+          <p className="text-lg font-medium">{t("portal_contractor_detail.not_found")}</p>
           <Button variant="outline" className="mt-4" onClick={() => setLocation(portalPath("/people"))}>
-            <ArrowLeft className="w-4 h-4 mr-2" /> Back to People
+            <ArrowLeft className="w-4 h-4 mr-2" /> {t("portal_contractor_detail.back_to_people")}
           </Button>
         </div>
       </PortalLayout>
@@ -107,7 +113,7 @@ export default function PortalContractorDetail() {
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground mt-0.5">
-                {contractor.contractorCode} · {contractor.jobTitle || "Contractor"}
+                {contractor.contractorCode} · {contractor.jobTitle || t("portal_contractor_detail.default_title")}
               </p>
             </div>
           </div>
@@ -118,21 +124,21 @@ export default function PortalContractorDetail() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <User className="w-4 h-4" /> Personal Information
+                <User className="w-4 h-4" /> {t("portal_contractor_detail.personal_info")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-1">
-              <InfoRow label="Full Name" value={`${contractor.firstName} ${contractor.lastName}`} icon={User} />
-              <InfoRow label="Email" value={contractor.email} icon={Mail} />
-              <InfoRow label="Phone" value={contractor.phone} icon={Phone} />
-              <InfoRow label="Date of Birth" value={contractor.dateOfBirth ? new Date(contractor.dateOfBirth).toLocaleDateString() : null} icon={Calendar} />
-              <InfoRow label="Nationality" value={contractor.nationality} icon={Globe} />
+              <InfoRow label={t("portal_contractor_detail.full_name")} value={`${contractor.firstName} ${contractor.lastName}`} icon={User} />
+              <InfoRow label={t("portal_contractor_detail.email")} value={contractor.email} icon={Mail} />
+              <InfoRow label={t("portal_contractor_detail.phone")} value={contractor.phone} icon={Phone} />
+              <InfoRow label={t("portal_contractor_detail.dob")} value={contractor.dateOfBirth ? new Date(contractor.dateOfBirth).toLocaleDateString() : null} icon={Calendar} />
+              <InfoRow label={t("portal_contractor_detail.nationality")} value={contractor.nationality} icon={Globe} />
               <Separator className="my-2" />
-              <InfoRow label="Address" value={contractor.address} icon={MapPin} />
-              <InfoRow label="City" value={contractor.city} />
-              <InfoRow label="State / Province" value={contractor.state} />
-              <InfoRow label="Postal Code" value={contractor.postalCode} />
-              <InfoRow label="Country" value={contractor.country} icon={Globe} />
+              <InfoRow label={t("portal_contractor_detail.address")} value={contractor.address} icon={MapPin} />
+              <InfoRow label={t("portal_contractor_detail.city")} value={contractor.city} icon={Building2} />
+              <InfoRow label={t("portal_contractor_detail.state")} value={contractor.state} icon={MapPin} />
+              <InfoRow label={t("portal_contractor_detail.postal_code")} value={contractor.postalCode} icon={Hash} />
+              <InfoRow label={t("portal_contractor_detail.country")} value={contractor.country} icon={Globe} />
             </CardContent>
           </Card>
 
@@ -140,18 +146,18 @@ export default function PortalContractorDetail() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <Briefcase className="w-4 h-4" /> Service Details
+                <Briefcase className="w-4 h-4" /> {t("portal_contractor_detail.service_details")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-1">
-              <InfoRow label="Job Title" value={contractor.jobTitle} icon={Briefcase} />
-              <InfoRow label="Department" value={contractor.department} />
-              <InfoRow label="Start Date" value={contractor.startDate ? new Date(contractor.startDate).toLocaleDateString() : null} icon={Calendar} />
-              <InfoRow label="End Date" value={contractor.endDate ? new Date(contractor.endDate).toLocaleDateString() : null} icon={Calendar} />
+              <InfoRow label={t("portal_contractor_detail.job_title")} value={contractor.jobTitle} icon={Briefcase} />
+              <InfoRow label={t("portal_contractor_detail.department")} value={contractor.department} icon={Building2} />
+              <InfoRow label={t("portal_contractor_detail.start_date")} value={contractor.startDate ? new Date(contractor.startDate).toLocaleDateString() : null} icon={Calendar} />
+              <InfoRow label={t("portal_contractor_detail.end_date")} value={contractor.endDate ? new Date(contractor.endDate).toLocaleDateString() : null} icon={Calendar} />
               <Separator className="my-2" />
-              <InfoRow label="Payment Frequency" value={paymentLabel} icon={DollarSign} />
+              <InfoRow label={t("portal_contractor_detail.payment_frequency")} value={paymentLabel} icon={DollarSign} />
               <InfoRow
-                label="Amount"
+                label={t("portal_contractor_detail.amount")}
                 value={
                   contractor.rateAmount
                     ? `${contractor.currency || "USD"} ${Number(contractor.rateAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
@@ -159,13 +165,16 @@ export default function PortalContractorDetail() {
                 }
                 icon={DollarSign}
               />
-              <InfoRow label="Currency" value={contractor.currency} />
+              <InfoRow label={t("portal_contractor_detail.currency")} value={contractor.currency} icon={Coins} />
               {contractor.notes && (
                 <>
                   <Separator className="my-2" />
-                  <div className="py-2">
-                    <p className="text-xs text-muted-foreground mb-1">Notes</p>
-                    <p className="text-sm whitespace-pre-wrap">{contractor.notes}</p>
+                  <div className="flex items-start gap-3 py-2">
+                    <StickyNote className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">{t("portal_contractor_detail.notes")}</p>
+                      <p className="text-sm whitespace-pre-wrap">{contractor.notes}</p>
+                    </div>
                   </div>
                 </>
               )}

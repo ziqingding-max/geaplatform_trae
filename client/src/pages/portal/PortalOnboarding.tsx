@@ -529,6 +529,19 @@ export default function PortalOnboarding() {
     sendInviteMutation.mutate({
       employeeName: inviteName,
       employeeEmail: inviteEmail,
+      // Employer-provided fields from step 2
+      serviceType: (formData.serviceType as any) || "eor",
+      country: formData.country || undefined,
+      jobTitle: formData.jobTitle || undefined,
+      department: formData.department || undefined,
+      startDate: formData.startDate || undefined,
+      endDate: formData.endDate || undefined,
+      employmentType: formData.employmentType || undefined,
+      baseSalary: formData.baseSalary || undefined,
+      salaryCurrency: formData.salaryCurrency || undefined,
+      paymentFrequency: formData.paymentFrequency || undefined,
+      rateAmount: formData.rateAmount || undefined,
+      contractorCurrency: formData.contractorCurrency || undefined,
     });
   }
 
@@ -953,7 +966,7 @@ export default function PortalOnboarding() {
           <div>
             <p className="text-sm font-medium text-blue-800">{t("portal_onboarding.wizard.invite_flow.step2.title")}</p>
             <p className="text-sm text-blue-700 mt-1">
-              These fields require information only the employer would know. The employee will fill in their personal details separately.
+              {t("portal_onboarding.invite_flow.step2.description")}
             </p>
           </div>
         </div>
@@ -1012,35 +1025,81 @@ export default function PortalOnboarding() {
       <div className="border-t border-border/40 pt-4">
         <h4 className="text-sm font-semibold mb-4 flex items-center gap-2">
           <DollarSign className="w-4 h-4 text-primary" />
-          Compensation
+          {t("portal_onboarding.compensation.title")}
         </h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">{t("portal_onboarding.compensation.label.base_salary")} <span className="text-destructive">*</span></Label>
-            <div className="flex gap-2">
-              <Input
-                type="number"
-                value={formData.baseSalary}
-                onChange={(e) => updateField("baseSalary", e.target.value)}
-                placeholder="0.00"
-                className="flex-1 h-10 rounded-xl"
-              />
-              <div className="flex items-center px-3 bg-muted/50 rounded-xl border text-sm font-medium min-w-[60px] justify-center">
-                {formData.salaryCurrency || "USD"}
+        {isAor ? (
+          /* AOR: Payment Frequency + Rate Amount */
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">{t("portal_onboarding.compensation.label.payment_frequency")} <span className="text-destructive">*</span></Label>
+                <Select value={formData.paymentFrequency} onValueChange={(v) => updateField("paymentFrequency", v)}>
+                  <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder={t("portal_onboarding.compensation.placeholder.select_frequency")} /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly">{t("portal_onboarding.compensation.frequency.monthly")}</SelectItem>
+                    <SelectItem value="semi_monthly">{t("portal_onboarding.compensation.frequency.semi_monthly")}</SelectItem>
+                    <SelectItem value="milestone">{t("portal_onboarding.compensation.frequency.milestone")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">{t("portal_onboarding.compensation.label.currency")}</Label>
+                <CurrencySelect value={formData.contractorCurrency} onValueChange={(v) => updateField("contractorCurrency", v)} />
               </div>
             </div>
+            {formData.paymentFrequency !== "milestone" && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    {formData.paymentFrequency === "semi_monthly" ? t("portal_onboarding.compensation.label.semi_monthly_amount") : t("portal_onboarding.compensation.label.monthly_amount")}
+                    <span className="text-destructive"> *</span>
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      value={formData.rateAmount}
+                      onChange={(e) => updateField("rateAmount", e.target.value)}
+                      placeholder="0.00"
+                      className="flex-1 h-10 rounded-xl"
+                    />
+                    <div className="flex items-center px-3 bg-muted/50 rounded-xl border text-sm font-medium min-w-[60px] justify-center">
+                      {formData.contractorCurrency || "USD"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">{t("portal_onboarding.compensation.label.salary_currency")}</Label>
-            <div className="flex items-center h-10 px-3 bg-muted/30 rounded-xl border text-sm font-medium">
-              {formData.salaryCurrency || "USD"}
-              {selectedCountry && (
-                <span className="ml-2 text-xs text-muted-foreground">(locked to {selectedCountry.countryName})</span>
-              )}
+        ) : (
+          /* EOR: Base Salary */
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">{t("portal_onboarding.compensation.label.base_salary")} <span className="text-destructive">*</span></Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  value={formData.baseSalary}
+                  onChange={(e) => updateField("baseSalary", e.target.value)}
+                  placeholder="0.00"
+                  className="flex-1 h-10 rounded-xl"
+                />
+                <div className="flex items-center px-3 bg-muted/50 rounded-xl border text-sm font-medium min-w-[60px] justify-center">
+                  {formData.salaryCurrency || "USD"}
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">{t("portal_onboarding.compensation.currency_auto_set_message")}</p>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">{t("portal_onboarding.compensation.label.salary_currency")}</Label>
+              <div className="flex items-center h-10 px-3 bg-muted/30 rounded-xl border text-sm font-medium">
+                {formData.salaryCurrency || "USD"}
+                {selectedCountry && (
+                  <span className="ml-2 text-xs text-muted-foreground">(locked to {selectedCountry.countryName})</span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">{t("portal_onboarding.compensation.currency_auto_set_message")}</p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -1056,14 +1115,14 @@ export default function PortalOnboarding() {
           <div>
             <p className="text-sm font-medium">{t("portal_onboarding.wizard.invite_flow.step3.title")}</p>
             <p className="text-sm text-muted-foreground mt-1">
-              Enter the employee's name and email. They will receive a unique link to fill in their personal information and upload documents.
+              {t("portal_onboarding.invite_flow.step3.description")}
             </p>
           </div>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.invite_flow.send_invite.label.employee_name")} <span className="text-destructive">*</span></Label>
+          <Label className="text-sm font-medium">{t("portal_onboarding.invite_flow.send_invite.label.worker_name")} <span className="text-destructive">*</span></Label>
           <Input
             value={inviteName}
             onChange={(e) => setInviteName(e.target.value)}
@@ -1072,12 +1131,12 @@ export default function PortalOnboarding() {
           />
         </div>
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Employee {t("portal_onboarding.personal_info.label.email")} <span className="text-destructive">*</span></Label>
+          <Label className="text-sm font-medium">{t("portal_onboarding.invite_flow.send_invite.label.worker_email")} <span className="text-destructive">*</span></Label>
           <Input
             type="email"
             value={inviteEmail}
             onChange={(e) => setInviteEmail(e.target.value)}
-            placeholder="employee@example.com"
+            placeholder="name@example.com"
             className="h-10 rounded-xl"
           />
         </div>
@@ -1087,7 +1146,7 @@ export default function PortalOnboarding() {
       <div className="rounded-2xl border border-border/40 bg-card/50 backdrop-blur-sm p-5">
         <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
           <ClipboardList className="w-4 h-4 text-primary" />
-          Pre-filled Information Summary
+          {t("portal_onboarding.invite_flow.step3.summary_title")}
         </h4>
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
@@ -1106,14 +1165,31 @@ export default function PortalOnboarding() {
             <span className="text-muted-foreground">{t("portal_onboarding.employment.label.start_date")}:</span>{" "}
             <span className="font-medium">{formData.startDate ? new Date(formData.startDate).toLocaleDateString() : "-"}</span>
           </div>
-          <div>
-            <span className="text-muted-foreground">{t("common.salary")}:</span>{" "}
-            <span className="font-medium">{formData.baseSalary ? `${formData.salaryCurrency} ${Number(formData.baseSalary).toLocaleString()}` : "-"}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground">{t("common.type")}:</span>{" "}
-            <span className="font-medium">{formData.employmentType === "long_term" ? "Permanent" : "Fixed Term"}</span>
-          </div>
+          {isAor ? (
+            <>
+              <div>
+                <span className="text-muted-foreground">{t("portal_onboarding.compensation.label.payment_frequency")}:</span>{" "}
+                <span className="font-medium">{formData.paymentFrequency || "-"}</span>
+              </div>
+              {formData.paymentFrequency !== "milestone" && (
+                <div>
+                  <span className="text-muted-foreground">{t("portal_onboarding.compensation.label.rate_amount")}:</span>{" "}
+                  <span className="font-medium">{formData.rateAmount ? `${formData.contractorCurrency || "USD"} ${Number(formData.rateAmount).toLocaleString()}` : "-"}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div>
+                <span className="text-muted-foreground">{t("common.salary")}:</span>{" "}
+                <span className="font-medium">{formData.baseSalary ? `${formData.salaryCurrency} ${Number(formData.baseSalary).toLocaleString()}` : "-"}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground">{t("common.type")}:</span>{" "}
+                <span className="font-medium">{formData.employmentType === "long_term" ? t("portal_onboarding.employment_type.permanent") : t("portal_onboarding.employment_type.fixed_term")}</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -1121,7 +1197,7 @@ export default function PortalOnboarding() {
         <div className="flex items-start gap-2">
           <Link2 className="w-4 h-4 text-muted-foreground mt-0.5" />
           <p className="text-xs text-muted-foreground">
-            The employee will receive a unique link valid for 72 hours. They can fill in their personal details, upload documents, and submit the onboarding form. The employer-provided information above will be pre-filled.
+            {t("portal_onboarding.invite_flow.step3.link_info")}
           </p>
         </div>
       </div>
@@ -1156,7 +1232,14 @@ export default function PortalOnboarding() {
       // invite flow
       switch (currentStep) {
         case 1: return !!formData.serviceType;
-        case 2: return !!(formData.country && formData.jobTitle && formData.startDate && formData.baseSalary);
+        case 2: {
+          const baseValid = !!(formData.country && formData.jobTitle && formData.startDate);
+          if (isAor) {
+            if (formData.paymentFrequency === "milestone") return baseValid;
+            return baseValid && !!formData.rateAmount;
+          }
+          return baseValid && !!formData.baseSalary;
+        }
         case 3: return !!(inviteName && inviteEmail);
         default: return false;
       }
@@ -1505,7 +1588,7 @@ export default function PortalOnboarding() {
                           <div className="flex items-center gap-2">
                             <p className="font-medium">{invite.employeeName}</p>
                             <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-blue-200/60 text-blue-600 bg-blue-50/50">
-                              Invite
+                              {t("portal_onboarding.list.invite_badge")}
                             </Badge>
                           </div>
                           <p className="text-sm text-muted-foreground">{invite.employeeEmail}</p>
@@ -1528,7 +1611,7 @@ export default function PortalOnboarding() {
                               onClick={() => copyInviteLink(invite.token)}
                             >
                               <Link2 className="w-3.5 h-3.5" />
-                              Copy Link
+                              {t("portal_onboarding.list.copy_link")}
                             </Button>
                             <Button
                               variant="outline"
@@ -1538,7 +1621,7 @@ export default function PortalOnboarding() {
                               disabled={resendInviteMutation.isPending}
                             >
                               <Send className="w-3.5 h-3.5" />
-                              Resend
+                              {t("portal_onboarding.list.resend")}
                             </Button>
                             <Button
                               variant="ghost"

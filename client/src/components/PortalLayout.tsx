@@ -83,7 +83,7 @@ function buildPortalNavGroups(): NavGroup[] {
       labelKey: "nav.finance",
       items: [
         { labelKey: "nav.invoices", icon: Receipt, href: portalPath("/invoices") },
-        { labelKey: "Wallet", icon: Wallet, href: portalPath("/wallet") },
+        { labelKey: "nav.wallet", icon: Wallet, href: portalPath("/wallet") },
       ],
     },
     {

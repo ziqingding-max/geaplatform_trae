@@ -953,7 +953,24 @@ export const onboardingInvites = sqliteTable(
       "expired",
       "cancelled",
     ] }).default("pending").notNull(),
+    // Employer-provided fields (filled during invite flow step 2)
+    serviceType: text("serviceType", { enum: ["eor", "visa_eor", "aor"] }).default("eor"),
+    country: text("country", { length: 100 }),
+    jobTitle: text("jobTitle", { length: 255 }),
+    department: text("department", { length: 100 }),
+    startDate: text("startDate"),
+    endDate: text("endDate"),
+    employmentType: text("employmentType", { length: 50 }),
+    // EOR compensation
+    baseSalary: text("baseSalary"),
+    salaryCurrency: text("salaryCurrency", { length: 3 }),
+    // AOR compensation
+    paymentFrequency: text("paymentFrequency", { length: 50 }),
+    rateAmount: text("rateAmount"),
+    contractorCurrency: text("contractorCurrency", { length: 3 }),
+    // Completion links
     employeeId: integer("employeeId"),
+    contractorId: integer("contractorId"),
     expiresAt: integer("expiresAt", { mode: "timestamp" }).notNull(),
     completedAt: integer("completedAt", { mode: "timestamp" }),
     createdBy: integer("createdBy"),

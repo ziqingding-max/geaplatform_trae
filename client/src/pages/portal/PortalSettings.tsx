@@ -150,17 +150,17 @@ function CompanyProfileTab() {
           {editing ? (
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={updateMutation.isPending}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button size="sm" onClick={saveEdit} disabled={updateMutation.isPending}>
                 {updateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-                Save Changes
+                {t("common.save")}
               </Button>
             </div>
           ) : (
             <Button variant="outline" size="sm" onClick={startEdit}>
               <Pencil className="w-4 h-4 mr-1" />
-              Edit Profile
+              {t("common.edit")}
             </Button>
           )}
         </div>
@@ -174,9 +174,9 @@ function CompanyProfileTab() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <EditableField label="Company Name" fieldKey="companyName" />
-            <LockedField label="Legal Entity Name" value={profile.legalEntityName || ""} tooltip="Contact your GEA account manager to update" />
-            <EditableField label="Registration Number" fieldKey="registrationNumber" />
+            <EditableField label={t("portal_settings.company.display_name")} fieldKey="companyName" />
+            <LockedField label={t("portal_settings.company.legal_name")} value={profile.legalEntityName || ""} tooltip={t("portal_settings.company.contact_support")} />
+            <EditableField label={t("portal_settings.company.registration_number")} fieldKey="registrationNumber" />
             <EditableField label={t("portal_settings.company_profile.industry_label")} fieldKey="industry" />
             <EditableField label={t("portal_settings.company_profile.country_label")} fieldKey="country" />
             <div className="space-y-1.5">
@@ -207,11 +207,11 @@ function CompanyProfileTab() {
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="md:col-span-2">
-              <EditableField label="Street Address" fieldKey="address" />
+              <EditableField label={t("portal_settings.company.address")} fieldKey="address" />
             </div>
             <EditableField label={t("portal_settings.company_profile.city_label")} fieldKey="city" />
-            <EditableField label="State / Province" fieldKey="state" />
-            <EditableField label="Postal Code" fieldKey="postalCode" />
+            <EditableField label={t("portal_settings.company.state")} fieldKey="state" />
+            <EditableField label={t("portal_settings.company.postal_code")} fieldKey="postalCode" />
           </div>
         </CardContent>
       </Card>
@@ -224,13 +224,13 @@ function CompanyProfileTab() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <LockedField label="Contact Name" value={profile.primaryContactName || ""} tooltip="Contact your GEA account manager to update" />
-            <LockedField label={t("portal_settings.company_profile.email_label")} value={profile.primaryContactEmail || ""} tooltip="Contact your GEA account manager to update" />
-            <LockedField label={t("portal_settings.company_profile.phone_label")} value={profile.primaryContactPhone || ""} tooltip="Contact your GEA account manager to update" />
+            <LockedField label={t("portal_settings.team.table.name")} value={profile.primaryContactName || ""} tooltip={t("portal_settings.company.contact_support")} />
+            <LockedField label={t("portal_settings.company.email")} value={profile.primaryContactEmail || ""} tooltip={t("portal_settings.company.contact_support")} />
+            <LockedField label={t("portal_settings.company.phone")} value={profile.primaryContactPhone || ""} tooltip={t("portal_settings.company.contact_support")} />
           </div>
           <p className="text-xs text-muted-foreground mt-4 flex items-center gap-1.5">
             <Shield className="w-3 h-3" />
-            To update primary contact information, please contact your GEA account manager.
+            {t("portal_settings.company.contact_support")}
           </p>
         </CardContent>
       </Card>
@@ -242,7 +242,7 @@ function CompanyProfileTab() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <LockedField label="Settlement Currency" value={profile.settlementCurrency || "USD"} tooltip="Settlement currency is set during onboarding and cannot be changed" />
+            <LockedField label={t("portal_settings.company.currency")} value={profile.settlementCurrency || "USD"} tooltip={t("portal_settings.company.contact_support")} />
           </div>
         </CardContent>
       </Card>
@@ -346,10 +346,10 @@ function LeavePoliciesTab() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Leave Type</TableHead>
-                    <TableHead className="text-center">Statutory Min.</TableHead>
-                    <TableHead className="text-center">Your Entitlement</TableHead>
-                    <TableHead className="text-center">Carry Over</TableHead>
+                    <TableHead>{t("portal_settings.leave_policies.table_header.leave_type") || "Leave Type"}</TableHead>
+                    <TableHead className="text-center">{t("portal_settings.leave_policies.table_header.statutory_min") || "Statutory Min."}</TableHead>
+                    <TableHead className="text-center">{t("portal_settings.leave_policies.table_header.entitlement") || "Your Entitlement"}</TableHead>
+                    <TableHead className="text-center">{t("portal_settings.leave_policies.table_header.carry_over") || "Carry Over"}</TableHead>
                     <TableHead>{t("portal_settings.leave_policies.table_header.expiry_rule")}</TableHead>
                     {isAdmin && <TableHead className="text-right">{t("portal_settings.leave_policies.table_header.actions")}</TableHead>}
                   </TableRow>
@@ -517,10 +517,10 @@ function UserManagementTab() {
   };
 
   const roleLabels: Record<string, string> = {
-    admin: "Admin",
-    hr_manager: "HR Manager",
-    finance: "Finance",
-    viewer: "Viewer",
+    admin: t("portal_settings.team.role.admin"),
+    hr_manager: t("portal_settings.team.role.hr_manager"),
+    finance: t("portal_settings.team.role.finance_manager"),
+    viewer: t("portal_settings.team.role.viewer"),
   };
 
   const roleDescriptions: Record<string, string> = {
@@ -537,7 +537,7 @@ function UserManagementTab() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Shield className="w-4 h-4" />
-            Role Permissions
+            {t("portal_settings.team.title")}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -566,14 +566,14 @@ function UserManagementTab() {
               <DialogTrigger asChild>
                 <Button size="sm">
                   <UserPlus className="w-4 h-4 mr-2" />
-                  Invite Member
+                  {t("portal_settings.team.invite_button")}
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>{t("portal_settings.team.invite_dialog_title")}</DialogTitle>
                   <DialogDescription>
-                    Send an invitation to join your company portal. They will receive a registration link.
+                    {t("portal_settings.team.description")}
                   </DialogDescription>
                 </DialogHeader>
                 {inviteLink ? (
@@ -591,12 +591,12 @@ function UserManagementTab() {
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Share this link with the team member. It expires in 7 days.
+                        {t("portal_settings.team.description")}
                       </p>
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => { setInviteOpen(false); setInviteLink(""); }}>
-                        Done
+                        {t("common.done") || "Done"}
                       </Button>
                     </DialogFooter>
                   </div>
@@ -636,12 +636,12 @@ function UserManagementTab() {
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button variant="outline" onClick={() => setInviteOpen(false)}>Cancel</Button>
+                      <Button variant="outline" onClick={() => setInviteOpen(false)}>{t("common.cancel")}</Button>
                       <Button onClick={handleInvite} disabled={inviteMutation.isPending}>
                         {inviteMutation.isPending ? (
                           <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("portal_settings.team.creating_invitation_button")}</>
                         ) : (
-                          "Create Invitation"
+                          t("portal_settings.team.invite_dialog.send_button")
                         )}
                       </Button>
                     </DialogFooter>
@@ -684,7 +684,7 @@ function UserManagementTab() {
                       </TableCell>
                       <TableCell>
                         <Badge variant={contact.isPortalActive ? "default" : "secondary"}>
-                          {contact.isPortalActive ? "Active" : "Invited"}
+                          {contact.isPortalActive ? t("portal_settings.team.status.active") : t("portal_settings.team.status.invited")}
                         </Badge>
                       </TableCell>
                       {isAdmin && (
@@ -715,7 +715,7 @@ function UserManagementTab() {
                                     onClick={() => resendMutation.mutate({ contactId: contact.id })}
                                   >
                                     <RefreshCw className="w-4 h-4 mr-2" />
-                                    Resend Invite
+                                    {t("common.resend") || "Resend Invite"}
                                   </DropdownMenuItem>
                                 )}
                                 <DropdownMenuItem
@@ -727,7 +727,7 @@ function UserManagementTab() {
                                   }}
                                 >
                                   <UserMinus className="w-4 h-4 mr-2" />
-                                  Deactivate
+                                  {t("portal_settings.team.remove_button")}
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -756,7 +756,7 @@ export default function PortalSettings() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">{t("portal_settings.title")}</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage your company profile, leave policies, and team access
+            {t("portal_settings.team.description")}
           </p>
         </div>
 
@@ -764,15 +764,15 @@ export default function PortalSettings() {
           <TabsList>
             <TabsTrigger value="company" className="gap-2">
               <Building2 className="w-4 h-4" />
-              Company
+              {t("portal_settings.tabs.company")}
             </TabsTrigger>
             <TabsTrigger value="leave" className="gap-2">
               <CalendarDays className="w-4 h-4" />
-              Leave Policies
+              {t("portal_settings.leave_policies.table_header.leave_type") || "Leave Policies"}
             </TabsTrigger>
             <TabsTrigger value="team" className="gap-2">
               <Users className="w-4 h-4" />
-              Team
+              {t("portal_settings.tabs.team")}
             </TabsTrigger>
           </TabsList>
 

@@ -114,7 +114,7 @@ function EmployeesTab() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search by name or email..."
+            placeholder={t("portal_people.employees.search_placeholder")}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="pl-10"
@@ -122,16 +122,16 @@ function EmployeesTab() {
         </div>
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue placeholder={t("portal_people.employees.filter.all_statuses")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{t("portal_employees.filters.all_statuses")}</SelectItem>
-            <SelectItem value="active">{t("portal_employees.filters.status_active")}</SelectItem>
-            <SelectItem value="onboarding">{t("portal_employees.filters.status_onboarding")}</SelectItem>
+            <SelectItem value="all">{t("portal_people.employees.filter.all_statuses")}</SelectItem>
+            <SelectItem value="active">{t("portal_people.employees.filter.active")}</SelectItem>
+            <SelectItem value="onboarding">{t("portal_people.employees.filter.onboarding")}</SelectItem>
             <SelectItem value="pending_review">{t("portal_employees.filters.status_pending_review")}</SelectItem>
             <SelectItem value="documents_incomplete">{t("portal_employees.filters.status_documents_incomplete")}</SelectItem>
-            <SelectItem value="offboarding">{t("portal_employees.filters.status_offboarding")}</SelectItem>
-            <SelectItem value="terminated">{t("portal_employees.filters.status_terminated")}</SelectItem>
+            <SelectItem value="offboarding">{t("portal_people.employees.filter.offboarding")}</SelectItem>
+            <SelectItem value="terminated">{t("portal_people.employees.filter.terminated")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -148,9 +148,9 @@ function EmployeesTab() {
           ) : employees.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Users className="w-10 h-10 mb-3" />
-              <p className="text-lg font-medium">{t("portal_employees.empty_state.title")}</p>
+              <p className="text-lg font-medium">{t("portal_people.employees.empty_title")}</p>
               <p className="text-sm mt-1">
-                {search ? "Try adjusting your search criteria" : "No employees have been onboarded yet"}
+                {t("portal_people.employees.empty_desc")}
               </p>
             </div>
           ) : (
@@ -200,7 +200,7 @@ function EmployeesTab() {
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">Delete</TooltipContent>
+                            <TooltipContent side="top" className="text-xs">{t("common.delete")}</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                       )}
@@ -217,13 +217,13 @@ function EmployeesTab() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
+            {t("common.showing")} {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} {t("common.of")} {total}
           </p>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <span className="text-sm">Page {page} of {totalPages}</span>
+            <span className="text-sm">{t("common.page")} {page} {t("common.of")} {totalPages}</span>
             <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
               <ChevronRight className="w-4 h-4" />
             </Button>
@@ -241,14 +241,14 @@ function EmployeesTab() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
               disabled={deleteMutation.isPending}
               className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
             >
               {deleteMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Delete
+              {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -284,7 +284,7 @@ function ContractorsTab() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search by name or email..."
+            placeholder={t("portal_people.contractors.search_placeholder")}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="pl-10"
@@ -292,13 +292,13 @@ function ContractorsTab() {
         </div>
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue placeholder={t("portal_people.contractors.filter.all_statuses")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="pending_review">Pending Review</SelectItem>
-            <SelectItem value="terminated">Terminated</SelectItem>
+            <SelectItem value="all">{t("portal_people.contractors.filter.all_statuses")}</SelectItem>
+            <SelectItem value="active">{t("portal_people.contractors.filter.active")}</SelectItem>
+            <SelectItem value="pending_review">{t("portal_people.contractors.filter.pending_review")}</SelectItem>
+            <SelectItem value="terminated">{t("portal_people.contractors.filter.terminated")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -315,21 +315,21 @@ function ContractorsTab() {
           ) : items.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Briefcase className="w-10 h-10 mb-3" />
-              <p className="text-lg font-medium">No contractors found</p>
+              <p className="text-lg font-medium">{t("portal_people.contractors.empty_title")}</p>
               <p className="text-sm mt-1">
-                {search ? "Try adjusting your search criteria" : "No contractors have been onboarded yet. Use Onboarding to add AOR contractors."}
+                {t("portal_people.contractors.empty_desc")}
               </p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Job Title</TableHead>
-                  <TableHead>Country</TableHead>
-                  <TableHead>Payment</TableHead>
-                  <TableHead>Start Date</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>{t("portal_people.contractors.table.name")}</TableHead>
+                  <TableHead>{t("portal_people.contractors.table.job_title")}</TableHead>
+                  <TableHead>{t("portal_people.contractors.table.country")}</TableHead>
+                  <TableHead>{t("portal_people.contractors.table.payment")}</TableHead>
+                  <TableHead>{t("portal_people.employees.table.start_date")}</TableHead>
+                  <TableHead>{t("portal_people.contractors.table.status")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -371,13 +371,13 @@ function ContractorsTab() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total}
+            {t("common.showing")} {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} {t("common.of")} {total}
           </p>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <span className="text-sm">Page {page} of {totalPages}</span>
+            <span className="text-sm">{t("common.page")} {page} {t("common.of")} {totalPages}</span>
             <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
               <ChevronRight className="w-4 h-4" />
             </Button>
@@ -393,12 +393,12 @@ export default function PortalPeople() {
   const { t } = useI18n();
 
   return (
-    <PortalLayout title="People">
+    <PortalLayout title={t("portal_people.title")}>
       <div className="p-6 space-y-6">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">People</h2>
+          <h2 className="text-2xl font-bold tracking-tight">{t("portal_people.header.title")}</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Your global workforce directory — employees and contractors
+            {t("portal_people.header.description")}
           </p>
         </div>
 
@@ -406,11 +406,11 @@ export default function PortalPeople() {
           <TabsList>
             <TabsTrigger value="employees" className="gap-1.5">
               <Users className="w-4 h-4" />
-              Employees
+              {t("portal_people.tabs.employees")}
             </TabsTrigger>
             <TabsTrigger value="contractors" className="gap-1.5">
               <Briefcase className="w-4 h-4" />
-              Contractors
+              {t("portal_people.tabs.contractors")}
             </TabsTrigger>
           </TabsList>
 
