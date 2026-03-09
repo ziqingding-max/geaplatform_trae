@@ -41,13 +41,23 @@ export default function PortalWallet() {
     { enabled: !!wallet }
   );
 
+  const txTypeLabels: Record<string, string> = {
+    credit_note_in: t("portal_wallet.transactions.type.refund"),
+    overpayment_in: t("portal_wallet.transactions.type.deposit"),
+    top_up: t("portal_wallet.transactions.type.deposit"),
+    invoice_deduction: t("portal_wallet.transactions.type.applied"),
+    invoice_refund: t("portal_wallet.transactions.type.refund"),
+    manual_adjustment: t("portal_wallet.transactions.type.adjustment"),
+    payout: t("portal_wallet.transactions.type.applied"),
+  };
+
   return (
-    <PortalLayout title="Wallet">
+    <PortalLayout title={t("portal_wallet.title")}>
       <div className="p-6 space-y-6">
         <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold tracking-tight">Wallet</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{t("portal_wallet.header.title")}</h1>
           <p className="text-muted-foreground">
-            Manage your prepaid balance and view transaction history.
+            {t("portal_wallet.header.description")}
           </p>
         </div>
 
@@ -56,7 +66,7 @@ export default function PortalWallet() {
           <Card className="md:col-span-1 bg-primary/5 border-primary/20 shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Wallet className="w-4 h-4" /> Main Wallet (Operating)
+                <Wallet className="w-4 h-4" /> {t("portal_wallet.overview.balance_title")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -68,14 +78,14 @@ export default function PortalWallet() {
                     {formatCurrency(currency, wallet?.balance || "0")}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Available for automatic invoice deduction
+                    {t("portal_wallet.overview.balance_description")}
                   </p>
                 </div>
               )}
               
               <div className="mt-6 pt-6 border-t border-primary/10">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Currency</span>
+                  <span className="text-muted-foreground">{t("portal_wallet.overview.current_balance")}</span>
                   <Select value={currency} onValueChange={setCurrency}>
                     <SelectTrigger className="w-[80px] h-8">
                       <SelectValue />
@@ -97,7 +107,7 @@ export default function PortalWallet() {
           <Card className="md:col-span-1 bg-indigo-50 border-indigo-100 shadow-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-indigo-700 flex items-center gap-2">
-                <Wallet className="w-4 h-4" /> Deposit Wallet (Frozen)
+                <Wallet className="w-4 h-4" /> {t("portal_wallet.overview.total_deposited")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -109,7 +119,7 @@ export default function PortalWallet() {
                     {formatCurrency(currency, wallet?.frozenBalance || "0")}
                   </div>
                   <p className="text-xs text-indigo-600/80">
-                    Security deposits held. Released upon termination.
+                    {t("portal_wallet.overview.total_applied")}
                   </p>
                 </div>
               )}
@@ -120,7 +130,7 @@ export default function PortalWallet() {
           <Card className="md:col-span-1">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <CreditCard className="w-4 h-4" /> How it works
+                <CreditCard className="w-4 h-4" /> {t("portal_wallet.overview.quick_actions")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-muted-foreground">
@@ -129,8 +139,8 @@ export default function PortalWallet() {
                   <ArrowDownLeft className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">Refunds & Credits</p>
-                  <p className="text-xs">Refunds/CNs go to Main Wallet.</p>
+                  <p className="font-medium text-foreground">{t("portal_wallet.overview.make_deposit")}</p>
+                  <p className="text-xs">{t("portal_wallet.overview.make_deposit_desc")}</p>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -138,8 +148,8 @@ export default function PortalWallet() {
                   <Wallet className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">Deposits</p>
-                  <p className="text-xs">Deposit invoices fund the Frozen Wallet.</p>
+                  <p className="font-medium text-foreground">{t("portal_wallet.overview.contact_support")}</p>
+                  <p className="text-xs">{t("portal_wallet.overview.contact_support_desc")}</p>
                 </div>
               </div>
             </CardContent>
@@ -150,10 +160,10 @@ export default function PortalWallet() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <History className="w-4 h-4" /> Transaction History
+              <History className="w-4 h-4" /> {t("portal_wallet.transactions.title")}
             </CardTitle>
             <CardDescription>
-              A complete record of all funds entering and leaving your wallet.
+              {t("portal_wallet.transactions.empty_desc")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -165,17 +175,17 @@ export default function PortalWallet() {
               </div>
             ) : !transactions || transactions.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground bg-muted/30 rounded-lg border border-dashed">
-                No transactions found for this currency.
+                {t("portal_wallet.transactions.empty_title")}
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
-                    <TableHead className="text-right">Balance</TableHead>
+                    <TableHead>{t("portal_wallet.transactions.table.date")}</TableHead>
+                    <TableHead>{t("portal_wallet.transactions.table.type")}</TableHead>
+                    <TableHead>{t("portal_wallet.transactions.table.description")}</TableHead>
+                    <TableHead className="text-right">{t("portal_wallet.transactions.table.amount")}</TableHead>
+                    <TableHead className="text-right">{t("portal_wallet.overview.current_balance")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -185,13 +195,13 @@ export default function PortalWallet() {
                         {formatDateISO(tx.createdAt)}
                       </TableCell>
                       <TableCell>
-                        <TransactionTypeBadge type={tx.type} />
+                        <TransactionTypeBadge type={tx.type} labels={txTypeLabels} />
                       </TableCell>
                       <TableCell className="max-w-[300px]">
                         <div className="truncate font-medium">{tx.description}</div>
                         {tx.referenceId && (
                           <div className="text-xs text-muted-foreground mt-0.5">
-                            Ref: {tx.referenceType} #{tx.referenceId}
+                            {t("portal_wallet.transactions.table.reference")}: {tx.referenceType} #{tx.referenceId}
                           </div>
                         )}
                       </TableCell>
@@ -215,7 +225,7 @@ export default function PortalWallet() {
   );
 }
 
-function TransactionTypeBadge({ type }: { type: string }) {
+function TransactionTypeBadge({ type, labels }: { type: string; labels: Record<string, string> }) {
   const styles: Record<string, string> = {
     credit_note_in: "bg-emerald-100 text-emerald-800 border-emerald-200",
     overpayment_in: "bg-blue-100 text-blue-800 border-blue-200",
@@ -224,16 +234,6 @@ function TransactionTypeBadge({ type }: { type: string }) {
     invoice_refund: "bg-amber-100 text-amber-800 border-amber-200",
     manual_adjustment: "bg-purple-100 text-purple-800 border-purple-200",
     payout: "bg-red-100 text-red-800 border-red-200",
-  };
-
-  const labels: Record<string, string> = {
-    credit_note_in: "Refund Credit",
-    overpayment_in: "Overpayment",
-    top_up: "Top Up",
-    invoice_deduction: "Invoice Payment",
-    invoice_refund: "Void Refund",
-    manual_adjustment: "Adjustment",
-    payout: "Withdrawal",
   };
 
   return (

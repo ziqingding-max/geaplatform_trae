@@ -16,7 +16,7 @@ import {
   portalRouter,
   portalPublicProcedure,
 } from "../portalTrpc";
-import { getDb, createEmployee, createEmployeeDocument } from "../../db";
+import { getDb, createEmployee, createEmployeeDocument, createContractor } from "../../db";
 import { storagePut } from "../../storage";
 import { notificationService } from "../../services/notificationService";
 import {
@@ -374,6 +374,19 @@ export const portalEmployeesRouter = portalRouter({
       z.object({
         employeeName: z.string().min(1),
         employeeEmail: z.string().email(),
+        // Employer-provided fields from invite flow step 2
+        serviceType: z.enum(["eor", "visa_eor", "aor"]).default("eor"),
+        country: z.string().optional(),
+        jobTitle: z.string().optional(),
+        department: z.string().optional(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        employmentType: z.string().optional(),
+        baseSalary: z.string().optional(),
+        salaryCurrency: z.string().optional(),
+        paymentFrequency: z.string().optional(),
+        rateAmount: z.string().optional(),
+        contractorCurrency: z.string().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -393,6 +406,19 @@ export const portalEmployeesRouter = portalRouter({
         status: "pending",
         expiresAt,
         createdBy: ctx.portalUser.contactId,
+        // Employer-provided fields
+        serviceType: input.serviceType,
+        country: input.country || null,
+        jobTitle: input.jobTitle || null,
+        department: input.department || null,
+        startDate: input.startDate || null,
+        endDate: input.endDate || null,
+        employmentType: input.employmentType || null,
+        baseSalary: input.baseSalary || null,
+        salaryCurrency: input.salaryCurrency || null,
+        paymentFrequency: input.paymentFrequency || null,
+        rateAmount: input.rateAmount || null,
+        contractorCurrency: input.contractorCurrency || null,
       });
 
       return { success: true, token };
@@ -413,7 +439,9 @@ export const portalEmployeesRouter = portalRouter({
         employeeEmail: onboardingInvites.employeeEmail,
         token: onboardingInvites.token,
         status: onboardingInvites.status,
+        serviceType: onboardingInvites.serviceType,
         employeeId: onboardingInvites.employeeId,
+        contractorId: onboardingInvites.contractorId,
         expiresAt: onboardingInvites.expiresAt,
         completedAt: onboardingInvites.completedAt,
         createdAt: onboardingInvites.createdAt,
@@ -504,6 +532,18 @@ export const portalEmployeesRouter = portalRouter({
           status: onboardingInvites.status,
           expiresAt: onboardingInvites.expiresAt,
           customerId: onboardingInvites.customerId,
+          serviceType: onboardingInvites.serviceType,
+          country: onboardingInvites.country,
+          jobTitle: onboardingInvites.jobTitle,
+          department: onboardingInvites.department,
+          startDate: onboardingInvites.startDate,
+          endDate: onboardingInvites.endDate,
+          employmentType: onboardingInvites.employmentType,
+          baseSalary: onboardingInvites.baseSalary,
+          salaryCurrency: onboardingInvites.salaryCurrency,
+          paymentFrequency: onboardingInvites.paymentFrequency,
+          rateAmount: onboardingInvites.rateAmount,
+          contractorCurrency: onboardingInvites.contractorCurrency,
         })
         .from(onboardingInvites)
         .where(eq(onboardingInvites.token, input.token));
@@ -527,6 +567,18 @@ export const portalEmployeesRouter = portalRouter({
         valid: true,
         employeeName: invite.employeeName,
         employeeEmail: invite.employeeEmail,
+        serviceType: invite.serviceType,
+        country: invite.country,
+        jobTitle: invite.jobTitle,
+        department: invite.department,
+        startDate: invite.startDate,
+        endDate: invite.endDate,
+        employmentType: invite.employmentType,
+        baseSalary: invite.baseSalary,
+        salaryCurrency: invite.salaryCurrency,
+        paymentFrequency: invite.paymentFrequency,
+        rateAmount: invite.rateAmount,
+        contractorCurrency: invite.contractorCurrency,
       };
     }),
 
@@ -584,46 +636,97 @@ export const portalEmployeesRouter = portalRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "This invite has expired" });
       }
 
-      // Create the employee record
-      const result = await createEmployee({
-        customerId: invite.customerId,
-        firstName: input.firstName,
-        lastName: input.lastName,
-        email: input.email,
-        phone: input.phone || null,
-        dateOfBirth: (input.dateOfBirth || null) as any,
-        gender: input.gender || null,
-        nationality: input.nationality || null,
-        idType: input.idType || null,
-        idNumber: input.idNumber || null,
-        address: input.address || null,
-        country: input.country,
-        city: input.city || null,
-        state: input.state || null,
-        postalCode: input.postalCode || null,
-        department: input.department || null,
-        jobTitle: input.jobTitle,
-        serviceType: "eor",
-        employmentType: "long_term",
-        startDate: input.startDate as any,
-        baseSalary: "0", // To be set by employer
-        salaryCurrency: "USD",
-        status: "pending_review",
-      });
+      // Use employer-provided data from invite, with worker input as fallback
+      const serviceType = invite.serviceType || "eor";
+      const country = invite.country || input.country;
+      const jobTitle = invite.jobTitle || input.jobTitle;
+      const department = invite.department || input.department;
+      const startDate = invite.startDate || input.startDate;
 
-      const employeeId = (result as any)[0]?.insertId;
+      if (serviceType === "aor") {
+        // AOR: Create contractor record
+        const result = await createContractor({
+          customerId: invite.customerId,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          phone: input.phone || null,
+          dateOfBirth: (input.dateOfBirth || null) as any,
+          nationality: input.nationality || null,
+          idType: input.idType || null,
+          idNumber: input.idNumber || null,
+          address: input.address || null,
+          country,
+          city: input.city || null,
+          state: input.state || null,
+          postalCode: input.postalCode || null,
+          department: department || null,
+          jobTitle,
+          startDate: startDate as any,
+          endDate: invite.endDate || null,
+          currency: invite.contractorCurrency || "USD",
+          paymentFrequency: (invite.paymentFrequency as any) || "monthly",
+          rateType: invite.paymentFrequency === "milestone" ? "milestone_only" : "fixed_monthly",
+          rateAmount: invite.rateAmount || null,
+          status: "pending_review",
+        });
 
-      // Update the invite
-      await db
-        .update(onboardingInvites)
-        .set({
-          status: "completed",
-          employeeId,
-          completedAt: new Date(),
-        })
-        .where(eq(onboardingInvites.id, invite.id));
+        const contractorId = (result as any)[0]?.id;
 
-      return { success: true, employeeId };
+        // Update the invite
+        await db
+          .update(onboardingInvites)
+          .set({
+            status: "completed",
+            contractorId,
+            completedAt: new Date(),
+          })
+          .where(eq(onboardingInvites.id, invite.id));
+
+        return { success: true, contractorId };
+      } else {
+        // EOR / Visa EOR: Create employee record
+        const result = await createEmployee({
+          customerId: invite.customerId,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          phone: input.phone || null,
+          dateOfBirth: (input.dateOfBirth || null) as any,
+          gender: input.gender || null,
+          nationality: input.nationality || null,
+          idType: input.idType || null,
+          idNumber: input.idNumber || null,
+          address: input.address || null,
+          country,
+          city: input.city || null,
+          state: input.state || null,
+          postalCode: input.postalCode || null,
+          department: department || null,
+          jobTitle,
+          serviceType: serviceType as any,
+          employmentType: (invite.employmentType as any) || "long_term",
+          startDate: startDate as any,
+          endDate: invite.endDate || null,
+          baseSalary: invite.baseSalary || "0",
+          salaryCurrency: invite.salaryCurrency || "USD",
+          status: "pending_review",
+        });
+
+        const employeeId = (result as any)[0]?.insertId;
+
+        // Update the invite
+        await db
+          .update(onboardingInvites)
+          .set({
+            status: "completed",
+            employeeId,
+            completedAt: new Date(),
+          })
+          .where(eq(onboardingInvites.id, invite.id));
+
+        return { success: true, employeeId };
+      }
     }),
 
   /**

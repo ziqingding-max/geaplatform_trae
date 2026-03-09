@@ -34,14 +34,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 /* ─── Status Config ──────────────────────────────────────────────────────── */
 
-const statusLabels: Record<string, string> = {
-  sent: "Issued",
-  paid: "Paid",
-  overdue: "Overdue",
-  cancelled: "Cancelled",
-  void: "Void",
-  applied: "Applied",
-};
+// statusLabels built with t() inside component
 
 const statusColors: Record<string, string> = {
   sent: "bg-amber-50 text-amber-700 border-amber-200",
@@ -52,16 +45,7 @@ const statusColors: Record<string, string> = {
   applied: "bg-gray-100 text-gray-500 border-gray-200",
 };
 
-const invoiceTypeLabels: Record<string, string> = {
-  deposit: "Deposit",
-  monthly_eor: "Monthly EOR",
-  monthly_visa_eor: "Monthly Visa EOR",
-  monthly_aor: "Monthly AOR",
-  visa_service: "Visa Service",
-  deposit_refund: "Deposit Refund",
-  credit_note: "Credit Note",
-  manual: "Manual",
-};
+// invoiceTypeLabels built with t() inside component
 
 /* ─── Main Component ─────────────────────────────────────────────────────── */
 
@@ -70,6 +54,25 @@ export default function PortalInvoiceDetail() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const invoiceId = parseInt(params.id || "0", 10);
+
+  const statusLabels: Record<string, string> = {
+    sent: t("portal_invoices.status.issued"),
+    paid: t("portal_invoices.status.paid"),
+    overdue: t("portal_invoices.status.overdue"),
+    cancelled: t("portal_invoices.status.cancelled"),
+    void: t("portal_invoices.status.void"),
+    applied: t("portal_invoices.status.applied"),
+  };
+  const invoiceTypeLabels: Record<string, string> = {
+    deposit: t("portal_invoices.type.deposit"),
+    monthly_eor: t("portal_invoices.type.monthly_eor"),
+    monthly_visa_eor: t("portal_invoices.type.monthly_visa_eor"),
+    monthly_aor: t("portal_invoices.type.monthly_aor"),
+    visa_service: t("portal_invoices.type.visa_service"),
+    deposit_refund: t("portal_invoices.type.deposit_refund"),
+    credit_note: t("portal_invoices.type.credit_note"),
+    manual: t("portal_invoices.type.manual"),
+  };
 
   const { data, isLoading } = portalTrpc.invoices.detail.useQuery(
     { id: invoiceId },
@@ -87,7 +90,7 @@ export default function PortalInvoiceDetail() {
   // Loading state
   if (isLoading) {
     return (
-      <PortalLayout title="Invoice Detail">
+      <PortalLayout title={t("portal_invoice_detail.page_title")}>
         <div className="p-6 max-w-5xl mx-auto space-y-6">
           <div className="flex items-center gap-3">
             <Skeleton className="h-9 w-9" />
@@ -108,10 +111,10 @@ export default function PortalInvoiceDetail() {
   // Not found
   if (!data) {
     return (
-      <PortalLayout title="Invoice Detail">
+      <PortalLayout title={t("portal_invoice_detail.page_title")}>
         <div className="p-6 max-w-5xl mx-auto">
           <Button variant="ghost" size="sm" onClick={() => setLocation(portalPath("/invoices"))} className="mb-6 gap-2 text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4" /> Back to Finance
+            <ArrowLeft className="w-4 h-4" /> {t("portal_invoice_detail.back_to_finance")}
           </Button>
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-16">
@@ -135,10 +138,10 @@ export default function PortalInvoiceDetail() {
   let statusColor = statusColors[data.status] || "";
 
   if (data.isPartiallyPaid) {
-    statusLabel = "Partially Paid";
+    statusLabel = t("portal_invoices.status.partially_paid");
     statusColor = "bg-orange-50 text-orange-700 border-orange-200";
   } else if (data.isOverpaid) {
-    statusLabel = "Paid";
+    statusLabel = t("portal_invoices.status.paid");
     statusColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
   }
 
@@ -146,7 +149,7 @@ export default function PortalInvoiceDetail() {
   if (isCreditNote && data.status !== "applied" && data.status !== "cancelled" && data.status !== "void") {
     statusColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
     if (data.creditNoteBalance && data.creditNoteBalance.applied > 0 && data.creditNoteBalance.remaining > 0) {
-      statusLabel = "Partially Applied";
+      statusLabel = t("portal_invoices.status.partially_applied");
     }
   }
 
@@ -164,29 +167,29 @@ export default function PortalInvoiceDetail() {
             : "from-primary to-primary/90";
 
   // Banner label and value
-  let bannerLabel = "Amount Due";
+  let bannerLabel = t("portal_invoice_detail.banner.amount_due");
   let bannerValue = formatCurrency(data.currency, data.balanceDue);
 
   if (isCreditNote) {
     if (data.creditNoteBalance && data.creditNoteBalance.remaining > 0) {
-      bannerLabel = "Available Credit";
+      bannerLabel = t("portal_invoice_detail.banner.available_credit");
       bannerValue = formatCurrency(data.currency, data.creditNoteBalance.remaining);
     } else {
-      bannerLabel = "Credit Amount";
+      bannerLabel = t("portal_invoice_detail.banner.credit_amount");
       bannerValue = formatCurrency(data.currency, Math.abs(Number(data.total)));
     }
   } else if (isDepositRefund) {
-    bannerLabel = "Refund Amount";
+    bannerLabel = t("portal_invoice_detail.banner.refund_amount");
     bannerValue = formatCurrency(data.currency, Math.abs(Number(data.total)));
   } else if (data.status === "paid" && !data.isPartiallyPaid) {
-    bannerLabel = "Total Paid";
+    bannerLabel = t("portal_invoice_detail.banner.total_paid");
     bannerValue = formatCurrency(data.currency, data.paidAmount || data.total);
   } else if (data.isPartiallyPaid) {
-    bannerLabel = "Remaining Balance";
+    bannerLabel = t("portal_invoice_detail.banner.remaining_balance");
     const remaining = Number(data.amountDue || data.total) - Number(data.paidAmount || 0);
     bannerValue = formatCurrency(data.currency, Math.max(0, remaining));
   } else if (data.status === "cancelled" || data.status === "void") {
-    bannerLabel = "Total Amount";
+    bannerLabel = t("portal_invoice_detail.banner.total_amount");
     bannerValue = formatCurrency(data.currency, data.total);
   }
 
@@ -194,7 +197,7 @@ export default function PortalInvoiceDetail() {
   const effectiveDue = data.amountDue != null ? Number(data.amountDue) : Number(data.total);
 
   return (
-    <PortalLayout title="Invoice Detail">
+    <PortalLayout title={t("portal_invoice_detail.page_title")}>
       <div className="p-6 max-w-5xl mx-auto space-y-6">
         {/* Back Navigation */}
         <Button
@@ -203,7 +206,7 @@ export default function PortalInvoiceDetail() {
           onClick={() => setLocation(portalPath("/invoices"))}
           className="gap-2 text-muted-foreground hover:text-foreground -ml-2"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Finance
+          <ArrowLeft className="w-4 h-4" /> {t("portal_invoice_detail.back_to_finance")}
         </Button>
 
         {/* Invoice Header */}
@@ -225,7 +228,7 @@ export default function PortalInvoiceDetail() {
             </p>
           </div>
           <Button onClick={handleDownload} className="gap-2 shrink-0">
-            <Download className="w-4 h-4" /> Download PDF
+            <Download className="w-4 h-4" /> {t("portal_invoice_detail.actions.download_pdf")}
           </Button>
         </div>
 
@@ -237,8 +240,8 @@ export default function PortalInvoiceDetail() {
             <Card>
               <CardContent className="pt-6">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-                  <MetaField icon={CalendarDays} label="Issue Date" value={formatDate(data.sentDate)} />
-                  <MetaField icon={Clock} label="Due Date" value={formatDate(data.dueDate)} />
+                  <MetaField icon={CalendarDays} label={t("portal_invoice_detail.meta.issue_date")} value={formatDate(data.sentDate)} />
+                  <MetaField icon={Clock} label={t("portal_invoice_detail.meta.due_date")} value={formatDate(data.dueDate)} />
                   <MetaField icon={CreditCard} label={t("portal_invoice_detail.meta.currency")} value={data.currency || "USD"} />
                   <MetaField icon={FileText} label={t("portal_invoice_detail.meta.reference")} value={data.invoiceNumber || "-"} mono />
                 </div>
@@ -250,7 +253,7 @@ export default function PortalInvoiceDetail() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-muted-foreground" />
-                  Line Items
+                  {t("portal_invoice_detail.line_items.title")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -270,7 +273,7 @@ export default function PortalInvoiceDetail() {
                       {(data.items || []).length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                            No line items
+                            {t("portal_invoice_detail.line_items.empty")}
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -314,7 +317,7 @@ export default function PortalInvoiceDetail() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <CreditCard className="w-4 h-4 text-emerald-600" />
-                    Credits Applied to This Invoice
+                    {t("portal_invoice_detail.credits_applied.title")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -330,7 +333,7 @@ export default function PortalInvoiceDetail() {
                           <ExternalLink className="w-3 h-3 text-emerald-600/60" />
                         </div>
                         {ca.notes && <p className="text-xs text-emerald-600/80">{ca.notes}</p>}
-                        <p className="text-xs text-muted-foreground">Applied on {formatDate(ca.appliedAt)}</p>
+                        <p className="text-xs text-muted-foreground">{t("portal_invoice_detail.credits_applied.applied_on")} {formatDate(ca.appliedAt)}</p>
                       </div>
                       <span className="font-mono text-sm text-emerald-700 font-semibold">
                         -{formatCurrency(data.currency, ca.appliedAmount)}
@@ -347,10 +350,10 @@ export default function PortalInvoiceDetail() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                    Application History
+                    {t("portal_invoice_detail.application_history.title")}
                   </CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Invoices this credit note has been applied to
+                    {t("portal_invoice_detail.application_history.description")}
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -369,7 +372,7 @@ export default function PortalInvoiceDetail() {
                           <ExternalLink className="w-3 h-3 text-muted-foreground/60" />
                         </div>
                         {app.notes && <p className="text-xs text-muted-foreground">{app.notes}</p>}
-                        <p className="text-xs text-muted-foreground">Applied on {formatDate(app.appliedAt)}</p>
+                        <p className="text-xs text-muted-foreground">{t("portal_invoice_detail.credits_applied.applied_on")} {formatDate(app.appliedAt)}</p>
                       </div>
                       <span className="font-mono text-sm font-medium">
                         {formatCurrency(data.currency, app.appliedAmount)}
@@ -386,7 +389,7 @@ export default function PortalInvoiceDetail() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Link2 className="w-4 h-4 text-muted-foreground" />
-                    Related Documents
+                    {t("portal_invoice_detail.related_documents.title")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -395,6 +398,7 @@ export default function PortalInvoiceDetail() {
                     <RelatedDocLink
                       doc={data.relatedDocuments.parent}
                       currency={data.currency}
+                      statusLabels={statusLabels}
                       relationship={
                         isCreditNote ? "Source Invoice" :
                         isDepositRefund ? "Original Deposit" :
@@ -410,6 +414,7 @@ export default function PortalInvoiceDetail() {
                       key={child.id}
                       doc={child}
                       currency={data.currency}
+                      statusLabels={statusLabels}
                       relationship={
                         child.invoiceType === "credit_note" ? "Overpayment Credit Note" :
                         child.invoiceType === "deposit_refund" ? "Deposit Refund" :
@@ -429,7 +434,7 @@ export default function PortalInvoiceDetail() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <Info className="w-4 h-4 text-muted-foreground" />
-                    Notes
+                    {t("portal_invoice_detail.notes.title")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -465,14 +470,14 @@ export default function PortalInvoiceDetail() {
 
                   {Number(data.serviceFeeTotal) > 0 && (
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Service Fees</span>
+                      <span className="text-sm text-muted-foreground">{t("portal_invoice_detail.summary.service_fees")}</span>
                       <span className="text-sm font-mono tabular-nums">{formatCurrency(data.currency, data.serviceFeeTotal)}</span>
                     </div>
                   )}
 
                   {Number(data.tax) > 0 && (
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Tax / VAT</span>
+                      <span className="text-sm text-muted-foreground">{t("portal_invoice_detail.summary.tax_vat")}</span>
                       <span className="text-sm font-mono tabular-nums">{formatCurrency(data.currency, data.tax)}</span>
                     </div>
                   )}
@@ -538,7 +543,7 @@ export default function PortalInvoiceDetail() {
                       <div>
                         <p className="text-xs font-medium text-orange-800">{t("portal_invoice_detail.alert.partial_payment.title")}</p>
                         <p className="text-xs text-orange-600 mt-0.5">
-                          A follow-up invoice has been issued for the remaining balance.
+                          {t("portal_invoice_detail.alert.partial_payment.description")}
                         </p>
                       </div>
                     </div>
@@ -553,7 +558,7 @@ export default function PortalInvoiceDetail() {
                       <div>
                         <p className="text-xs font-medium text-emerald-800">{t("portal_invoice_detail.alert.overpayment.title")}</p>
                         <p className="text-xs text-emerald-600 mt-0.5">
-                          A credit note has been issued for the excess amount.
+                          {t("portal_invoice_detail.alert.overpayment.description")}
                         </p>
                       </div>
                     </div>
@@ -567,7 +572,7 @@ export default function PortalInvoiceDetail() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                    Credit Balance
+                    {t("portal_invoice_detail.credit_balance.title")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -597,7 +602,7 @@ export default function PortalInvoiceDetail() {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground text-center">
-                    {Math.round((data.creditNoteBalance.applied / data.creditNoteBalance.original) * 100)}% applied
+                    {Math.round((data.creditNoteBalance.applied / data.creditNoteBalance.original) * 100)}% {t("portal_invoice_detail.credit_balance.applied_percent")}
                   </p>
                 </CardContent>
               </Card>
@@ -608,7 +613,7 @@ export default function PortalInvoiceDetail() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                    Payment Details
+                    {t("portal_invoice_detail.payment_details.title")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -628,7 +633,7 @@ export default function PortalInvoiceDetail() {
 
             {/* Download */}
             <Button onClick={handleDownload} variant="outline" className="w-full gap-2">
-              <Download className="w-4 h-4" /> Download PDF
+              <Download className="w-4 h-4" /> {t("portal_invoice_detail.actions.download_pdf")}
             </Button>
           </div>
         </div>
@@ -645,7 +650,7 @@ function MetaField({
   value,
   mono,
 }: {
-  icon: typeof Calendar;
+  icon: typeof CalendarDays;
   label: string;
   value: string;
   mono?: boolean;
@@ -665,11 +670,13 @@ function RelatedDocLink({
   relationship,
   onClick,
   currency,
+  statusLabels,
 }: {
   doc: { id: number; invoiceNumber: string; invoiceType: string; total: string; status: string };
   relationship: string;
   onClick: () => void;
   currency?: string;
+  statusLabels: Record<string, string>;
 }) {
   const isCredit = doc.invoiceType === "credit_note" || doc.invoiceType === "deposit_refund";
   const statusLabel = statusLabels[doc.status] || doc.status;

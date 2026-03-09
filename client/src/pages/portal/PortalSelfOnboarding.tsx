@@ -4,7 +4,7 @@
  * Public page (no portal auth required) where employees fill in their own
  * personal information via a unique invite token.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearch } from "wouter";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { Card, CardContent } from "@/components/ui/card";
@@ -104,6 +104,7 @@ export default function PortalSelfOnboarding() {
     department: "",
   });
   const [documents, setDocuments] = useState<DocFile[]>([]);
+  const [employerFieldsLocked, setEmployerFieldsLocked] = useState(false);
 
   const { data: invite, isLoading: loadingInvite, error: inviteError } =
     portalTrpc.employees.validateOnboardingToken.useQuery(
@@ -115,14 +116,36 @@ export default function PortalSelfOnboarding() {
 
   const uploadDocMutation = portalTrpc.employees.uploadSelfServiceDocument.useMutation();
 
+  // Pre-fill form with employer-provided data from invite
+  useEffect(() => {
+    if (invite?.valid) {
+      const updates: Partial<SelfOnboardingForm> = {};
+      if (invite.country) { updates.country = invite.country; }
+      if (invite.jobTitle) { updates.jobTitle = invite.jobTitle; }
+      if (invite.department) { updates.department = invite.department; }
+      if (Object.keys(updates).length > 0) {
+        setFormData((prev) => ({ ...prev, ...updates }));
+        setEmployerFieldsLocked(true);
+      }
+    }
+  }, [invite]);
+
+  const isAorInvite = invite?.serviceType === "aor";
+
+  // For AOR invites, skip documents step
+  const activeSteps = isAorInvite ? STEPS.filter((s) => s.id !== 3) : STEPS;
+  const maxStep = activeSteps.length;
+  const isLastStep = currentStep === maxStep;
+
   const submitMutation = portalTrpc.employees.submitSelfServiceOnboarding.useMutation({
     onSuccess: async (data) => {
-      if (documents.length > 0 && data.employeeId) {
+      const recordId = data.employeeId || data.contractorId;
+      if (documents.length > 0 && recordId && !isAorInvite) {
         for (const doc of documents) {
           try {
             await uploadDocMutation.mutateAsync({
               token,
-              employeeId: data.employeeId,
+              employeeId: recordId,
               documentType: doc.type as any,
               documentName: doc.name,
               fileBase64: doc.base64,
@@ -190,10 +213,10 @@ export default function PortalSelfOnboarding() {
       city: formData.city || undefined,
       state: formData.state || undefined,
       postalCode: formData.postalCode || undefined,
-      country: formData.country || "SG",
-      jobTitle: formData.jobTitle || "TBD",
+      country: formData.country || invite?.country || "SG",
+      jobTitle: formData.jobTitle || invite?.jobTitle || "TBD",
       department: formData.department || undefined,
-      startDate: new Date().toISOString().split("T")[0],
+      startDate: invite?.startDate || new Date().toISOString().split("T")[0],
     });
   }
 
@@ -405,17 +428,28 @@ export default function PortalSelfOnboarding() {
 
             {currentStep === 2 && (
               <div className="space-y-4">
+                {employerFieldsLocked && (
+                  <div className="rounded-lg border border-blue-200/60 bg-blue-50/30 p-3 text-sm text-blue-700">
+                    {t("portal_self_onboarding.employer_prefilled_notice")}
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t("portal_self_onboarding.form.address.country")}</Label>
-                    <Select value={formData.country} onValueChange={(v) => updateField("country", v)}>
-                      <SelectTrigger><SelectValue placeholder={t("portal_self_onboarding.placeholders.select_country")} /></SelectTrigger>
-                      <SelectContent>
-                        {(countries || []).map((c) => (
-                          <SelectItem key={c.countryCode} value={c.countryCode}>{c.countryName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {employerFieldsLocked && formData.country ? (
+                      <div className="flex items-center h-10 px-3 bg-muted/30 rounded-md border text-sm">
+                        {(countries || []).find((c) => c.countryCode === formData.country)?.countryName || formData.country}
+                      </div>
+                    ) : (
+                      <Select value={formData.country} onValueChange={(v) => updateField("country", v)}>
+                        <SelectTrigger><SelectValue placeholder={t("portal_self_onboarding.placeholders.select_country")} /></SelectTrigger>
+                        <SelectContent>
+                          {(countries || []).map((c) => (
+                            <SelectItem key={c.countryCode} value={c.countryCode}>{c.countryName}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>{t("portal_self_onboarding.form.address.city")}</Label>
@@ -425,7 +459,11 @@ export default function PortalSelfOnboarding() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t("portal_self_onboarding.form.employment.job_title")}</Label>
-                    <Input value={formData.jobTitle} onChange={(e) => updateField("jobTitle", e.target.value)} placeholder={t("portal_self_onboarding.placeholders.job_title")} />
+                    {employerFieldsLocked && formData.jobTitle ? (
+                      <div className="flex items-center h-10 px-3 bg-muted/30 rounded-md border text-sm">{formData.jobTitle}</div>
+                    ) : (
+                      <Input value={formData.jobTitle} onChange={(e) => updateField("jobTitle", e.target.value)} placeholder={t("portal_self_onboarding.placeholders.job_title")} />
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>{t("portal_self_onboarding.form.employment.department")}</Label>
@@ -501,10 +539,10 @@ export default function PortalSelfOnboarding() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               {t("portal_self_onboarding.buttons.previous")}
             </Button>
-            {currentStep < 3 ? (
+            {!isLastStep ? (
               <Button
                 className="min-w-[120px]"
-                onClick={() => setCurrentStep((s) => Math.min(3, s + 1))}
+                onClick={() => setCurrentStep((s) => Math.min(maxStep, s + 1))}
                 disabled={currentStep === 1 && (!formData.firstName || !formData.lastName || !formData.email)}
               >
                 {t("portal_self_onboarding.buttons.next")}

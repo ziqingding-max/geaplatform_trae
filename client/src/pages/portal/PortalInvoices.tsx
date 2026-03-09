@@ -11,6 +11,7 @@
  */
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
+import { portalPath } from "@/lib/portalBasePath";
 import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { Card, CardContent } from "@/components/ui/card";
@@ -39,14 +40,7 @@ import { useI18n } from "@/lib/i18n";
 /* ─── Status Display Config ──────────────────────────────────────────────── */
 
 // Portal status labels: sent → Issued
-const statusLabels: Record<string, string> = {
-  sent: "Issued",
-  paid: "Paid",
-  overdue: "Overdue",
-  cancelled: "Cancelled",
-  void: "Void",
-  applied: "Applied",
-};
+// statusLabels will be built inside component with t() - see getStatusLabel()
 
 // Color system: green=favorable, yellow/amber=pending, red=urgent, grey=inactive
 const statusColors: Record<string, string> = {
@@ -58,16 +52,7 @@ const statusColors: Record<string, string> = {
   applied: "bg-gray-100 text-gray-500 border-gray-200",        // Applied (CN fully used) = grey
 };
 
-const invoiceTypeLabels: Record<string, string> = {
-  deposit: "Deposit",
-  monthly_eor: "Monthly EOR",
-  monthly_visa_eor: "Monthly Visa EOR",
-  monthly_aor: "Monthly AOR",
-  visa_service: "Visa Service",
-  deposit_refund: "Deposit Refund",
-  credit_note: "Credit Note",
-  manual: "Manual",
-};
+// invoiceTypeLabels will be built inside component with t() - see getTypeLabel()
 
 const invoiceTypeColors: Record<string, string> = {
   deposit: "bg-indigo-50 text-indigo-700 border-indigo-200",
@@ -109,7 +94,7 @@ export default function PortalInvoices() {
   const totalPages = Math.ceil(total / pageSize);
 
   function navigateToDetail(id: number) {
-    setLocation(`/portal/invoices/${id}`);
+    setLocation(portalPath(`/invoices/${id}`));
   }
 
   function handleDownload(e: React.MouseEvent, id: number) {
@@ -123,14 +108,14 @@ export default function PortalInvoices() {
       return [
         { value: "all", label: t("portal_invoices.filter.all_statuses") },
         { value: "sent", label: t("portal_invoices.status.issued") },
-        { value: "partially_paid", label: "Partially Paid" },
+        { value: "partially_paid", label: t("portal_invoices.status.partially_paid") },
         { value: "paid", label: t("portal_invoices.status.paid") },
         { value: "overdue", label: t("portal_invoices.status.overdue") },
       ];
     }
     return [
-      { value: "all", label: "All Statuses" },
-      { value: "paid", label: "Paid" },
+      { value: "all", label: t("portal_invoices.filter.all_statuses") },
+      { value: "paid", label: t("portal_invoices.status.paid") },
       { value: "applied", label: t("portal_invoices.status.applied") },
       { value: "cancelled", label: t("portal_invoices.status.cancelled") },
       { value: "void", label: t("portal_invoices.status.void") },
@@ -145,7 +130,7 @@ export default function PortalInvoices() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{t("portal_invoices.title")}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Manage invoices, credit notes, and deposits
+              {t("portal_invoices.header.description")}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -162,11 +147,11 @@ export default function PortalInvoices() {
                   { header: "Total", accessor: (r: any) => r.total || 0 },
                   { header: "Amount Due", accessor: (r: any) => r.amountDue ?? r.total ?? 0 },
                   { header: "Currency", accessor: (r: any) => r.currency || "" },
-                  { header: "Status", accessor: (r: any) => statusLabels[r.status] || r.status || "" },
+                  { header: "Status", accessor: (r: any) => r.status || "" },
                 ], `invoices-${new Date().toISOString().slice(0, 10)}.csv`);
               }}
             >
-              <Download className="w-4 h-4 mr-1" /> Export CSV
+              <Download className="w-4 h-4 mr-1" /> {t("portal_invoices.actions.export_csv")}
             </Button>
           </div>
         </div>
@@ -176,10 +161,10 @@ export default function PortalInvoices() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <TabsList className="h-10">
               <TabsTrigger value="active" className="gap-1.5 px-4">
-                <Receipt className="w-4 h-4" /> Active
+                <Receipt className="w-4 h-4" /> {t("portal_invoices.tabs.active")}
               </TabsTrigger>
               <TabsTrigger value="history" className="gap-1.5 px-4">
-                <Archive className="w-4 h-4" /> History
+                <Archive className="w-4 h-4" /> {t("portal_invoices.tabs.history")}
               </TabsTrigger>
             </TabsList>
 
@@ -221,9 +206,9 @@ export default function PortalInvoices() {
                   ) : items.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center">
                       <FileText className="w-12 h-12 text-muted-foreground/30 mb-3" />
-                      <p className="text-sm font-medium text-muted-foreground">No documents found</p>
+                      <p className="text-sm font-medium text-muted-foreground">{t("portal_invoices.empty.title")}</p>
                       <p className="text-xs text-muted-foreground/70 mt-1">
-                        {tab === "history" ? "Completed and cancelled documents will appear here." : "No active invoices at this time."}
+                        {tab === "history" ? t("portal_invoices.empty.history_desc") : t("portal_invoices.empty.active_desc")}
                       </p>
                     </div>
                   ) : (
@@ -231,14 +216,14 @@ export default function PortalInvoices() {
                       <Table>
                         <TableHeader>
                           <TableRow className="bg-muted/30 hover:bg-muted/30">
-                            <TableHead className="pl-6 font-semibold text-xs uppercase tracking-wider">Document #</TableHead>
+                            <TableHead className="pl-6 font-semibold text-xs uppercase tracking-wider">{t("portal_invoices.table.header.document")}</TableHead>
                             <TableHead className="font-semibold text-xs uppercase tracking-wider">{t("portal_invoices.table.header.type")}</TableHead>
-                            <TableHead className="font-semibold text-xs uppercase tracking-wider">Period</TableHead>
+                            <TableHead className="font-semibold text-xs uppercase tracking-wider">{t("portal_invoices.table.header.period")}</TableHead>
                             <TableHead className="font-semibold text-xs uppercase tracking-wider">{t("portal_invoices.table.header.due_date")}</TableHead>
-                            <TableHead className="text-right font-semibold text-xs uppercase tracking-wider">Amount</TableHead>
-                            <TableHead className="text-right font-semibold text-xs uppercase tracking-wider">Balance Due</TableHead>
+                            <TableHead className="text-right font-semibold text-xs uppercase tracking-wider">{t("portal_invoices.table.header.amount")}</TableHead>
+                            <TableHead className="text-right font-semibold text-xs uppercase tracking-wider">{t("portal_invoices.table.header.balance_due")}</TableHead>
                             <TableHead className="font-semibold text-xs uppercase tracking-wider">{t("portal_invoices.table.header.status")}</TableHead>
-                            <TableHead className="text-right pr-6 font-semibold text-xs uppercase tracking-wider">Actions</TableHead>
+                            <TableHead className="text-right pr-6 font-semibold text-xs uppercase tracking-wider">{t("portal_invoices.table.header.actions")}</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -261,7 +246,7 @@ export default function PortalInvoices() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between pt-3">
                   <p className="text-sm text-muted-foreground">
-                    Showing <span className="font-medium text-foreground">{(page - 1) * pageSize + 1}</span>–<span className="font-medium text-foreground">{Math.min(page * pageSize, total)}</span> of <span className="font-medium text-foreground">{total}</span>
+                    {t("common.showing")} <span className="font-medium text-foreground">{(page - 1) * pageSize + 1}</span>–<span className="font-medium text-foreground">{Math.min(page * pageSize, total)}</span> {t("common.of")} <span className="font-medium text-foreground">{total}</span>
                   </p>
                   <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-8">
@@ -299,30 +284,48 @@ function InvoiceRow({
   const isCredit = isCreditNote || isDepositRefund;
 
   // Determine the status badge
-  let statusLabel = statusLabels[inv.status] || inv.status;
+  const statusLabelsMap: Record<string, string> = {
+    sent: t("portal_invoices.status.issued"),
+    paid: t("portal_invoices.status.paid"),
+    overdue: t("portal_invoices.status.overdue"),
+    cancelled: t("portal_invoices.status.cancelled"),
+    void: t("portal_invoices.status.void"),
+    applied: t("portal_invoices.status.applied"),
+  };
+  const typeLabelsMap: Record<string, string> = {
+    deposit: t("portal_invoices.type.deposit"),
+    monthly_eor: t("portal_invoices.type.monthly_eor"),
+    monthly_visa_eor: t("portal_invoices.type.monthly_visa_eor"),
+    monthly_aor: t("portal_invoices.type.monthly_aor"),
+    visa_service: t("portal_invoices.type.visa_service"),
+    deposit_refund: t("portal_invoices.type.deposit_refund"),
+    credit_note: t("portal_invoices.type.credit_note"),
+    manual: t("portal_invoices.type.manual"),
+  };
+  let statusLabel = statusLabelsMap[inv.status] || inv.status;
   let statusColor = statusColors[inv.status] || "";
 
   // Special composite statuses
   if (inv.isPartiallyPaid) {
-    statusLabel = "Partially Paid";
+    statusLabel = t("portal_invoices.status.partially_paid");
     statusColor = "bg-orange-50 text-orange-700 border-orange-200";
   } else if (inv.isOverpaid) {
-    statusLabel = "Paid";
+    statusLabel = t("portal_invoices.status.paid");
     statusColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
   }
 
   // Credit note: if not fully applied, show green; if applied, show grey
   if (isCreditNote) {
     if (inv.status === "applied") {
-      statusLabel = "Applied";
+      statusLabel = t("portal_invoices.status.applied");
       statusColor = "bg-gray-100 text-gray-500 border-gray-200";
     } else if (inv.status !== "cancelled" && inv.status !== "void") {
       // Active credit note — green
       statusColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
       if (inv.creditNoteTotalApplied > 0 && inv.creditNoteRemaining > 0) {
-        statusLabel = "Partially Applied";
+        statusLabel = t("portal_invoices.status.partially_applied");
       } else {
-        statusLabel = statusLabels[inv.status] || inv.status;
+        statusLabel = statusLabelsMap[inv.status] || inv.status;
       }
     }
   }
@@ -372,7 +375,7 @@ function InvoiceRow({
       </TableCell>
       <TableCell>
         <Badge variant="outline" className={cn("text-xs font-medium", invoiceTypeColors[inv.invoiceType] || "")}>
-          {invoiceTypeLabels[inv.invoiceType] || inv.invoiceType}
+          {typeLabelsMap[inv.invoiceType] || inv.invoiceType}
         </Badge>
       </TableCell>
       <TableCell className="text-sm text-muted-foreground">
