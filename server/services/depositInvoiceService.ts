@@ -168,8 +168,9 @@ export async function generateDepositInvoice(
       notes: `Deposit invoice for employee ${employee.firstName} ${employee.lastName} (${employee.employeeCode}). Deposit = (${baseSalary} + ${estimatedEmployerCost}) × ${depositMultiplier} = ${localAmount.toFixed(2)} ${employeeCurrency}${employeeCurrency !== settlementCurrency ? ` → ${depositAmount.toFixed(2)} ${settlementCurrency}` : ""}`,
     };
 
-    const invoiceResult = await db.insert(invoices).values(invoiceData);
-    const invoiceId = (invoiceResult as any)[0]?.insertId as number;
+    const invoiceResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+    const invoiceId = invoiceResult[0]?.id;
+    if (!invoiceId) throw new Error("Failed to get deposit invoice ID after insert");
 
     // 9. Create invoice line item
     const lineItem: InsertInvoiceItem = {

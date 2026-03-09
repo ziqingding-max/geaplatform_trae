@@ -379,8 +379,11 @@ export async function generateCreditNote(params: {
       notes: `Credit Note for ${originalInvoice.invoiceNumber}. Reason: ${params.reason}`,
     };
 
-    const invoiceResult = await db.insert(invoices).values(invoiceData);
-    const invoiceId = (invoiceResult as any)[0]?.insertId as number;
+    const invoiceResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+    const invoiceId = invoiceResult[0]?.id;
+    if (!invoiceId) {
+      throw new Error("Failed to get credit note invoice ID after insert");
+    }
 
     // 8. Create credit note line items
     for (const item of creditItems) {

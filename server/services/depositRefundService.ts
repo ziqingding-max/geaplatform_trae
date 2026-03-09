@@ -175,8 +175,9 @@ export async function generateDepositRefund(
       notes: `Deposit refund for terminated employee ${employee.firstName} ${employee.lastName} (${employee.employeeCode}). Original deposit: ${depositInvoice.invoiceNumber}`,
     };
 
-    const invoiceResult = await db.insert(invoices).values(invoiceData);
-    const invoiceId = (invoiceResult as any)[0]?.insertId as number;
+    const invoiceResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+    const invoiceId = invoiceResult[0]?.id;
+    if (!invoiceId) throw new Error("Failed to get deposit refund invoice ID after insert");
 
     // 8. Create refund line item
     const lineItem: InsertInvoiceItem = {

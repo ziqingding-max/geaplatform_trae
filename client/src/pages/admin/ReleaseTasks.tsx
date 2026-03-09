@@ -28,15 +28,22 @@ export default function ReleaseTasks() {
   
   const utils = trpc.useUtils();
 
-  // Fetch pending credit notes (deposit releases)
-  // Assuming we filter by invoiceType='credit_note' and status='draft'
-  // Or we might need a specific endpoint if logic is complex.
-  // Using generic invoice list for now.
-  const { data, isLoading } = trpc.invoices.list.useQuery({
-    type: "credit_note", // or deposit_refund?
+  // Fetch pending credit notes and deposit refunds for approval
+  const { data: creditNoteData, isLoading: isLoadingCN } = trpc.invoices.list.useQuery({
+    invoiceType: "credit_note",
     status: "draft",
     limit: 50,
   });
+  const { data: depositRefundData, isLoading: isLoadingDR } = trpc.invoices.list.useQuery({
+    invoiceType: "deposit_refund",
+    status: "draft",
+    limit: 50,
+  });
+  const isLoading = isLoadingCN || isLoadingDR;
+  const allTasks = [
+    ...((creditNoteData as any)?.data || []),
+    ...((depositRefundData as any)?.data || []),
+  ].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const approveMut = trpc.invoices.approveCreditNote.useMutation({
     onSuccess: () => {
@@ -63,7 +70,8 @@ export default function ReleaseTasks() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>CN #</TableHead>
+                  <TableHead>Invoice #</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Reason</TableHead>
@@ -75,15 +83,20 @@ export default function ReleaseTasks() {
                 {isLoading ? (
                   Array.from({ length: 3 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 6 }).map((_, j) => (
+                      {Array.from({ length: 7 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-24" /></TableCell>
                       ))}
                     </TableRow>
                   ))
-                ) : data?.data && data.data.length > 0 ? (
-                  data.data.map((cn: any) => (
+                ) : allTasks.length > 0 ? (
+                  allTasks.map((cn: any) => (
                     <TableRow key={cn.id}>
                       <TableCell className="font-medium">{cn.invoiceNumber}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={cn.invoiceType === 'deposit_refund' ? 'text-amber-700 border-amber-200 bg-amber-50' : 'text-purple-700 border-purple-200 bg-purple-50'}>
+                          {cn.invoiceType === 'deposit_refund' ? 'Deposit Refund' : 'Credit Note'}
+                        </Badge>
+                      </TableCell>
                       <TableCell>{cn.customerName}</TableCell>
                       <TableCell className="font-mono text-emerald-600">
                         {formatCurrencyAmount(Math.abs(parseFloat(cn.total)), cn.currency)}
@@ -107,7 +120,7 @@ export default function ReleaseTasks() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                       <CheckCircle className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
                       No pending release tasks
                     </TableCell>

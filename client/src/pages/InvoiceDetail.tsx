@@ -163,9 +163,9 @@ export default function InvoiceDetail() {
 
   // Exchange rate reference (finance manager only)
   const isFinanceManager = user?.role?.includes("admin") || user?.role?.includes("finance_manager");
-  const { data: rateRef, isLoading: isLoadingRate } = trpc.invoices.getRealTimeRateReference.useQuery(
+  const { data: rateRef, isLoading: isLoadingRate, refetch: refetchRate } = trpc.invoices.getRealTimeRateReference.useQuery(
     { invoiceId },
-    { enabled: !!invoiceId && !!isFinanceManager }
+    { enabled: !!invoiceId && !!isFinanceManager, refetchInterval: 60000 }
   );
 
   const isLoading = isLoadingInvoice || isLoadingItems;
@@ -197,6 +197,18 @@ export default function InvoiceDetail() {
     onSuccess: () => { toast.success("Item deleted"); refetch(); },
     onError: (err) => toast.error(err.message),
   });
+  const createCreditNoteMutation = trpc.invoices.createCreditNote.useMutation({
+    onSuccess: (result) => {
+      toast.success("Credit note created successfully");
+      setCreditNoteOpen(false);
+      setCreditNoteForm({ isFullCredit: true, reason: "", partialAmount: "" });
+      refetch();
+      if (result?.invoiceId) {
+        setLocation(`/invoices/${result.invoiceId}`);
+      }
+    },
+    onError: (err) => toast.error(err.message),
+  });
   const deleteMutation = trpc.invoices.delete.useMutation({
     onSuccess: () => { toast.success("Invoice deleted"); setLocation("/invoices"); },
     onError: (err) => toast.error(err.message),
@@ -209,6 +221,8 @@ export default function InvoiceDetail() {
   const [editingItem, setEditingItem] = useState<any>(null); // null = add new
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
   const [paidAmount, setPaidAmount] = useState("");
+  const [creditNoteOpen, setCreditNoteOpen] = useState(false);
+  const [creditNoteForm, setCreditNoteForm] = useState({ isFullCredit: true, reason: "", partialAmount: "" });
 
   // ── Derived ──
   const customerList = (customers as any)?.data || [];
@@ -356,8 +370,15 @@ export default function InvoiceDetail() {
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf/preview`, "_blank")}>
                   <Eye className="w-4 h-4" /> Preview PDF
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => updateStatusMutation.mutate({ id: invoiceId, status: "sent" })}>
-                  <Send className="w-4 h-4" /> Mark as Sent
+                <Button variant="outline" size="sm" className="gap-1.5 text-red-600 hover:text-red-700" onClick={() => {
+                  if (confirm("Reject this invoice and return to draft? Any wallet deductions will be refunded.")) {
+                    updateStatusMutation.mutate({ id: invoiceId, status: "draft" });
+                  }
+                }}>
+                  <XCircle className="w-4 h-4" /> Reject to Draft
+                </Button>
+                <Button size="sm" className="gap-1.5" onClick={() => updateStatusMutation.mutate({ id: invoiceId, status: "sent" })}>
+                  <CheckCircle2 className="w-4 h-4" /> Approve & Send
                 </Button>
               </>
             )}
@@ -374,10 +395,15 @@ export default function InvoiceDetail() {
                 </Button>
               </>
             )}
-            {isPaid && (
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf`, "_blank")}>
-                <Download className="w-4 h-4" /> Download PDF
-              </Button>
+            {isPaid && !isCreditNote && (
+              <>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf`, "_blank")}>
+                  <Download className="w-4 h-4" /> Download PDF
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreditNoteOpen(true)}>
+                  <FileText className="w-4 h-4" /> Create Credit Note
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -409,7 +435,7 @@ export default function InvoiceDetail() {
 
         {/* ── Exchange Rate Intelligence (Finance Manager only) ── */}
         {isFinanceManager && rateRef && rateRef.foreignCurrency && rateRef.liveRate && (
-          <ExchangeRatePanel rateRef={rateRef} currency={invoice.currency || "USD"} />
+          <ExchangeRatePanel rateRef={rateRef} currency={invoice.currency || "USD"} onRefresh={() => refetchRate()} />
         )}
 
         {/* ── Main Content: 2 columns ── */}
@@ -516,7 +542,7 @@ export default function InvoiceDetail() {
                               <TableCell className="text-right font-mono text-sm">{fmtAmt(item.unitPrice)}</TableCell>
                               <TableCell className="text-right font-mono text-sm">{item.vatRate ? `${item.vatRate}%` : "0%"}</TableCell>
                               <TableCell className="text-right font-mono text-sm font-medium pr-6">
-                                {fmtAmt(item.amount || (parseFloat(item.quantity || "1") * parseFloat(item.unitPrice || "0")))}
+                                {fmtAmt(item.localAmount || item.amount || (parseFloat(item.quantity || "1") * parseFloat(item.unitPrice || "0")))}
                               </TableCell>
                               {isEditable && (
                                 <TableCell>
@@ -650,9 +676,11 @@ export default function InvoiceDetail() {
                 <CardTitle className="text-base flex items-center gap-2">
                   <Info className="w-4 h-4 text-muted-foreground" /> Notes
                 </CardTitle>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditNotesOpen(true)}>
-                  <Edit className="w-4 h-4" /> Edit
-                </Button>
+                {(canEditExternalNotes || canEditInternalNotes) && (
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditNotesOpen(true)}>
+                    <Edit className="w-4 h-4" /> Edit
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -840,6 +868,86 @@ export default function InvoiceDetail() {
           </DialogContent>
         </Dialog>
 
+        {/* Create Credit Note Dialog */}
+        <Dialog open={creditNoteOpen} onOpenChange={(open) => { setCreditNoteOpen(open); if (!open) setCreditNoteForm({ isFullCredit: true, reason: "", partialAmount: "" }); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" /> Create Credit Note
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Original Invoice</span>
+                  <span className="font-medium font-mono">{invoice.invoiceNumber}</span>
+                </div>
+                <div className="flex justify-between text-sm font-bold">
+                  <span>Invoice Total</span>
+                  <span className="font-mono">{invoice.currency} {fmtAmt(invoice.total)}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Credit Type</Label>
+                <Select value={creditNoteForm.isFullCredit ? "full" : "partial"} onValueChange={(v) => setCreditNoteForm(prev => ({ ...prev, isFullCredit: v === "full" }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full">Full Credit (entire invoice amount)</SelectItem>
+                    <SelectItem value="partial">Partial Credit (specify amount)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {!creditNoteForm.isFullCredit && (
+                <div className="space-y-2">
+                  <Label>Credit Amount ({invoice.currency})</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={creditNoteForm.partialAmount}
+                    onChange={(e) => setCreditNoteForm(prev => ({ ...prev, partialAmount: e.target.value }))}
+                    placeholder="Enter credit amount"
+                  />
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Reason <span className="text-red-500">*</span></Label>
+                <Textarea
+                  value={creditNoteForm.reason}
+                  onChange={(e) => setCreditNoteForm(prev => ({ ...prev, reason: e.target.value }))}
+                  rows={3}
+                  placeholder="Reason for issuing credit note..."
+                />
+              </div>
+              <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>The credit note will be created in draft status and must be approved via Release Tasks before funds are credited to the customer.</span>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreditNoteOpen(false)}>Cancel</Button>
+              <Button
+                onClick={() => {
+                  const data: any = {
+                    originalInvoiceId: invoiceId,
+                    reason: creditNoteForm.reason,
+                    isFullCredit: creditNoteForm.isFullCredit,
+                  };
+                  if (!creditNoteForm.isFullCredit && creditNoteForm.partialAmount) {
+                    data.lineItems = [{
+                      description: `Partial credit for invoice ${invoice.invoiceNumber}`,
+                      amount: parseFloat(creditNoteForm.partialAmount).toFixed(2),
+                    }];
+                  }
+                  createCreditNoteMutation.mutate(data);
+                }}
+                disabled={createCreditNoteMutation.isPending || !creditNoteForm.reason.trim()}
+              >
+                {createCreditNoteMutation.isPending ? "Creating..." : "Create Credit Note"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
       </div>
     </Layout>
   );
@@ -873,7 +981,7 @@ function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string;
 }
 
 /* ── Exchange Rate Panel ── */
-function ExchangeRatePanel({ rateRef, currency }: { rateRef: any; currency: string }) {
+function ExchangeRatePanel({ rateRef, currency, onRefresh }: { rateRef: any; currency: string; onRefresh?: () => void }) {
   const diffPercent = parseFloat(rateRef.amountDiffPercent || "0");
   const diffAmount = parseFloat(rateRef.amountDiff || "0");
   const isPositive = diffAmount >= 0;
@@ -896,17 +1004,22 @@ function ExchangeRatePanel({ rateRef, currency }: { rateRef: any; currency: stri
           {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
           Exchange Rate Comparison
           <Badge variant="outline" className="text-xs ml-auto">{rateRef.foreignCurrency} → {currency}</Badge>
+          {onRefresh && (
+            <Button variant="ghost" size="icon" className="h-6 w-6 ml-1" onClick={onRefresh}>
+              <RefreshCw className="w-3.5 h-3.5" />
+            </Button>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
           <div>
             <p className="text-xs text-muted-foreground">Invoice Rate (w/ markup)</p>
-            <p className="font-mono font-medium">{parseFloat(rateRef.invoiceExchangeRateWithMarkup).toFixed(4)}</p>
+            <p className="font-mono font-medium">{parseFloat(rateRef.invoiceExchangeRateWithMarkup).toFixed(6)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Live Market Rate</p>
-            <p className="font-mono font-medium">{parseFloat(rateRef.liveRate).toFixed(4)}</p>
+            <p className="font-mono font-medium">{parseFloat(rateRef.liveRate).toFixed(6)}</p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Invoice Total ({currency})</p>
