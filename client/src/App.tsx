@@ -172,6 +172,8 @@ function PortalRouter() {
             <Route path={`${base}/forgot-password`} component={PortalForgotPassword} />
             <Route path={`${base}/reset-password`} component={PortalResetPassword} />
             <Route path={base || "/"} component={PortalDashboard} />
+            {/* Fallback: /dashboard redirects to root dashboard (for impersonation redirect compatibility) */}
+            <Route path={`${base}/dashboard`}>{() => <Redirect to={base || "/"} />}</Route>
             <Route path={`${base}/onboarding`} component={PortalOnboarding} />
             <Route path={`${base}/employees/:id`} component={PortalEmployeeDetail} />
             <Route path={`${base}/employees`} component={PortalPeople} />
