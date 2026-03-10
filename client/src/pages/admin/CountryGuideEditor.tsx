@@ -690,12 +690,14 @@ export default function CountryGuideEditor() {
                         ? formData.titleEn
                         : formData.titleZh}
                     </h2>
-                    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-table:text-sm">
+                    <div className="overflow-x-auto">
+                    <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-table:text-sm prose-th:bg-muted/50 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2 prose-th:text-left prose-table:border prose-th:border prose-td:border">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {previewLang === "en"
                           ? formData.contentEn || ""
                           : formData.contentZh || ""}
                       </ReactMarkdown>
+                    </div>
                     </div>
                   </div>
                 </TabsContent>
