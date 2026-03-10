@@ -551,9 +551,9 @@ export async function regenerateInvoices(
 
   const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
 
-  // 1. Find all DRAFT invoices for this month
+  // 1. Find all DRAFT invoices for this month (exclude deposit & deposit_refund — those are system-generated)
   const drafts = await db
-    .select({ id: invoices.id })
+    .select({ id: invoices.id, invoiceType: invoices.invoiceType })
     .from(invoices)
     .where(
       and(
@@ -562,13 +562,18 @@ export async function regenerateInvoices(
       )
     );
 
-  const draftIds = drafts.map((d) => d.id);
+  // Filter out deposit and deposit_refund invoices — they should never be deleted by regenerate
+  const nonDepositDrafts = drafts.filter(
+    (d) => d.invoiceType !== "deposit" && d.invoiceType !== "deposit_refund" && d.invoiceType !== "credit_note"
+  );
+
+  const draftIds = nonDepositDrafts.map((d) => d.id);
 
   if (draftIds.length > 0) {
-    // 2. Delete invoice items
+    // 2. Delete invoice items (only non-deposit drafts)
     await db.delete(invoiceItems).where(inArray(invoiceItems.invoiceId, draftIds));
     
-    // 3. Delete invoices
+    // 3. Delete invoices (only non-deposit drafts)
     await db.delete(invoices).where(inArray(invoices.id, draftIds));
   }
 
@@ -596,6 +601,10 @@ export async function regenerateSingleInvoice(
   }
   if (!invoice.invoiceMonth) {
     return { success: false, message: "Invoice does not have a month set" };
+  }
+  // Protect deposit/deposit_refund/credit_note invoices from being regenerated
+  if (invoice.invoiceType === "deposit" || invoice.invoiceType === "deposit_refund" || invoice.invoiceType === "credit_note") {
+    return { success: false, message: `Cannot regenerate ${invoice.invoiceType} invoices — these are system-generated.` };
   }
 
   // 2. Delete invoice

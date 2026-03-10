@@ -945,7 +945,7 @@ function CustomerDetail({ id }: { id: number }) {
                           </div>
                           <div className="space-y-2">
                             <Label>{t("common.effectiveFrom")} *</Label>
-                            <Input type="text" placeholder="YYYY-MM-DD" value={aorForm.effectiveFrom} onChange={(e) => setAorForm({ ...aorForm, effectiveFrom: e.target.value })} />
+                            <Input type="date" value={aorForm.effectiveFrom} onChange={(e) => setAorForm({ ...aorForm, effectiveFrom: e.target.value })} />
                           </div>
                         </div>
                         <div className="flex justify-end gap-3 pt-2">
@@ -1098,11 +1098,11 @@ function CustomerDetail({ id }: { id: number }) {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>{t("common.effectiveFrom")} *</Label>
-                        <Input type="text" placeholder="YYYY-MM-DD" value={pricingForm.effectiveFrom} onChange={(e) => setPricingForm({ ...pricingForm, effectiveFrom: e.target.value })} />
+                        <Input type="date" value={pricingForm.effectiveFrom} onChange={(e) => setPricingForm({ ...pricingForm, effectiveFrom: e.target.value })} />
                       </div>
                       <div className="space-y-2">
                         <Label>{t("common.effectiveTo")}</Label>
-                        <Input type="text" placeholder="YYYY-MM-DD" value={pricingForm.effectiveTo} onChange={(e) => setPricingForm({ ...pricingForm, effectiveTo: e.target.value })} />
+                        <Input type="date" value={pricingForm.effectiveTo} onChange={(e) => setPricingForm({ ...pricingForm, effectiveTo: e.target.value })} />
                       </div>
                     </div>
 

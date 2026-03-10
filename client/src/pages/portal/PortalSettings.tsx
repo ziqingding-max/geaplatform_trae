@@ -264,6 +264,8 @@ function LeavePoliciesTab() {
     expiryRule: string;
     carryOverDays: number;
   }>({ annualEntitlement: 0, expiryRule: "year_end", carryOverDays: 0 });
+  const [initOpen, setInitOpen] = useState(false);
+  const [initCountry, setInitCountry] = useState("");
 
   const updateMutation = portalTrpc.settings.updateLeavePolicy.useMutation({
     onSuccess: () => {
@@ -273,6 +275,18 @@ function LeavePoliciesTab() {
     },
     onError: (err: { message?: string }) => {
       toast.error(err.message || "Failed to update policy");
+    },
+  });
+
+  const initMutation = portalTrpc.settings.initializeFromStatutory.useMutation({
+    onSuccess: (data: { count: number }) => {
+      toast.success(`Initialized ${data.count} leave types from statutory defaults`);
+      setInitOpen(false);
+      setInitCountry("");
+      refetch();
+    },
+    onError: (err: { message?: string }) => {
+      toast.error(err.message || "Failed to initialize leave policies");
     },
   });
 
@@ -311,25 +325,95 @@ function LeavePoliciesTab() {
     );
   }
 
+  // Countries that already have policies configured
+  const configuredCountries = new Set(Object.keys(groupedPolicies));
+  // Countries where customer has employees but no policies yet
+  const unconfiguredCountries = (countries ?? []).filter(
+    (c: any) => c.country && !configuredCountries.has(c.country)
+  );
+
+  const initDialog = isAdmin && (
+    <Dialog open={initOpen} onOpenChange={setInitOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create Leave Policy</DialogTitle>
+          <DialogDescription>
+            Initialize leave policies from statutory defaults for a country where you have employees.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label>Country/Region</Label>
+            <Select value={initCountry} onValueChange={setInitCountry}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a country/region" />
+              </SelectTrigger>
+              <SelectContent>
+                {unconfiguredCountries.map((c: any) => (
+                  <SelectItem key={c.country} value={c.country}>
+                    {c.country} — {c.countryName || c.country}
+                  </SelectItem>
+                ))}
+                {unconfiguredCountries.length === 0 && (
+                  <SelectItem value="__none" disabled>
+                    All countries with employees already have policies
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setInitOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => initCountry && initMutation.mutate({ countryCode: initCountry })}
+            disabled={!initCountry || initMutation.isPending}
+          >
+            {initMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Initialize from Statutory
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   if (Object.keys(groupedPolicies).length === 0) {
     return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="flex flex-col items-center justify-center text-muted-foreground">
-            <CalendarDays className="w-10 h-10 mb-3" />
-            <p className="text-sm font-medium">No leave policies configured</p>
-            <p className="text-xs mt-1">Leave policies will be set up when you onboard employees in a new country.</p>
-          </div>
-        </CardContent>
-      </Card>
+      <>
+        {initDialog}
+        <Card>
+          <CardContent className="py-12">
+            <div className="flex flex-col items-center justify-center text-muted-foreground">
+              <CalendarDays className="w-10 h-10 mb-3" />
+              <p className="text-sm font-medium">No leave policies configured</p>
+              <p className="text-xs mt-1">Create leave policies for countries where you have employees.</p>
+              {isAdmin && (
+                <Button className="mt-4" onClick={() => setInitOpen(true)}>
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Create Leave Policy
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 text-blue-800 text-sm">
-        <Info className="w-4 h-4 shrink-0" />
-        <span>Leave policies define the annual entitlement for each leave type per country. Entitlements must meet or exceed the statutory minimum.</span>
+      {initDialog}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 text-blue-800 text-sm flex-1">
+          <Info className="w-4 h-4 shrink-0" />
+          <span>Leave policies define the annual entitlement for each leave type per country. Entitlements must meet or exceed the statutory minimum.</span>
+        </div>
+        {isAdmin && unconfiguredCountries.length > 0 && (
+          <Button className="ml-4 shrink-0" size="sm" onClick={() => setInitOpen(true)}>
+            <UserPlus className="w-4 h-4 mr-2" />
+            Create Leave Policy
+          </Button>
+        )}
       </div>
 
       {Object.entries(groupedPolicies).map(([countryCode, countryPolicies]) => {

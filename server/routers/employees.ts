@@ -289,9 +289,22 @@ export const employeesRouter = router({
       const isTransitioningToTerminated = input.data.status === "terminated";
       const isReactivating = input.data.status && ["active", "onboarding", "contract_signed"].includes(input.data.status);
       let previousStatus: string | undefined;
+      let currentEmp: any;
       if (input.data.status) {
-        const currentEmp = await getEmployeeById(input.id);
+        currentEmp = await getEmployeeById(input.id);
         previousStatus = currentEmp?.status;
+      }
+
+      // Validate: Est.Employer Cost must be filled before transitioning to onboarding
+      if (isTransitioningToOnboarding && previousStatus !== "onboarding") {
+        const emp = currentEmp || await getEmployeeById(input.id);
+        const cost = parseFloat(emp?.estimatedEmployerCost || "0");
+        if (!cost || cost <= 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Cannot transition to onboarding: please fill in the Est. Employer Cost (monthly) for this employee first.",
+          });
+        }
       }
 
       await updateEmployee(input.id, updateData);
