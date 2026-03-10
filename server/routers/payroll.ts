@@ -347,32 +347,105 @@ export const payrollRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: `Employee ${employee.firstName} ${employee.lastName} is already in this payroll run.` });
       }
 
-      // Calculate item-level totals
-      const totals = calculateItemTotals(input);
+      // Normalize payroll month
+      const pmDate = payrollRun.payrollMonth instanceof Date ? payrollRun.payrollMonth : new Date(payrollRun.payrollMonth as any);
+      const y = pmDate.getUTCFullYear();
+      const m = String(pmDate.getUTCMonth() + 1).padStart(2, "0");
+      const d = String(pmDate.getUTCDate()).padStart(2, "0");
+      const payrollMonthStr = `${y}-${m}-${d}`;
+
+      // 1. Fetch Adjustments
+      const allAdj = await getSubmittedAdjustmentsForPayroll(input.employeeId, payrollMonthStr);
+      let totalBonus = 0;
+      let totalAllowances = 0;
+      let totalReimbursements = 0;
+      let totalDeductions = 0;
+      const adjustmentsBreakdown: any[] = [];
+      const lockedAdjustmentIds: number[] = [];
+
+      for (const adj of allAdj) {
+        const amount = parseFloat(adj.amount?.toString() ?? "0");
+        switch (adj.adjustmentType) {
+          case "bonus": totalBonus += amount; break;
+          case "allowance": totalAllowances += amount; break;
+          case "reimbursement": totalReimbursements += amount; break;
+          case "deduction": totalDeductions += amount; break;
+          case "other": totalAllowances += amount; break;
+        }
+        adjustmentsBreakdown.push({
+          id: adj.id,
+          type: adj.adjustmentType,
+          category: adj.category,
+          description: adj.description,
+          amount: adj.amount,
+        });
+        lockedAdjustmentIds.push(adj.id);
+      }
+
+      // 2. Fetch Unpaid Leave
+      const allLeave = await getSubmittedUnpaidLeaveForPayroll(input.employeeId, payrollMonthStr);
+      let totalUnpaidDays = 0;
+      const lockedLeaveIds: number[] = [];
+
+      for (const lv of allLeave) {
+        totalUnpaidDays += parseFloat(lv.days?.toString() ?? "0");
+        lockedLeaveIds.push(lv.id);
+      }
+
+      const baseSalary = parseFloat(employee.baseSalary?.toString() ?? "0");
+
+      // Calculate unpaid leave deduction
+      const countryConfig = await getCountryConfig(payrollRun.countryCode);
+      const workingDaysPerWeek = countryConfig?.workingDaysPerWeek ?? 5;
+      const monthlyWorkingDays = workingDaysPerWeek * 4.33;
+      const totalUnpaidDeduction = monthlyWorkingDays > 0
+        ? Math.round((baseSalary / monthlyWorkingDays) * totalUnpaidDays * 100) / 100
+        : 0;
+
+      // Use calculated values, but allow manual overrides if input is non-zero
+      // (However, typically "Add" just sends defaults, so we prioritize calculated)
+      const inputBase = parseFloat(input.baseSalary);
+      const finalBaseSalary = inputBase > 0 ? inputBase : baseSalary;
+
+      const itemFields = {
+        baseSalary: finalBaseSalary.toFixed(2),
+        bonus: totalBonus.toFixed(2),
+        allowances: totalAllowances.toFixed(2),
+        reimbursements: totalReimbursements.toFixed(2),
+        deductions: totalDeductions.toFixed(2),
+        taxDeduction: input.taxDeduction,
+        socialSecurityDeduction: input.socialSecurityDeduction,
+        unpaidLeaveDeduction: totalUnpaidDeduction.toFixed(2),
+        employerSocialContribution: input.employerSocialContribution,
+      };
+
+      const totals = calculateItemTotals(itemFields);
 
       const result = await createPayrollItem({
         payrollRunId: input.payrollRunId,
         employeeId: input.employeeId,
-        baseSalary: input.baseSalary,
-        bonus: input.bonus,
-        allowances: input.allowances,
-        reimbursements: input.reimbursements,
-        deductions: input.deductions,
-        taxDeduction: input.taxDeduction,
-        socialSecurityDeduction: input.socialSecurityDeduction,
-        unpaidLeaveDeduction: input.unpaidLeaveDeduction,
-        unpaidLeaveDays: input.unpaidLeaveDays,
+        ...itemFields,
+        unpaidLeaveDays: totalUnpaidDays.toFixed(1),
         gross: totals.gross,
         net: totals.net,
-        employerSocialContribution: input.employerSocialContribution,
         totalEmploymentCost: totals.totalEmploymentCost,
-        currency: input.currency,
+        currency: employee.salaryCurrency || payrollRun.currency,
         notes: input.notes,
-        adjustmentsBreakdown: input.adjustmentsBreakdown,
+        adjustmentsBreakdown: adjustmentsBreakdown.length > 0 ? adjustmentsBreakdown : undefined,
       });
 
-      // Recalculate payroll run totals after adding item
+      // Recalculate payroll run totals
       await recalculatePayrollRunTotals(input.payrollRunId);
+
+      // Lock aggregated adjustments
+      for (const adjId of lockedAdjustmentIds) {
+        await updateAdjustment(adjId, { status: "locked", payrollRunId: input.payrollRunId } as any);
+      }
+
+      // Lock aggregated leave records
+      for (const leaveId of lockedLeaveIds) {
+        await updateLeaveRecord(leaveId, { status: "locked" } as any);
+      }
 
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
