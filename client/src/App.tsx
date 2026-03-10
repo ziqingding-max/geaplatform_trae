@@ -13,11 +13,8 @@ import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
 import Contractors from "./pages/Contractors";
 import ContractorDetail from "./pages/ContractorDetail";
-// import Countries from "./pages/Countries"; // Moved to Settings tab
 import Settings from "./pages/Settings";
 import Customers from "./pages/Customers";
-// import CustomerDetail from "./pages/admin/customers/CustomerDetail";
-// import CustomerPortal from "./pages/portal/CustomerPortal";
 import Payroll from "./pages/Payroll";
 import Invoices from "./pages/Invoices";
 import InvoiceDetail from "./pages/InvoiceDetail";
@@ -33,7 +30,6 @@ import VendorBills from "./pages/VendorBills";
 import ContractorInvoices from "./pages/admin/ContractorInvoices";
 import ReleaseTasks from "./pages/admin/ReleaseTasks";
 import ProfitLossReport from "./pages/ProfitLossReport";
-// import CostAllocation from "./pages/CostAllocation"; // Removed: merged into VendorBills detail
 import SalesCRM from "./pages/SalesCRM";
 import Quotations from "./pages/Quotations";
 import QuotationCreatePage from "./pages/QuotationCreatePage";
@@ -50,8 +46,6 @@ import superjson from "superjson";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { Loader2 } from "lucide-react";
 import { isPortalDomain, getPortalBasePath, isWorkerDomain } from "@/lib/portalBasePath";
-// Copilot disabled — feature not yet ready for production
-// import { CopilotDrawer } from "@/components/CopilotDrawer";
 
 // Worker Portal pages
 const WorkerLogin = lazy(() => import("./pages/worker/WorkerLogin"));
@@ -299,8 +293,6 @@ function App() {
         <TooltipProvider>
           <Toaster position="top-right" richColors closeButton expand visibleToasts={8} gap={8} />
           <Router />
-          {/* Copilot disabled — feature not yet ready for production */}
-          {/* <CopilotDrawer /> */}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

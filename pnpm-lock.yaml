@@ -119,48 +119,12 @@ importers:
       '@trpc/server':
         specifier: ^11.6.0
         version: 11.11.0(typescript@5.9.3)
-      '@types/bcryptjs':
-        specifier: ^3.0.0
-        version: 3.0.0
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/express':
-        specifier: 4.17.21
-        version: 4.17.21
-      '@types/google.maps':
-        specifier: ^3.58.1
-        version: 3.58.1
-      '@types/jsonwebtoken':
-        specifier: ^9.0.10
-        version: 9.0.10
-      '@types/node':
-        specifier: ^24.7.0
-        version: 24.11.0
-      '@types/node-cron':
-        specifier: ^3.0.11
-        version: 3.0.11
-      '@types/nodemailer':
-        specifier: ^7.0.11
-        version: 7.0.11
-      '@types/pdfkit':
-        specifier: ^0.17.5
-        version: 0.17.5
-      '@types/react':
-        specifier: ^19.2.1
-        version: 19.2.14
-      '@types/react-dom':
-        specifier: ^19.2.1
-        version: 19.2.3(@types/react@19.2.14)
       '@vitejs/plugin-react':
         specifier: ^5.0.4
         version: 5.1.4(vite@7.3.1(@types/node@24.11.0)(jiti@2.6.1)(lightningcss@1.31.1)(tsx@4.21.0))
       '@vnedyalk0v/react19-simple-maps':
         specifier: ^2.0.2
         version: 2.0.2(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      add:
-        specifier: ^2.0.6
-        version: 2.0.6
       autoprefixer:
         specifier: ^10.4.20
         version: 10.4.27(postcss@8.5.6)
@@ -245,9 +209,6 @@ importers:
       pdfkit:
         specifier: ^0.17.2
         version: 0.17.2
-      pnpm:
-        specifier: ^10.15.1
-        version: 10.30.3
       postcss:
         specifier: ^8.4.47
         version: 8.5.6
@@ -318,6 +279,36 @@ importers:
         specifier: ^5.0.11
         version: 5.0.11(@types/react@19.2.14)(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
     devDependencies:
+      '@types/bcryptjs':
+        specifier: ^3.0.0
+        version: 3.0.0
+      '@types/express':
+        specifier: 4.17.21
+        version: 4.17.21
+      '@types/google.maps':
+        specifier: ^3.58.1
+        version: 3.58.1
+      '@types/jsonwebtoken':
+        specifier: ^9.0.10
+        version: 9.0.10
+      '@types/node':
+        specifier: ^24.7.0
+        version: 24.11.0
+      '@types/node-cron':
+        specifier: ^3.0.11
+        version: 3.0.11
+      '@types/nodemailer':
+        specifier: ^7.0.11
+        version: 7.0.11
+      '@types/pdfkit':
+        specifier: ^0.17.5
+        version: 0.17.5
+      '@types/react':
+        specifier: ^19.2.1
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.1
+        version: 19.2.3(@types/react@19.2.14)
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -2715,9 +2706,6 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  add@2.0.6:
-    resolution: {integrity: sha512-j5QzrmsokwWWp6kUcJQySpbG+xfOBqqKnup3OIk1pz+kB/80SLorZ9V8zHFLO92Lcd+hbvq8bT+zOGoPkmBV0Q==}
-
   aria-hidden@1.2.6:
     resolution: {integrity: sha512-ik3ZgC9dY/lYVVM++OISsaYDeg1tb0VtP5uL3ouh1koGOaUMDPpbFIei4JkFimWUFPn90sbMNMXQAIVOlnYKJA==}
     engines: {node: '>=10'}
@@ -4149,11 +4137,6 @@ packages:
 
   png-js@1.0.0:
     resolution: {integrity: sha512-k+YsbhpA9e+EFfKjTCH3VW6aoKlyNYI6NYdTfDL4CIvFnvsuO84ttonmZE7rc+v23SLTH8XX+5w/Ak9v0xGY4g==}
-
-  pnpm@10.30.3:
-    resolution: {integrity: sha512-yWHR4KLY41TsqlFmuCJRZmi39Ey1vZUSLVkN2Bki9gb1RzttI+xKW+Bef80Y6EiNR9l4u+mBhy8RRdBumnQAFw==}
-    engines: {node: '>=18.12'}
-    hasBin: true
 
   points-on-curve@0.2.0:
     resolution: {integrity: sha512-0mYKnYYe9ZcqMCWhUjItv/oHjvgEsfKvnUTg8sAtnHr3GVy7rGkXCb6d5cSyqrWqL4k81b9CPg3urd+T7aop3A==}
@@ -7163,6 +7146,7 @@ snapshots:
   '@types/better-sqlite3@7.6.13':
     dependencies:
       '@types/node': 24.11.0
+    optional: true
 
   '@types/body-parser@1.19.6':
     dependencies:
@@ -7454,8 +7438,6 @@ snapshots:
       negotiator: 0.6.3
 
   acorn@8.16.0: {}
-
-  add@2.0.6: {}
 
   aria-hidden@1.2.6:
     dependencies:
@@ -9172,8 +9154,6 @@ snapshots:
       pathe: 2.0.3
 
   png-js@1.0.0: {}
-
-  pnpm@10.30.3: {}
 
   points-on-curve@0.2.0: {}
 
