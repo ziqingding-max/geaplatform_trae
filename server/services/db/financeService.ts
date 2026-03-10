@@ -78,6 +78,8 @@ export async function listInvoices(
       amountDue: invoices.amountDue,
       currency: invoices.currency,
       createdAt: invoices.createdAt,
+      creditNoteDisposition: invoices.creditNoteDisposition,
+      relatedInvoiceId: invoices.relatedInvoiceId,
     })
     .from(invoices)
     .leftJoin(customers, eq(invoices.customerId, customers.id))

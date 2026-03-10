@@ -16,14 +16,15 @@ export type FrozenWalletTransactionType = FrozenWalletTransaction["type"];
 
 export class WalletService {
   /**
-   * Get or create a wallet for a customer and currency
+   * Get or create a wallet for a customer and currency.
+   * Accepts an optional transaction object to participate in an outer transaction.
    */
-  async getWallet(customerId: number, currency: string) {
-    const db = getDb();
+  async getWallet(customerId: number, currency: string, externalTx?: any) {
+    const db = externalTx || getDb();
     if (!db) throw new Error("Database not initialized");
 
     const existing = await db.query.customerWallets.findFirst({
-      where: (t, { and, eq }) => and(eq(t.customerId, customerId), eq(t.currency, currency)),
+      where: (t: any, { and, eq }: any) => and(eq(t.customerId, customerId), eq(t.currency, currency)),
     });
 
     if (existing) return existing;
@@ -48,7 +49,89 @@ export class WalletService {
   }
 
   /**
-   * Execute a wallet transaction with optimistic locking
+   * Core wallet transaction logic that operates on a given transaction context.
+   * This is the internal implementation shared by both standalone and nested-tx paths.
+   */
+  private async _transactWithTx(tx: any, params: {
+    walletId: number;
+    type: WalletTransactionType;
+    amount: string;
+    direction: "credit" | "debit";
+    referenceId: number;
+    referenceType: WalletTransaction["referenceType"];
+    description?: string;
+    internalNote?: string;
+    createdBy?: number;
+  }) {
+    const amountNum = parseFloat(params.amount);
+    if (amountNum <= 0) throw new Error("Transaction amount must be positive");
+
+    // 1. Get current wallet state with lock
+    const wallet = await tx.query.customerWallets.findFirst({
+      where: eq(customerWallets.id, params.walletId),
+    });
+
+    if (!wallet) throw new Error(`Wallet ${params.walletId} not found`);
+
+    const currentBalance = parseFloat(wallet.balance);
+    let newBalance = currentBalance;
+
+    if (params.direction === "credit") {
+      newBalance += amountNum;
+    } else {
+      newBalance -= amountNum;
+      // Prevent negative balance (strict mode)
+      if (newBalance < 0) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `Insufficient wallet balance. Current: ${currentBalance}, Required: ${amountNum}`,
+        });
+      }
+    }
+
+    // 2. Update wallet balance with optimistic locking
+    const result = await tx
+      .update(customerWallets)
+      .set({
+        balance: newBalance.toFixed(2),
+        version: wallet.version + 1,
+      })
+      .where(
+        // Ensure version hasn't changed since read
+        and(eq(customerWallets.id, params.walletId), eq(customerWallets.version, wallet.version))
+      );
+
+    if (result.rowsAffected === 0) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "Wallet balance was updated concurrently. Please try again.",
+      });
+    }
+
+    // 3. Record transaction
+    const [transaction] = await tx
+      .insert(walletTransactions)
+      .values({
+        walletId: params.walletId,
+        type: params.type,
+        amount: params.amount,
+        direction: params.direction,
+        balanceBefore: currentBalance.toFixed(2),
+        balanceAfter: newBalance.toFixed(2),
+        referenceId: params.referenceId,
+        referenceType: params.referenceType,
+        description: params.description,
+        internalNote: params.internalNote,
+        createdBy: params.createdBy,
+      })
+      .returning();
+
+    return { wallet: { ...wallet, balance: newBalance.toFixed(2) }, transaction };
+  }
+
+  /**
+   * Execute a wallet transaction with optimistic locking.
+   * Accepts an optional external transaction object to avoid nested transactions (SQLITE_BUSY).
    */
   async transact(params: {
     walletId: number;
@@ -60,75 +143,17 @@ export class WalletService {
     description?: string;
     internalNote?: string;
     createdBy?: number;
-  }) {
+  }, externalTx?: any) {
+    if (externalTx) {
+      // Use the provided external transaction — no nested db.transaction()
+      return await this._transactWithTx(externalTx, params);
+    }
+
+    // Standalone: create our own transaction
     const db = getDb();
     if (!db) throw new Error("Database not initialized");
-
-    const amountNum = parseFloat(params.amount);
-    if (amountNum <= 0) throw new Error("Transaction amount must be positive");
-
-    return await db.transaction(async (tx) => {
-      // 1. Get current wallet state with lock
-      const wallet = await tx.query.customerWallets.findFirst({
-        where: eq(customerWallets.id, params.walletId),
-      });
-
-      if (!wallet) throw new Error(`Wallet ${params.walletId} not found`);
-
-      const currentBalance = parseFloat(wallet.balance);
-      let newBalance = currentBalance;
-
-      if (params.direction === "credit") {
-        newBalance += amountNum;
-      } else {
-        newBalance -= amountNum;
-        // Prevent negative balance (strict mode)
-        if (newBalance < 0) {
-          throw new TRPCError({
-            code: "PRECONDITION_FAILED",
-            message: `Insufficient wallet balance. Current: ${currentBalance}, Required: ${amountNum}`,
-          });
-        }
-      }
-
-      // 2. Update wallet balance with optimistic locking
-      const result = await tx
-        .update(customerWallets)
-        .set({
-          balance: newBalance.toFixed(2),
-          version: wallet.version + 1,
-        })
-        .where(
-          // Ensure version hasn't changed since read
-          and(eq(customerWallets.id, params.walletId), eq(customerWallets.version, wallet.version))
-        );
-
-      if (result.rowsAffected === 0) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "Wallet balance was updated concurrently. Please try again.",
-        });
-      }
-
-      // 3. Record transaction
-      const [transaction] = await tx
-        .insert(walletTransactions)
-        .values({
-          walletId: params.walletId,
-          type: params.type,
-          amount: params.amount,
-          direction: params.direction,
-          balanceBefore: currentBalance.toFixed(2),
-          balanceAfter: newBalance.toFixed(2),
-          referenceId: params.referenceId,
-          referenceType: params.referenceType,
-          description: params.description,
-          internalNote: params.internalNote,
-          createdBy: params.createdBy,
-        })
-        .returning();
-
-      return { wallet: { ...wallet, balance: newBalance.toFixed(2) }, transaction };
+    return await db.transaction(async (tx: any) => {
+      return await this._transactWithTx(tx, params);
     });
   }
 
@@ -186,14 +211,15 @@ export class WalletService {
   // ── Frozen Wallet Methods ─────────────────────────────────────────────
 
   /**
-   * Get or create a frozen wallet for a customer and currency
+   * Get or create a frozen wallet for a customer and currency.
+   * Accepts an optional transaction object to participate in an outer transaction.
    */
-  async getFrozenWallet(customerId: number, currency: string) {
-    const db = getDb();
+  async getFrozenWallet(customerId: number, currency: string, externalTx?: any) {
+    const db = externalTx || getDb();
     if (!db) throw new Error("Database not initialized");
 
     const existing = await db.query.customerFrozenWallets.findFirst({
-      where: (t, { and, eq }) => and(eq(t.customerId, customerId), eq(t.currency, currency)),
+      where: (t: any, { and, eq }: any) => and(eq(t.customerId, customerId), eq(t.currency, currency)),
     });
 
     if (existing) return existing;
@@ -217,7 +243,86 @@ export class WalletService {
   }
 
   /**
-   * Execute a frozen wallet transaction with optimistic locking
+   * Core frozen wallet transaction logic that operates on a given transaction context.
+   */
+  private async _frozenTransactWithTx(tx: any, params: {
+    walletId: number;
+    type: FrozenWalletTransactionType;
+    amount: string;
+    direction: "credit" | "debit";
+    referenceId: number;
+    referenceType: string;
+    description?: string;
+    internalNote?: string;
+    createdBy?: number;
+  }) {
+    const amountNum = parseFloat(params.amount);
+    if (amountNum <= 0) throw new Error("Transaction amount must be positive");
+
+    // 1. Get current wallet state with lock
+    const wallet = await tx.query.customerFrozenWallets.findFirst({
+      where: eq(customerFrozenWallets.id, params.walletId),
+    });
+
+    if (!wallet) throw new Error(`Frozen Wallet ${params.walletId} not found`);
+
+    const currentBalance = parseFloat(wallet.balance);
+    let newBalance = currentBalance;
+
+    if (params.direction === "credit") {
+      newBalance += amountNum;
+    } else {
+      newBalance -= amountNum;
+      if (newBalance < 0) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: `Insufficient frozen wallet balance. Current: ${currentBalance}, Required: ${amountNum}`,
+        });
+      }
+    }
+
+    // 2. Update wallet balance with optimistic locking
+    const result = await tx
+      .update(customerFrozenWallets)
+      .set({
+        balance: newBalance.toFixed(2),
+        version: wallet.version + 1,
+      })
+      .where(
+        and(eq(customerFrozenWallets.id, params.walletId), eq(customerFrozenWallets.version, wallet.version))
+      );
+
+    if (result.rowsAffected === 0) {
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "Frozen Wallet balance was updated concurrently. Please try again.",
+      });
+    }
+
+    // 3. Record transaction
+    const [transaction] = await tx
+      .insert(frozenWalletTransactions)
+      .values({
+        walletId: params.walletId,
+        type: params.type,
+        amount: params.amount,
+        direction: params.direction,
+        balanceBefore: currentBalance.toFixed(2),
+        balanceAfter: newBalance.toFixed(2),
+        referenceId: params.referenceId,
+        referenceType: params.referenceType,
+        description: params.description,
+        internalNote: params.internalNote,
+        createdBy: params.createdBy,
+      })
+      .returning();
+
+    return { wallet: { ...wallet, balance: newBalance.toFixed(2) }, transaction };
+  }
+
+  /**
+   * Execute a frozen wallet transaction with optimistic locking.
+   * Accepts an optional external transaction object to avoid nested transactions (SQLITE_BUSY).
    */
   async frozenTransact(params: {
     walletId: number;
@@ -229,73 +334,17 @@ export class WalletService {
     description?: string;
     internalNote?: string;
     createdBy?: number;
-  }) {
+  }, externalTx?: any) {
+    if (externalTx) {
+      // Use the provided external transaction — no nested db.transaction()
+      return await this._frozenTransactWithTx(externalTx, params);
+    }
+
+    // Standalone: create our own transaction
     const db = getDb();
     if (!db) throw new Error("Database not initialized");
-
-    const amountNum = parseFloat(params.amount);
-    if (amountNum <= 0) throw new Error("Transaction amount must be positive");
-
-    return await db.transaction(async (tx) => {
-      // 1. Get current wallet state with lock
-      const wallet = await tx.query.customerFrozenWallets.findFirst({
-        where: eq(customerFrozenWallets.id, params.walletId),
-      });
-
-      if (!wallet) throw new Error(`Frozen Wallet ${params.walletId} not found`);
-
-      const currentBalance = parseFloat(wallet.balance);
-      let newBalance = currentBalance;
-
-      if (params.direction === "credit") {
-        newBalance += amountNum;
-      } else {
-        newBalance -= amountNum;
-        if (newBalance < 0) {
-          throw new TRPCError({
-            code: "PRECONDITION_FAILED",
-            message: `Insufficient frozen wallet balance. Current: ${currentBalance}, Required: ${amountNum}`,
-          });
-        }
-      }
-
-      // 2. Update wallet balance with optimistic locking
-      const result = await tx
-        .update(customerFrozenWallets)
-        .set({
-          balance: newBalance.toFixed(2),
-          version: wallet.version + 1,
-        })
-        .where(
-          and(eq(customerFrozenWallets.id, params.walletId), eq(customerFrozenWallets.version, wallet.version))
-        );
-
-      if (result.rowsAffected === 0) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "Frozen Wallet balance was updated concurrently. Please try again.",
-        });
-      }
-
-      // 3. Record transaction
-      const [transaction] = await tx
-        .insert(frozenWalletTransactions)
-        .values({
-          walletId: params.walletId,
-          type: params.type,
-          amount: params.amount,
-          direction: params.direction,
-          balanceBefore: currentBalance.toFixed(2),
-          balanceAfter: newBalance.toFixed(2),
-          referenceId: params.referenceId,
-          referenceType: params.referenceType,
-          description: params.description,
-          internalNote: params.internalNote,
-          createdBy: params.createdBy,
-        })
-        .returning();
-
-      return { wallet: { ...wallet, balance: newBalance.toFixed(2) }, transaction };
+    return await db.transaction(async (tx: any) => {
+      return await this._frozenTransactWithTx(tx, params);
     });
   }
 
@@ -319,9 +368,10 @@ export class WalletService {
   /**
    * Release funds from frozen wallet to a credit note (e.g. after employee termination)
    * The Credit Note will then be processed by Finance to either credit Main Wallet or refund to Bank.
+   * Accepts an optional external transaction object to avoid nested transactions.
    */
-  async releaseDepositToCreditNote(customerId: number, currency: string, amount: string, creditNoteId: number, reason: string, createdBy?: number) {
-    const frozenWallet = await this.getFrozenWallet(customerId, currency);
+  async releaseDepositToCreditNote(customerId: number, currency: string, amount: string, creditNoteId: number, reason: string, createdBy?: number, externalTx?: any) {
+    const frozenWallet = await this.getFrozenWallet(customerId, currency, externalTx);
 
     return await this.frozenTransact({
       walletId: frozenWallet.id,
@@ -332,7 +382,7 @@ export class WalletService {
       referenceType: "credit_note",
       description: `Deposit released to Credit Note #${creditNoteId}: ${reason}`,
       createdBy,
-    });
+    }, externalTx);
   }
 
   /**
