@@ -21,7 +21,7 @@ import {
   Clock, Receipt, Info, Eye, Edit, Save, Plus, Trash2,
   Building2, User, DollarSign, TrendingUp, TrendingDown,
   AlertTriangle, CheckCircle2, Send, XCircle, Ban,
-  RefreshCw, ExternalLink, Link2,
+  RefreshCw, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate, formatAmount, formatMonth } from "@/lib/format";
@@ -156,7 +156,7 @@ export default function InvoiceDetail() {
     { enabled: !!invoiceId }
   );
 
-  const activeCreditNotes = (relatedInvoices as any[])?.filter(inv => 
+  const activeCreditNotes = (Array.isArray(relatedInvoices) ? relatedInvoices : [])?.filter((inv: any) => 
     (inv.invoiceType === 'credit_note' || inv.invoiceType === 'deposit_refund') && 
     inv.status !== 'cancelled'
   ) || [];
@@ -628,7 +628,7 @@ export default function InvoiceDetail() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Link2 className="w-4 h-4 text-muted-foreground" /> Related Invoices
+                    <ExternalLink className="w-4 h-4 text-muted-foreground" /> Related Invoices
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">

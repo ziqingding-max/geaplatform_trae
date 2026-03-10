@@ -69,7 +69,7 @@ export const appRouter = router({
   pdfParsing: pdfParsingRouter,
   sales: salesRouter,
   knowledgeBaseAdmin: knowledgeBaseAdminRouter,
-  copilot: copilotRouter,
+  // copilot: copilotRouter,
   notifications: notificationsRouter,
   calculation: calculationRouter,
   quotations: quotationRouter,

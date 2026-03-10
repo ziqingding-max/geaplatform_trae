@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, AlertCircle, Building2, Wallet, Landmark, Eye, Clock, CheckCircle2, Download, Link2 } from "lucide-react";
+import { CheckCircle, XCircle, AlertCircle, Building2, Wallet, Landmark, Eye, Clock, CheckCircle2, Download, ExternalLink } from "lucide-react";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -130,7 +130,7 @@ export default function ReleaseTasks() {
                             <div className="font-medium font-mono">{cn.invoiceNumber}</div>
                             {cn.relatedInvoiceId && (
                               <div className="text-xs text-muted-foreground flex items-center gap-1 cursor-pointer hover:text-primary mt-0.5" onClick={() => setLocation(`/invoices/${cn.relatedInvoiceId}`)}>
-                                <Link2 className="w-3 h-3" /> Orig. #{cn.relatedInvoiceId}
+                                <ExternalLink className="w-3 h-3" /> Orig. #{cn.relatedInvoiceId}
                               </div>
                             )}
                           </TableCell>
