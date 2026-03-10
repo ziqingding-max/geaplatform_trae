@@ -66,6 +66,37 @@ ALL_COUNTRIES = [
     ("IL", "Israel", "ILS"), ("TR", "Turkey", "TRY"), ("EG", "Egypt", "EGP"),
     ("NG", "Nigeria", "NGN"), ("KE", "Kenya", "KES"), ("ZA", "South Africa", "ZAR"),
     ("GH", "Ghana", "GHS"),
+    # Additional Asia-Pacific
+    ("MM", "Myanmar", "MMK"), ("MN", "Mongolia", "MNT"), ("NP", "Nepal", "NPR"),
+    ("BT", "Bhutan", "BTN"), ("MV", "Maldives", "MVR"), ("FJ", "Fiji", "FJD"),
+    ("PG", "Papua New Guinea", "PGK"), ("BN", "Brunei", "BND"),
+    ("TL", "Timor-Leste", "USD"), ("LA", "Laos", "LAK"),
+    # Additional Americas
+    ("EC", "Ecuador", "USD"), ("BO", "Bolivia", "BOB"), ("PY", "Paraguay", "PYG"),
+    ("UY", "Uruguay", "UYU"), ("VE", "Venezuela", "VES"), ("GT", "Guatemala", "GTQ"),
+    ("HN", "Honduras", "HNL"), ("SV", "El Salvador", "USD"), ("NI", "Nicaragua", "NIO"),
+    ("PA", "Panama", "PAB"), ("DO", "Dominican Republic", "DOP"), ("JM", "Jamaica", "JMD"),
+    ("TT", "Trinidad and Tobago", "TTD"), ("BB", "Barbados", "BBD"),
+    # Additional Europe
+    ("SK", "Slovakia", "EUR"), ("SI", "Slovenia", "EUR"), ("HR", "Croatia", "EUR"),
+    ("RS", "Serbia", "RSD"), ("BG", "Bulgaria", "BGN"), ("LT", "Lithuania", "EUR"),
+    ("LV", "Latvia", "EUR"), ("EE", "Estonia", "EUR"), ("UA", "Ukraine", "UAH"),
+    ("MD", "Moldova", "MDL"), ("AL", "Albania", "ALL"), ("MK", "North Macedonia", "MKD"),
+    ("BA", "Bosnia and Herzegovina", "BAM"), ("ME", "Montenegro", "EUR"),
+    ("LU", "Luxembourg", "EUR"), ("MT", "Malta", "EUR"), ("CY", "Cyprus", "EUR"),
+    ("IS", "Iceland", "ISK"),
+    # Additional Middle East & Central Asia
+    ("QA", "Qatar", "QAR"), ("KW", "Kuwait", "KWD"), ("BH", "Bahrain", "BHD"),
+    ("OM", "Oman", "OMR"), ("JO", "Jordan", "JOD"), ("IQ", "Iraq", "IQD"),
+    ("KZ", "Kazakhstan", "KZT"), ("UZ", "Uzbekistan", "UZS"),
+    ("AZ", "Azerbaijan", "AZN"), ("GE", "Georgia", "GEL"), ("AM", "Armenia", "AMD"),
+    # Additional Africa
+    ("MA", "Morocco", "MAD"), ("TN", "Tunisia", "TND"), ("DZ", "Algeria", "DZD"),
+    ("ET", "Ethiopia", "ETB"), ("TZ", "Tanzania", "TZS"), ("UG", "Uganda", "UGX"),
+    ("RW", "Rwanda", "RWF"), ("SN", "Senegal", "XOF"), ("CI", "Ivory Coast", "XOF"),
+    ("CM", "Cameroon", "XAF"), ("AO", "Angola", "AOA"), ("MZ", "Mozambique", "MZN"),
+    ("ZM", "Zambia", "ZMW"), ("BW", "Botswana", "BWP"), ("NA", "Namibia", "NAD"),
+    ("MU", "Mauritius", "MUR"), ("SC", "Seychelles", "SCR"),
 ]
 
 # ─── Chapter Definitions (strict, from COUNTRY_GUIDE_SPEC.md) ────────────────
