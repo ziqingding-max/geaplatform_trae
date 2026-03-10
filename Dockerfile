@@ -35,6 +35,16 @@ RUN pnpm install --prod --frozen-lockfile
 # Copy built artifacts from builder stage
 COPY --from=builder /app/dist ./dist
 
+# Copy data directory (seed data, country guides, etc.)
+COPY --from=builder /app/data ./data
+
+# Copy drizzle migration SQL files
+COPY --from=builder /app/drizzle/*.sql ./drizzle/
+
+# Copy docker entrypoint script
+COPY docker-entrypoint.sh ./
+RUN chmod +x docker-entrypoint.sh
+
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -42,5 +52,5 @@ ENV PORT=3000
 # Expose the port
 EXPOSE 3000
 
-# Start the application
-CMD ["node", "dist/index.js"]
+# Start the application via entrypoint (runs migrations then starts node)
+ENTRYPOINT ["./docker-entrypoint.sh"]

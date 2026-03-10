@@ -3,7 +3,8 @@ import 'dotenv/config';
 import { getDb } from './db';
 import { 
   customers, employees, invoices, invoiceItems, 
-  billingEntities, countriesConfig, leaveTypes, publicHolidays 
+  billingEntities, countriesConfig, leaveTypes, publicHolidays,
+  countryGuideChapters
 } from '../drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 // @ts-ignore
@@ -324,4 +325,86 @@ export async function seedMigration() {
   }
   
   console.log('[Seed] Migration seed completed.');
+
+  // 4. Seed Country Guide data
+  await seedCountryGuides(db);
+}
+
+/**
+ * Seed Country Guide chapters from JSON data file.
+ * Uses upsert logic: inserts new chapters, updates existing ones.
+ * Matching is based on countryCode + chapterKey.
+ */
+async function seedCountryGuides(db: any) {
+  const guideData = await readJsonFile('country_guide_data.json');
+  if (!guideData || !Array.isArray(guideData) || guideData.length === 0) {
+    console.log('[Seed] No country guide data found, skipping.');
+    return;
+  }
+
+  console.log(`[Seed] Checking ${guideData.length} country guide chapters...`);
+
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+
+  for (const ch of guideData) {
+    if (!ch.countryCode || !ch.chapterKey || !ch.contentEn) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      const existing = await db.query.countryGuideChapters.findFirst({
+        where: and(
+          eq(countryGuideChapters.countryCode, ch.countryCode),
+          eq(countryGuideChapters.chapterKey, ch.chapterKey)
+        ),
+      });
+
+      if (existing) {
+        // Only update if version is newer or content has changed
+        const contentChanged = existing.contentEn !== ch.contentEn || existing.contentZh !== ch.contentZh;
+        const versionNewer = ch.version && ch.version > (existing.version || '');
+
+        if (contentChanged || versionNewer) {
+          await db.update(countryGuideChapters)
+            .set({
+              part: ch.part,
+              titleEn: ch.titleEn,
+              titleZh: ch.titleZh,
+              contentEn: ch.contentEn,
+              contentZh: ch.contentZh,
+              sortOrder: ch.sortOrder,
+              version: ch.version || '2026-Q1',
+              status: ch.status || 'published',
+              updatedAt: new Date(),
+            })
+            .where(eq(countryGuideChapters.id, existing.id));
+          updated++;
+        } else {
+          skipped++;
+        }
+      } else {
+        await db.insert(countryGuideChapters).values({
+          countryCode: ch.countryCode,
+          part: ch.part,
+          chapterKey: ch.chapterKey,
+          titleEn: ch.titleEn,
+          titleZh: ch.titleZh,
+          contentEn: ch.contentEn,
+          contentZh: ch.contentZh,
+          sortOrder: ch.sortOrder,
+          version: ch.version || '2026-Q1',
+          status: ch.status || 'published',
+        });
+        created++;
+      }
+    } catch (err: any) {
+      console.warn(`[Seed] Failed to seed ${ch.countryCode}/${ch.chapterKey}: ${err.message}`);
+      skipped++;
+    }
+  }
+
+  console.log(`[Seed] Country guides: ${created} created, ${updated} updated, ${skipped} skipped.`);
 }
