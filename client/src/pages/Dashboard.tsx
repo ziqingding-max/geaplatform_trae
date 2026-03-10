@@ -503,7 +503,7 @@ function OperationsTab() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 font-medium">Country</th>
+                    <th className="pb-2 font-medium">Country/Region</th>
                     <th className="pb-2 font-medium">Month</th>
                     <th className="pb-2 font-medium">Status</th>
                     <th className="pb-2 font-medium text-right">Gross Total</th>

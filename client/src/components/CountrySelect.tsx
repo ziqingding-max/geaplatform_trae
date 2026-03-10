@@ -159,7 +159,7 @@ interface CountrySelectProps {
 export default function CountrySelect({
   value,
   onValueChange,
-  placeholder = "Select country",
+  placeholder = "Select country/region",
   className,
   showCode = true,
   scope = "active",

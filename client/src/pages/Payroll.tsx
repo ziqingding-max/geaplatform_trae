@@ -280,7 +280,7 @@ function PayrollList() {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("payroll.table.header.month")}</TableHead>
-                  <TableHead>{t("payroll.filters.placeholder.country")}</TableHead>
+                  <TableHead className="min-w-[120px]">{t("payroll.filters.placeholder.country")}</TableHead>
                   <TableHead>{t("settings.exchangeRates.table.currency")}</TableHead>
                   <TableHead>{t("payroll.detail.summary.totalEmployerCost")}</TableHead>
                   <TableHead>{t("payroll.filters.placeholder.status")}</TableHead>

@@ -262,7 +262,7 @@ function VendorList() {
                 <TableRow>
                   <TableHead>{t("vendors.table.header.vendor")}</TableHead>
                   <TableHead>{t("vendors.detail.field.vendor_type")}</TableHead>
-                  <TableHead>{t("vendors.table.header.country")}</TableHead>
+                  <TableHead className="min-w-[120px]">{t("vendors.table.header.country")}</TableHead>
                   <TableHead>{t("vendors.form.service_type.label")}</TableHead>
                   <TableHead>{t("vendors.table.header.contact")}</TableHead>
                   <TableHead>{t("common.currency")}</TableHead>

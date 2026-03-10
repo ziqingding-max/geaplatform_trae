@@ -159,7 +159,7 @@ function EmployeesTab() {
                 <TableRow>
                   <TableHead>{t("portal_employees.table.header_name")}</TableHead>
                   <TableHead>{t("portal_employees.table.header_job_title")}</TableHead>
-                  <TableHead>{t("portal_employees.table.header_country")}</TableHead>
+                  <TableHead className="min-w-[120px]">{t("portal_employees.table.header_country")}</TableHead>
                   <TableHead>{t("portal_employees.table.header_department")}</TableHead>
                   <TableHead>{t("portal_employees.table.header_start_date")}</TableHead>
                   <TableHead>{t("portal_employees.table.header_status")}</TableHead>
@@ -326,7 +326,7 @@ function ContractorsTab() {
                 <TableRow>
                   <TableHead>{t("portal_people.contractors.table.name")}</TableHead>
                   <TableHead>{t("portal_people.contractors.table.job_title")}</TableHead>
-                  <TableHead>{t("portal_people.contractors.table.country")}</TableHead>
+                  <TableHead className="min-w-[120px]">{t("portal_people.contractors.table.country")}</TableHead>
                   <TableHead>{t("portal_people.contractors.table.payment")}</TableHead>
                   <TableHead>{t("portal_people.employees.table.start_date")}</TableHead>
                   <TableHead>{t("portal_people.contractors.table.status")}</TableHead>

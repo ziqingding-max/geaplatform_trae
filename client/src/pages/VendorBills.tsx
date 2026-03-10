@@ -1483,7 +1483,7 @@ function VendorBillDetail({ id }: { id: number }) {
                     <TableHead className="text-right">{t("vendorBills.lineItems.unitPriceHeader")}</TableHead>
                     <TableHead className="text-right">{t("vendorBills.lineItems.amountHeader")}</TableHead>
                     <TableHead>{t("vendorBills.allocations.customerHeader")}</TableHead>
-                    <TableHead>{t("common.country")}</TableHead>
+                    <TableHead className="min-w-[120px]">{t("common.country")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

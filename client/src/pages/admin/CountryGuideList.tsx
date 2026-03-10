@@ -66,12 +66,12 @@ export default function CountryGuideList() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Countries with Guides</CardTitle>
+              <CardTitle className="text-sm font-medium">Countries/Regions with Guides</CardTitle>
               <Globe className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{totalCountriesWithGuides}</div>
-              <p className="text-xs text-muted-foreground">of {countries?.length || 0} active countries</p>
+              <p className="text-xs text-muted-foreground">of {countries?.length || 0} active countries/regions</p>
             </CardContent>
           </Card>
           <Card>
@@ -81,7 +81,7 @@ export default function CountryGuideList() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{totalChapters}</div>
-              <p className="text-xs text-muted-foreground">across all countries</p>
+              <p className="text-xs text-muted-foreground">across all countries/regions</p>
             </CardContent>
           </Card>
           <Card>
@@ -100,7 +100,7 @@ export default function CountryGuideList() {
         <div className="relative max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search countries..."
+            placeholder="Search countries/regions..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -118,7 +118,7 @@ export default function CountryGuideList() {
               <div>
                 <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-green-500" />
-                  Countries with Guides ({countriesWithGuides.length})
+                  Countries/Regions with Guides ({countriesWithGuides.length})
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {countriesWithGuides.map((country) => {
@@ -160,7 +160,7 @@ export default function CountryGuideList() {
               <div>
                 <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
                   <Archive className="h-5 w-5 text-muted-foreground" />
-                  Countries without Guides ({countriesWithoutGuides.length})
+                  Countries/Regions without Guides ({countriesWithoutGuides.length})
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {countriesWithoutGuides.map((country) => (

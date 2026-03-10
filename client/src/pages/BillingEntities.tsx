@@ -194,7 +194,7 @@ export default function BillingEntities({ embedded }: { embedded?: boolean } = {
             <Input value={form.taxId} onChange={(e) => setForm((f) => ({ ...f, taxId: e.target.value }))} />
           </div>
           <div className="space-y-2">
-            <Label>Country *</Label>
+            <Label>Country/Region *</Label>
             <CountrySelect
               value={form.country}
               onValueChange={(v) => {

@@ -290,7 +290,7 @@ function EditContractorDialog({ contractor, open, onOpenChange, onSuccess }: {
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Country</Label>
+            <Label>Country/Region</Label>
             <CountrySelect value={form.country} onValueChange={v => setForm({...form, country: v})} showCode={false} scope="all" />
           </div>
 
@@ -493,7 +493,7 @@ export default function ContractorDetail() {
                   <InfoRow label="Address" value={contractor.address} />
                   <InfoRow label="City" value={contractor.city} />
                   <InfoRow label="State / Province" value={contractor.state} />
-                  <InfoRow label="Country" value={contractor.country} />
+                  <InfoRow label="Country/Region" value={contractor.country} />
                   <InfoRow label="Postal Code" value={contractor.postalCode} />
                 </CardContent>
               </Card>

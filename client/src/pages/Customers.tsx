@@ -282,7 +282,7 @@ function CustomerList() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t("customers.table.header.company")}</TableHead>
-                    <TableHead>{t("customers.table.header.country")}</TableHead>
+                    <TableHead className="min-w-[120px]">{t("customers.table.header.country")}</TableHead>
                     <TableHead>{t("customers.form.primary_contact")}</TableHead>
                     <TableHead>{t("customers.table.header.billing")}</TableHead>
                     <TableHead>{t("customers.table.header.status")}</TableHead>
@@ -1125,7 +1125,7 @@ function CustomerDetail({ id }: { id: number }) {
                     <TableHeader>
                       <TableRow>
                         <TableHead>{t("common.type")}</TableHead>
-                        <TableHead>{t("customers.table.header.country")}</TableHead>
+                        <TableHead className="min-w-[120px]">{t("customers.table.header.country")}</TableHead>
                         <TableHead>{t("common.service")}</TableHead>
                         <TableHead>{t("customers.pricing.standardRate")}</TableHead>
                         <TableHead>{t("customers.pricing.customerPrice")}</TableHead>

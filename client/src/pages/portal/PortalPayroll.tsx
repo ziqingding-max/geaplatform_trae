@@ -529,7 +529,7 @@ export default function PortalPayroll() {
               onClick={() => {
                 exportToCsv(filteredRuns, [
                   { header: "Month", accessor: (r: any) => r.payrollMonth ? new Date(r.payrollMonth).toLocaleString(lang === "zh" ? "zh-CN" : "en-US", { month: "long", year: "numeric" }) : "" },
-                  { header: "Country", accessor: (r: any) => r.countryCode || "" },
+                  { header: "Country/Region", accessor: (r: any) => r.countryCode || "" },
                   { header: "Employees", accessor: (r: any) => r.employeeCount || 0 },
                   { header: "Gross Total", accessor: (r: any) => r.customerTotalGross || 0 },
                   { header: "Net Total", accessor: (r: any) => r.customerTotalNet || 0 },

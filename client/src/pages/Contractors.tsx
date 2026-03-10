@@ -136,7 +136,7 @@ export function ContractorListContent() {
               <TableRow>
                 <TableHead>{t("contractors.list.table.header.contractor")}</TableHead>
                 <TableHead>{t("employees.create.form.customer")}</TableHead>
-                <TableHead>{t("employees.list.table.header.country")}</TableHead>
+                <TableHead className="min-w-[120px]">{t("employees.list.table.header.country")}</TableHead>
                 <TableHead>{t("contractors.list.table.header.rate")}</TableHead>
                 <TableHead>{t("contractors.list.table.header.status")}</TableHead>
                 <TableHead className="w-10"></TableHead>

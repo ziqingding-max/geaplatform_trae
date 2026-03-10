@@ -191,10 +191,10 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
     doc.fontSize(10).font("Helvetica").fillColor("#333333");
     doc.text(`Invoice #: ${invoice.invoiceNumber}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
     ry += 14;
-    doc.text(`Date: ${new Date(invoice.createdAt).toLocaleDateString("en-GB")}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
+    doc.text(`Date: ${safeFormatDate(invoice.createdAt)}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
     ry += 14;
     if (invoice.dueDate) {
-      doc.text(`Due Date: ${new Date(invoice.dueDate).toLocaleDateString("en-GB")}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
+      doc.text(`Due Date: ${safeFormatDate(invoice.dueDate)}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
       ry += 14;
     }
     if (invoice.invoiceMonth) {
@@ -478,6 +478,25 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
 
     doc.end();
   });
+}
+
+/** Safely format a date value, handling potential microsecond timestamps */
+function safeFormatDate(val: any, locale: string = "en-GB", options?: Intl.DateTimeFormatOptions): string {
+  if (!val) return "N/A";
+  let d: Date;
+  if (val instanceof Date) {
+    d = val;
+  } else if (typeof val === "number") {
+    // If timestamp is in microseconds (year > 9999), convert to milliseconds
+    d = new Date(val);
+    if (d.getFullYear() > 9999) {
+      d = new Date(Math.floor(val / 1000));
+    }
+  } else {
+    d = new Date(val);
+  }
+  if (isNaN(d.getTime())) return "N/A";
+  return d.toLocaleDateString(locale, options);
 }
 
 function formatNum(val: any): string {

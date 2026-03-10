@@ -189,7 +189,7 @@ export default function PortalLayout({ children, title }: PortalLayoutProps) {
                     >
                       <item.icon className={cn("flex-shrink-0", collapsed ? "w-5 h-5" : "w-4 h-4")} />
                       {!collapsed && (
-                        <span className="flex-1">{t(item.labelKey)}</span>
+                        <span className="flex-1 truncate">{t(item.labelKey)}</span>
                       )}
                     </div>
                   </Link>

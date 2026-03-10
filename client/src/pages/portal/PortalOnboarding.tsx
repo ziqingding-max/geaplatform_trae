@@ -459,6 +459,23 @@ export default function PortalOnboarding() {
       toast.error("Payment amount must be a positive number");
       return;
     }
+    // Validation: required documents must be uploaded (EOR/Visa EOR only)
+    if (!isAor) {
+      const requiredDocTypes = ["national_id"];
+      if (needsVisa || formData.serviceType === "visa_eor") {
+        requiredDocTypes.push("passport");
+      }
+      const missingDocs = requiredDocTypes.filter(
+        (docType) => !documents.find((d) => d.type === docType)
+      );
+      if (missingDocs.length > 0) {
+        const labels = missingDocs.map((t) =>
+          t === "national_id" ? "National ID" : t === "passport" ? "Passport" : t
+        );
+        toast.error(`Please upload required documents: ${labels.join(", ")}`);
+        return;
+      }
+    }
     try {
       if (isAor) {
         // AOR → create contractor

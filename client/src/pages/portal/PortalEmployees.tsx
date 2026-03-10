@@ -163,7 +163,7 @@ export default function PortalEmployees() {
                   <TableRow>
                     <TableHead>{t("portal_employees.table.header_name")}</TableHead>
                     <TableHead>{t("portal_employees.table.header_job_title")}</TableHead>
-                    <TableHead>{t("portal_employees.table.header_country")}</TableHead>
+                    <TableHead className="min-w-[120px]">{t("portal_employees.table.header_country")}</TableHead>
                     <TableHead>{t("portal_employees.table.header_department")}</TableHead>
                     <TableHead>{t("portal_employees.table.header_start_date")}</TableHead>
                     <TableHead>{t("portal_employees.table.header_status")}</TableHead>

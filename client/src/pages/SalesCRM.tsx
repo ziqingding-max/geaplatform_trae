@@ -539,7 +539,7 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
                   <TableRow>
                     <TableHead>{t("sales.companyName")}</TableHead>
                     <TableHead>{t("sales.contactName")}</TableHead>
-                    <TableHead>{t("common.country")}</TableHead>
+                    <TableHead className="min-w-[120px]">{t("common.country")}</TableHead>
                     <TableHead>{t("sales.source")}</TableHead>
                     <TableHead>{t("common.status")}</TableHead>
                     <TableHead>{t("sales.owner")}</TableHead>

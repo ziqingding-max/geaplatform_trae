@@ -13,7 +13,7 @@ const ENTITY_LABELS: Record<string, string> = {
   invoice_item: "Invoice Item",
   adjustment: "Adjustment",
   leave_record: "Leave Record",
-  country_config: "Country",
+  country_config: "Country/Region",
   leave_type: "Leave Type",
   exchange_rate: "Exchange Rate",
   exchange_rates: "Exchange Rates",

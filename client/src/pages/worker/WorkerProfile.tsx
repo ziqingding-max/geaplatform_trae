@@ -154,7 +154,7 @@ export default function WorkerProfile() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Country</Label>
+                  <Label>Country/Region</Label>
                   <Input value={profile?.country} disabled className="bg-muted" />
                 </div>
               </div>

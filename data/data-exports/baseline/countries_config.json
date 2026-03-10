@@ -24,7 +24,7 @@
   {
     "id": 240032,
     "countryCode": "HK",
-    "countryName": "Hong Kong",
+    "countryName": "Hong Kong, China",
     "localCurrency": "HKD",
     "payrollCycle": "monthly",
     "probationPeriodDays": 180,
@@ -112,7 +112,7 @@
   {
     "id": 240036,
     "countryCode": "TW",
-    "countryName": "Taiwan",
+    "countryName": "Taiwan, China",
     "localCurrency": "TWD",
     "payrollCycle": "monthly",
     "probationPeriodDays": 90,
@@ -640,7 +640,7 @@
   {
     "id": 240060,
     "countryCode": "MO",
-    "countryName": "Macau",
+    "countryName": "Macau, China",
     "localCurrency": "MOP",
     "payrollCycle": "monthly",
     "probationPeriodDays": 90,
@@ -2664,7 +2664,7 @@
   {
     "id": 240152,
     "countryCode": "CI",
-    "countryName": "Côte d'Ivoire",
+    "countryName": "C\u00f4te d'Ivoire",
     "localCurrency": "XOF",
     "payrollCycle": "monthly",
     "probationPeriodDays": 180,
@@ -2748,27 +2748,5 @@
     "notes": null,
     "createdAt": "2026-02-25T18:35:38.000Z",
     "updatedAt": "2026-02-28T09:57:58.000Z"
-  },
-  {
-    "id": 750003,
-    "countryCode": "L22",
-    "countryName": "Leave Policy Test Country",
-    "localCurrency": "USD",
-    "payrollCycle": "monthly",
-    "probationPeriodDays": 90,
-    "noticePeriodDays": 30,
-    "workingDaysPerWeek": 5,
-    "statutoryAnnualLeave": 14,
-    "standardEorRate": "449.00",
-    "standardVisaEorRate": "699.00",
-    "standardAorRate": "249.00",
-    "visaEorSetupFee": "5000.00",
-    "standardRateCurrency": "USD",
-    "vatApplicable": false,
-    "vatRate": "0.00",
-    "isActive": true,
-    "notes": null,
-    "createdAt": "2026-02-28T04:37:30.000Z",
-    "updatedAt": "2026-02-28T09:23:28.000Z"
   }
 ]

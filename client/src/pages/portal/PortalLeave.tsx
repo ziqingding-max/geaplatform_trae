@@ -714,7 +714,7 @@ export default function PortalLeave() {
                       <TableRow>
                         <TableHead>{t("portal_leave.holidays.date")}</TableHead>
                         <TableHead>{t("portal_leave.holidays.header_holiday")}</TableHead>
-                        <TableHead>{t("portal_leave.holidays.header_country")}</TableHead>
+                        <TableHead className="min-w-[120px]">{t("portal_leave.holidays.header_country")}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>

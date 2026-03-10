@@ -583,7 +583,7 @@ function EmployeeList() {
                 <TableRow>
                   <TableHead>{t("employees.list.table.header.employee")}</TableHead>
                   <TableHead>{t("employees.create.form.customer")}</TableHead>
-                  <TableHead>{t("employees.list.table.header.country")}</TableHead>
+                  <TableHead className="min-w-[120px]">{t("employees.list.table.header.country")}</TableHead>
                   <TableHead>{t("employees.list.table.header.service")}</TableHead>
                   <TableHead>{t("employees.list.table.header.salary")}</TableHead>
                   <TableHead>{t("employees.list.table.header.status")}</TableHead>

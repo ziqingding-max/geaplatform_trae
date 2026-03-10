@@ -203,7 +203,7 @@ export function ContractorInvoicesContent() {
       {/* Pagination */}
       {data && (
         <div className="flex items-center justify-between mt-4">
-          <p className="text-xs text-muted-foreground">Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, data.total)} of {data.total} invoices</p>
+          <p className="text-xs text-muted-foreground">{data.total > 0 ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, data.total)} of ${data.total} invoices` : "No invoices found"}</p>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
             <Button variant="outline" size="sm" disabled={page * pageSize >= data.total} onClick={() => setPage(p => p + 1)}>Next</Button>

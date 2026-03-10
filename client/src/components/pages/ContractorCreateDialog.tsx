@@ -103,7 +103,7 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
            </div>
            
            <div className="space-y-2">
-             <Label>Country</Label>
+             <Label>Country/Region</Label>
              <CountrySelect value={formData.country} onValueChange={v => setFormData({...formData, country: v})} showCode={false} scope="all" />
            </div>
 

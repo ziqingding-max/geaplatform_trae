@@ -49,7 +49,7 @@ export default function CostSimulator() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Country</Label>
+                <Label>Country/Region</Label>
                 <Select value={countryCode} onValueChange={setCountryCode}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select country" />
