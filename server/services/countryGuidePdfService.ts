@@ -1,7 +1,41 @@
 import { getDb } from "../db";
-import { countryGuideChapters, countriesConfig } from "../../drizzle/schema";
+import { countryGuideChapters, countriesConfig, billingEntities } from "../../drizzle/schema";
 import { eq, and, asc } from "drizzle-orm";
-import { generateCountryGuidePdf } from "./htmlPdfService";
+import { generateCountryGuidePdf, BrandingInfo } from "./htmlPdfService";
+
+/**
+ * Fetch the default (or first active) billing entity and convert it to BrandingInfo.
+ * Falls back to GEA defaults if no billing entity is configured.
+ */
+async function getDefaultBranding(db: ReturnType<typeof getDb>): Promise<BrandingInfo> {
+  if (!db) return { shortName: "GEA", fullName: "Global Employment Advisors", contactEmail: "sales@geahr.com" };
+
+  // Try isDefault=true first, then fall back to first active entity
+  let entity = await db.query.billingEntities.findFirst({
+    where: and(eq(billingEntities.isDefault, true), eq(billingEntities.isActive, true)),
+  });
+  if (!entity) {
+    entity = await db.query.billingEntities.findFirst({
+      where: eq(billingEntities.isActive, true),
+    });
+  }
+  if (!entity) {
+    return { shortName: "GEA", fullName: "Global Employment Advisors", contactEmail: "sales@geahr.com" };
+  }
+
+  // Build a one-line address
+  const addressParts = [entity.address, entity.city, entity.country].filter(Boolean);
+  const address = addressParts.length > 0 ? addressParts.join(", ") : undefined;
+
+  return {
+    shortName: entity.entityName,
+    fullName: entity.legalName,
+    logoUrl: entity.logoUrl ?? null,
+    contactEmail: entity.contactEmail ?? null,
+    address: address ?? null,
+    legalName: entity.legalName,
+  };
+}
 
 export const countryGuidePdfService = {
   generatePdf: async (countryCode: string, locale: "en" | "zh" = "en"): Promise<Buffer | null> => {
@@ -10,7 +44,7 @@ export const countryGuidePdfService = {
 
     // 1. Fetch Country Info
     const country = await db.query.countriesConfig.findFirst({
-      where: eq(countriesConfig.countryCode, countryCode)
+      where: eq(countriesConfig.countryCode, countryCode),
     });
     if (!country) return null;
 
@@ -20,14 +54,17 @@ export const countryGuidePdfService = {
         eq(countryGuideChapters.countryCode, countryCode),
         eq(countryGuideChapters.status, "published")
       ),
-      orderBy: [asc(countryGuideChapters.sortOrder)]
+      orderBy: [asc(countryGuideChapters.sortOrder)],
     });
     if (chapters.length === 0) return null;
 
-    // 3. Generate PDF using HTML engine (supports tables, bold, headings)
+    // 3. Fetch default billing entity branding
+    const branding = await getDefaultBranding(db);
+
+    // 4. Generate PDF using HTML engine (supports tables, bold, headings)
     return generateCountryGuidePdf(
       { countryCode: country.countryCode, countryName: country.countryName },
-      chapters.map(ch => ({
+      chapters.map((ch) => ({
         id: ch.id,
         titleEn: ch.titleEn,
         titleZh: ch.titleZh ?? undefined,
@@ -36,7 +73,8 @@ export const countryGuidePdfService = {
         chapterKey: ch.chapterKey,
         sortOrder: ch.sortOrder ?? 0,
       })),
-      locale
+      locale,
+      branding
     );
-  }
+  },
 };

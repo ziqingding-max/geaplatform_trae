@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { calculationService } from "./calculationService";
 import { getExchangeRate } from "./exchangeRateService";
 import { storagePut } from "../storage";
-import { generateQuotationPdf } from "./htmlPdfService";
+import { generateQuotationPdf, BrandingInfo } from "./htmlPdfService";
 import { countryGuidePdfService } from "./countryGuidePdfService";
 import { mergePdfs } from "./contentMergeService";
 
@@ -295,19 +295,43 @@ export const quotationService = {
         ? JSON.parse(quotation.snapshotData) 
         : [];
     
-    // Step 1: Fetch billing entity info (for "Issued By" section)
+    // Step 1: Fetch billing entity info (for branding + "Issued By" section)
+    // Priority: isDefault=true → first active entity → hardcoded GEA defaults
     let billingEntity: any = undefined;
-    const defaultBilling = await db.query.billingEntities.findFirst({
+    let branding: BrandingInfo = {
+      shortName: "GEA",
+      fullName: "Global Employment Advisors",
+      contactEmail: "sales@geahr.com",
+    };
+
+    let defaultBilling = await db.query.billingEntities.findFirst({
       where: eq(billingEntities.isDefault, true)
     });
+    if (!defaultBilling) {
+      // Fall back to first active entity
+      defaultBilling = await db.query.billingEntities.findFirst({
+        where: eq(billingEntities.isActive, true)
+      }) ?? null;
+    }
     if (defaultBilling) {
+      const addressParts = [defaultBilling.address, defaultBilling.city, defaultBilling.country].filter(Boolean);
+      const address = addressParts.join(", ") || undefined;
       billingEntity = {
         entityName: defaultBilling.entityName,
         legalName: defaultBilling.legalName,
-        address: [defaultBilling.address, defaultBilling.city, defaultBilling.country].filter(Boolean).join(", "),
+        address,
         contactEmail: defaultBilling.contactEmail ?? undefined,
         contactPhone: defaultBilling.contactPhone ?? undefined,
         country: defaultBilling.country,
+      };
+      // Build BrandingInfo from the same entity
+      branding = {
+        shortName: defaultBilling.entityName,
+        fullName: defaultBilling.legalName,
+        logoUrl: defaultBilling.logoUrl ?? null,
+        contactEmail: defaultBilling.contactEmail ?? null,
+        address: address ?? null,
+        legalName: defaultBilling.legalName,
       };
     }
 
@@ -321,6 +345,7 @@ export const quotationService = {
       currency: quotation.currency,
       validUntil: quotation.validUntil ?? undefined,
       billingEntity,
+      branding,
     });
 
     // Step 3: Fetch Additional PDFs (Country Guides)

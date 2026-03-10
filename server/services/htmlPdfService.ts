@@ -437,36 +437,71 @@ async function htmlToPdf(html: string): Promise<Buffer> {
   }
 }
 
+// ─── Branding Info (from Billing Entity) ────────────────────────────────────
+export interface BrandingInfo {
+  /** Short display name, e.g. "GEA" or entityName */
+  shortName: string;
+  /** Full legal / trading name, e.g. "Global Employment Advisors" */
+  fullName: string;
+  /** S3 URL for logo image – if present, rendered as <img>; otherwise shortName text is used */
+  logoUrl?: string | null;
+  /** Contact email shown in T&C footer */
+  contactEmail?: string | null;
+  /** One-line address for "Issued By" section */
+  address?: string | null;
+  /** Legal name override */
+  legalName?: string | null;
+}
+
+/** Default branding used when no billing entity is configured */
+const DEFAULT_BRANDING: BrandingInfo = {
+  shortName: "GEA",
+  fullName: "Global Employment Advisors",
+  logoUrl: null,
+  contactEmail: "sales@geahr.com",
+};
+
 // ─── Page wrapper helpers ─────────────────────────────────────────────────────
-function coverPage(title: string, subtitle: string, date: string): string {
+function logoHtml(b: BrandingInfo, size: "cover" | "header"): string {
+  if (b.logoUrl) {
+    const h = size === "cover" ? "18mm" : "7mm";
+    return `<img src="${b.logoUrl}" alt="${b.shortName}" style="height:${h};object-fit:contain;display:block;" />`;
+  }
+  if (size === "cover") {
+    return `<div class="cover-logo">${b.shortName}</div>`;
+  }
+  return `<span class="page-header-logo">${b.shortName}</span>`;
+}
+
+function coverPage(title: string, subtitle: string, date: string, branding: BrandingInfo = DEFAULT_BRANDING): string {
   return `
   <div class="page cover">
     <div class="cover-top-bar"></div>
     <div class="cover-body">
       <div>
-        <div class="cover-logo">GEA</div>
-        <div class="cover-tagline">Global Employment Advisors</div>
+        ${logoHtml(branding, "cover")}
+        ${!branding.logoUrl ? `<div class="cover-tagline">${branding.fullName}</div>` : ""}
       </div>
       <div class="cover-divider"></div>
       <div class="cover-title">${title}</div>
       <div class="cover-subtitle">${subtitle}</div>
       <div class="cover-date">${date}</div>
     </div>
-    <div class="cover-bottom-bar">Confidential &amp; Proprietary — Global Employment Advisors</div>
+    <div class="cover-bottom-bar">Confidential &amp; Proprietary — ${branding.fullName}</div>
   </div>`;
 }
 
-function contentPage(headerTitle: string, pageNum: number, totalPages: number, body: string): string {
+function contentPage(headerTitle: string, pageNum: number, totalPages: number, body: string, branding: BrandingInfo = DEFAULT_BRANDING): string {
   return `
   <div class="page">
     <div class="page-header">
-      <span class="page-header-logo">GEA</span>
+      ${logoHtml(branding, "header")}
       <span class="page-header-title">${headerTitle}</span>
     </div>
     ${body}
     <div class="page-footer">
       <span>Confidential &amp; Proprietary</span>
-      <span>Global Employment Advisors</span>
+      <span>${branding.fullName}</span>
       <span>Page ${pageNum}</span>
     </div>
   </div>`;
@@ -491,7 +526,8 @@ export interface CountryInfo {
 export async function generateCountryGuidePdf(
   country: CountryInfo,
   chapters: CountryGuideChapter[],
-  locale: "en" | "zh" = "en"
+  locale: "en" | "zh" = "en",
+  branding: BrandingInfo = DEFAULT_BRANDING
 ): Promise<Buffer> {
   const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const headerTitle = `Country Guide: ${country.countryName}`;
@@ -499,7 +535,7 @@ export async function generateCountryGuidePdf(
   let pages = "";
 
   // 1. Cover
-  pages += coverPage("Country Guide", country.countryName, date);
+  pages += coverPage("Country Guide", country.countryName, date, branding);
 
   // 2. Table of Contents
   let tocRows = chapters.map((ch, i) => `
@@ -511,7 +547,7 @@ export async function generateCountryGuidePdf(
   pages += contentPage(headerTitle, 2, chapters.length + 2, `
     <h2>Table of Contents</h2>
     <div style="margin-top: 4mm;">${tocRows}</div>
-  `);
+  `, branding);
 
   // 3. Chapter pages
   chapters.forEach((ch, i) => {
@@ -525,7 +561,7 @@ export async function generateCountryGuidePdf(
         <div class="chapter-title">${title}</div>
       </div>
       <div class="chapter-content">${htmlContent}</div>
-    `);
+    `, branding);
   });
 
   const html = `<!DOCTYPE html>
@@ -573,6 +609,7 @@ export interface QuotationData {
   currency: string;
   validUntil?: string;
   notes?: string;
+  branding?: BrandingInfo;
   billingEntity?: {
     entityName: string;
     legalName: string;
@@ -584,6 +621,7 @@ export interface QuotationData {
 }
 
 export async function generateQuotationPdf(data: QuotationData): Promise<Buffer> {
+  const branding: BrandingInfo = data.branding ?? DEFAULT_BRANDING;
   const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const headerTitle = `Quotation #${data.quotationNumber}`;
   const validUntil = data.validUntil
@@ -593,18 +631,20 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
   let pages = "";
 
   // 1. Cover
-  pages += coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date);
+  pages += coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date, branding);
 
-  // 2. Company Introduction (if provided)
-  const GEA_INTRO = `
-    <p>Global Employment Advisors (GEA) is a leading Employer of Record (EOR) and workforce solutions provider, enabling businesses to hire talent across 50+ countries without the need to establish local legal entities. Our platform combines compliance expertise, payroll management, and HR technology to deliver a seamless employment experience for both clients and their employees.</p>
+  // 2. Company Introduction — uses billing entity name dynamically
+  const companyIntroHtml = data.companyIntro
+    ? `<p>${data.companyIntro}</p>`
+    : `
+    <p>${branding.fullName} is a leading Employer of Record (EOR) and workforce solutions provider, enabling businesses to hire talent across 50+ countries without the need to establish local legal entities. Our platform combines compliance expertise, payroll management, and HR technology to deliver a seamless employment experience for both clients and their employees.</p>
     <p>We handle all aspects of local employment — including employment contracts, payroll processing, statutory benefits, tax compliance, and HR administration — so you can focus on growing your business globally.</p>
   `;
 
   pages += contentPage(headerTitle, 2, 0, `
-    <h2>About Global Employment Advisors</h2>
+    <h2>About ${branding.fullName}</h2>
     <div class="section-card">
-      ${GEA_INTRO}
+      ${companyIntroHtml}
     </div>
 
     <h2>Prepared For</h2>
@@ -646,7 +686,7 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
       ${data.billingEntity.address ? `<div class="info-item"><label>Address</label><span>${data.billingEntity.address}</span></div>` : ""}
       ${data.billingEntity.contactEmail ? `<div class="info-item"><label>Email</label><span>${data.billingEntity.contactEmail}</span></div>` : ""}
     </div>` : ""}
-  `);
+  `, branding);
 
   // 3. Pricing Summary Page
   const tableRows = data.items.map((item, idx) => {
@@ -746,9 +786,10 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
     <div class="notes-box">
       <strong>Notes:</strong><br>${data.notes}
     </div>` : ""}
-  `);
+  `, branding);
 
   // 4. Terms & Conditions page
+  const contactEmail = branding.contactEmail ?? data.billingEntity?.contactEmail ?? "sales@geahr.com";
   pages += contentPage(headerTitle, 4, 0, `
     <h2>Terms &amp; Conditions</h2>
     <div class="section-card">
@@ -759,22 +800,22 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
       <p>The quoted service fee covers: employment contract administration, monthly payroll processing, statutory benefit contributions, HR compliance management, and dedicated account support.</p>
 
       <h3>Employer of Record (EOR)</h3>
-      <p>Under the EOR model, GEA acts as the legal employer of the worker(s) in the respective country. The client retains full day-to-day management of the worker's tasks and responsibilities.</p>
+      <p>Under the EOR model, ${branding.shortName} acts as the legal employer of the worker(s) in the respective country. The client retains full day-to-day management of the worker's tasks and responsibilities.</p>
 
       <h3>Agent of Record (AOR)</h3>
-      <p>Under the AOR model, GEA engages contractors on behalf of the client. The contractor rate shown is the gross contractor fee; no statutory employer contributions apply.</p>
+      <p>Under the AOR model, ${branding.shortName} engages contractors on behalf of the client. The contractor rate shown is the gross contractor fee; no statutory employer contributions apply.</p>
 
       <h3>Exchange Rates</h3>
       <p>Exchange rates are indicative and based on rates at the time of quotation. Final invoiced amounts may vary based on prevailing rates at the time of payroll processing.</p>
 
       <h3>Confidentiality</h3>
-      <p>This document is confidential and intended solely for the named recipient. It may not be shared with third parties without prior written consent from GEA.</p>
+      <p>This document is confidential and intended solely for the named recipient. It may not be shared with third parties without prior written consent from ${branding.shortName}.</p>
     </div>
 
     <div class="notes-box" style="margin-top:6mm;">
-      For questions about this quotation, please contact your GEA account manager or email <strong>sales@geahr.com</strong>.
+      For questions about this quotation, please contact your ${branding.shortName} account manager or email <strong>${contactEmail}</strong>.
     </div>
-  `);
+  `, branding);
 
   const html = `<!DOCTYPE html>
 <html lang="en">
