@@ -324,10 +324,15 @@ export default function Adjustments() {
     const isEmployee = adj.workerType === "employee";
     
     let effMonth = "";
-    if (isEmployee) {
-      effMonth = adj.effectiveMonth ? new Date(adj.effectiveMonth).toISOString().slice(0, 7) : defaultMonth;
-    } else {
-      effMonth = adj.date ? new Date(adj.date).toISOString().slice(0, 7) : defaultMonth;
+    try {
+      if (isEmployee) {
+        effMonth = adj.effectiveMonth ? new Date(adj.effectiveMonth).toISOString().slice(0, 7) : defaultMonth;
+      } else {
+        effMonth = adj.date ? new Date(adj.date).toISOString().slice(0, 7) : defaultMonth;
+      }
+    } catch (e) {
+      console.error("Invalid date in adjustment:", e);
+      effMonth = defaultMonth;
     }
 
     setEditFormData({

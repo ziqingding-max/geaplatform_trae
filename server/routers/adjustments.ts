@@ -13,7 +13,7 @@ import {
   getCountryConfig,
 } from "../db";
 import { enforceCutoff, checkCutoffPassed, getAdjustmentPayrollMonth } from "../utils/cutoff";
-import { storagePut } from "../storage";
+import { storagePut, storageGet } from "../storage";
 
 export const adjustmentsRouter = router({
   list: userProcedure
@@ -30,7 +30,7 @@ export const adjustmentsRouter = router({
     )
     .query(async ({ input }) => {
       const page = Math.floor(input.offset / input.limit) + 1;
-      return await listAdjustments({
+      const { data: items, total } = await listAdjustments({
         page,
         pageSize: input.limit,
         customerId: input.customerId,
@@ -39,6 +39,21 @@ export const adjustmentsRouter = router({
         adjustmentType: input.adjustmentType,
         effectiveMonth: input.effectiveMonth,
       });
+
+      // Map to signed URLs for viewing receipts
+      const processedItems = await Promise.all(items.map(async (item) => {
+        if (item.receiptFileKey) {
+          try {
+            const { url } = await storageGet(item.receiptFileKey);
+            return { ...item, receiptFileUrl: url };
+          } catch (e) {
+            return item;
+          }
+        }
+        return item;
+      }));
+
+      return { data: processedItems, total };
     }),
 
   get: userProcedure
@@ -66,12 +81,29 @@ export const adjustmentsRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       // Normalize effectiveMonth to YYYY-MM-01
+      // Handle various input formats (YYYY-MM, YYYY-MM-DD)
       const parts = input.effectiveMonth.split("-");
+      if (parts.length < 2) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Invalid effective month format" });
+      }
       const normalizedMonth = `${parts[0]}-${parts[1].padStart(2, "0")}-01`;
 
-      // Enforce cutoff — allow creating adjustments for any month whose cutoff hasn't passed.
-      // e.g. In Feb, Feb cutoff is Mar 4th 23:59, so Feb adjustments are allowed until then.
-      // Jan cutoff (Feb 4th) has already passed, so Jan adjustments are blocked (unless admin/ops_manager).
+      // 1. Check if Payroll Run for this month is already approved/locked
+      // If payroll is locked, we CANNOT add new adjustments regardless of cutoff date
+      const employee = await getEmployeeById(input.employeeId);
+      if (!employee) throw new TRPCError({ code: 'BAD_REQUEST', message: "Employee not found" });
+
+      const { findPayrollRunByCountryMonth } = await import("../db");
+      const existingPayroll = await findPayrollRunByCountryMonth(employee.country, normalizedMonth);
+      
+      if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
+        throw new TRPCError({ 
+          code: 'BAD_REQUEST', 
+          message: `Payroll run for ${normalizedMonth.substring(0, 7)} is already ${existingPayroll.status}. Adjustments cannot be added.` 
+        });
+      }
+
+      // 2. Enforce cutoff — allow creating adjustments for any month whose cutoff hasn't passed.
       const now = new Date();
       await enforceCutoff(normalizedMonth, ctx.user.role, "create adjustment");
 
@@ -84,10 +116,6 @@ export const adjustmentsRouter = router({
           cutoffWarning = `Cutoff for ${parts[0]}-${parts[1]} payroll is in ${Math.round(hoursUntilCutoff)} hours. Submit before the deadline.`;
         }
       }
-
-      // Auto-fill customerId and currency from employee
-      const employee = await getEmployeeById(input.employeeId);
-      if (!employee) throw new TRPCError({ code: 'BAD_REQUEST', message: "Employee not found" });
 
       const currency = employee.salaryCurrency || "USD";
       const customerId = employee.customerId;
@@ -104,7 +132,7 @@ export const adjustmentsRouter = router({
         description: input.description,
         amount: input.amount,
         currency,
-        effectiveMonth: new Date(normalizedMonth),
+        effectiveMonth: new Date(normalizedMonth), // Safe conversion
         receiptFileUrl: input.receiptFileUrl,
         receiptFileKey: input.receiptFileKey,
         status: "submitted",

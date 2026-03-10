@@ -182,7 +182,8 @@ export default function Reimbursements() {
 
   const items = useMemo(() => {
     let list = data?.data || [];
-    const historyStatuses = ["locked", "admin_approved"];
+    // Added admin_rejected to history statuses so they don't clutter the Active tab
+    const historyStatuses = ["locked", "admin_approved", "admin_rejected"];
     if (viewTab === "active") {
       list = list.filter((r: any) => !historyStatuses.includes(r.status));
     } else {
@@ -236,12 +237,22 @@ export default function Reimbursements() {
   function handleEdit(item: any) {
     try {
       setEditingId(item.id);
+      
+      let effMonth = defaultMonth;
+      if (item.effectiveMonth) {
+        // Safe parsing: check if it's a valid date string first
+        const d = new Date(item.effectiveMonth);
+        if (!isNaN(d.getTime())) {
+          effMonth = d.toISOString().slice(0, 7);
+        }
+      }
+
       setFormData({
         employeeId: item.employeeId,
         category: item.category || "other",
         description: item.description || "",
         amount: item.amount || "",
-        effectiveMonth: item.effectiveMonth ? new Date(item.effectiveMonth).toISOString().slice(0, 7) : defaultMonth,
+        effectiveMonth: effMonth,
         receiptFileUrl: item.receiptFileUrl || "",
         receiptFileKey: item.receiptFileKey || "",
       });
