@@ -85,7 +85,7 @@ export const socialInsuranceRules: SocialInsuranceItem[] = [
     sortOrder: 5,
   },
 
-  // 2. Hong Kong (HK)
+  // 2. Hong Kong, China (HK)
   {
     countryCode: "HK",
     itemKey: "mpf",
@@ -391,7 +391,7 @@ export const socialInsuranceRules: SocialInsuranceItem[] = [
     sortOrder: 2,
   },
 
-  // 13. Taiwan (TW)
+  // 13. Taiwan, China (TW)
   {
     countryCode: "TW",
     itemKey: "labor_insurance",

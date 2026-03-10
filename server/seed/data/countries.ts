@@ -6,7 +6,7 @@ type CountryConfig = InferInsertModel<typeof countriesConfig>;
 export const countriesData: CountryConfig[] = [
   // APAC
   { countryCode: "CN", countryName: "China", localCurrency: "CNY", standardRateCurrency: "USD", isActive: true },
-  { countryCode: "HK", countryName: "Hong Kong", localCurrency: "HKD", standardRateCurrency: "USD", isActive: true },
+  { countryCode: "HK", countryName: "Hong Kong, China", localCurrency: "HKD", standardRateCurrency: "USD", isActive: true },
   { countryCode: "SG", countryName: "Singapore", localCurrency: "SGD", standardRateCurrency: "USD", isActive: true },
   { countryCode: "VN", countryName: "Vietnam", localCurrency: "VND", standardRateCurrency: "USD", isActive: true },
   { countryCode: "JP", countryName: "Japan", localCurrency: "JPY", standardRateCurrency: "USD", isActive: true },
@@ -17,7 +17,7 @@ export const countriesData: CountryConfig[] = [
   { countryCode: "MY", countryName: "Malaysia", localCurrency: "MYR", standardRateCurrency: "USD", isActive: true },
   { countryCode: "ID", countryName: "Indonesia", localCurrency: "IDR", standardRateCurrency: "USD", isActive: true },
   { countryCode: "PH", countryName: "Philippines", localCurrency: "PHP", standardRateCurrency: "USD", isActive: true },
-  { countryCode: "TW", countryName: "Taiwan", localCurrency: "TWD", standardRateCurrency: "USD", isActive: true },
+  { countryCode: "TW", countryName: "Taiwan, China", localCurrency: "TWD", standardRateCurrency: "USD", isActive: true },
   { countryCode: "NZ", countryName: "New Zealand", localCurrency: "NZD", standardRateCurrency: "USD", isActive: true },
   { countryCode: "PK", countryName: "Pakistan", localCurrency: "PKR", standardRateCurrency: "USD", isActive: true },
   { countryCode: "BD", countryName: "Bangladesh", localCurrency: "BDT", standardRateCurrency: "USD", isActive: true },
