@@ -1,16 +1,50 @@
 import { getDb } from "../db";
-import { countryGuideChapters, countriesConfig } from "../../drizzle/schema";
+import { countryGuideChapters, countriesConfig, billingEntities } from "../../drizzle/schema";
 import { eq, and, asc } from "drizzle-orm";
-import { createBrandedPdfDocument, drawCoverPage, drawHeader, drawFooter, drawMarkdown } from "./pdfBrandTemplateService";
+import { generateCountryGuidePdf, BrandingInfo } from "./htmlPdfService";
+
+/**
+ * Fetch the default (or first active) billing entity and convert it to BrandingInfo.
+ * Falls back to GEA defaults if no billing entity is configured.
+ */
+async function getDefaultBranding(db: ReturnType<typeof getDb>): Promise<BrandingInfo> {
+  if (!db) return { shortName: "GEA", fullName: "Global Employment Advisors", contactEmail: "sales@geahr.com" };
+
+  // Try isDefault=true first, then fall back to first active entity
+  let entity = await db.query.billingEntities.findFirst({
+    where: and(eq(billingEntities.isDefault, true), eq(billingEntities.isActive, true)),
+  });
+  if (!entity) {
+    entity = await db.query.billingEntities.findFirst({
+      where: eq(billingEntities.isActive, true),
+    });
+  }
+  if (!entity) {
+    return { shortName: "GEA", fullName: "Global Employment Advisors", contactEmail: "sales@geahr.com" };
+  }
+
+  // Build a one-line address
+  const addressParts = [entity.address, entity.city, entity.country].filter(Boolean);
+  const address = addressParts.length > 0 ? addressParts.join(", ") : undefined;
+
+  return {
+    shortName: entity.entityName,
+    fullName: entity.legalName,
+    logoUrl: entity.logoUrl ?? null,
+    contactEmail: entity.contactEmail ?? null,
+    address: address ?? null,
+    legalName: entity.legalName,
+  };
+}
 
 export const countryGuidePdfService = {
-  generatePdf: async (countryCode: string): Promise<Buffer | null> => {
+  generatePdf: async (countryCode: string, locale: "en" | "zh" = "en"): Promise<Buffer | null> => {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
 
     // 1. Fetch Country Info
     const country = await db.query.countriesConfig.findFirst({
-      where: eq(countriesConfig.countryCode, countryCode)
+      where: eq(countriesConfig.countryCode, countryCode),
     });
     if (!country) return null;
 
@@ -20,65 +54,27 @@ export const countryGuidePdfService = {
         eq(countryGuideChapters.countryCode, countryCode),
         eq(countryGuideChapters.status, "published")
       ),
-      orderBy: [asc(countryGuideChapters.sortOrder)]
+      orderBy: [asc(countryGuideChapters.sortOrder)],
     });
-
     if (chapters.length === 0) return null;
 
-    // 3. Create PDF
-    const { doc, cjkFontPath } = await createBrandedPdfDocument();
+    // 3. Fetch default billing entity branding
+    const branding = await getDefaultBranding(db);
 
-    return new Promise<Buffer>((resolve, reject) => {
-      const buffers: Buffer[] = [];
-      doc.on("data", chunk => buffers.push(chunk));
-      doc.on("end", () => resolve(Buffer.concat(buffers)));
-      doc.on("error", reject);
-
-      // Cover Page
-      drawCoverPage(
-        doc,
-        "Country Guide",
-        country.countryName,
-        new Date().toLocaleDateString(),
-        cjkFontPath
-      );
-
-      // Content Pages
-      let pageNum = 1;
-
-      // Table of Contents (Simple)
-      drawHeader(doc, `Country Guide: ${country.countryName}`);
-      doc.fontSize(16).font("Helvetica-Bold").text("Table of Contents");
-      doc.moveDown();
-      
-      chapters.forEach((chapter, index) => {
-        doc.fontSize(12).font("Helvetica").text(`${index + 1}. ${chapter.titleEn}`);
-        doc.moveDown(0.5);
-      });
-      
-      drawFooter(doc, pageNum++);
-      doc.addPage();
-
-      // Chapters
-      chapters.forEach((chapter, index) => {
-        drawHeader(doc, `Country Guide: ${country.countryName}`);
-        
-        // Chapter Title
-        doc.fontSize(18).font("Helvetica-Bold").fillColor("#1B5E20");
-        doc.text(chapter.titleEn);
-        doc.moveDown();
-
-        // Content
-        drawMarkdown(doc, chapter.contentEn, cjkFontPath);
-        
-        drawFooter(doc, pageNum++);
-        
-        if (index < chapters.length - 1) {
-          doc.addPage();
-        }
-      });
-
-      doc.end();
-    });
-  }
+    // 4. Generate PDF using HTML engine (supports tables, bold, headings)
+    return generateCountryGuidePdf(
+      { countryCode: country.countryCode, countryName: country.countryName },
+      chapters.map((ch) => ({
+        id: ch.id,
+        titleEn: ch.titleEn,
+        titleZh: ch.titleZh ?? undefined,
+        contentEn: ch.contentEn ?? "",
+        contentZh: ch.contentZh ?? undefined,
+        chapterKey: ch.chapterKey,
+        sortOrder: ch.sortOrder ?? 0,
+      })),
+      locale,
+      branding
+    );
+  },
 };

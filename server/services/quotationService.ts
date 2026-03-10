@@ -4,9 +4,9 @@ import { eq } from "drizzle-orm";
 import { calculationService } from "./calculationService";
 import { getExchangeRate } from "./exchangeRateService";
 import { storagePut } from "../storage";
-import { createBrandedPdfDocument, drawCoverPage, drawHeader, drawFooter, smartText } from "./pdfBrandTemplateService";
-import { mergePdfs } from "./contentMergeService";
+import { generateQuotationPdf, BrandingInfo } from "./htmlPdfService";
 import { countryGuidePdfService } from "./countryGuidePdfService";
+import { mergePdfs } from "./contentMergeService";
 
 interface QuotationItemInput {
   countryCode: string;
@@ -295,103 +295,60 @@ export const quotationService = {
         ? JSON.parse(quotation.snapshotData) 
         : [];
     
-    // Step 1: Generate the Quotation PDF (Table)
-    const { doc, cjkFontPath } = await createBrandedPdfDocument();
+    // Step 1: Fetch billing entity info (for branding + "Issued By" section)
+    // Priority: isDefault=true → first active entity → hardcoded GEA defaults
+    let billingEntity: any = undefined;
+    let branding: BrandingInfo = {
+      shortName: "GEA",
+      fullName: "Global Employment Advisors",
+      contactEmail: "sales@geahr.com",
+    };
 
-    const quotationBuffer = await new Promise<Buffer>((resolve, reject) => {
-      const buffers: Buffer[] = [];
-      doc.on("data", chunk => buffers.push(chunk));
-      doc.on("end", () => resolve(Buffer.concat(buffers)));
-      doc.on("error", reject);
-
-      // 1. Cover Page
-      drawCoverPage(
-        doc, 
-        "Quotation Proposal", 
-        `Ref: ${quotation.quotationNumber}`, 
-        new Date().toLocaleDateString(), 
-        cjkFontPath
-      );
-
-      // drawCoverPage calls addPage() at the end, so we are on Page 2 (Content)
-
-      // 2. Header
-      drawHeader(doc, `Quotation #${quotation.quotationNumber}`);
-
-      // 3. Customer Info
-      doc.moveDown();
-      doc.fontSize(12).font("Helvetica-Bold").text("Prepared For:");
-      doc.fontSize(10).font("Helvetica").text(customerName);
-      if (customerAddress) doc.text(customerAddress);
-      
-      doc.moveDown(2);
-
-      // 4. Table Header
-      const tableTop = doc.y;
-      const cols = {
-        country: { x: 50, w: 80 },
-        role: { x: 130, w: 100 },
-        count: { x: 230, w: 40 },
-        salary: { x: 270, w: 70 },
-        employer: { x: 340, w: 70 },
-        fee: { x: 410, w: 60 },
-        subtotal: { x: 470, w: 70 }
+    let defaultBilling = await db.query.billingEntities.findFirst({
+      where: eq(billingEntities.isDefault, true)
+    });
+    if (!defaultBilling) {
+      // Fall back to first active entity
+      defaultBilling = await db.query.billingEntities.findFirst({
+        where: eq(billingEntities.isActive, true)
+      }) ?? null;
+    }
+    if (defaultBilling) {
+      const addressParts = [defaultBilling.address, defaultBilling.city, defaultBilling.country].filter(Boolean);
+      const address = addressParts.join(", ") || undefined;
+      billingEntity = {
+        entityName: defaultBilling.entityName,
+        legalName: defaultBilling.legalName,
+        address,
+        contactEmail: defaultBilling.contactEmail ?? undefined,
+        contactPhone: defaultBilling.contactPhone ?? undefined,
+        country: defaultBilling.country,
       };
+      // Build BrandingInfo from the same entity
+      branding = {
+        shortName: defaultBilling.entityName,
+        fullName: defaultBilling.legalName,
+        logoUrl: defaultBilling.logoUrl ?? null,
+        contactEmail: defaultBilling.contactEmail ?? null,
+        address: address ?? null,
+        legalName: defaultBilling.legalName,
+      };
+    }
 
-      doc.fontSize(8).font("Helvetica-Bold");
-      doc.text("COUNTRY", cols.country.x, tableTop);
-      doc.text("SERVICE", cols.role.x, tableTop);
-      doc.text("QTY", cols.count.x, tableTop);
-      doc.text("SALARY", cols.salary.x, tableTop, { align: "right" });
-      doc.text("ER COST", cols.employer.x, tableTop, { align: "right" });
-      doc.text("FEE", cols.fee.x, tableTop, { align: "right" });
-      doc.text("SUBTOTAL", cols.subtotal.x, tableTop, { align: "right" });
-
-      doc.moveTo(50, tableTop + 15).lineTo(540, tableTop + 15).stroke();
-
-      let y = tableTop + 25;
-
-      // 5. Table Rows
-      for (const item of items) {
-        if (y > 700) { // Leave space for footer
-          drawFooter(doc, 1); // Draw footer for current page
-          doc.addPage();
-          drawHeader(doc, `Quotation #${quotation.quotationNumber}`);
-          y = 50;
-        }
-
-        doc.fontSize(8).fillColor("black");
-        smartText(doc, item.countryCode, cols.country.x, y, { width: cols.country.w }, cjkFontPath);
-        smartText(doc, (item.serviceType || "").toUpperCase(), cols.role.x, y, { width: cols.role.w }, cjkFontPath);
-        doc.text((item.headcount || 0).toString(), cols.count.x, y);
-        doc.text(formatMoney(item.salary), cols.salary.x, y, { align: "right", width: cols.salary.w });
-        doc.text(formatMoney(item.employerCost), cols.employer.x, y, { align: "right", width: cols.employer.w });
-         doc.text(formatMoney(item.serviceFee), cols.fee.x, y, { align: "right", width: cols.fee.w });
-         
-         if (item.oneTimeFee) {
-           doc.fontSize(6).text(`+ ${formatMoney(item.oneTimeFee)} (one-time)`, cols.fee.x, y + 10, { align: "right", width: cols.fee.w });
-         }
-
-         doc.font("Helvetica-Bold").text(formatMoney(item.subtotal), cols.subtotal.x, y, { align: "right", width: cols.subtotal.w });
-         
-         y += item.oneTimeFee ? 25 : 15;
-      }
-
-      doc.moveTo(50, y).lineTo(540, y).stroke();
-      y += 10;
-
-      // 6. Total
-      doc.fontSize(12).font("Helvetica-Bold");
-      doc.text(`TOTAL MONTHLY (${quotation.currency})`, 300, y, { align: "right", width: 160 });
-      doc.text(formatMoney(parseFloat(quotation.totalMonthly)), 470, y, { align: "right", width: 70 });
-
-      // 7. Footer for last page
-      drawFooter(doc, 1); // Todo: handle page numbers dynamically
-
-      doc.end();
+    // Step 2: Generate the Quotation PDF using HTML engine
+    const quotationBuffer = await generateQuotationPdf({
+      quotationNumber: quotation.quotationNumber,
+      customerName,
+      customerAddress,
+      items: items as any[],
+      totalMonthly: quotation.totalMonthly,
+      currency: quotation.currency,
+      validUntil: quotation.validUntil ?? undefined,
+      billingEntity,
+      branding,
     });
 
-    // Step 2: Fetch Additional PDFs (Country Guides)
+    // Step 3: Fetch Additional PDFs (Country Guides)
     const pdfsToMerge: Buffer[] = [quotationBuffer];
     
     if (includeCountryGuide) {
@@ -402,7 +359,7 @@ export const quotationService = {
         }
     }
 
-    // Step 3: Merge
+    // Step 4: Merge
     const finalPdfBuffer = await mergePdfs(pdfsToMerge, { 
       addPageNumbers: true,
       metadata: {
@@ -411,7 +368,7 @@ export const quotationService = {
       }
     });
 
-    // Step 4: Upload to S3
+    // Step 5: Upload to S3
     const fileName = `Quotation-${quotation.quotationNumber}.pdf`;
     const { key, url } = await storagePut(`quotations/${fileName}`, finalPdfBuffer, "application/pdf");
 
