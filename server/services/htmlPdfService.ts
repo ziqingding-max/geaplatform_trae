@@ -285,8 +285,10 @@ const BASE_CSS = `
     font-size: 9pt;
   }
   .qt-table thead tr {
-    background: ${BRAND.primary};
-    color: white;
+    background: ${BRAND.primary} !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .qt-table thead th {
     padding: 2.5mm 3mm;
@@ -295,6 +297,10 @@ const BASE_CSS = `
     font-size: 8pt;
     border: none;
     white-space: nowrap;
+    background: ${BRAND.primary} !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .qt-table thead th.right { text-align: right; }
   .qt-table tbody tr:nth-child(even) { background: ${BRAND.tableStripe}; }
@@ -443,7 +449,7 @@ function fmt(n: number, currency = ""): string {
   return currency ? `${currency} ${s}` : s;
 }
 
-// ─── Helper: launch browser ───────────────────────────────────────────────────
+// ─── Helper: launch browser ───────────────────────────────────────────────
 async function launchBrowser() {
   const executablePath = findChromiumPath();
   return puppeteer.launch({
@@ -453,7 +459,31 @@ async function launchBrowser() {
   });
 }
 
-// ─── Helper: render HTML to PDF buffer ───────────────────────────────────────
+// ─── Helper: fetch remote logo and convert to base64 data URI ────────────────────
+// Puppeteer may not load external URLs during PDF generation; embedding as base64 is reliable.
+async function fetchLogoAsBase64(url: string): Promise<string | null> {
+  try {
+    const https = await import("https");
+    const http = await import("http");
+    return await new Promise((resolve) => {
+      const client = url.startsWith("https") ? https : http;
+      (client as any).get(url, (res: any) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => {
+          const buf = Buffer.concat(chunks);
+          const contentType = (res.headers["content-type"] as string) || "image/png";
+          resolve(`data:${contentType};base64,${buf.toString("base64")}`);
+        });
+        res.on("error", () => resolve(null));
+      }).on("error", () => resolve(null));
+    });
+  } catch {
+    return null;
+  }
+}
+
+// ─── Helper: render HTML to PDF buffer ───────────────────────────────────────────────
 async function htmlToPdf(html: string): Promise<Buffer> {
   const browser = await launchBrowser();
   try {
@@ -476,8 +506,10 @@ export interface BrandingInfo {
   shortName: string;
   /** Full legal / trading name, e.g. "Global Employment Advisors" */
   fullName: string;
-  /** S3 URL for logo image – if present, rendered as <img>; otherwise shortName text is used */
+  /** S3/OSS URL for logo image – will be pre-fetched and converted to base64 before PDF generation */
   logoUrl?: string | null;
+  /** Pre-fetched base64 data URI for logo (set internally before rendering) */
+  logoBase64?: string | null;
   /** Contact email shown in T&C footer */
   contactEmail?: string | null;
   /** One-line address for "Issued By" section */
@@ -494,11 +526,22 @@ const DEFAULT_BRANDING: BrandingInfo = {
   contactEmail: "sales@geahr.com",
 };
 
-// ─── Page wrapper helpers ─────────────────────────────────────────────────────
+// ─── Page wrapper helpers ───────────────────────────────────────────────────
+/** Pre-fetch logo URL as base64 so Puppeteer can embed it without network access during PDF rendering */
+async function resolveBrandingLogo(branding: BrandingInfo): Promise<BrandingInfo> {
+  if (branding.logoUrl && !branding.logoBase64) {
+    const b64 = await fetchLogoAsBase64(branding.logoUrl);
+    return { ...branding, logoBase64: b64 };
+  }
+  return branding;
+}
+
 function logoHtml(b: BrandingInfo, size: "cover" | "header"): string {
-  if (b.logoUrl) {
+  // Prefer pre-fetched base64; fall back to URL (may not render in Puppeteer); fall back to text
+  const src = b.logoBase64 || b.logoUrl;
+  if (src) {
     const h = size === "cover" ? "18mm" : "7mm";
-    return `<img src="${b.logoUrl}" alt="${b.shortName}" style="height:${h};object-fit:contain;display:block;" />`;
+    return `<img src="${src}" alt="${b.shortName}" style="height:${h};max-width:60mm;object-fit:contain;display:block;" />`;
   }
   if (size === "cover") {
     return `<div class="cover-logo">${b.shortName}</div>`;
@@ -562,6 +605,8 @@ export async function generateCountryGuidePdf(
   locale: "en" | "zh" = "en",
   branding: BrandingInfo = DEFAULT_BRANDING
 ): Promise<Buffer> {
+  // Pre-fetch logo as base64 so Puppeteer can embed it reliably
+  branding = await resolveBrandingLogo(branding);
   const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const headerTitle = `Country Guide: ${country.countryName}`;
 
@@ -654,7 +699,8 @@ export interface QuotationData {
 }
 
 export async function generateQuotationPdf(data: QuotationData): Promise<Buffer> {
-  const branding: BrandingInfo = data.branding ?? DEFAULT_BRANDING;
+  // Pre-fetch logo as base64 so Puppeteer can embed it reliably (Bug 1 fix)
+  const branding: BrandingInfo = await resolveBrandingLogo(data.branding ?? DEFAULT_BRANDING);
   const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const headerTitle = `Quotation #${data.quotationNumber}`;
   const validUntil = data.validUntil

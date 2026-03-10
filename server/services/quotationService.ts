@@ -360,8 +360,10 @@ export const quotationService = {
     }
 
     // Step 4: Merge
+    // Bug fix: htmlPdfService already adds "Page X" in each page footer;
+    // setting addPageNumbers=true here would create duplicate overlapping page numbers.
     const finalPdfBuffer = await mergePdfs(pdfsToMerge, { 
-      addPageNumbers: true,
+      addPageNumbers: false,
       metadata: {
         title: `Quotation ${quotation.quotationNumber}`,
         subject: `Proposal for ${customerName}`
