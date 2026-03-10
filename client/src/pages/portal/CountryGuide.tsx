@@ -349,12 +349,14 @@ export default function CountryGuide() {
                                 ? chapter.titleZh
                                 : chapter.titleEn}
                             </h3>
-                            <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-headings:font-semibold prose-p:text-muted-foreground prose-p:leading-relaxed prose-strong:text-foreground prose-table:text-sm prose-th:bg-muted/50 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2 prose-th:text-left prose-table:border prose-th:border prose-td:border prose-li:text-muted-foreground prose-ul:my-2 prose-ol:my-2 prose-a:text-primary">
-                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                {locale === "zh"
-                                  ? chapter.contentZh
-                                  : chapter.contentEn}
-                              </ReactMarkdown>
+                            <div className="overflow-x-auto">
+                              <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-headings:font-semibold prose-p:text-muted-foreground prose-p:leading-relaxed prose-strong:text-foreground prose-table:text-sm prose-th:bg-muted/50 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2 prose-th:text-left prose-table:border prose-th:border prose-td:border prose-li:text-muted-foreground prose-ul:my-2 prose-ol:my-2 prose-a:text-primary prose-h2:text-base prose-h3:text-sm prose-h2:mt-4 prose-h3:mt-3">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {locale === "zh"
+                                    ? chapter.contentZh
+                                    : chapter.contentEn}
+                                </ReactMarkdown>
+                              </div>
                             </div>
                           </div>
                         ))}
