@@ -503,27 +503,10 @@ export const invoicesRouter = router({
         });
       };
 
-      // 1. Draft -> Pending Review: Auto-deduct from wallet
+      // 1. Draft -> Pending Review: Manual review only
       if (oldStatus === "draft" && newStatus === "pending_review") {
-        const total = invoice.total;
-        const deducted = await walletService.attemptAutoDeduction(
-          invoice.id,
-          invoice.customerId,
-          invoice.currency,
-          total
-        );
-        
-        // If deduction occurred, update invoice record
-        if (parseFloat(deducted) > 0) {
-          const amountDue = (parseFloat(total) - parseFloat(deducted)).toFixed(2);
-          await updateInvoice(invoice.id, {
-            walletAppliedAmount: deducted,
-            amountDue: amountDue,
-            // If fully paid by wallet, can we auto-move to paid? 
-            // Spec says: Pending Review -> Sent shows deduction. 
-            // Let's keep it in pending_review but with reduced due amount.
-          });
-        }
+        // No auto-deduction logic here anymore.
+        // User must manually pay via wallet in the UI if they wish to use balance.
       }
 
       // 2. Pending Review -> Draft (Rejected): Refund wallet deduction

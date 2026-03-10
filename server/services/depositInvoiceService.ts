@@ -140,13 +140,19 @@ export async function generateDepositInvoice(
 
     // 7. Deposit invoice: Due Date = Employee Start Date - 1 day
     let dueDate: Date;
+    let invoiceMonthStr: string;
+    
     if (employee.startDate) {
       dueDate = new Date(employee.startDate);
       dueDate.setDate(dueDate.getDate() - 1);
+      // Invoice month = Month of Start Date (YYYY-MM-01)
+      invoiceMonthStr = employee.startDate.substring(0, 7) + "-01";
     } else {
       // Fallback: 30 days from now if no start date
       dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + 30);
+      // Fallback month: Current month
+      invoiceMonthStr = new Date().toISOString().substring(0, 7) + "-01";
     }
 
     // 8. Create invoice
@@ -155,6 +161,7 @@ export async function generateDepositInvoice(
       billingEntityId,
       invoiceNumber,
       invoiceType: "deposit",
+      invoiceMonth: invoiceMonthStr,
       currency: settlementCurrency,
       exchangeRate: exchangeRate.toFixed(6),
       exchangeRateWithMarkup: exchangeRateWithMarkup.toFixed(6),
@@ -173,12 +180,21 @@ export async function generateDepositInvoice(
     if (!invoiceId) throw new Error("Failed to get deposit invoice ID after insert");
 
     // 9. Create invoice line item
+    // Logic update: Quantity = depositMultiplier, UnitPrice = monthlyTotal
+    // This correctly reflects "2.0 months x $5000/month" structure
+    
+    // Calculate unit price in settlement currency
+    // depositAmount (Total) = monthlyTotal * depositMultiplier * exchangeRateWithMarkup
+    // unitPrice (Settlement) = (monthlyTotal * exchangeRateWithMarkup)
+    
+    const monthlyTotalSettlement = monthlyTotal * exchangeRateWithMarkup;
+    
     const lineItem: InsertInvoiceItem = {
       invoiceId,
       employeeId,
       description: `Deposit - ${employee.employeeCode || ''} ${employee.firstName} ${employee.lastName}`,
-      quantity: "1",
-      unitPrice: depositAmount.toFixed(2),
+      quantity: depositMultiplier.toString(),
+      unitPrice: monthlyTotalSettlement.toFixed(2),
       amount: depositAmount.toFixed(2),
       itemType: "deposit",
       countryCode: employee.country,

@@ -399,7 +399,10 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
     tableY += 14;
 
     // Credit Applied section (if any credit notes have been applied to this invoice)
-    if (creditAppliedAmt > 0.01 && creditApps.length > 0) {
+    const walletAppliedAmt = parseFloat(invoice.walletAppliedAmount?.toString() || "0");
+    const hasDeductions = creditAppliedAmt > 0.01 || walletAppliedAmt > 0.01;
+
+    if (hasDeductions) {
       tableY += 4;
       doc.moveTo(totalsLabelX, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.3).strokeColor("#aaaaaa").stroke();
       tableY += 8;
@@ -410,10 +413,21 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
       tableY += 14;
 
       doc.fontSize(8).font("Helvetica").fillColor("#2563eb");
-      // Simplified: show single "Less: Credit Note Applied" line with total credit amount
-      doc.text("Less: Credit Note Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 5 });
-      doc.text(`- ${currency} ${formatNum(creditAppliedAmt)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
-      tableY += 12;
+      
+      // Show Credit Note deductions
+      if (creditAppliedAmt > 0.01) {
+        doc.text("Less: Credit Note Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 5 });
+        doc.text(`- ${currency} ${formatNum(creditAppliedAmt)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+        tableY += 12;
+      }
+
+      // Show Wallet Applied deductions
+      if (walletAppliedAmt > 0.01) {
+        doc.text("Less: Wallet Balance Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 5 });
+        doc.text(`- ${currency} ${formatNum(walletAppliedAmt)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+        tableY += 12;
+      }
+      
       tableY += 2;
     }
 
@@ -422,11 +436,12 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
     doc.moveTo(totalsLabelX, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.5).strokeColor("#333333").stroke();
     tableY += 8;
 
-    // Show adjusted AMOUNT DUE when credit is applied, otherwise show TOTAL DUE
-    const finalAmountDue = creditAppliedAmt > 0.01
-      ? parseFloat(invoice.amountDue?.toString() || (parseFloat(invoice.total?.toString() || "0") - creditAppliedAmt).toFixed(2))
+    // Show adjusted AMOUNT DUE when credit/wallet is applied, otherwise show TOTAL DUE
+    const totalDeductions = creditAppliedAmt + walletAppliedAmt;
+    const finalAmountDue = totalDeductions > 0.01
+      ? parseFloat(invoice.amountDue?.toString() || (parseFloat(invoice.total?.toString() || "0") - totalDeductions).toFixed(2))
       : parseFloat(invoice.total?.toString() || "0");
-    const totalLabel = creditAppliedAmt > 0.01 ? "AMOUNT DUE" : "TOTAL DUE";
+    const totalLabel = totalDeductions > 0.01 ? "AMOUNT DUE" : "TOTAL DUE";
 
     doc.fontSize(11).font("Helvetica-Bold").fillColor("#1a1a1a");
     doc.text(totalLabel, totalsLabelX, tableY, { width: 110 });
