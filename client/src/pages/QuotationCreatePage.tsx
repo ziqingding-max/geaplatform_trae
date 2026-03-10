@@ -18,7 +18,7 @@ import { useLocation } from "wouter";
 interface QuotationItem {
   countryCode: string;
   regionCode?: string;
-  serviceType: "eor" | "visa_eor";
+  serviceType: "eor" | "visa_eor" | "aor";
   headcount: number;
   salary: number;
   currency: string; // Local Currency
@@ -151,14 +151,17 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
 
                 setItems(currentItems => {
                     const updated = [...currentItems];
+                    const st = updated[index].serviceType;
                     updated[index] = { 
                         ...updated[index], 
                         currency: localCurrency,
                         exchangeRate: exchangeRate,
-                        serviceFee: updated[index].serviceType === "visa_eor" 
-                            ? parseFloat(config.standardVisaEorRate || "0") 
-                            : parseFloat(config.standardEorRate || "0"),
-                        oneTimeFee: updated[index].serviceType === "visa_eor"
+                        serviceFee: st === "aor"
+                            ? parseFloat((config as any).standardAorRate || "0")
+                            : st === "visa_eor" 
+                                ? parseFloat(config.standardVisaEorRate || "0") 
+                                : parseFloat(config.standardEorRate || "0"),
+                        oneTimeFee: st === "visa_eor"
                             ? parseFloat(config.visaEorSetupFee || "0")
                             : undefined
                     };
@@ -171,13 +174,13 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
     }
   };
 
-  const handleServiceTypeChange = async (index: number, serviceType: "eor" | "visa_eor") => {
+  const handleServiceTypeChange = async (index: number, serviceType: "eor" | "visa_eor" | "aor") => {
       // 1. Update service type
       const newItems = [...items];
       newItems[index] = { ...newItems[index], serviceType, employerCost: undefined, totalMonthly: undefined };
       setItems(newItems);
       
-      // 2. Update fees
+      // 2. Update fees based on service type
       const countryCode = items[index].countryCode;
       if (countryCode) {
           try {
@@ -185,15 +188,25 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
               if (config) {
                   setItems(currentItems => {
                       const updated = [...currentItems];
-                      updated[index] = {
-                          ...updated[index],
-                          serviceFee: serviceType === "visa_eor" 
-                              ? parseFloat(config.standardVisaEorRate || "0") 
-                              : parseFloat(config.standardEorRate || "0"),
-                          oneTimeFee: serviceType === "visa_eor"
-                              ? parseFloat(config.visaEorSetupFee || "0")
-                              : undefined
-                      };
+                      if (serviceType === "aor") {
+                          // AOR: use standardAorRate, no one-time fee, no employer cost
+                          updated[index] = {
+                              ...updated[index],
+                              serviceFee: parseFloat((config as any).standardAorRate || "0"),
+                              oneTimeFee: undefined,
+                              employerCost: undefined,
+                          };
+                      } else {
+                          updated[index] = {
+                              ...updated[index],
+                              serviceFee: serviceType === "visa_eor" 
+                                  ? parseFloat(config.standardVisaEorRate || "0") 
+                                  : parseFloat(config.standardEorRate || "0"),
+                              oneTimeFee: serviceType === "visa_eor"
+                                  ? parseFloat(config.visaEorSetupFee || "0")
+                                  : undefined
+                          };
+                      }
                       return updated;
                   });
               }
@@ -210,29 +223,37 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
     for (let i = 0; i < updatedItems.length; i++) {
         const item = updatedItems[i];
         if (item.countryCode && item.salary > 0) {
-            try {
-                const result = await calculateMutation.mutateAsync({
-                    countryCode: item.countryCode,
-                    salary: item.salary,
-                    year: 2025,
-                    regionCode: item.regionCode
-                });
-                
-                const employerCost = parseFloat(result.totalEmployer);
-                updatedItems[i].employerCost = employerCost;
-                
-                // Calculate Total in USD
-                // Salary (Local) + EmployerCost (Local) -> Convert to USD
-                // Service Fee (USD) -> Add
-                
-                const localTotal = item.salary + employerCost;
+            if (item.serviceType === "aor") {
+                // AOR: no employer cost calculation, total = (contractorRate / exchangeRate + serviceFee) * headcount
+                updatedItems[i].employerCost = undefined;
                 const rate = item.exchangeRate || 1;
-                const usdEmploymentCost = localTotal / rate;
-                
-                updatedItems[i].totalMonthly = (usdEmploymentCost + item.serviceFee) * item.headcount;
-            } catch (err) {
-                console.error(`Failed to calculate for item ${i}`, err);
-                hasError = true;
+                const usdContractorCost = item.salary / rate;
+                updatedItems[i].totalMonthly = (usdContractorCost + item.serviceFee) * item.headcount;
+            } else {
+                try {
+                    const result = await calculateMutation.mutateAsync({
+                        countryCode: item.countryCode,
+                        salary: item.salary,
+                        year: 2025,
+                        regionCode: item.regionCode
+                    });
+                    
+                    const employerCost = parseFloat(result.totalEmployer);
+                    updatedItems[i].employerCost = employerCost;
+                    
+                    // Calculate Total in USD
+                    // Salary (Local) + EmployerCost (Local) -> Convert to USD
+                    // Service Fee (USD) -> Add
+                    
+                    const localTotal = item.salary + employerCost;
+                    const rate = item.exchangeRate || 1;
+                    const usdEmploymentCost = localTotal / rate;
+                    
+                    updatedItems[i].totalMonthly = (usdEmploymentCost + item.serviceFee) * item.headcount;
+                } catch (err) {
+                    console.error(`Failed to calculate for item ${i}`, err);
+                    hasError = true;
+                }
             }
         }
     }
@@ -361,11 +382,12 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                                     <SelectContent>
                                         <SelectItem value="eor">{t("quotations.create.service_eor")}</SelectItem>
                                         <SelectItem value="visa_eor">{t("quotations.create.service_visa_eor")}</SelectItem>
+                                        <SelectItem value="aor">{t("quotations.create.service_aor")}</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div className="col-span-2 space-y-2">
-                                <Label className="text-xs">{t("quotations.items.salary")}</Label>
+                                <Label className="text-xs">{item.serviceType === "aor" ? t("quotations.create.contractor_rate") : t("quotations.items.salary")}</Label>
                                 <div className="relative">
                                   <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">{item.currency || "$"}</span>
                                   <Input type="number" className="pl-12" value={item.salary} onChange={(e) => updateItem(index, "salary", parseFloat(e.target.value))} />
@@ -399,7 +421,14 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                       
                       {/* Region selector moved inside country column above for better layout */}
 
-                      {item.employerCost !== undefined && (
+                      {/* AOR: show total without employer cost; EOR/Visa EOR: show employer cost + total */}
+                      {item.serviceType === "aor" && item.totalMonthly !== undefined && (
+                          <div className="bg-muted/50 p-3 rounded text-sm flex justify-between items-center text-muted-foreground border border-border/50">
+                              <span className="text-xs">{t("quotations.create.aor_no_employer_cost")}</span>
+                              <span className="font-medium text-foreground">{t("quotations.create.total_monthly")}: <span className="font-mono text-primary">{formatCurrency("USD", item.totalMonthly || 0)}</span></span>
+                          </div>
+                      )}
+                      {item.serviceType !== "aor" && item.employerCost !== undefined && (
                           <div className="bg-muted/50 p-3 rounded text-sm flex justify-between items-center text-muted-foreground border border-border/50">
                               <span>{t("quotations.create.employer_cost")}: <span className="font-mono text-foreground">{formatCurrency(item.currency, item.employerCost)}</span></span>
                               <span className="font-medium text-foreground">{t("quotations.create.total_monthly")}: <span className="font-mono text-primary">{formatCurrency("USD", item.totalMonthly || 0)}</span></span>

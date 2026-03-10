@@ -10,11 +10,11 @@ var __export = (target, all) => {
 
 // drizzle/copilot-schema.ts
 import { sqliteTable, integer, text, index, uniqueIndex } from "drizzle-orm/sqlite-core";
-var copilotUserConfigs2, copilotConversations2, copilotMessages2, copilotFileAnalyses, copilotPredictions2, copilotShortcuts2, copilotMetrics;
+var copilotUserConfigs, copilotConversations, copilotMessages, copilotFileAnalyses, copilotPredictions, copilotShortcuts, copilotMetrics;
 var init_copilot_schema = __esm({
   "drizzle/copilot-schema.ts"() {
     "use strict";
-    copilotUserConfigs2 = sqliteTable(
+    copilotUserConfigs = sqliteTable(
       "copilot_user_configs",
       {
         id: integer("id").primaryKey({ autoIncrement: true }),
@@ -41,7 +41,7 @@ var init_copilot_schema = __esm({
         cucEnabledIdx: index("cuc_enabled_idx").on(table.isEnabled)
       })
     );
-    copilotConversations2 = sqliteTable(
+    copilotConversations = sqliteTable(
       "copilot_conversations",
       {
         id: integer("id").primaryKey({ autoIncrement: true }),
@@ -58,7 +58,7 @@ var init_copilot_schema = __esm({
         ccLastMessageIdx: index("cc_last_message_idx").on(table.lastMessageAt)
       })
     );
-    copilotMessages2 = sqliteTable(
+    copilotMessages = sqliteTable(
       "copilot_messages",
       {
         id: integer("id").primaryKey({ autoIncrement: true }),
@@ -116,7 +116,7 @@ var init_copilot_schema = __esm({
         cfaCreatedIdx: index("cfa_created_idx").on(table.createdAt)
       })
     );
-    copilotPredictions2 = sqliteTable(
+    copilotPredictions = sqliteTable(
       "copilot_predictions",
       {
         id: integer("id").primaryKey({ autoIncrement: true }),
@@ -149,7 +149,7 @@ var init_copilot_schema = __esm({
         cpCreatedIdx: index("cp_created_idx").on(table.createdAt)
       })
     );
-    copilotShortcuts2 = sqliteTable(
+    copilotShortcuts = sqliteTable(
       "copilot_shortcuts",
       {
         id: integer("id").primaryKey({ autoIncrement: true }),
@@ -266,7 +266,7 @@ var init_aor_schema = __esm({
           "milestone"
         ] }).default("monthly").notNull(),
         // Payment Rates (Flexible based on frequency)
-        rateType: text2("rateType", { enum: ["fixed_monthly", "hourly", "daily", "milestone_only"] }).default("fixed_monthly").notNull(),
+        rateType: text2("rateType", { enum: ["fixed_monthly", "hourly", "milestone_only"] }).default("fixed_monthly").notNull(),
         rateAmount: text2("rateAmount"),
         // e.g. Monthly Salary or Hourly Rate
         // Bank Details (Encrypted/JSON in real app, but text here for simplicity as per existing patterns)
@@ -455,13 +455,13 @@ __export(schema_exports, {
   contractorInvoices: () => contractorInvoices,
   contractorMilestones: () => contractorMilestones,
   contractors: () => contractors,
-  copilotConversations: () => copilotConversations2,
+  copilotConversations: () => copilotConversations,
   copilotFileAnalyses: () => copilotFileAnalyses,
-  copilotMessages: () => copilotMessages2,
+  copilotMessages: () => copilotMessages,
   copilotMetrics: () => copilotMetrics,
-  copilotPredictions: () => copilotPredictions2,
-  copilotShortcuts: () => copilotShortcuts2,
-  copilotUserConfigs: () => copilotUserConfigs2,
+  copilotPredictions: () => copilotPredictions,
+  copilotShortcuts: () => copilotShortcuts,
+  copilotUserConfigs: () => copilotUserConfigs,
   countriesConfig: () => countriesConfig,
   countryGuideChapters: () => countryGuideChapters,
   countrySocialInsuranceItems: () => countrySocialInsuranceItems,
@@ -718,10 +718,11 @@ var init_schema = __esm({
       {
         id: integer3("id").primaryKey({ autoIncrement: true }),
         customerId: integer3("customerId").notNull(),
-        pricingType: text3("pricingType", { enum: ["global_discount", "country_specific"] }).notNull(),
+        pricingType: text3("pricingType", { enum: ["global_discount", "country_specific", "client_aor_fixed"] }).notNull(),
         // For global_discount: discount percentage (e.g. 10 = 10% off standard price)
         globalDiscountPercent: text3("globalDiscountPercent"),
         // For country_specific: fixed price per employee per month
+        // For client_aor_fixed: fixed price for AOR globally (ignores countryCode)
         countryCode: text3("countryCode", { length: 3 }),
         serviceType: text3("serviceType", { enum: ["eor", "visa_eor"] }),
         fixedPrice: text3("fixedPrice"),
@@ -1092,6 +1093,8 @@ var init_schema = __esm({
           "credit_note",
           "manual"
         ] }).notNull(),
+        // Credit Note Disposition (for invoiceType = 'credit_note')
+        creditNoteDisposition: text3("creditNoteDisposition", { enum: ["to_wallet", "to_bank"] }),
         invoiceMonth: text3("invoiceMonth"),
         // For monthly invoices
         // Invoice aggregates from multiple country-based payroll runs for this customer
@@ -1111,6 +1114,7 @@ var init_schema = __esm({
           "pending_review",
           "sent",
           "paid",
+          "partially_paid",
           "overdue",
           "cancelled",
           "void",
@@ -1361,7 +1365,24 @@ var init_schema = __esm({
           "expired",
           "cancelled"
         ] }).default("pending").notNull(),
+        // Employer-provided fields (filled during invite flow step 2)
+        serviceType: text3("serviceType", { enum: ["eor", "visa_eor", "aor"] }).default("eor"),
+        country: text3("country", { length: 100 }),
+        jobTitle: text3("jobTitle", { length: 255 }),
+        department: text3("department", { length: 100 }),
+        startDate: text3("startDate"),
+        endDate: text3("endDate"),
+        employmentType: text3("employmentType", { length: 50 }),
+        // EOR compensation
+        baseSalary: text3("baseSalary"),
+        salaryCurrency: text3("salaryCurrency", { length: 3 }),
+        // AOR compensation
+        paymentFrequency: text3("paymentFrequency", { length: 50 }),
+        rateAmount: text3("rateAmount"),
+        contractorCurrency: text3("contractorCurrency", { length: 3 }),
+        // Completion links
         employeeId: integer3("employeeId"),
+        contractorId: integer3("contractorId"),
         expiresAt: integer3("expiresAt", { mode: "timestamp" }).notNull(),
         completedAt: integer3("completedAt", { mode: "timestamp" }),
         createdBy: integer3("createdBy"),
@@ -1814,7 +1835,7 @@ var init_schema = __esm({
       "ai_task_executions",
       {
         id: integer3("id").primaryKey({ autoIncrement: true }),
-        taskType: text3("taskType", { enum: ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit"] }).notNull(),
+        taskType: text3("taskType", { enum: ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit", "knowledge_generate_guide", "copilot_chat"] }).notNull(),
         providerPrimary: text3("providerPrimary", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
         providerActual: text3("providerActual", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
         fallbackTriggered: integer3("fallbackTriggered", { mode: "boolean" }).default(false).notNull(),
@@ -2096,8 +2117,10 @@ var init_schema = __esm({
           // Invoice rejected/voided, balance returned (+)
           "manual_adjustment",
           // Admin manual adjustment (+/-)
-          "payout"
+          "payout",
           // Withdrawal/Refund to bank (-)
+          "refund_out"
+          // Alias for payout (Withdrawal)
         ] }).notNull(),
         amount: text3("amount").notNull(),
         // Always positive
@@ -2163,8 +2186,8 @@ var init_schema = __esm({
         balanceAfter: text3("balanceAfter").notNull(),
         // Audit Trail
         referenceId: integer3("referenceId").notNull(),
-        // InvoiceID, PaymentID
-        referenceType: text3("referenceType", { enum: ["invoice", "payment", "manual"] }).notNull(),
+        // InvoiceID, PaymentID, CreditNoteID
+        referenceType: text3("referenceType", { enum: ["invoice", "payment", "credit_note", "manual"] }).notNull(),
         description: text3("description"),
         internalNote: text3("internalNote"),
         createdBy: integer3("createdBy"),
@@ -2586,7 +2609,7 @@ var init_connection = __esm({
 });
 
 // server/services/db/userService.ts
-import { eq as eq2, like, count, desc as desc2 } from "drizzle-orm";
+import { eq, like, count, desc } from "drizzle-orm";
 async function upsertUser(user) {
   if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
@@ -2629,25 +2652,25 @@ async function upsertUser(user) {
 async function getUserById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(users).where(eq2(users.id, id)).limit(1);
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function getUserByEmail(email) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(users).where(eq2(users.email, email.toLowerCase().trim())).limit(1);
+  const result = await db.select().from(users).where(eq(users.email, email.toLowerCase().trim())).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function getUserByInviteToken(token) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(users).where(eq2(users.inviteToken, token)).limit(1);
+  const result = await db.select().from(users).where(eq(users.inviteToken, token)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function getUserByResetToken(token) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(users).where(eq2(users.resetToken, token)).limit(1);
+  const result = await db.select().from(users).where(eq(users.resetToken, token)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function listUsers(params = {}) {
@@ -2657,7 +2680,7 @@ async function listUsers(params = {}) {
   const offset = (page - 1) * pageSize;
   const where = search ? like(users.name, `%${search}%`) : void 0;
   const [data, totalResult] = await Promise.all([
-    db.select().from(users).where(where).limit(pageSize).offset(offset).orderBy(desc2(users.createdAt)),
+    db.select().from(users).where(where).limit(pageSize).offset(offset).orderBy(desc(users.createdAt)),
     db.select({ count: count() }).from(users).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -2665,7 +2688,7 @@ async function listUsers(params = {}) {
 async function updateUser(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(users).set(data).where(eq2(users.id, id));
+  await db.update(users).set(data).where(eq(users.id, id));
 }
 var init_userService = __esm({
   "server/services/db/userService.ts"() {
@@ -2676,7 +2699,7 @@ var init_userService = __esm({
 });
 
 // server/services/db/customerService.ts
-import { eq as eq3, like as like2, count as count2, desc as desc3, and as and2, getTableColumns } from "drizzle-orm";
+import { eq as eq2, like as like2, count as count2, desc as desc2, and, getTableColumns } from "drizzle-orm";
 async function createCustomer(data) {
   const db = await getDb();
   if (!db) return [];
@@ -2685,7 +2708,7 @@ async function createCustomer(data) {
 async function getCustomerById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(customers).where(eq3(customers.id, id)).limit(1);
+  const result = await db.select().from(customers).where(eq2(customers.id, id)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function listCustomers(params = {}) {
@@ -2695,10 +2718,10 @@ async function listCustomers(params = {}) {
   const offset = (page - 1) * pageSize;
   const conditions = [];
   if (search) conditions.push(like2(customers.companyName, `%${search}%`));
-  if (status) conditions.push(eq3(customers.status, status));
-  const where = conditions.length > 0 ? and2(...conditions) : void 0;
+  if (status) conditions.push(eq2(customers.status, status));
+  const where = conditions.length > 0 ? and(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
-    db.select().from(customers).where(where).limit(pageSize).offset(offset).orderBy(desc3(customers.createdAt)),
+    db.select().from(customers).where(where).limit(pageSize).offset(offset).orderBy(desc2(customers.createdAt)),
     db.select({ count: count2() }).from(customers).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -2706,12 +2729,12 @@ async function listCustomers(params = {}) {
 async function updateCustomer(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(customers).set(data).where(eq3(customers.id, id));
+  await db.update(customers).set(data).where(eq2(customers.id, id));
 }
 async function getCustomerByEmail(email) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(customers).where(eq3(customers.primaryContactEmail, email)).limit(1);
+  const result = await db.select().from(customers).where(eq2(customers.primaryContactEmail, email)).limit(1);
   return result[0];
 }
 async function listCustomerPricing(customerId) {
@@ -2720,7 +2743,7 @@ async function listCustomerPricing(customerId) {
   return await db.select({
     ...getTableColumns(customerPricing),
     quotationNumber: quotations.quotationNumber
-  }).from(customerPricing).leftJoin(quotations, eq3(customerPricing.sourceQuotationId, quotations.id)).where(eq3(customerPricing.customerId, customerId));
+  }).from(customerPricing).leftJoin(quotations, eq2(customerPricing.sourceQuotationId, quotations.id)).where(eq2(customerPricing.customerId, customerId));
 }
 async function createCustomerPricing(data) {
   const db = await getDb();
@@ -2730,12 +2753,12 @@ async function createCustomerPricing(data) {
 async function updateCustomerPricing(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(customerPricing).set(data).where(eq3(customerPricing.id, id));
+  await db.update(customerPricing).set(data).where(eq2(customerPricing.id, id));
 }
 async function deleteCustomerPricing(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(customerPricing).where(eq3(customerPricing.id, id));
+  await db.delete(customerPricing).where(eq2(customerPricing.id, id));
 }
 async function batchCreateCustomerPricing(data) {
   const db = await getDb();
@@ -2745,7 +2768,7 @@ async function batchCreateCustomerPricing(data) {
 async function listCustomerContacts(customerId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(customerContacts).where(eq3(customerContacts.customerId, customerId));
+  return await db.select().from(customerContacts).where(eq2(customerContacts.customerId, customerId));
 }
 async function createCustomerContact(data) {
   const db = await getDb();
@@ -2755,17 +2778,17 @@ async function createCustomerContact(data) {
 async function updateCustomerContact(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(customerContacts).set(data).where(eq3(customerContacts.id, id));
+  await db.update(customerContacts).set(data).where(eq2(customerContacts.id, id));
 }
 async function deleteCustomerContact(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(customerContacts).where(eq3(customerContacts.id, id));
+  await db.delete(customerContacts).where(eq2(customerContacts.id, id));
 }
 async function listCustomerContracts(customerId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(customerContracts).where(eq3(customerContracts.customerId, customerId));
+  return await db.select().from(customerContracts).where(eq2(customerContracts.customerId, customerId));
 }
 async function createCustomerContract(data) {
   const db = await getDb();
@@ -2775,12 +2798,12 @@ async function createCustomerContract(data) {
 async function updateCustomerContract(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(customerContracts).set(data).where(eq3(customerContracts.id, id));
+  await db.update(customerContracts).set(data).where(eq2(customerContracts.id, id));
 }
 async function deleteCustomerContract(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(customerContracts).where(eq3(customerContracts.id, id));
+  await db.delete(customerContracts).where(eq2(customerContracts.id, id));
 }
 async function listCustomerLeavePolicies(customerId, countryCode) {
   const db = await getDb();
@@ -2789,8 +2812,8 @@ async function listCustomerLeavePolicies(customerId, countryCode) {
     ...getTableColumns(customerLeavePolicies),
     leaveTypeName: leaveTypes.leaveTypeName,
     isPaid: leaveTypes.isPaid
-  }).from(customerLeavePolicies).leftJoin(leaveTypes, eq3(customerLeavePolicies.leaveTypeId, leaveTypes.id)).where(
-    countryCode ? and2(eq3(customerLeavePolicies.customerId, customerId), eq3(customerLeavePolicies.countryCode, countryCode)) : eq3(customerLeavePolicies.customerId, customerId)
+  }).from(customerLeavePolicies).leftJoin(leaveTypes, eq2(customerLeavePolicies.leaveTypeId, leaveTypes.id)).where(
+    countryCode ? and(eq2(customerLeavePolicies.customerId, customerId), eq2(customerLeavePolicies.countryCode, countryCode)) : eq2(customerLeavePolicies.customerId, customerId)
   );
   return await query;
 }
@@ -2802,24 +2825,24 @@ async function createCustomerLeavePolicy(data) {
 async function updateCustomerLeavePolicy(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(customerLeavePolicies).set(data).where(eq3(customerLeavePolicies.id, id));
+  await db.update(customerLeavePolicies).set(data).where(eq2(customerLeavePolicies.id, id));
 }
 async function deleteCustomerLeavePolicy(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(customerLeavePolicies).where(eq3(customerLeavePolicies.id, id));
+  await db.delete(customerLeavePolicies).where(eq2(customerLeavePolicies.id, id));
 }
 async function getCustomerLeavePoliciesForCountry(customerId, countryCode) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(customerLeavePolicies).where(and2(eq3(customerLeavePolicies.customerId, customerId), eq3(customerLeavePolicies.countryCode, countryCode)));
+  return await db.select().from(customerLeavePolicies).where(and(eq2(customerLeavePolicies.customerId, customerId), eq2(customerLeavePolicies.countryCode, countryCode)));
 }
 async function syncLeaveBalancesOnPolicyUpdate(customerId, countryCode) {
   const db = await getDb();
   if (!db) return { updatedCount: 0, errorCount: 0 };
-  const policies = await db.select().from(customerLeavePolicies).where(and2(eq3(customerLeavePolicies.customerId, customerId), eq3(customerLeavePolicies.countryCode, countryCode)));
+  const policies = await db.select().from(customerLeavePolicies).where(and(eq2(customerLeavePolicies.customerId, customerId), eq2(customerLeavePolicies.countryCode, countryCode)));
   if (policies.length === 0) return { updatedCount: 0, errorCount: 0 };
-  const activeEmployees = await db.select().from(employees).where(and2(eq3(employees.customerId, customerId), eq3(employees.country, countryCode), eq3(employees.status, "active")));
+  const activeEmployees = await db.select().from(employees).where(and(eq2(employees.customerId, customerId), eq2(employees.country, countryCode), eq2(employees.status, "active")));
   let updatedCount = 0;
   let errorCount = 0;
   for (const employee of activeEmployees) {
@@ -2843,7 +2866,7 @@ var init_customerService = __esm({
 });
 
 // server/services/db/employeeService.ts
-import { eq as eq4, like as like3, count as count3, desc as desc4, and as and3, or, gte, lte, ne } from "drizzle-orm";
+import { eq as eq3, like as like3, count as count3, desc as desc3, and as and2, or, gte, lte, ne, inArray } from "drizzle-orm";
 async function createEmployee(data) {
   const db = await getDb();
   if (!db) return [];
@@ -2852,7 +2875,7 @@ async function createEmployee(data) {
 async function getEmployeeById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(employees).where(eq4(employees.id, id)).limit(1);
+  const result = await db.select().from(employees).where(eq3(employees.id, id)).limit(1);
   return result.length > 0 ? result[0] : void 0;
 }
 async function listEmployees(params = {}) {
@@ -2868,11 +2891,11 @@ async function listEmployees(params = {}) {
       like3(employees.email, `%${search}%`)
     ));
   }
-  if (customerId) conditions.push(eq4(employees.customerId, customerId));
-  if (status) conditions.push(eq4(employees.status, status));
-  if (country) conditions.push(eq4(employees.country, country));
-  if (serviceType) conditions.push(eq4(employees.serviceType, serviceType));
-  const where = conditions.length > 0 ? and3(...conditions) : void 0;
+  if (customerId) conditions.push(eq3(employees.customerId, customerId));
+  if (status) conditions.push(eq3(employees.status, status));
+  if (country) conditions.push(eq3(employees.country, country));
+  if (serviceType) conditions.push(eq3(employees.serviceType, serviceType));
+  const where = conditions.length > 0 ? and2(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
     db.select({
       id: employees.id,
@@ -2887,7 +2910,7 @@ async function listEmployees(params = {}) {
       customerId: employees.customerId,
       customerName: customers.companyName,
       clientCode: customers.clientCode
-    }).from(employees).leftJoin(customers, eq4(employees.customerId, customers.id)).where(where).limit(pageSize).offset(offset).orderBy(desc4(employees.createdAt)),
+    }).from(employees).leftJoin(customers, eq3(employees.customerId, customers.id)).where(where).limit(pageSize).offset(offset).orderBy(desc3(employees.createdAt)),
     db.select({ count: count3() }).from(employees).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -2895,7 +2918,7 @@ async function listEmployees(params = {}) {
 async function updateEmployee(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(employees).set(data).where(eq4(employees.id, id));
+  await db.update(employees).set(data).where(eq3(employees.id, id));
 }
 async function getEmployeeCountByStatus() {
   const db = await getDb();
@@ -2910,9 +2933,9 @@ async function getEmployeeCountByCountry() {
 async function getActiveEmployeesForPayroll(countryCode) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(employees).where(and3(
-    eq4(employees.country, countryCode),
-    eq4(employees.status, "active"),
+  return await db.select().from(employees).where(and2(
+    eq3(employees.country, countryCode),
+    eq3(employees.status, "active"),
     ne(employees.serviceType, "aor")
     // Exclude AOR
   ));
@@ -2920,7 +2943,7 @@ async function getActiveEmployeesForPayroll(countryCode) {
 async function listEmployeeDocuments(employeeId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(employeeDocuments).where(eq4(employeeDocuments.employeeId, employeeId));
+  return await db.select().from(employeeDocuments).where(eq3(employeeDocuments.employeeId, employeeId));
 }
 async function createEmployeeDocument(data) {
   const db = await getDb();
@@ -2930,18 +2953,18 @@ async function createEmployeeDocument(data) {
 async function deleteEmployeeDocument(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(employeeDocuments).where(eq4(employeeDocuments.id, id));
+  await db.delete(employeeDocuments).where(eq3(employeeDocuments.id, id));
 }
 async function getEmployeeDocumentById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(employeeDocuments).where(eq4(employeeDocuments.id, id)).limit(1);
+  const result = await db.select().from(employeeDocuments).where(eq3(employeeDocuments.id, id)).limit(1);
   return result[0];
 }
 async function listEmployeeContracts(employeeId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(employeeContracts).where(eq4(employeeContracts.employeeId, employeeId));
+  return await db.select().from(employeeContracts).where(eq3(employeeContracts.employeeId, employeeId));
 }
 async function createEmployeeContractRecord(data) {
   const db = await getDb();
@@ -2951,26 +2974,26 @@ async function createEmployeeContractRecord(data) {
 async function updateEmployeeContract(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(employeeContracts).set(data).where(eq4(employeeContracts.id, id));
+  await db.update(employeeContracts).set(data).where(eq3(employeeContracts.id, id));
 }
 async function deleteEmployeeContract(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(employeeContracts).where(eq4(employeeContracts.id, id));
+  await db.delete(employeeContracts).where(eq3(employeeContracts.id, id));
 }
 async function getContractSignedEmployeesReadyForActivation(dateStr) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(employees).where(and3(
-    eq4(employees.status, "contract_signed"),
+  return await db.select().from(employees).where(and2(
+    eq3(employees.status, "contract_signed"),
     lte(employees.startDate, dateStr)
   ));
 }
 async function getCountriesWithActiveEmployees() {
   const db = await getDb();
   if (!db) return [];
-  const result = await db.select({ country: employees.country }).from(employees).where(and3(
-    eq4(employees.status, "active"),
+  const result = await db.select({ country: employees.country }).from(employees).where(and2(
+    eq3(employees.status, "active"),
     ne(employees.serviceType, "aor")
     // Exclude AOR
   )).groupBy(employees.country);
@@ -2979,9 +3002,9 @@ async function getCountriesWithActiveEmployees() {
 async function getEmployeesForPayrollMonth(country, monthStart, monthEnd) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(employees).where(and3(
-    eq4(employees.country, country),
-    eq4(employees.status, "active"),
+  return await db.select().from(employees).where(and2(
+    eq3(employees.country, country),
+    eq3(employees.status, "active"),
     ne(employees.serviceType, "aor")
     // Exclude AOR
   ));
@@ -2989,9 +3012,21 @@ async function getEmployeesForPayrollMonth(country, monthStart, monthEnd) {
 async function listLeaveBalances(employeeId, year) {
   const db = await getDb();
   if (!db) return [];
-  const conditions = [eq4(leaveBalances.employeeId, employeeId)];
-  if (year) conditions.push(eq4(leaveBalances.year, year));
-  return await db.select().from(leaveBalances).where(and3(...conditions));
+  const conditions = [eq3(leaveBalances.employeeId, employeeId)];
+  if (year) conditions.push(eq3(leaveBalances.year, year));
+  return await db.select({
+    id: leaveBalances.id,
+    employeeId: leaveBalances.employeeId,
+    leaveTypeId: leaveBalances.leaveTypeId,
+    year: leaveBalances.year,
+    totalEntitlement: leaveBalances.totalEntitlement,
+    used: leaveBalances.used,
+    remaining: leaveBalances.remaining,
+    expiryDate: leaveBalances.expiryDate,
+    createdAt: leaveBalances.createdAt,
+    updatedAt: leaveBalances.updatedAt,
+    leaveTypeName: leaveTypes.leaveTypeName
+  }).from(leaveBalances).leftJoin(leaveTypes, eq3(leaveBalances.leaveTypeId, leaveTypes.id)).where(and2(...conditions));
 }
 async function createLeaveBalance(data) {
   const db = await getDb();
@@ -3001,15 +3036,73 @@ async function createLeaveBalance(data) {
 async function updateLeaveBalance(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(leaveBalances).set(data).where(eq4(leaveBalances.id, id));
+  await db.update(leaveBalances).set(data).where(eq3(leaveBalances.id, id));
 }
 async function deleteLeaveBalance(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(leaveBalances).where(eq4(leaveBalances.id, id));
+  await db.delete(leaveBalances).where(eq3(leaveBalances.id, id));
 }
 async function initializeLeaveBalancesForEmployee(employeeId) {
-  return { added: 0 };
+  const db = await getDb();
+  if (!db) return { added: 0 };
+  const employee = await getEmployeeById(employeeId);
+  if (!employee) return { added: 0 };
+  const year = (/* @__PURE__ */ new Date()).getFullYear();
+  const { leaveTypes: leaveTypes2, customerLeavePolicies: customerLeavePolicies2, leaveBalances: leaveBalances3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+  const countryLeaveTypes = await db.select().from(leaveTypes2).where(eq3(leaveTypes2.countryCode, employee.country));
+  if (countryLeaveTypes.length === 0) return { added: 0 };
+  const customerPolicies = await db.select().from(customerLeavePolicies2).where(and2(
+    eq3(customerLeavePolicies2.customerId, employee.customerId),
+    eq3(customerLeavePolicies2.countryCode, employee.country)
+  ));
+  const policyMap = new Map(
+    customerPolicies.map((p) => [p.leaveTypeId, p])
+  );
+  const existingBalances = await db.select().from(leaveBalances3).where(and2(
+    eq3(leaveBalances3.employeeId, employeeId),
+    eq3(leaveBalances3.year, year)
+  ));
+  const existingTypeIds = new Set(existingBalances.map((b) => b.leaveTypeId));
+  let addedCount = 0;
+  for (const lt3 of countryLeaveTypes) {
+    if (existingTypeIds.has(lt3.id)) continue;
+    const policy = policyMap.get(lt3.id);
+    const totalEntitlement = policy ? policy.annualEntitlement : lt3.annualEntitlement || 0;
+    let expiryDate = null;
+    const rule = policy?.expiryRule || "year_end";
+    if (rule === "year_end") {
+      expiryDate = `${year}-12-31`;
+    } else if (rule === "no_expiry") {
+      expiryDate = null;
+    }
+    const previousYear = year - 1;
+    const previousBalance = await db.select().from(leaveBalances3).where(and2(
+      eq3(leaveBalances3.employeeId, employeeId),
+      eq3(leaveBalances3.leaveTypeId, lt3.id),
+      eq3(leaveBalances3.year, previousYear)
+    )).limit(1);
+    let carryOverAmount = 0;
+    if (previousBalance.length > 0) {
+      const prevRemaining = previousBalance[0].remaining;
+      const maxCarryOver = policy?.carryOverDays ?? 0;
+      if (prevRemaining > 0 && maxCarryOver > 0) {
+        carryOverAmount = Math.min(prevRemaining, maxCarryOver);
+      }
+    }
+    const finalEntitlement = (totalEntitlement ?? 0) + carryOverAmount;
+    await db.insert(leaveBalances3).values({
+      employeeId,
+      leaveTypeId: lt3.id,
+      year,
+      totalEntitlement: finalEntitlement,
+      used: 0,
+      remaining: finalEntitlement,
+      expiryDate
+    });
+    addedCount++;
+  }
+  return { added: addedCount };
 }
 async function createLeaveRecord(data) {
   const db = await getDb();
@@ -3022,16 +3115,36 @@ async function listLeaveRecords(params = {}) {
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
   const conditions = [];
-  if (employeeId) conditions.push(eq4(leaveRecords.employeeId, employeeId));
-  if (status) conditions.push(eq4(leaveRecords.status, status));
+  if (employeeId) conditions.push(eq3(leaveRecords.employeeId, employeeId));
+  if (status) conditions.push(eq3(leaveRecords.status, status));
   if (month) {
     const startOfMonth = `${month}-01`;
     const endOfMonth = `${month}-31`;
-    conditions.push(and3(gte(leaveRecords.startDate, startOfMonth), lte(leaveRecords.startDate, endOfMonth)));
+    conditions.push(and2(gte(leaveRecords.startDate, startOfMonth), lte(leaveRecords.startDate, endOfMonth)));
   }
-  const where = conditions.length > 0 ? and3(...conditions) : void 0;
+  const where = conditions.length > 0 ? and2(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
-    db.select().from(leaveRecords).where(where).limit(pageSize).offset(offset).orderBy(desc4(leaveRecords.createdAt)),
+    db.select({
+      id: leaveRecords.id,
+      employeeId: leaveRecords.employeeId,
+      leaveTypeId: leaveRecords.leaveTypeId,
+      startDate: leaveRecords.startDate,
+      endDate: leaveRecords.endDate,
+      days: leaveRecords.days,
+      reason: leaveRecords.reason,
+      status: leaveRecords.status,
+      createdAt: leaveRecords.createdAt,
+      updatedAt: leaveRecords.updatedAt,
+      submittedBy: leaveRecords.submittedBy,
+      clientApprovedBy: leaveRecords.clientApprovedBy,
+      clientApprovedAt: leaveRecords.clientApprovedAt,
+      clientRejectionReason: leaveRecords.clientRejectionReason,
+      adminApprovedBy: leaveRecords.adminApprovedBy,
+      adminApprovedAt: leaveRecords.adminApprovedAt,
+      adminRejectionReason: leaveRecords.adminRejectionReason,
+      // Join fields
+      leaveTypeName: leaveTypes.leaveTypeName
+    }).from(leaveRecords).leftJoin(leaveTypes, eq3(leaveRecords.leaveTypeId, leaveTypes.id)).where(where).limit(pageSize).offset(offset).orderBy(desc3(leaveRecords.createdAt)),
     db.select({ count: count3() }).from(leaveRecords).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -3039,18 +3152,18 @@ async function listLeaveRecords(params = {}) {
 async function updateLeaveRecord(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(leaveRecords).set(data).where(eq4(leaveRecords.id, id));
+  await db.update(leaveRecords).set(data).where(eq3(leaveRecords.id, id));
 }
 async function getLeaveRecordById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(leaveRecords).where(eq4(leaveRecords.id, id)).limit(1);
+  const result = await db.select().from(leaveRecords).where(eq3(leaveRecords.id, id)).limit(1);
   return result[0];
 }
 async function deleteLeaveRecord(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(leaveRecords).where(eq4(leaveRecords.id, id));
+  await db.delete(leaveRecords).where(eq3(leaveRecords.id, id));
 }
 async function lockSubmittedLeaveRecords(monthStr, countryCode) {
   const db = await getDb();
@@ -3061,29 +3174,62 @@ async function lockSubmittedLeaveRecords(monthStr, countryCode) {
   const conditions = [
     gte(leaveRecords.startDate, startOfMonth),
     lte(leaveRecords.startDate, endOfMonth),
-    eq4(leaveRecords.status, "admin_approved")
+    eq3(leaveRecords.status, "admin_approved")
   ];
   if (countryCode) {
-    const empRows = await db.select({ id: employees.id }).from(employees).where(eq4(employees.country, countryCode));
+    const empRows = await db.select({ id: employees.id }).from(employees).where(eq3(employees.country, countryCode));
     const empIds = empRows.map((e) => e.id);
     if (empIds.length === 0) return 0;
-    conditions.push(or(...empIds.map((id) => eq4(leaveRecords.employeeId, id))));
+    conditions.push(or(...empIds.map((id) => eq3(leaveRecords.employeeId, id))));
   }
-  const result = await db.update(leaveRecords).set({ status: "locked" }).where(and3(...conditions));
+  const result = await db.update(leaveRecords).set({ status: "locked" }).where(and2(...conditions));
   return result.changes || 0;
 }
 async function getActiveLeaveRecordsForDate(employeeId, date) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(leaveRecords).where(and3(
-    eq4(leaveRecords.employeeId, employeeId),
+  return await db.select().from(leaveRecords).where(and2(
+    eq3(leaveRecords.employeeId, employeeId),
     lte(leaveRecords.startDate, date),
     gte(leaveRecords.endDate, date),
-    eq4(leaveRecords.status, "approved")
+    eq3(leaveRecords.status, "approved")
   ));
 }
-async function getOnLeaveEmployeesWithExpiredLeave() {
-  return [];
+async function getAllActiveLeaveRecordsForDate(dateStr) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(leaveRecords).where(and2(
+    lte(leaveRecords.startDate, dateStr),
+    gte(leaveRecords.endDate, dateStr),
+    or(
+      eq3(leaveRecords.status, "approved"),
+      eq3(leaveRecords.status, "admin_approved"),
+      eq3(leaveRecords.status, "locked")
+    )
+  ));
+}
+async function getOnLeaveEmployeesWithExpiredLeave(todayStr) {
+  const db = await getDb();
+  if (!db) return [];
+  const dateStr = todayStr || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+  const onLeaveEmps = await db.select({ id: employees.id, employeeCode: employees.employeeCode }).from(employees).where(eq3(employees.status, "on_leave"));
+  const result = [];
+  for (const emp of onLeaveEmps) {
+    const activeLeaves = await db.select().from(leaveRecords).where(and2(
+      eq3(leaveRecords.employeeId, emp.id),
+      lte(leaveRecords.startDate, dateStr),
+      gte(leaveRecords.endDate, dateStr),
+      or(
+        eq3(leaveRecords.status, "approved"),
+        eq3(leaveRecords.status, "admin_approved"),
+        eq3(leaveRecords.status, "locked")
+      )
+    )).limit(1);
+    if (activeLeaves.length === 0) {
+      result.push(emp);
+    }
+  }
+  return result;
 }
 async function getSubmittedUnpaidLeaveForPayroll(countryCodeOrEmployeeId, monthStr, statuses = ["admin_approved"]) {
   const db = await getDb();
@@ -3092,24 +3238,24 @@ async function getSubmittedUnpaidLeaveForPayroll(countryCodeOrEmployeeId, monthS
   const monthPrefix = monthStr.length === 7 ? monthStr : monthStr.substring(0, 7);
   const startOfMonth = `${monthPrefix}-01`;
   const endOfMonth = `${monthPrefix}-31`;
-  const unpaidTypes = await db.select({ id: leaveTypes2.id }).from(leaveTypes2).where(eq4(leaveTypes2.isPaid, false));
+  const unpaidTypes = await db.select({ id: leaveTypes2.id }).from(leaveTypes2).where(eq3(leaveTypes2.isPaid, false));
   const unpaidTypeIds = unpaidTypes.map((t4) => t4.id);
   if (unpaidTypeIds.length === 0) return [];
   if (typeof countryCodeOrEmployeeId === "string") {
-    const empRows = await db.select({ id: employees.id }).from(employees).where(eq4(employees.country, countryCodeOrEmployeeId));
+    const empRows = await db.select({ id: employees.id }).from(employees).where(eq3(employees.country, countryCodeOrEmployeeId));
     const empIds = empRows.map((e) => e.id);
     if (empIds.length === 0) return [];
-    return await db.select().from(leaveRecords).where(and3(
-      or(...empIds.map((id) => eq4(leaveRecords.employeeId, id))),
-      or(...unpaidTypeIds.map((id) => eq4(leaveRecords.leaveTypeId, id))),
+    return await db.select().from(leaveRecords).where(and2(
+      or(...empIds.map((id) => eq3(leaveRecords.employeeId, id))),
+      or(...unpaidTypeIds.map((id) => eq3(leaveRecords.leaveTypeId, id))),
       gte(leaveRecords.startDate, startOfMonth),
       lte(leaveRecords.startDate, endOfMonth),
       inArray(leaveRecords.status, statuses)
     ));
   } else {
-    return await db.select().from(leaveRecords).where(and3(
-      eq4(leaveRecords.employeeId, countryCodeOrEmployeeId),
-      or(...unpaidTypeIds.map((id) => eq4(leaveRecords.leaveTypeId, id))),
+    return await db.select().from(leaveRecords).where(and2(
+      eq3(leaveRecords.employeeId, countryCodeOrEmployeeId),
+      or(...unpaidTypeIds.map((id) => eq3(leaveRecords.leaveTypeId, id))),
       gte(leaveRecords.startDate, startOfMonth),
       lte(leaveRecords.startDate, endOfMonth),
       inArray(leaveRecords.status, statuses)
@@ -3125,27 +3271,38 @@ var init_employeeService = __esm({
 });
 
 // server/services/db/financeService.ts
-import { eq as eq5, like as like4, count as count4, desc as desc5, and as and4, inArray as inArray2 } from "drizzle-orm";
+import { eq as eq4, like as like4, count as count4, desc as desc4, and as and3, inArray as inArray2 } from "drizzle-orm";
 async function createInvoice(data) {
   const db = await getDb();
   if (!db) return [];
-  return await db.insert(invoices).values(data);
+  return await db.insert(invoices).values(data).returning({ id: invoices.id });
 }
 async function getInvoiceById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(invoices).where(eq5(invoices.id, id)).limit(1);
+  const result = await db.select().from(invoices).where(eq4(invoices.id, id)).limit(1);
+  return result[0];
+}
+async function getInvoiceByNumber(invoiceNumber) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const result = await db.select().from(invoices).where(eq4(invoices.invoiceNumber, invoiceNumber)).limit(1);
   return result[0];
 }
 async function listInvoices(filters = {}, limit = 50, offset = 0) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const conditions = [];
-  if (filters.customerId) conditions.push(eq5(invoices.customerId, filters.customerId));
-  if (filters.status) conditions.push(eq5(invoices.status, filters.status));
-  if (filters.invoiceType) conditions.push(eq5(invoices.invoiceType, filters.invoiceType));
-  if (filters.invoiceMonth) conditions.push(eq5(invoices.invoiceMonth, filters.invoiceMonth));
-  const where = conditions.length > 0 ? and4(...conditions) : void 0;
+  if (filters.customerId) conditions.push(eq4(invoices.customerId, filters.customerId));
+  if (filters.status) conditions.push(eq4(invoices.status, filters.status));
+  if (filters.invoiceType) conditions.push(eq4(invoices.invoiceType, filters.invoiceType));
+  if (filters.invoiceMonth) conditions.push(eq4(invoices.invoiceMonth, filters.invoiceMonth));
+  if (filters.excludeCreditNotes) {
+    const { ne: ne4, and: and50 } = await import("drizzle-orm");
+    conditions.push(ne4(invoices.invoiceType, "credit_note"));
+    conditions.push(ne4(invoices.invoiceType, "deposit_refund"));
+  }
+  const where = conditions.length > 0 ? and3(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
     db.select({
       id: invoices.id,
@@ -3160,24 +3317,52 @@ async function listInvoices(filters = {}, limit = 50, offset = 0) {
       total: invoices.total,
       amountDue: invoices.amountDue,
       currency: invoices.currency,
-      createdAt: invoices.createdAt
-    }).from(invoices).leftJoin(customers, eq5(invoices.customerId, customers.id)).where(where).limit(limit).offset(offset).orderBy(desc5(invoices.createdAt)),
+      createdAt: invoices.createdAt,
+      creditNoteDisposition: invoices.creditNoteDisposition,
+      relatedInvoiceId: invoices.relatedInvoiceId
+    }).from(invoices).leftJoin(customers, eq4(invoices.customerId, customers.id)).where(where).limit(limit).offset(offset).orderBy(desc4(invoices.createdAt)),
     db.select({ count: count4() }).from(invoices).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
 }
 async function getRelatedInvoices(invoiceId) {
-  return [];
+  const db = await getDb();
+  if (!db) return [];
+  const children = await db.select({
+    id: invoices.id,
+    invoiceNumber: invoices.invoiceNumber,
+    invoiceType: invoices.invoiceType,
+    total: invoices.total,
+    status: invoices.status,
+    currency: invoices.currency,
+    createdAt: invoices.createdAt,
+    relatedInvoiceId: invoices.relatedInvoiceId
+  }).from(invoices).where(eq4(invoices.relatedInvoiceId, invoiceId));
+  const currentInvoice = await db.select({ relatedInvoiceId: invoices.relatedInvoiceId }).from(invoices).where(eq4(invoices.id, invoiceId)).limit(1);
+  let parent = [];
+  if (currentInvoice[0]?.relatedInvoiceId) {
+    parent = await db.select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      invoiceType: invoices.invoiceType,
+      total: invoices.total,
+      status: invoices.status,
+      currency: invoices.currency,
+      createdAt: invoices.createdAt,
+      relatedInvoiceId: invoices.relatedInvoiceId
+    }).from(invoices).where(eq4(invoices.id, currentInvoice[0].relatedInvoiceId));
+  }
+  return [...parent, ...children];
 }
 async function updateInvoice(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(invoices).set(data).where(eq5(invoices.id, id));
+  await db.update(invoices).set(data).where(eq4(invoices.id, id));
 }
 async function deleteInvoice(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(invoices).where(eq5(invoices.id, id));
+  await db.delete(invoices).where(eq4(invoices.id, id));
 }
 async function createInvoiceItem(data) {
   const db = await getDb();
@@ -3187,17 +3372,17 @@ async function createInvoiceItem(data) {
 async function listInvoiceItemsByInvoice(invoiceId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(invoiceItems).where(eq5(invoiceItems.invoiceId, invoiceId));
+  return await db.select().from(invoiceItems).where(eq4(invoiceItems.invoiceId, invoiceId));
 }
 async function updateInvoiceItem(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(invoiceItems).set(data).where(eq5(invoiceItems.id, id));
+  await db.update(invoiceItems).set(data).where(eq4(invoiceItems.id, id));
 }
 async function deleteInvoiceItem(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(invoiceItems).where(eq5(invoiceItems.id, id));
+  await db.delete(invoiceItems).where(eq4(invoiceItems.id, id));
 }
 async function getInvoiceProfitAnalysis(invoiceId) {
   return null;
@@ -3210,19 +3395,19 @@ async function createPayrollRun(data) {
 async function getPayrollRunById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(payrollRuns).where(eq5(payrollRuns.id, id)).limit(1);
+  const result = await db.select().from(payrollRuns).where(eq4(payrollRuns.id, id)).limit(1);
   return result[0];
 }
 async function listPayrollRuns(filters = {}, limit = 50, offset = 0) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const conditions = [];
-  if (filters.status) conditions.push(eq5(payrollRuns.status, filters.status));
-  if (filters.countryCode) conditions.push(eq5(payrollRuns.countryCode, filters.countryCode));
-  if (filters.payrollMonth) conditions.push(eq5(payrollRuns.payrollMonth, filters.payrollMonth));
-  const whereClause = conditions.length > 0 ? and4(...conditions) : void 0;
+  if (filters.status) conditions.push(eq4(payrollRuns.status, filters.status));
+  if (filters.countryCode) conditions.push(eq4(payrollRuns.countryCode, filters.countryCode));
+  if (filters.payrollMonth) conditions.push(eq4(payrollRuns.payrollMonth, filters.payrollMonth));
+  const whereClause = conditions.length > 0 ? and3(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
-    whereClause ? db.select().from(payrollRuns).where(whereClause).limit(limit).offset(offset).orderBy(desc5(payrollRuns.createdAt)) : db.select().from(payrollRuns).limit(limit).offset(offset).orderBy(desc5(payrollRuns.createdAt)),
+    whereClause ? db.select().from(payrollRuns).where(whereClause).limit(limit).offset(offset).orderBy(desc4(payrollRuns.createdAt)) : db.select().from(payrollRuns).limit(limit).offset(offset).orderBy(desc4(payrollRuns.createdAt)),
     whereClause ? db.select({ count: count4() }).from(payrollRuns).where(whereClause) : db.select({ count: count4() }).from(payrollRuns)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -3230,12 +3415,12 @@ async function listPayrollRuns(filters = {}, limit = 50, offset = 0) {
 async function updatePayrollRun(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(payrollRuns).set(data).where(eq5(payrollRuns.id, id));
+  await db.update(payrollRuns).set(data).where(eq4(payrollRuns.id, id));
 }
 async function findPayrollRunByCountryMonth(country, month) {
   const db = await getDb();
   if (!db) return null;
-  const result = await db.select().from(payrollRuns).where(and4(eq5(payrollRuns.countryCode, country), eq5(payrollRuns.payrollMonth, month))).limit(1);
+  const result = await db.select().from(payrollRuns).where(and3(eq4(payrollRuns.countryCode, country), eq4(payrollRuns.payrollMonth, month))).limit(1);
   return result[0];
 }
 async function createPayrollItem(data) {
@@ -3246,28 +3431,28 @@ async function createPayrollItem(data) {
 async function listPayrollItemsByRun(runId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(payrollItems).where(eq5(payrollItems.payrollRunId, runId));
+  return await db.select().from(payrollItems).where(eq4(payrollItems.payrollRunId, runId));
 }
 async function getPayrollItemById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(payrollItems).where(eq5(payrollItems.id, id)).limit(1);
+  const result = await db.select().from(payrollItems).where(eq4(payrollItems.id, id)).limit(1);
   return result[0];
 }
 async function updatePayrollItem(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(payrollItems).set(data).where(eq5(payrollItems.id, id));
+  await db.update(payrollItems).set(data).where(eq4(payrollItems.id, id));
 }
 async function deletePayrollItem(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(payrollItems).where(eq5(payrollItems.id, id));
+  await db.delete(payrollItems).where(eq4(payrollItems.id, id));
 }
 async function listPayrollItemsByEmployee(employeeId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(payrollItems).where(eq5(payrollItems.employeeId, employeeId));
+  return await db.select().from(payrollItems).where(eq4(payrollItems.employeeId, employeeId));
 }
 async function createAdjustment(data) {
   const db = await getDb();
@@ -3280,14 +3465,14 @@ async function listAdjustments(params = {}) {
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
   const conditions = [];
-  if (customerId) conditions.push(eq5(adjustments.customerId, customerId));
-  if (employeeId) conditions.push(eq5(adjustments.employeeId, employeeId));
-  if (status) conditions.push(eq5(adjustments.status, status));
-  if (adjustmentType) conditions.push(eq5(adjustments.adjustmentType, adjustmentType));
-  if (effectiveMonth) conditions.push(eq5(adjustments.effectiveMonth, effectiveMonth));
-  const where = conditions.length > 0 ? and4(...conditions) : void 0;
+  if (customerId) conditions.push(eq4(adjustments.customerId, customerId));
+  if (employeeId) conditions.push(eq4(adjustments.employeeId, employeeId));
+  if (status) conditions.push(eq4(adjustments.status, status));
+  if (adjustmentType) conditions.push(eq4(adjustments.adjustmentType, adjustmentType));
+  if (effectiveMonth) conditions.push(eq4(adjustments.effectiveMonth, effectiveMonth));
+  const where = conditions.length > 0 ? and3(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
-    db.select().from(adjustments).where(where).limit(pageSize).offset(offset).orderBy(desc5(adjustments.createdAt)),
+    db.select().from(adjustments).where(where).limit(pageSize).offset(offset).orderBy(desc4(adjustments.createdAt)),
     db.select({ count: count4() }).from(adjustments).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -3295,18 +3480,18 @@ async function listAdjustments(params = {}) {
 async function getAdjustmentById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(adjustments).where(eq5(adjustments.id, id)).limit(1);
+  const result = await db.select().from(adjustments).where(eq4(adjustments.id, id)).limit(1);
   return result[0];
 }
 async function updateAdjustment(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(adjustments).set(data).where(eq5(adjustments.id, id));
+  await db.update(adjustments).set(data).where(eq4(adjustments.id, id));
 }
 async function deleteAdjustment(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(adjustments).where(eq5(adjustments.id, id));
+  await db.delete(adjustments).where(eq4(adjustments.id, id));
 }
 async function getSubmittedAdjustmentsForPayroll(countryCodeOrEmployeeId, monthStr, statuses = ["admin_approved"]) {
   const db = await getDb();
@@ -3325,16 +3510,16 @@ async function getSubmittedAdjustmentsForPayroll(countryCodeOrEmployeeId, monthS
       status: adjustments.status,
       effectiveMonth: adjustments.effectiveMonth,
       createdAt: adjustments.createdAt
-    }).from(adjustments).innerJoin(employees2, eq5(adjustments.employeeId, employees2.id)).where(and4(
-      eq5(employees2.country, countryCodeOrEmployeeId),
-      eq5(adjustments.effectiveMonth, monthStr),
+    }).from(adjustments).innerJoin(employees2, eq4(adjustments.employeeId, employees2.id)).where(and3(
+      eq4(employees2.country, countryCodeOrEmployeeId),
+      eq4(adjustments.effectiveMonth, monthStr),
       inArray2(adjustments.status, statuses)
     ));
     return results;
   } else {
-    return await db.select().from(adjustments).where(and4(
-      eq5(adjustments.employeeId, countryCodeOrEmployeeId),
-      eq5(adjustments.effectiveMonth, monthStr),
+    return await db.select().from(adjustments).where(and3(
+      eq4(adjustments.employeeId, countryCodeOrEmployeeId),
+      eq4(adjustments.effectiveMonth, monthStr),
       inArray2(adjustments.status, statuses)
     ));
   }
@@ -3343,17 +3528,17 @@ async function lockSubmittedAdjustments(monthStr, countryCode) {
   const db = await getDb();
   if (!db) return 0;
   const conditions = [
-    eq5(adjustments.effectiveMonth, monthStr),
-    eq5(adjustments.status, "admin_approved")
+    eq4(adjustments.effectiveMonth, monthStr),
+    eq4(adjustments.status, "admin_approved")
   ];
   if (countryCode) {
     const { employees: employees2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-    const empRows = await db.select({ id: employees2.id }).from(employees2).where(eq5(employees2.country, countryCode));
+    const empRows = await db.select({ id: employees2.id }).from(employees2).where(eq4(employees2.country, countryCode));
     const empIds = empRows.map((e) => e.id);
     if (empIds.length === 0) return 0;
     conditions.push(inArray2(adjustments.employeeId, empIds));
   }
-  const result = await db.update(adjustments).set({ status: "locked" }).where(and4(...conditions));
+  const result = await db.update(adjustments).set({ status: "locked" }).where(and3(...conditions));
   return result.changes || 0;
 }
 async function createReimbursement(data) {
@@ -3367,14 +3552,14 @@ async function listReimbursements(params = {}) {
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
   const conditions = [];
-  if (customerId) conditions.push(eq5(reimbursements.customerId, customerId));
-  if (employeeId) conditions.push(eq5(reimbursements.employeeId, employeeId));
-  if (status) conditions.push(eq5(reimbursements.status, status));
-  if (category) conditions.push(eq5(reimbursements.category, category));
-  if (effectiveMonth) conditions.push(eq5(reimbursements.effectiveMonth, effectiveMonth));
-  const where = conditions.length > 0 ? and4(...conditions) : void 0;
+  if (customerId) conditions.push(eq4(reimbursements.customerId, customerId));
+  if (employeeId) conditions.push(eq4(reimbursements.employeeId, employeeId));
+  if (status) conditions.push(eq4(reimbursements.status, status));
+  if (category) conditions.push(eq4(reimbursements.category, category));
+  if (effectiveMonth) conditions.push(eq4(reimbursements.effectiveMonth, effectiveMonth));
+  const where = conditions.length > 0 ? and3(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
-    db.select().from(reimbursements).where(where).limit(pageSize).offset(offset).orderBy(desc5(reimbursements.createdAt)),
+    db.select().from(reimbursements).where(where).limit(pageSize).offset(offset).orderBy(desc4(reimbursements.createdAt)),
     db.select({ count: count4() }).from(reimbursements).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -3382,49 +3567,32 @@ async function listReimbursements(params = {}) {
 async function getReimbursementById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(reimbursements).where(eq5(reimbursements.id, id)).limit(1);
+  const result = await db.select().from(reimbursements).where(eq4(reimbursements.id, id)).limit(1);
   return result[0];
 }
 async function updateReimbursement(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(reimbursements).set(data).where(eq5(reimbursements.id, id));
+  await db.update(reimbursements).set(data).where(eq4(reimbursements.id, id));
 }
 async function deleteReimbursement(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(reimbursements).where(eq5(reimbursements.id, id));
-}
-async function applyCreditNote(data) {
-  const db = await getDb();
-  if (!db) return;
-  await db.insert(creditNoteApplications).values(data);
-}
-async function listCreditNoteApplications() {
-  const db = await getDb();
-  if (!db) return [];
-  return await db.select().from(creditNoteApplications);
-}
-async function listApplicationsForInvoice(invoiceId) {
-  const db = await getDb();
-  if (!db) return [];
-  return await db.select().from(creditNoteApplications).where(eq5(creditNoteApplications.invoiceId, invoiceId));
-}
-async function getCreditNoteRemainingBalance(creditNoteId) {
-  return null;
+  await db.delete(reimbursements).where(eq4(reimbursements.id, id));
 }
 async function hasDepositBeenProcessed(depositInvoiceId) {
   return { processed: false };
 }
 async function createVendor(data) {
   const db = await getDb();
-  if (!db) return;
-  return await db.insert(vendors).values(data);
+  if (!db) return void 0;
+  const result = await db.insert(vendors).values(data).returning({ id: vendors.id });
+  return result[0]?.id;
 }
 async function getVendorById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(vendors).where(eq5(vendors.id, id)).limit(1);
+  const result = await db.select().from(vendors).where(eq4(vendors.id, id)).limit(1);
   return result[0];
 }
 async function listVendors(params = {}) {
@@ -3433,13 +3601,13 @@ async function listVendors(params = {}) {
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
   const conditions = [];
-  if (status) conditions.push(eq5(vendors.status, status));
-  if (country) conditions.push(eq5(vendors.country, country));
-  if (vendorType) conditions.push(eq5(vendors.vendorType, vendorType));
-  if (search) conditions.push(like4(vendors.vendorName, `%${search}%`));
-  const where = conditions.length > 0 ? and4(...conditions) : void 0;
+  if (status) conditions.push(eq4(vendors.status, status));
+  if (country) conditions.push(eq4(vendors.country, country));
+  if (vendorType) conditions.push(eq4(vendors.vendorType, vendorType));
+  if (search) conditions.push(like4(vendors.name, `%${search}%`));
+  const where = conditions.length > 0 ? and3(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
-    db.select().from(vendors).where(where).limit(pageSize).offset(offset).orderBy(desc5(vendors.createdAt)),
+    db.select().from(vendors).where(where).limit(pageSize).offset(offset).orderBy(desc4(vendors.createdAt)),
     db.select({ count: count4() }).from(vendors).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -3447,25 +3615,26 @@ async function listVendors(params = {}) {
 async function updateVendor(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(vendors).set(data).where(eq5(vendors.id, id));
+  await db.update(vendors).set(data).where(eq4(vendors.id, id));
 }
 async function deleteVendor(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(vendors).where(eq5(vendors.id, id));
+  await db.delete(vendors).where(eq4(vendors.id, id));
 }
 async function getVendorProfitAnalysis(vendorId) {
   return null;
 }
 async function createVendorBill(data) {
   const db = await getDb();
-  if (!db) return;
-  return await db.insert(vendorBills).values(data);
+  if (!db) return void 0;
+  const result = await db.insert(vendorBills).values(data).returning({ id: vendorBills.id });
+  return result[0]?.id;
 }
 async function getVendorBillById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(vendorBills).where(eq5(vendorBills.id, id)).limit(1);
+  const result = await db.select().from(vendorBills).where(eq4(vendorBills.id, id)).limit(1);
   return result[0];
 }
 async function listVendorBills(params = {}) {
@@ -3474,14 +3643,14 @@ async function listVendorBills(params = {}) {
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
   const conditions = [];
-  if (vendorId) conditions.push(eq5(vendorBills.vendorId, vendorId));
-  if (status) conditions.push(eq5(vendorBills.status, status));
-  if (category) conditions.push(eq5(vendorBills.category, category));
-  if (billMonth) conditions.push(eq5(vendorBills.billMonth, billMonth));
+  if (vendorId) conditions.push(eq4(vendorBills.vendorId, vendorId));
+  if (status) conditions.push(eq4(vendorBills.status, status));
+  if (category) conditions.push(eq4(vendorBills.category, category));
+  if (billMonth) conditions.push(eq4(vendorBills.billMonth, billMonth));
   if (search) conditions.push(like4(vendorBills.billNumber, `%${search}%`));
-  const where = conditions.length > 0 ? and4(...conditions) : void 0;
+  const where = conditions.length > 0 ? and3(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
-    db.select().from(vendorBills).where(where).limit(pageSize).offset(offset).orderBy(desc5(vendorBills.createdAt)),
+    db.select().from(vendorBills).where(where).limit(pageSize).offset(offset).orderBy(desc4(vendorBills.createdAt)),
     db.select({ count: count4() }).from(vendorBills).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -3489,33 +3658,34 @@ async function listVendorBills(params = {}) {
 async function updateVendorBill(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(vendorBills).set(data).where(eq5(vendorBills.id, id));
+  await db.update(vendorBills).set(data).where(eq4(vendorBills.id, id));
 }
 async function deleteVendorBill(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(vendorBills).where(eq5(vendorBills.id, id));
+  await db.delete(vendorBills).where(eq4(vendorBills.id, id));
 }
 async function createVendorBillItem(data) {
   const db = await getDb();
-  if (!db) return;
-  await db.insert(vendorBillItems).values(data);
+  if (!db) return void 0;
+  const result = await db.insert(vendorBillItems).values(data).returning({ id: vendorBillItems.id });
+  return result[0]?.id;
 }
 async function listVendorBillItems(billId) {
   const db = await getDb();
   if (!db) return [];
-  const where = billId ? eq5(vendorBillItems.billId, billId) : void 0;
+  const where = billId ? eq4(vendorBillItems.vendorBillId, billId) : void 0;
   return await db.select().from(vendorBillItems).where(where);
 }
 async function updateVendorBillItem(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(vendorBillItems).set(data).where(eq5(vendorBillItems.id, id));
+  await db.update(vendorBillItems).set(data).where(eq4(vendorBillItems.id, id));
 }
 async function deleteVendorBillItem(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(vendorBillItems).where(eq5(vendorBillItems.id, id));
+  await db.delete(vendorBillItems).where(eq4(vendorBillItems.id, id));
 }
 async function listVendorBillItemsByBill(billId) {
   return listVendorBillItems(billId);
@@ -3528,33 +3698,33 @@ async function createBillInvoiceAllocation(data) {
 async function getBillInvoiceAllocationById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(billInvoiceAllocations).where(eq5(billInvoiceAllocations.id, id)).limit(1);
+  const result = await db.select().from(billInvoiceAllocations).where(eq4(billInvoiceAllocations.id, id)).limit(1);
   return result[0];
 }
 async function listAllocationsByBill(billId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(billInvoiceAllocations).where(eq5(billInvoiceAllocations.vendorBillId, billId));
+  return await db.select().from(billInvoiceAllocations).where(eq4(billInvoiceAllocations.vendorBillId, billId));
 }
 async function listAllocationsByInvoice(invoiceId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(billInvoiceAllocations).where(eq5(billInvoiceAllocations.invoiceId, invoiceId));
+  return await db.select().from(billInvoiceAllocations).where(eq4(billInvoiceAllocations.invoiceId, invoiceId));
 }
 async function updateBillInvoiceAllocation(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(billInvoiceAllocations).set(data).where(eq5(billInvoiceAllocations.id, id));
+  await db.update(billInvoiceAllocations).set(data).where(eq4(billInvoiceAllocations.id, id));
 }
 async function deleteBillInvoiceAllocation(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(billInvoiceAllocations).where(eq5(billInvoiceAllocations.id, id));
+  await db.delete(billInvoiceAllocations).where(eq4(billInvoiceAllocations.id, id));
 }
 async function deleteAllocationsByBill(billId) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(billInvoiceAllocations).where(eq5(billInvoiceAllocations.vendorBillId, billId));
+  await db.delete(billInvoiceAllocations).where(eq4(billInvoiceAllocations.vendorBillId, billId));
 }
 async function getBillAllocatedTotal(billId) {
   const db = await getDb();
@@ -3585,7 +3755,7 @@ var init_financeService = __esm({
 });
 
 // server/services/db/commonService.ts
-import { eq as eq6, desc as desc6, count as count5, like as like5, sql, and as and5 } from "drizzle-orm";
+import { eq as eq5, desc as desc5, count as count5, like as like5, sql, and as and4 } from "drizzle-orm";
 async function listCountriesConfig() {
   const db = await getDb();
   if (!db) return [];
@@ -3594,7 +3764,7 @@ async function listCountriesConfig() {
 async function getCountryConfig(code) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(countriesConfig).where(eq6(countriesConfig.countryCode, code)).limit(1);
+  const result = await db.select().from(countriesConfig).where(eq5(countriesConfig.countryCode, code)).limit(1);
   return result[0];
 }
 async function createCountryConfig(data) {
@@ -3605,17 +3775,17 @@ async function createCountryConfig(data) {
 async function updateCountryConfig(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(countriesConfig).set(data).where(eq6(countriesConfig.id, id));
+  await db.update(countriesConfig).set(data).where(eq5(countriesConfig.id, id));
 }
 async function deleteCountryConfig(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(countriesConfig).where(eq6(countriesConfig.id, id));
+  await db.delete(countriesConfig).where(eq5(countriesConfig.id, id));
 }
 async function getSystemConfig(key) {
   const db = await getDb();
   if (!db) return null;
-  const result = await db.select().from(systemConfig).where(eq6(systemConfig.configKey, key)).limit(1);
+  const result = await db.select().from(systemConfig).where(eq5(systemConfig.configKey, key)).limit(1);
   return result.length > 0 ? result[0].configValue : null;
 }
 async function setSystemConfig(key, value) {
@@ -3639,11 +3809,11 @@ async function listAuditLogs(params = {}) {
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
   const conditions = [];
-  if (entityType) conditions.push(eq6(auditLogs.entityType, entityType));
-  if (userId) conditions.push(eq6(auditLogs.userId, userId));
-  const where = conditions.length > 0 ? and5(...conditions) : void 0;
+  if (entityType) conditions.push(eq5(auditLogs.entityType, entityType));
+  if (userId) conditions.push(eq5(auditLogs.userId, userId));
+  const where = conditions.length > 0 ? and4(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
-    db.select().from(auditLogs).where(where).limit(pageSize).offset(offset).orderBy(desc6(auditLogs.createdAt)),
+    db.select().from(auditLogs).where(where).limit(pageSize).offset(offset).orderBy(desc5(auditLogs.createdAt)),
     db.select({ count: count5() }).from(auditLogs).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -3651,7 +3821,7 @@ async function listAuditLogs(params = {}) {
 async function listLeaveTypesByCountry(countryCode) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(leaveTypes).where(eq6(leaveTypes.countryCode, countryCode));
+  return await db.select().from(leaveTypes).where(eq5(leaveTypes.countryCode, countryCode));
 }
 async function createLeaveType(data) {
   const db = await getDb();
@@ -3661,17 +3831,17 @@ async function createLeaveType(data) {
 async function updateLeaveType(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(leaveTypes).set(data).where(eq6(leaveTypes.id, id));
+  await db.update(leaveTypes).set(data).where(eq5(leaveTypes.id, id));
 }
 async function deleteLeaveType(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(leaveTypes).where(eq6(leaveTypes.id, id));
+  await db.delete(leaveTypes).where(eq5(leaveTypes.id, id));
 }
 async function getLeaveTypeById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(leaveTypes).where(eq6(leaveTypes.id, id)).limit(1);
+  const result = await db.select().from(leaveTypes).where(eq5(leaveTypes.id, id)).limit(1);
   return result[0];
 }
 async function listAllExchangeRates(params = {}) {
@@ -3680,7 +3850,7 @@ async function listAllExchangeRates(params = {}) {
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
   const [data, totalResult] = await Promise.all([
-    db.select().from(exchangeRates).limit(pageSize).offset(offset).orderBy(desc6(exchangeRates.updatedAt)),
+    db.select().from(exchangeRates).limit(pageSize).offset(offset).orderBy(desc5(exchangeRates.updatedAt)),
     db.select({ count: count5() }).from(exchangeRates)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -3688,7 +3858,7 @@ async function listAllExchangeRates(params = {}) {
 async function deleteExchangeRate(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(exchangeRates).where(eq6(exchangeRates.id, id));
+  await db.delete(exchangeRates).where(eq5(exchangeRates.id, id));
 }
 async function getDashboardStats() {
   const db = await getDb();
@@ -3711,7 +3881,7 @@ async function getDashboardStats() {
   ] = await Promise.all([
     db.select({ count: count5() }).from(customers),
     db.select({ count: count5() }).from(employees),
-    db.select({ count: count5() }).from(employees).where(eq6(employees.status, "active"))
+    db.select({ count: count5() }).from(employees).where(eq5(employees.status, "active"))
   ]);
   return {
     totalCustomers: custCount[0]?.count || 0,
@@ -3741,7 +3911,7 @@ async function listBillingEntities() {
 async function getBillingEntityById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(billingEntities).where(eq6(billingEntities.id, id)).limit(1);
+  const result = await db.select().from(billingEntities).where(eq5(billingEntities.id, id)).limit(1);
   return result[0];
 }
 async function createBillingEntity(data) {
@@ -3752,12 +3922,12 @@ async function createBillingEntity(data) {
 async function updateBillingEntity(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(billingEntities).set(data).where(eq6(billingEntities.id, id));
+  await db.update(billingEntities).set(data).where(eq5(billingEntities.id, id));
 }
 async function deleteBillingEntity(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(billingEntities).where(eq6(billingEntities.id, id));
+  await db.delete(billingEntities).where(eq5(billingEntities.id, id));
 }
 async function createSalesLead(data) {
   const db = await getDb();
@@ -3767,7 +3937,7 @@ async function createSalesLead(data) {
 async function getSalesLeadById(id) {
   const db = await getDb();
   if (!db) return void 0;
-  const result = await db.select().from(salesLeads).where(eq6(salesLeads.id, id)).limit(1);
+  const result = await db.select().from(salesLeads).where(eq5(salesLeads.id, id)).limit(1);
   return result[0];
 }
 async function listSalesLeads(params = {}) {
@@ -3780,10 +3950,10 @@ async function listSalesLeads(params = {}) {
   if (status) {
     conditions.push(sql`trim(lower(${salesLeads.status})) = trim(lower(${status}))`);
   }
-  if (assignedTo) conditions.push(eq6(salesLeads.assignedTo, assignedTo));
-  const where = conditions.length > 0 ? and5(...conditions) : void 0;
+  if (assignedTo) conditions.push(eq5(salesLeads.assignedTo, assignedTo));
+  const where = conditions.length > 0 ? and4(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
-    db.select().from(salesLeads).where(where).limit(pageSize).offset(offset).orderBy(desc6(salesLeads.createdAt)),
+    db.select().from(salesLeads).where(where).limit(pageSize).offset(offset).orderBy(desc5(salesLeads.createdAt)),
     db.select({ count: count5() }).from(salesLeads).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -3791,12 +3961,12 @@ async function listSalesLeads(params = {}) {
 async function updateSalesLead(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(salesLeads).set(data).where(eq6(salesLeads.id, id));
+  await db.update(salesLeads).set(data).where(eq5(salesLeads.id, id));
 }
 async function deleteSalesLead(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(salesLeads).where(eq6(salesLeads.id, id));
+  await db.delete(salesLeads).where(eq5(salesLeads.id, id));
 }
 async function createSalesActivity(data) {
   const db = await getDb();
@@ -3806,12 +3976,12 @@ async function createSalesActivity(data) {
 async function listSalesActivities(leadId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(salesActivities).where(eq6(salesActivities.leadId, leadId)).orderBy(desc6(salesActivities.activityDate));
+  return await db.select().from(salesActivities).where(eq5(salesActivities.leadId, leadId)).orderBy(desc5(salesActivities.activityDate));
 }
 async function deleteSalesActivity(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(salesActivities).where(eq6(salesActivities.id, id));
+  await db.delete(salesActivities).where(eq5(salesActivities.id, id));
 }
 var init_commonService = __esm({
   "server/services/db/commonService.ts"() {
@@ -3823,7 +3993,7 @@ var init_commonService = __esm({
 });
 
 // server/services/db/contractorService.ts
-import { eq as eq7, like as like6, count as count6, desc as desc7, and as and6, or as or2, getTableColumns as getTableColumns2 } from "drizzle-orm";
+import { eq as eq6, like as like6, count as count6, desc as desc6, and as and5, or as or2, getTableColumns as getTableColumns2, sql as sql2 } from "drizzle-orm";
 function calculateNextPaymentDate(contractor) {
   if (contractor.status !== "active") return null;
   if (contractor.paymentFrequency === "fixed") return null;
@@ -3844,9 +4014,9 @@ async function getContractorById(id) {
   if (!db) return void 0;
   const result = await db.select({
     ...getTableColumns2(contractors),
-    defaultApproverName: users.displayName,
+    defaultApproverName: users.name,
     customerName: customers.companyName
-  }).from(contractors).leftJoin(users, eq7(contractors.defaultApproverId, users.id)).leftJoin(customers, eq7(contractors.customerId, customers.id)).where(eq7(contractors.id, id)).limit(1);
+  }).from(contractors).leftJoin(users, eq6(contractors.defaultApproverId, users.id)).leftJoin(customers, eq6(contractors.customerId, customers.id)).where(eq6(contractors.id, id)).limit(1);
   if (result.length === 0) return void 0;
   const contractor = result[0];
   const nextPaymentDate = calculateNextPaymentDate(contractor);
@@ -3856,8 +4026,8 @@ async function listContractors(filters, limit = 50, offset = 0) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const conditions = [];
-  if (filters.customerId) conditions.push(eq7(contractors.customerId, filters.customerId));
-  if (filters.status) conditions.push(eq7(contractors.status, filters.status));
+  if (filters.customerId) conditions.push(eq6(contractors.customerId, filters.customerId));
+  if (filters.status) conditions.push(eq6(contractors.status, filters.status));
   if (filters.search) {
     conditions.push(or2(
       like6(contractors.firstName, `%${filters.search}%`),
@@ -3866,7 +4036,7 @@ async function listContractors(filters, limit = 50, offset = 0) {
       like6(contractors.contractorCode, `%${filters.search}%`)
     ));
   }
-  const where = conditions.length > 0 ? and6(...conditions) : void 0;
+  const where = conditions.length > 0 ? and5(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
     db.select({
       id: contractors.id,
@@ -3881,7 +4051,7 @@ async function listContractors(filters, limit = 50, offset = 0) {
       customerId: contractors.customerId,
       customerName: customers.companyName,
       paymentFrequency: contractors.paymentFrequency
-    }).from(contractors).leftJoin(customers, eq7(contractors.customerId, customers.id)).where(where).limit(limit).offset(offset).orderBy(desc7(contractors.createdAt)),
+    }).from(contractors).leftJoin(customers, eq6(contractors.customerId, customers.id)).where(where).limit(limit).offset(offset).orderBy(desc6(contractors.createdAt)),
     db.select({ count: count6() }).from(contractors).where(where)
   ]);
   return { data, total: totalResult[0]?.count || 0 };
@@ -3889,15 +4059,42 @@ async function listContractors(filters, limit = 50, offset = 0) {
 async function updateContractor(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(contractors).set(data).where(eq7(contractors.id, id));
+  await db.update(contractors).set(data).where(eq6(contractors.id, id));
 }
 async function listContractorMilestones(contractorId) {
   const db = await getDb();
   if (!db) return [];
   return await db.select({
     ...getTableColumns2(contractorMilestones),
-    approverName: users.displayName
-  }).from(contractorMilestones).leftJoin(users, eq7(contractorMilestones.approvedBy, users.id)).where(eq7(contractorMilestones.contractorId, contractorId)).orderBy(desc7(contractorMilestones.createdAt));
+    approverName: users.name
+  }).from(contractorMilestones).leftJoin(users, eq6(contractorMilestones.approvedBy, users.id)).where(eq6(contractorMilestones.contractorId, contractorId)).orderBy(desc6(contractorMilestones.createdAt));
+}
+async function listAllContractorMilestones(filters = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (filters.customerId) {
+    conditions.push(eq6(contractors.customerId, filters.customerId));
+  }
+  if (filters.status) {
+    conditions.push(eq6(contractorMilestones.status, filters.status));
+  }
+  if (filters.search) {
+    conditions.push(or2(
+      like6(contractorMilestones.title, `%${filters.search}%`),
+      like6(contractors.firstName, `%${filters.search}%`),
+      like6(contractors.lastName, `%${filters.search}%`)
+    ));
+  }
+  const where = conditions.length > 0 ? and5(...conditions) : void 0;
+  return await db.select({
+    ...getTableColumns2(contractorMilestones),
+    contractorFirstName: contractors.firstName,
+    contractorLastName: contractors.lastName,
+    customerId: contractors.customerId,
+    customerName: customers.companyName,
+    currency: contractors.currency
+  }).from(contractorMilestones).leftJoin(contractors, eq6(contractorMilestones.contractorId, contractors.id)).leftJoin(customers, eq6(contractors.customerId, customers.id)).where(where).orderBy(desc6(contractorMilestones.createdAt));
 }
 async function createContractorMilestone(data) {
   const db = await getDb();
@@ -3907,17 +4104,43 @@ async function createContractorMilestone(data) {
 async function updateContractorMilestone(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(contractorMilestones).set(data).where(eq7(contractorMilestones.id, id));
+  await db.update(contractorMilestones).set(data).where(eq6(contractorMilestones.id, id));
 }
 async function deleteContractorMilestone(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(contractorMilestones).where(eq7(contractorMilestones.id, id));
+  await db.delete(contractorMilestones).where(eq6(contractorMilestones.id, id));
 }
 async function listContractorAdjustments(contractorId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(contractorAdjustments).where(eq7(contractorAdjustments.contractorId, contractorId)).orderBy(desc7(contractorAdjustments.createdAt));
+  return await db.select().from(contractorAdjustments).where(eq6(contractorAdjustments.contractorId, contractorId)).orderBy(desc6(contractorAdjustments.createdAt));
+}
+async function listAllContractorAdjustments(filters = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (filters.customerId) {
+    conditions.push(eq6(contractors.customerId, filters.customerId));
+  }
+  if (filters.status) {
+    conditions.push(eq6(contractorAdjustments.status, filters.status));
+  }
+  if (filters.search) {
+    conditions.push(or2(
+      like6(contractorAdjustments.description, `%${filters.search}%`),
+      like6(contractors.firstName, `%${filters.search}%`),
+      like6(contractors.lastName, `%${filters.search}%`)
+    ));
+  }
+  const where = conditions.length > 0 ? and5(...conditions) : void 0;
+  return await db.select({
+    ...getTableColumns2(contractorAdjustments),
+    contractorFirstName: contractors.firstName,
+    contractorLastName: contractors.lastName,
+    customerId: contractors.customerId,
+    customerName: customers.companyName
+  }).from(contractorAdjustments).leftJoin(contractors, eq6(contractorAdjustments.contractorId, contractors.id)).leftJoin(customers, eq6(contractors.customerId, customers.id)).where(where).orderBy(desc6(contractorAdjustments.createdAt));
 }
 async function createContractorAdjustment(data) {
   const db = await getDb();
@@ -3927,17 +4150,50 @@ async function createContractorAdjustment(data) {
 async function updateContractorAdjustment(id, data) {
   const db = await getDb();
   if (!db) return;
-  await db.update(contractorAdjustments).set(data).where(eq7(contractorAdjustments.id, id));
+  await db.update(contractorAdjustments).set(data).where(eq6(contractorAdjustments.id, id));
 }
 async function deleteContractorAdjustment(id) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(contractorAdjustments).where(eq7(contractorAdjustments.id, id));
+  await db.delete(contractorAdjustments).where(eq6(contractorAdjustments.id, id));
 }
 async function listContractorInvoices(contractorId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(contractorInvoices).where(eq7(contractorInvoices.contractorId, contractorId)).orderBy(desc7(contractorInvoices.createdAt));
+  return await db.select().from(contractorInvoices).where(eq6(contractorInvoices.contractorId, contractorId)).orderBy(desc6(contractorInvoices.createdAt));
+}
+async function listAllContractorInvoices(filters = {}, limit = 50, offset = 0) {
+  const db = await getDb();
+  if (!db) return { data: [], total: 0 };
+  const conditions = [];
+  if (filters.customerId) conditions.push(eq6(contractorInvoices.customerId, filters.customerId));
+  if (filters.status) conditions.push(eq6(contractorInvoices.status, filters.status));
+  if (filters.search) {
+    conditions.push(or2(
+      like6(contractorInvoices.invoiceNumber, `%${filters.search}%`),
+      like6(contractors.firstName, `%${filters.search}%`),
+      like6(contractors.lastName, `%${filters.search}%`)
+    ));
+  }
+  const where = conditions.length > 0 ? and5(...conditions) : void 0;
+  const [data, totalResult] = await Promise.all([
+    db.select({
+      id: contractorInvoices.id,
+      invoiceNumber: contractorInvoices.invoiceNumber,
+      contractorId: contractorInvoices.contractorId,
+      customerId: contractorInvoices.customerId,
+      customerName: customers.companyName,
+      contractorName: sql2`${contractors.firstName} || ' ' || ${contractors.lastName}`,
+      status: contractorInvoices.status,
+      periodStart: contractorInvoices.periodStart,
+      periodEnd: contractorInvoices.periodEnd,
+      totalAmount: contractorInvoices.totalAmount,
+      currency: contractorInvoices.currency,
+      createdAt: contractorInvoices.createdAt
+    }).from(contractorInvoices).leftJoin(contractors, eq6(contractorInvoices.contractorId, contractors.id)).leftJoin(customers, eq6(contractorInvoices.customerId, customers.id)).where(where).limit(limit).offset(offset).orderBy(desc6(contractorInvoices.createdAt)),
+    db.select({ count: count6() }).from(contractorInvoices).leftJoin(contractors, eq6(contractorInvoices.contractorId, contractors.id)).where(where)
+  ]);
+  return { data, total: totalResult[0]?.count || 0 };
 }
 async function getContractorInvoiceById(id) {
   const db = await getDb();
@@ -3947,9 +4203,9 @@ async function getContractorInvoiceById(id) {
     customerName: customers.companyName,
     contractorName: contractors.firstName
     // Just for display
-  }).from(contractorInvoices).leftJoin(customers, eq7(contractorInvoices.customerId, customers.id)).leftJoin(contractors, eq7(contractorInvoices.contractorId, contractors.id)).where(eq7(contractorInvoices.id, id)).limit(1);
+  }).from(contractorInvoices).leftJoin(customers, eq6(contractorInvoices.customerId, customers.id)).leftJoin(contractors, eq6(contractorInvoices.contractorId, contractors.id)).where(eq6(contractorInvoices.id, id)).limit(1);
   if (result.length === 0) return void 0;
-  const items = await db.select().from(contractorInvoiceItems).where(eq7(contractorInvoiceItems.invoiceId, id));
+  const items = await db.select().from(contractorInvoiceItems).where(eq6(contractorInvoiceItems.invoiceId, id));
   return { ...result[0], items };
 }
 var init_contractorService = __esm({
@@ -3976,7 +4232,6 @@ var init_db = __esm({
 // server/db.ts
 var db_exports = {};
 __export(db_exports, {
-  applyCreditNote: () => applyCreditNote,
   batchCreateCustomerPricing: () => batchCreateCustomerPricing,
   createAdjustment: () => createAdjustment,
   createBillInvoiceAllocation: () => createBillInvoiceAllocation,
@@ -4036,6 +4291,7 @@ __export(db_exports, {
   getActiveEmployeesForPayroll: () => getActiveEmployeesForPayroll,
   getActiveLeaveRecordsForDate: () => getActiveLeaveRecordsForDate,
   getAdjustmentById: () => getAdjustmentById,
+  getAllActiveLeaveRecordsForDate: () => getAllActiveLeaveRecordsForDate,
   getBillAllocatedTotal: () => getBillAllocatedTotal,
   getBillInvoiceAllocationById: () => getBillInvoiceAllocationById,
   getBillingEntityById: () => getBillingEntityById,
@@ -4044,7 +4300,6 @@ __export(db_exports, {
   getContractorInvoiceById: () => getContractorInvoiceById,
   getCountriesWithActiveEmployees: () => getCountriesWithActiveEmployees,
   getCountryConfig: () => getCountryConfig,
-  getCreditNoteRemainingBalance: () => getCreditNoteRemainingBalance,
   getCustomerByEmail: () => getCustomerByEmail,
   getCustomerById: () => getCustomerById,
   getCustomerLeavePoliciesForCountry: () => getCustomerLeavePoliciesForCountry,
@@ -4056,6 +4311,7 @@ __export(db_exports, {
   getEmployeeDocumentById: () => getEmployeeDocumentById,
   getEmployeesForPayrollMonth: () => getEmployeesForPayrollMonth,
   getInvoiceById: () => getInvoiceById,
+  getInvoiceByNumber: () => getInvoiceByNumber,
   getInvoiceCostAllocatedTotal: () => getInvoiceCostAllocatedTotal,
   getInvoiceProfitAnalysis: () => getInvoiceProfitAnalysis,
   getLeaveRecordById: () => getLeaveRecordById,
@@ -4079,10 +4335,12 @@ __export(db_exports, {
   hasDepositBeenProcessed: () => hasDepositBeenProcessed,
   initializeLeaveBalancesForEmployee: () => initializeLeaveBalancesForEmployee,
   listAdjustments: () => listAdjustments,
+  listAllContractorAdjustments: () => listAllContractorAdjustments,
+  listAllContractorInvoices: () => listAllContractorInvoices,
+  listAllContractorMilestones: () => listAllContractorMilestones,
   listAllExchangeRates: () => listAllExchangeRates,
   listAllocationsByBill: () => listAllocationsByBill,
   listAllocationsByInvoice: () => listAllocationsByInvoice,
-  listApplicationsForInvoice: () => listApplicationsForInvoice,
   listAuditLogs: () => listAuditLogs,
   listBillingEntities: () => listBillingEntities,
   listContractorAdjustments: () => listContractorAdjustments,
@@ -4090,7 +4348,6 @@ __export(db_exports, {
   listContractorMilestones: () => listContractorMilestones,
   listContractors: () => listContractors,
   listCountriesConfig: () => listCountriesConfig,
-  listCreditNoteApplications: () => listCreditNoteApplications,
   listCustomerContacts: () => listCustomerContacts,
   listCustomerContracts: () => listCustomerContracts,
   listCustomerLeavePolicies: () => listCustomerLeavePolicies,
@@ -4350,7 +4607,7 @@ __export(portalAuth_exports, {
 });
 import bcrypt2 from "bcryptjs";
 import * as jose2 from "jose";
-import { eq as eq8, and as and7 } from "drizzle-orm";
+import { eq as eq7, and as and6 } from "drizzle-orm";
 import crypto2 from "crypto";
 function getJwtSecret2() {
   const portalKey = `portal:${ENV.cookieSecret}`;
@@ -4440,15 +4697,15 @@ async function authenticatePortalRequest(req) {
     isPortalActive: customerContacts.isPortalActive,
     hasPortalAccess: customerContacts.hasPortalAccess
   }).from(customerContacts).where(
-    and7(
-      eq8(customerContacts.id, parseInt(payload.sub)),
-      eq8(customerContacts.isPortalActive, true),
-      eq8(customerContacts.hasPortalAccess, true)
+    and6(
+      eq7(customerContacts.id, parseInt(payload.sub)),
+      eq7(customerContacts.isPortalActive, true),
+      eq7(customerContacts.hasPortalAccess, true)
     )
   ).limit(1);
   if (contacts.length === 0) return null;
   const contact = contacts[0];
-  const customerRows = await db.select({ companyName: customers.companyName, status: customers.status }).from(customers).where(eq8(customers.id, contact.customerId)).limit(1);
+  const customerRows = await db.select({ companyName: customers.companyName, status: customers.status }).from(customers).where(eq7(customers.id, contact.customerId)).limit(1);
   if (customerRows.length === 0 || customerRows[0].status !== "active") return null;
   return {
     contactId: contact.id,
@@ -4869,15 +5126,26 @@ init_db2();
 init_env();
 import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+function normalizeRegion(region) {
+  return region.replace(/^oss-/, "");
+}
+function normalizeEndpoint(endpoint) {
+  if (endpoint.includes("s3.oss-")) {
+    return endpoint;
+  }
+  return endpoint.replace(/^(https?:\/\/)(oss-)/, "$1s3.$2");
+}
+var ossRegion = normalizeRegion(ENV.ossRegion || "oss-cn-hangzhou");
+var ossEndpoint = normalizeEndpoint(ENV.ossEndpoint || "https://oss-cn-hangzhou.aliyuncs.com");
 var s3Client = new S3Client({
-  region: ENV.ossRegion || "oss-cn-hangzhou",
-  endpoint: ENV.ossEndpoint || `https://oss-cn-hangzhou.aliyuncs.com`,
+  region: ossRegion,
+  endpoint: ossEndpoint,
   credentials: {
     accessKeyId: ENV.ossAccessKeyId,
     secretAccessKey: ENV.ossAccessKeySecret
   },
   forcePathStyle: false
-  // OSS usually supports virtual-hosted style, but some private clouds need true
+  // OSS uses virtual-hosted style: https://bucket.s3.oss-region.aliyuncs.com
 });
 var BUCKET_NAME = ENV.ossBucket;
 async function storagePut(key, body, contentType = "application/octet-stream") {
@@ -4894,8 +5162,8 @@ async function storagePut(key, body, contentType = "application/octet-stream") {
   });
   try {
     await s3Client.send(command);
-    const endpoint = ENV.ossEndpoint || `https://${ENV.ossRegion}.aliyuncs.com`;
-    const endpointHost = endpoint.replace(/^https?:\/\//, "");
+    const rawEndpoint = ENV.ossEndpoint || `https://oss-${ossRegion}.aliyuncs.com`;
+    const endpointHost = rawEndpoint.replace(/^https?:\/\//, "").replace(/^s3\./, "");
     const url = `https://${BUCKET_NAME}.${endpointHost}/${normalizedKey}`;
     return { key: normalizedKey, url };
   } catch (error) {
@@ -4920,6 +5188,28 @@ async function storageGet(key) {
   } catch (error) {
     console.error("[Storage] Get signed URL failed:", error);
     throw new Error(`Storage get failed: ${error}`);
+  }
+}
+async function storageDownload(key) {
+  if (!ENV.ossAccessKeyId || !ENV.ossAccessKeySecret || !BUCKET_NAME) {
+    throw new Error("OSS credentials not configured");
+  }
+  const normalizedKey = key.replace(/^\/+/, "");
+  const command = new GetObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: normalizedKey
+  });
+  try {
+    const response = await s3Client.send(command);
+    const byteArray = await response.Body?.transformToByteArray();
+    if (!byteArray) throw new Error("Empty body");
+    return {
+      content: Buffer.from(byteArray),
+      contentType: response.ContentType
+    };
+  } catch (error) {
+    console.error("[Storage] Download failed:", error);
+    throw new Error(`Storage download failed: ${error}`);
   }
 }
 
@@ -5066,10 +5356,10 @@ var customersRouter = router({
     create: customerManagerProcedure.input(
       z3.object({
         customerId: z3.number(),
-        pricingType: z3.enum(["global_discount", "country_specific"]),
+        pricingType: z3.enum(["global_discount", "country_specific", "client_aor_fixed"]),
         globalDiscountPercent: z3.string().optional(),
         countryCode: z3.string().optional(),
-        serviceType: z3.enum(["eor", "visa_eor"]).optional(),
+        serviceType: z3.enum(["eor", "visa_eor", "aor"]).optional(),
         fixedPrice: z3.string().optional(),
         visaOneTimeFee: z3.string().optional(),
         currency: z3.string().default("USD"),
@@ -5082,6 +5372,8 @@ var customersRouter = router({
       for (const p of existingPricing) {
         if (!p.isActive) continue;
         if (input.pricingType === "global_discount" && p.pricingType === "global_discount") {
+          await updateCustomerPricing(p.id, { isActive: false });
+        } else if (input.pricingType === "client_aor_fixed" && p.pricingType === "client_aor_fixed") {
           await updateCustomerPricing(p.id, { isActive: false });
         } else if (input.pricingType === "country_specific" && p.pricingType === "country_specific" && p.countryCode === input.countryCode && p.serviceType === input.serviceType) {
           await updateCustomerPricing(p.id, { isActive: false });
@@ -5114,7 +5406,7 @@ var customersRouter = router({
       z3.object({
         customerId: z3.number(),
         countryCodes: z3.array(z3.string()).min(1),
-        serviceType: z3.enum(["eor", "visa_eor"]),
+        serviceType: z3.enum(["eor", "visa_eor", "aor"]),
         fixedPrice: z3.string(),
         visaOneTimeFee: z3.string().optional(),
         currency: z3.string().default("USD"),
@@ -5407,6 +5699,31 @@ var customersRouter = router({
         return c;
       }));
     }),
+    download: userProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
+      const { getDb: getDb2 } = await Promise.resolve().then(() => (init_db2(), db_exports));
+      const { customerContracts: customerContracts2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { eq: eq65 } = await import("drizzle-orm");
+      const db = await getDb2();
+      if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const contract = await db.query.customerContracts.findFirst({
+        where: eq65(customerContracts2.id, input.id)
+      });
+      if (!contract) throw new TRPCError4({ code: "NOT_FOUND", message: "Contract not found" });
+      if (contract.fileKey) {
+        try {
+          const { content, contentType } = await storageDownload(contract.fileKey);
+          return {
+            content: content.toString("base64"),
+            filename: contract.contractName || `Contract-${contract.id}.pdf`,
+            contentType: contentType || "application/pdf"
+          };
+        } catch (e) {
+          console.error("Failed to download contract:", e);
+          throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Failed to download file" });
+        }
+      }
+      throw new TRPCError4({ code: "NOT_FOUND", message: "File key missing" });
+    }),
     upload: customerManagerProcedure.input(
       z3.object({
         customerId: z3.number(),
@@ -5521,7 +5838,7 @@ init_db2();
 // server/services/depositInvoiceService.ts
 init_db2();
 init_schema();
-import { eq as eq11, and as and10 } from "drizzle-orm";
+import { eq as eq10, and as and9 } from "drizzle-orm";
 
 // server/services/invoiceNumberService.ts
 init_db2();
@@ -5592,12 +5909,12 @@ async function generateDepositInvoiceNumber(billingEntityId, date) {
 // server/services/exchangeRateService.ts
 init_db2();
 init_schema();
-import { eq as eq10, and as and9, desc as desc8, lte as lte2 } from "drizzle-orm";
+import { eq as eq9, and as and8, desc as desc7, lte as lte2 } from "drizzle-orm";
 async function getGlobalMarkup() {
   try {
     const db = await getDb();
     if (!db) return 5;
-    const result = await db.select().from(systemConfig).where(eq10(systemConfig.configKey, "exchange_rate_markup_percentage")).limit(1);
+    const result = await db.select().from(systemConfig).where(eq9(systemConfig.configKey, "exchange_rate_markup_percentage")).limit(1);
     if (result.length > 0) {
       return parseFloat(result[0].configValue) || 5;
     }
@@ -5622,12 +5939,12 @@ async function getExchangeRate(fromCurrency, toCurrency, effectiveDate) {
     dateCondition = lte2(exchangeRates.effectiveDate, dateStr);
   }
   const result = await db.select().from(exchangeRates).where(
-    and9(
-      eq10(exchangeRates.fromCurrency, fromCurrency),
-      eq10(exchangeRates.toCurrency, toCurrency),
+    and8(
+      eq9(exchangeRates.fromCurrency, fromCurrency),
+      eq9(exchangeRates.toCurrency, toCurrency),
       dateCondition
     )
-  ).orderBy(desc8(exchangeRates.effectiveDate)).limit(1);
+  ).orderBy(desc7(exchangeRates.effectiveDate)).limit(1);
   if (result.length > 0) {
     const rate = parseFloat(result[0].rate.toString());
     const rateWithMarkup = parseFloat(result[0].rateWithMarkup.toString());
@@ -5640,12 +5957,12 @@ async function getExchangeRate(fromCurrency, toCurrency, effectiveDate) {
     };
   }
   const inverse = await db.select().from(exchangeRates).where(
-    and9(
-      eq10(exchangeRates.fromCurrency, toCurrency),
-      eq10(exchangeRates.toCurrency, fromCurrency),
+    and8(
+      eq9(exchangeRates.fromCurrency, toCurrency),
+      eq9(exchangeRates.toCurrency, fromCurrency),
       dateCondition
     )
-  ).orderBy(desc8(exchangeRates.effectiveDate)).limit(1);
+  ).orderBy(desc7(exchangeRates.effectiveDate)).limit(1);
   if (inverse.length > 0) {
     const rawRate = parseFloat(inverse[0].rate.toString());
     const markupPercentage = parseFloat(inverse[0].markupPercentage.toString());
@@ -5726,11 +6043,11 @@ async function initializeDefaultRates() {
 async function hasDepositInvoice(employeeId) {
   const db = await getDb();
   if (!db) return false;
-  const existing = await db.select({ id: invoiceItems.id, invoiceId: invoiceItems.invoiceId, status: invoices.status }).from(invoiceItems).innerJoin(invoices, eq11(invoiceItems.invoiceId, invoices.id)).where(
-    and10(
-      eq11(invoiceItems.employeeId, employeeId),
-      eq11(invoiceItems.itemType, "deposit"),
-      eq11(invoices.invoiceType, "deposit")
+  const existing = await db.select({ id: invoiceItems.id, invoiceId: invoiceItems.invoiceId, status: invoices.status }).from(invoiceItems).innerJoin(invoices, eq10(invoiceItems.invoiceId, invoices.id)).where(
+    and9(
+      eq10(invoiceItems.employeeId, employeeId),
+      eq10(invoiceItems.itemType, "deposit"),
+      eq10(invoices.invoiceType, "deposit")
     )
   ).limit(10);
   const activeDeposits = existing.filter(
@@ -5739,9 +6056,9 @@ async function hasDepositInvoice(employeeId) {
   if (activeDeposits.length === 0) return false;
   for (const deposit of activeDeposits) {
     const refunds = await db.select({ id: invoices.id, status: invoices.status }).from(invoices).where(
-      and10(
-        eq11(invoices.relatedInvoiceId, deposit.invoiceId),
-        eq11(invoices.invoiceType, "deposit_refund")
+      and9(
+        eq10(invoices.relatedInvoiceId, deposit.invoiceId),
+        eq10(invoices.invoiceType, "deposit_refund")
       )
     );
     const hasActiveRefund = refunds.some(
@@ -5749,9 +6066,9 @@ async function hasDepositInvoice(employeeId) {
     );
     if (hasActiveRefund) continue;
     const creditNotes = await db.select({ id: invoices.id, status: invoices.status }).from(invoices).where(
-      and10(
-        eq11(invoices.relatedInvoiceId, deposit.invoiceId),
-        eq11(invoices.invoiceType, "credit_note")
+      and9(
+        eq10(invoices.relatedInvoiceId, deposit.invoiceId),
+        eq10(invoices.invoiceType, "credit_note")
       )
     );
     const hasActiveCreditNote = creditNotes.some(
@@ -5800,18 +6117,22 @@ async function generateDepositInvoice(employeeId) {
     const billingEntityId = customer.billingEntityId || null;
     const invoiceNumber = await generateDepositInvoiceNumber(billingEntityId);
     let dueDate;
+    let invoiceMonthStr;
     if (employee.startDate) {
       dueDate = new Date(employee.startDate);
       dueDate.setDate(dueDate.getDate() - 1);
+      invoiceMonthStr = employee.startDate.substring(0, 7) + "-01";
     } else {
       dueDate = /* @__PURE__ */ new Date();
       dueDate.setDate(dueDate.getDate() + 30);
+      invoiceMonthStr = (/* @__PURE__ */ new Date()).toISOString().substring(0, 7) + "-01";
     }
     const invoiceData = {
       customerId: employee.customerId,
       billingEntityId,
       invoiceNumber,
       invoiceType: "deposit",
+      invoiceMonth: invoiceMonthStr,
       currency: settlementCurrency,
       exchangeRate: exchangeRate.toFixed(6),
       exchangeRateWithMarkup: exchangeRateWithMarkup.toFixed(6),
@@ -5825,14 +6146,17 @@ async function generateDepositInvoice(employeeId) {
       amountDue: depositAmount.toFixed(2),
       notes: `Deposit invoice for employee ${employee.firstName} ${employee.lastName} (${employee.employeeCode}). Deposit = (${baseSalary} + ${estimatedEmployerCost}) \xD7 ${depositMultiplier} = ${localAmount.toFixed(2)} ${employeeCurrency}${employeeCurrency !== settlementCurrency ? ` \u2192 ${depositAmount.toFixed(2)} ${settlementCurrency}` : ""}`
     };
-    const invoiceResult = await db.insert(invoices).values(invoiceData);
-    const invoiceId = invoiceResult[0]?.insertId;
+    const invoiceResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+    const invoiceId = invoiceResult[0]?.id;
+    if (!invoiceId) throw new Error("Failed to get deposit invoice ID after insert");
+    const monthlyTotalSettlement = monthlyTotal * exchangeRateWithMarkup;
     const lineItem = {
       invoiceId,
       employeeId,
       description: `Deposit - ${employee.employeeCode || ""} ${employee.firstName} ${employee.lastName}`,
-      quantity: "1",
-      unitPrice: depositAmount.toFixed(2),
+      quantity: depositMultiplier.toString(),
+      // Use localCurrency unit price if available (for PDF display), otherwise settlement currency unit price
+      unitPrice: employeeCurrency !== settlementCurrency ? monthlyTotal.toFixed(2) : monthlyTotalSettlement.toFixed(2),
       amount: depositAmount.toFixed(2),
       itemType: "deposit",
       countryCode: employee.country,
@@ -5859,23 +6183,23 @@ async function generateDepositInvoice(employeeId) {
 init_db2();
 init_schema();
 init_db2();
-import { eq as eq12, and as and11 } from "drizzle-orm";
+import { eq as eq11, and as and10 } from "drizzle-orm";
 async function findDepositInvoice(employeeId) {
   const db = await getDb();
   if (!db) return null;
   const items = await db.select({
     invoiceId: invoiceItems.invoiceId
   }).from(invoiceItems).where(
-    and11(
-      eq12(invoiceItems.employeeId, employeeId),
-      eq12(invoiceItems.itemType, "deposit")
+    and10(
+      eq11(invoiceItems.employeeId, employeeId),
+      eq11(invoiceItems.itemType, "deposit")
     )
   );
   if (items.length === 0) return null;
   const invoice = await db.select().from(invoices).where(
-    and11(
-      eq12(invoices.id, items[0].invoiceId),
-      eq12(invoices.invoiceType, "deposit")
+    and10(
+      eq11(invoices.id, items[0].invoiceId),
+      eq11(invoices.invoiceType, "deposit")
     )
   );
   return invoice.length > 0 ? invoice[0] : null;
@@ -5884,14 +6208,14 @@ async function hasDepositRefund(employeeId) {
   const db = await getDb();
   if (!db) return false;
   const items = await db.select({ invoiceId: invoiceItems.invoiceId }).from(invoiceItems).where(
-    and11(
-      eq12(invoiceItems.employeeId, employeeId),
-      eq12(invoiceItems.itemType, "deposit")
+    and10(
+      eq11(invoiceItems.employeeId, employeeId),
+      eq11(invoiceItems.itemType, "deposit")
     )
   );
   if (items.length === 0) return false;
   for (const item of items) {
-    const inv = await db.select({ invoiceType: invoices.invoiceType, status: invoices.status }).from(invoices).where(eq12(invoices.id, item.invoiceId));
+    const inv = await db.select({ invoiceType: invoices.invoiceType, status: invoices.status }).from(invoices).where(eq11(invoices.id, item.invoiceId));
     if (inv.length > 0 && inv[0].invoiceType === "deposit_refund" && inv[0].status !== "cancelled") {
       return true;
     }
@@ -5918,9 +6242,9 @@ async function generateDepositRefund(employeeId) {
       return { invoiceId: null, message: "No deposit invoice found for this employee" };
     }
     const existingCreditNotes = await db.select({ id: invoices.id, status: invoices.status }).from(invoices).where(
-      and11(
-        eq12(invoices.relatedInvoiceId, depositInvoice.id),
-        eq12(invoices.invoiceType, "credit_note")
+      and10(
+        eq11(invoices.relatedInvoiceId, depositInvoice.id),
+        eq11(invoices.invoiceType, "credit_note")
       )
     );
     const hasActiveCreditNote = existingCreditNotes.some(
@@ -5961,8 +6285,9 @@ async function generateDepositRefund(employeeId) {
       amountDue: (-refundAmount).toFixed(2),
       notes: `Deposit refund for terminated employee ${employee.firstName} ${employee.lastName} (${employee.employeeCode}). Original deposit: ${depositInvoice.invoiceNumber}`
     };
-    const invoiceResult = await db.insert(invoices).values(invoiceData);
-    const invoiceId = invoiceResult[0]?.insertId;
+    const invoiceResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+    const invoiceId = invoiceResult[0]?.id;
+    if (!invoiceId) throw new Error("Failed to get deposit refund invoice ID after insert");
     const lineItem = {
       invoiceId,
       employeeId,
@@ -5990,14 +6315,14 @@ async function generateDepositRefund(employeeId) {
 // server/services/visaServiceInvoiceService.ts
 init_db2();
 init_schema();
-import { eq as eq13 } from "drizzle-orm";
+import { eq as eq12 } from "drizzle-orm";
 async function generateVisaServiceInvoice(employeeId) {
   const db = await getDb();
   if (!db) {
     return { invoiceId: null, message: "Database not available" };
   }
   try {
-    const empData = await db.select().from(employees).where(eq13(employees.id, employeeId)).limit(1);
+    const empData = await db.select().from(employees).where(eq12(employees.id, employeeId)).limit(1);
     if (empData.length === 0) {
       return { invoiceId: null, message: "Employee not found" };
     }
@@ -6005,7 +6330,7 @@ async function generateVisaServiceInvoice(employeeId) {
     if (emp.serviceType !== "visa_eor") {
       return { invoiceId: null, message: "Employee is not a Visa EOR employee" };
     }
-    const custData = await db.select().from(customers).where(eq13(customers.id, emp.customerId)).limit(1);
+    const custData = await db.select().from(customers).where(eq12(customers.id, emp.customerId)).limit(1);
     if (custData.length === 0) {
       return { invoiceId: null, message: "Customer not found" };
     }
@@ -6057,11 +6382,14 @@ async function generateVisaServiceInvoice(employeeId) {
       status: "draft",
       dueDate: dueDate.toISOString().slice(0, 10),
       // text column: use YYYY-MM-DD string
+      invoiceMonth: (/* @__PURE__ */ new Date()).toISOString().slice(0, 7) + "-01",
+      // Set current month
       amountDue: totalAmount.toFixed(2),
       notes: `Visa & Immigration Service Fee for ${empCode} ${empName}`
     };
-    const invoiceInsertResult = await db.insert(invoices).values(invoiceData);
-    const invoiceId = invoiceInsertResult[0]?.insertId;
+    const invoiceInsertResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+    const invoiceId = invoiceInsertResult[0]?.id;
+    if (!invoiceId) throw new Error("Failed to get visa service invoice ID after insert");
     const lineItem = {
       invoiceId,
       employeeId,
@@ -6093,7 +6421,7 @@ async function generateVisaServiceInvoice(employeeId) {
 
 // server/routers/employees.ts
 init_schema();
-import { eq as eq14, desc as desc9, and as and12 } from "drizzle-orm";
+import { eq as eq13, desc as desc8, and as and11 } from "drizzle-orm";
 var employeesRouter = router({
   list: userProcedure.input(
     z4.object({
@@ -6212,7 +6540,7 @@ var employeesRouter = router({
     const insertId = result[0]?.insertId ?? result.insertId;
     if (insertId && input.country) {
       try {
-        await initializeLeaveBalancesForEmployee(insertId, input.country, (/* @__PURE__ */ new Date()).getFullYear(), input.customerId);
+        await initializeLeaveBalancesForEmployee(insertId);
       } catch (e) {
         console.error("Failed to initialize leave balances:", e);
       }
@@ -6365,7 +6693,7 @@ var employeesRouter = router({
               type: "deposit",
               employeeId: input.id,
               trigger: "reactivation_from_terminated",
-              previousDepositProcessedAs: depositStatus.type
+              previousDepositProcessed: depositStatus.processed
             })
           });
         }
@@ -6379,19 +6707,19 @@ var employeesRouter = router({
         const db = await getDb2();
         if (db) {
           const { invoices: invoicesTable, invoiceItems: invoiceItemsTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-          const { eq: eq66, and: and51 } = await import("drizzle-orm");
+          const { eq: eq65, and: and50 } = await import("drizzle-orm");
           const existingVisaInvoices = await db.select().from(invoicesTable).where(
-            and51(
-              eq66(invoicesTable.invoiceType, "visa_service"),
-              eq66(invoicesTable.customerId, currentEmpForVisa.customerId)
+            and50(
+              eq65(invoicesTable.invoiceType, "visa_service"),
+              eq65(invoicesTable.customerId, currentEmpForVisa.customerId)
             )
           );
           let hasActiveBilledInvoice = false;
           for (const inv of existingVisaInvoices) {
             const items = await db.select().from(invoiceItemsTable).where(
-              and51(
-                eq66(invoiceItemsTable.invoiceId, inv.id),
-                eq66(invoiceItemsTable.employeeId, input.id)
+              and50(
+                eq65(invoiceItemsTable.invoiceId, inv.id),
+                eq65(invoiceItemsTable.employeeId, input.id)
               )
             );
             if (items.length > 0) {
@@ -6400,8 +6728,8 @@ var employeesRouter = router({
                 visaServiceResult = { invoiceId: null, message: "Visa service invoice already exists and is billed" };
                 break;
               } else if (inv.status === "draft" || inv.status === "cancelled") {
-                await db.delete(invoiceItemsTable).where(eq66(invoiceItemsTable.invoiceId, inv.id));
-                await db.delete(invoicesTable).where(eq66(invoicesTable.id, inv.id));
+                await db.delete(invoiceItemsTable).where(eq65(invoiceItemsTable.invoiceId, inv.id));
+                await db.delete(invoicesTable).where(eq65(invoicesTable.id, inv.id));
               }
             }
           }
@@ -6427,7 +6755,7 @@ var employeesRouter = router({
         const emp = await getEmployeeById(input.id);
         if (emp) {
           const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
-          await initializeLeaveBalancesForEmployee(input.id, emp.country, currentYear, emp.customerId);
+          await initializeLeaveBalancesForEmployee(input.id);
           leaveBalancesInitialized = true;
         }
       } catch (err) {
@@ -6476,8 +6804,8 @@ var employeesRouter = router({
     return await listAdjustments({ employeeId: input.employeeId, pageSize: 100 });
   }),
   // Initialize leave balances for employee based on country leave types
-  initializeLeaveBalances: customerManagerProcedure.input(z4.object({ employeeId: z4.number(), countryCode: z4.string(), year: z4.number() })).mutation(async ({ input }) => {
-    return await initializeLeaveBalancesForEmployee(input.employeeId, input.countryCode, input.year);
+  initializeLeaveBalances: customerManagerProcedure.input(z4.object({ employeeId: z4.number(), countryCode: z4.string(), year: z4.number() })).query(async ({ input }) => {
+    return await initializeLeaveBalancesForEmployee(input.employeeId);
   }),
   // Create a leave balance entry
   createLeaveBalance: customerManagerProcedure.input(z4.object({
@@ -6487,7 +6815,7 @@ var employeesRouter = router({
     totalEntitlement: z4.number(),
     used: z4.number().default(0),
     remaining: z4.number()
-  })).mutation(async ({ input }) => {
+  })).query(async ({ input }) => {
     return await createLeaveBalance(input);
   }),
   // Update a leave balance entry — only entitlement and expiry are editable, used/remaining are auto-calculated from leave records
@@ -6497,7 +6825,7 @@ var employeesRouter = router({
       totalEntitlement: z4.number(),
       expiryDate: z4.string().nullable().optional()
     })
-  })).mutation(async ({ input }) => {
+  })).query(async ({ input }) => {
     const updateData = { totalEntitlement: input.data.totalEntitlement };
     if (input.data.expiryDate !== void 0) {
       updateData.expiryDate = input.data.expiryDate;
@@ -6505,7 +6833,7 @@ var employeesRouter = router({
     return await updateLeaveBalance(input.id, updateData);
   }),
   // Delete a leave balance entry
-  deleteLeaveBalance: customerManagerProcedure.input(z4.object({ id: z4.number() })).mutation(async ({ input }) => {
+  deleteLeaveBalance: customerManagerProcedure.input(z4.object({ id: z4.number() })).query(async ({ input }) => {
     return await deleteLeaveBalance(input.id);
   }),
   // Get leave types for a country (for leave balance initialization)
@@ -6533,6 +6861,28 @@ var employeesRouter = router({
         }
         return c;
       }));
+    }),
+    download: userProcedure.input(z4.object({ id: z4.number() })).mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError5({ code: "INTERNAL_SERVER_ERROR" });
+      const { employeeContracts: employeeContracts2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { eq: eq65 } = await import("drizzle-orm");
+      const contracts = await db.select().from(employeeContracts2).where(eq65(employeeContracts2.id, input.id));
+      const contract = contracts[0];
+      if (!contract || !contract.fileKey) {
+        throw new TRPCError5({ code: "NOT_FOUND", message: "Contract file not found" });
+      }
+      try {
+        const buffer = await storageDownload(contract.fileKey);
+        return {
+          content: buffer.toString("base64"),
+          filename: contract.fileKey.split("/").pop() || "contract.pdf",
+          contentType: "application/pdf"
+        };
+      } catch (error) {
+        console.error("Failed to download contract:", error);
+        throw new TRPCError5({ code: "INTERNAL_SERVER_ERROR", message: "Failed to download contract" });
+      }
     }),
     upload: customerManagerProcedure.input(
       z4.object({
@@ -6626,6 +6976,23 @@ var employeesRouter = router({
         return d;
       }));
     }),
+    download: userProcedure.input(z4.object({ id: z4.number() })).mutation(async ({ input }) => {
+      const doc = await getEmployeeDocumentById(input.id);
+      if (!doc || !doc.fileKey) {
+        throw new TRPCError5({ code: "NOT_FOUND", message: "Document not found" });
+      }
+      try {
+        const buffer = await storageDownload(doc.fileKey);
+        return {
+          content: buffer.toString("base64"),
+          filename: doc.fileKey.split("/").pop() || "document.pdf",
+          contentType: doc.mimeType || "application/pdf"
+        };
+      } catch (error) {
+        console.error("Failed to download document:", error);
+        throw new TRPCError5({ code: "INTERNAL_SERVER_ERROR", message: "Failed to download document" });
+      }
+    }),
     upload: customerManagerProcedure.input(
       z4.object({
         employeeId: z4.number(),
@@ -6682,8 +7049,8 @@ var employeesRouter = router({
       const db = await getDb();
       if (!db) return [];
       const conditions = [];
-      if (input.customerId) conditions.push(eq14(onboardingInvites.customerId, input.customerId));
-      if (input.status) conditions.push(eq14(onboardingInvites.status, input.status));
+      if (input.customerId) conditions.push(eq13(onboardingInvites.customerId, input.customerId));
+      if (input.status) conditions.push(eq13(onboardingInvites.status, input.status));
       const invites = await db.select({
         id: onboardingInvites.id,
         customerId: onboardingInvites.customerId,
@@ -6695,13 +7062,13 @@ var employeesRouter = router({
         expiresAt: onboardingInvites.expiresAt,
         completedAt: onboardingInvites.completedAt,
         createdAt: onboardingInvites.createdAt
-      }).from(onboardingInvites).leftJoin(customers, eq14(onboardingInvites.customerId, customers.id)).where(conditions.length > 0 ? and12(...conditions) : void 0).orderBy(desc9(onboardingInvites.createdAt));
+      }).from(onboardingInvites).leftJoin(customers, eq13(onboardingInvites.customerId, customers.id)).where(conditions.length > 0 ? and11(...conditions) : void 0).orderBy(desc8(onboardingInvites.createdAt));
       return invites;
     }),
     delete: customerManagerProcedure.input(z4.object({ id: z4.number() })).mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError5({ code: "INTERNAL_SERVER_ERROR" });
-      await db.delete(onboardingInvites).where(eq14(onboardingInvites.id, input.id));
+      await db.delete(onboardingInvites).where(eq13(onboardingInvites.id, input.id));
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -6967,28 +7334,91 @@ var payrollRouter = router({
     if (duplicate) {
       throw new TRPCError6({ code: "BAD_REQUEST", message: `Employee ${employee.firstName} ${employee.lastName} is already in this payroll run.` });
     }
-    const totals = calculateItemTotals(input);
+    const pmDate = payrollRun.payrollMonth instanceof Date ? payrollRun.payrollMonth : new Date(payrollRun.payrollMonth);
+    const y = pmDate.getUTCFullYear();
+    const m = String(pmDate.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(pmDate.getUTCDate()).padStart(2, "0");
+    const payrollMonthStr = `${y}-${m}-${d}`;
+    const allAdj = await getSubmittedAdjustmentsForPayroll(input.employeeId, payrollMonthStr);
+    let totalBonus = 0;
+    let totalAllowances = 0;
+    let totalReimbursements = 0;
+    let totalDeductions = 0;
+    const adjustmentsBreakdown = [];
+    const lockedAdjustmentIds = [];
+    for (const adj of allAdj) {
+      const amount = parseFloat(adj.amount?.toString() ?? "0");
+      switch (adj.adjustmentType) {
+        case "bonus":
+          totalBonus += amount;
+          break;
+        case "allowance":
+          totalAllowances += amount;
+          break;
+        case "reimbursement":
+          totalReimbursements += amount;
+          break;
+        case "deduction":
+          totalDeductions += amount;
+          break;
+        case "other":
+          totalAllowances += amount;
+          break;
+      }
+      adjustmentsBreakdown.push({
+        id: adj.id,
+        type: adj.adjustmentType,
+        category: adj.category,
+        description: adj.description,
+        amount: adj.amount
+      });
+      lockedAdjustmentIds.push(adj.id);
+    }
+    const allLeave = await getSubmittedUnpaidLeaveForPayroll(input.employeeId, payrollMonthStr);
+    let totalUnpaidDays = 0;
+    const lockedLeaveIds = [];
+    for (const lv of allLeave) {
+      totalUnpaidDays += parseFloat(lv.days?.toString() ?? "0");
+      lockedLeaveIds.push(lv.id);
+    }
+    const baseSalary = parseFloat(employee.baseSalary?.toString() ?? "0");
+    const countryConfig = await getCountryConfig(payrollRun.countryCode);
+    const workingDaysPerWeek = countryConfig?.workingDaysPerWeek ?? 5;
+    const monthlyWorkingDays = workingDaysPerWeek * 4.33;
+    const totalUnpaidDeduction = monthlyWorkingDays > 0 ? Math.round(baseSalary / monthlyWorkingDays * totalUnpaidDays * 100) / 100 : 0;
+    const inputBase = parseFloat(input.baseSalary);
+    const finalBaseSalary = inputBase > 0 ? inputBase : baseSalary;
+    const itemFields = {
+      baseSalary: finalBaseSalary.toFixed(2),
+      bonus: totalBonus.toFixed(2),
+      allowances: totalAllowances.toFixed(2),
+      reimbursements: totalReimbursements.toFixed(2),
+      deductions: totalDeductions.toFixed(2),
+      taxDeduction: input.taxDeduction,
+      socialSecurityDeduction: input.socialSecurityDeduction,
+      unpaidLeaveDeduction: totalUnpaidDeduction.toFixed(2),
+      employerSocialContribution: input.employerSocialContribution
+    };
+    const totals = calculateItemTotals(itemFields);
     const result = await createPayrollItem({
       payrollRunId: input.payrollRunId,
       employeeId: input.employeeId,
-      baseSalary: input.baseSalary,
-      bonus: input.bonus,
-      allowances: input.allowances,
-      reimbursements: input.reimbursements,
-      deductions: input.deductions,
-      taxDeduction: input.taxDeduction,
-      socialSecurityDeduction: input.socialSecurityDeduction,
-      unpaidLeaveDeduction: input.unpaidLeaveDeduction,
-      unpaidLeaveDays: input.unpaidLeaveDays,
+      ...itemFields,
+      unpaidLeaveDays: totalUnpaidDays.toFixed(1),
       gross: totals.gross,
       net: totals.net,
-      employerSocialContribution: input.employerSocialContribution,
       totalEmploymentCost: totals.totalEmploymentCost,
-      currency: input.currency,
+      currency: employee.salaryCurrency || payrollRun.currency,
       notes: input.notes,
-      adjustmentsBreakdown: input.adjustmentsBreakdown
+      adjustmentsBreakdown: adjustmentsBreakdown.length > 0 ? adjustmentsBreakdown : void 0
     });
     await recalculatePayrollRunTotals(input.payrollRunId);
+    for (const adjId of lockedAdjustmentIds) {
+      await updateAdjustment(adjId, { status: "locked", payrollRunId: input.payrollRunId });
+    }
+    for (const leaveId of lockedLeaveIds) {
+      await updateLeaveRecord(leaveId, { status: "locked" });
+    }
     await logAuditAction({
       userId: ctx.user.id,
       userName: ctx.user.name || null,
@@ -7206,29 +7636,30 @@ var payrollRouter = router({
 import { z as z6 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq18, and as and16, sql as sql6 } from "drizzle-orm";
+import { eq as eq17, sql as sql7 } from "drizzle-orm";
 import { TRPCError as TRPCError8 } from "@trpc/server";
 
 // server/services/creditNoteService.ts
 init_db2();
 init_schema();
 init_db2();
-import { eq as eq16, like as like8, and as and14 } from "drizzle-orm";
+import { eq as eq15, like as like8, and as and13 } from "drizzle-orm";
 
 // server/services/walletService.ts
 init_connection();
 init_schema();
-import { eq as eq15, and as and13 } from "drizzle-orm";
+import { eq as eq14, and as and12 } from "drizzle-orm";
 import { TRPCError as TRPCError7 } from "@trpc/server";
 var WalletService = class {
   /**
-   * Get or create a wallet for a customer and currency
+   * Get or create a wallet for a customer and currency.
+   * Accepts an optional transaction object to participate in an outer transaction.
    */
-  async getWallet(customerId, currency) {
-    const db = getDb();
+  async getWallet(customerId, currency, externalTx) {
+    const db = externalTx || getDb();
     if (!db) throw new Error("Database not initialized");
     const existing = await db.query.customerWallets.findFirst({
-      where: (t4, { and: and51, eq: eq66 }) => and51(eq66(t4.customerId, customerId), eq66(t4.currency, currency))
+      where: (t4, { and: and50, eq: eq65 }) => and50(eq65(t4.customerId, customerId), eq65(t4.currency, currency))
     });
     if (existing) return existing;
     const [inserted] = await db.insert(customerWallets).values({
@@ -7244,58 +7675,69 @@ var WalletService = class {
     return inserted;
   }
   /**
-   * Execute a wallet transaction with optimistic locking
+   * Core wallet transaction logic that operates on a given transaction context.
+   * This is the internal implementation shared by both standalone and nested-tx paths.
    */
-  async transact(params) {
-    const db = getDb();
-    if (!db) throw new Error("Database not initialized");
+  async _transactWithTx(tx, params) {
     const amountNum = parseFloat(params.amount);
     if (amountNum <= 0) throw new Error("Transaction amount must be positive");
-    return await db.transaction(async (tx) => {
-      const wallet = await tx.query.customerWallets.findFirst({
-        where: eq15(customerWallets.id, params.walletId)
-      });
-      if (!wallet) throw new Error(`Wallet ${params.walletId} not found`);
-      const currentBalance = parseFloat(wallet.balance);
-      let newBalance = currentBalance;
-      if (params.direction === "credit") {
-        newBalance += amountNum;
-      } else {
-        newBalance -= amountNum;
-        if (newBalance < 0) {
-          throw new TRPCError7({
-            code: "PRECONDITION_FAILED",
-            message: `Insufficient wallet balance. Current: ${currentBalance}, Required: ${amountNum}`
-          });
-        }
-      }
-      const result = await tx.update(customerWallets).set({
-        balance: newBalance.toFixed(2),
-        version: wallet.version + 1
-      }).where(
-        // Ensure version hasn't changed since read
-        and13(eq15(customerWallets.id, params.walletId), eq15(customerWallets.version, wallet.version))
-      );
-      if (result.rowsAffected === 0) {
+    const wallet = await tx.query.customerWallets.findFirst({
+      where: eq14(customerWallets.id, params.walletId)
+    });
+    if (!wallet) throw new Error(`Wallet ${params.walletId} not found`);
+    const currentBalance = parseFloat(wallet.balance);
+    let newBalance = currentBalance;
+    if (params.direction === "credit") {
+      newBalance += amountNum;
+    } else {
+      newBalance -= amountNum;
+      if (newBalance < 0) {
         throw new TRPCError7({
-          code: "CONFLICT",
-          message: "Wallet balance was updated concurrently. Please try again."
+          code: "PRECONDITION_FAILED",
+          message: `Insufficient wallet balance. Current: ${currentBalance}, Required: ${amountNum}`
         });
       }
-      const [transaction] = await tx.insert(walletTransactions).values({
-        walletId: params.walletId,
-        type: params.type,
-        amount: params.amount,
-        direction: params.direction,
-        balanceBefore: currentBalance.toFixed(2),
-        balanceAfter: newBalance.toFixed(2),
-        referenceId: params.referenceId,
-        referenceType: params.referenceType,
-        description: params.description,
-        internalNote: params.internalNote,
-        createdBy: params.createdBy
-      }).returning();
-      return { wallet: { ...wallet, balance: newBalance.toFixed(2) }, transaction };
+    }
+    const result = await tx.update(customerWallets).set({
+      balance: newBalance.toFixed(2),
+      version: wallet.version + 1
+    }).where(
+      // Ensure version hasn't changed since read
+      and12(eq14(customerWallets.id, params.walletId), eq14(customerWallets.version, wallet.version))
+    );
+    if (result.rowsAffected === 0) {
+      throw new TRPCError7({
+        code: "CONFLICT",
+        message: "Wallet balance was updated concurrently. Please try again."
+      });
+    }
+    const [transaction] = await tx.insert(walletTransactions).values({
+      walletId: params.walletId,
+      type: params.type,
+      amount: params.amount,
+      direction: params.direction,
+      balanceBefore: currentBalance.toFixed(2),
+      balanceAfter: newBalance.toFixed(2),
+      referenceId: params.referenceId,
+      referenceType: params.referenceType,
+      description: params.description,
+      internalNote: params.internalNote,
+      createdBy: params.createdBy
+    }).returning();
+    return { wallet: { ...wallet, balance: newBalance.toFixed(2) }, transaction };
+  }
+  /**
+   * Execute a wallet transaction with optimistic locking.
+   * Accepts an optional external transaction object to avoid nested transactions (SQLITE_BUSY).
+   */
+  async transact(params, externalTx) {
+    if (externalTx) {
+      return await this._transactWithTx(externalTx, params);
+    }
+    const db = getDb();
+    if (!db) throw new Error("Database not initialized");
+    return await db.transaction(async (tx) => {
+      return await this._transactWithTx(tx, params);
     });
   }
   /**
@@ -7341,13 +7783,14 @@ var WalletService = class {
   }
   // ── Frozen Wallet Methods ─────────────────────────────────────────────
   /**
-   * Get or create a frozen wallet for a customer and currency
+   * Get or create a frozen wallet for a customer and currency.
+   * Accepts an optional transaction object to participate in an outer transaction.
    */
-  async getFrozenWallet(customerId, currency) {
-    const db = getDb();
+  async getFrozenWallet(customerId, currency, externalTx) {
+    const db = externalTx || getDb();
     if (!db) throw new Error("Database not initialized");
     const existing = await db.query.customerFrozenWallets.findFirst({
-      where: (t4, { and: and51, eq: eq66 }) => and51(eq66(t4.customerId, customerId), eq66(t4.currency, currency))
+      where: (t4, { and: and50, eq: eq65 }) => and50(eq65(t4.customerId, customerId), eq65(t4.currency, currency))
     });
     if (existing) return existing;
     const [inserted] = await db.insert(customerFrozenWallets).values({
@@ -7362,57 +7805,67 @@ var WalletService = class {
     return inserted;
   }
   /**
-   * Execute a frozen wallet transaction with optimistic locking
+   * Core frozen wallet transaction logic that operates on a given transaction context.
    */
-  async frozenTransact(params) {
-    const db = getDb();
-    if (!db) throw new Error("Database not initialized");
+  async _frozenTransactWithTx(tx, params) {
     const amountNum = parseFloat(params.amount);
     if (amountNum <= 0) throw new Error("Transaction amount must be positive");
-    return await db.transaction(async (tx) => {
-      const wallet = await tx.query.customerFrozenWallets.findFirst({
-        where: eq15(customerFrozenWallets.id, params.walletId)
-      });
-      if (!wallet) throw new Error(`Frozen Wallet ${params.walletId} not found`);
-      const currentBalance = parseFloat(wallet.balance);
-      let newBalance = currentBalance;
-      if (params.direction === "credit") {
-        newBalance += amountNum;
-      } else {
-        newBalance -= amountNum;
-        if (newBalance < 0) {
-          throw new TRPCError7({
-            code: "PRECONDITION_FAILED",
-            message: `Insufficient frozen wallet balance. Current: ${currentBalance}, Required: ${amountNum}`
-          });
-        }
-      }
-      const result = await tx.update(customerFrozenWallets).set({
-        balance: newBalance.toFixed(2),
-        version: wallet.version + 1
-      }).where(
-        and13(eq15(customerFrozenWallets.id, params.walletId), eq15(customerFrozenWallets.version, wallet.version))
-      );
-      if (result.rowsAffected === 0) {
+    const wallet = await tx.query.customerFrozenWallets.findFirst({
+      where: eq14(customerFrozenWallets.id, params.walletId)
+    });
+    if (!wallet) throw new Error(`Frozen Wallet ${params.walletId} not found`);
+    const currentBalance = parseFloat(wallet.balance);
+    let newBalance = currentBalance;
+    if (params.direction === "credit") {
+      newBalance += amountNum;
+    } else {
+      newBalance -= amountNum;
+      if (newBalance < 0) {
         throw new TRPCError7({
-          code: "CONFLICT",
-          message: "Frozen Wallet balance was updated concurrently. Please try again."
+          code: "PRECONDITION_FAILED",
+          message: `Insufficient frozen wallet balance. Current: ${currentBalance}, Required: ${amountNum}`
         });
       }
-      const [transaction] = await tx.insert(frozenWalletTransactions).values({
-        walletId: params.walletId,
-        type: params.type,
-        amount: params.amount,
-        direction: params.direction,
-        balanceBefore: currentBalance.toFixed(2),
-        balanceAfter: newBalance.toFixed(2),
-        referenceId: params.referenceId,
-        referenceType: params.referenceType,
-        description: params.description,
-        internalNote: params.internalNote,
-        createdBy: params.createdBy
-      }).returning();
-      return { wallet: { ...wallet, balance: newBalance.toFixed(2) }, transaction };
+    }
+    const result = await tx.update(customerFrozenWallets).set({
+      balance: newBalance.toFixed(2),
+      version: wallet.version + 1
+    }).where(
+      and12(eq14(customerFrozenWallets.id, params.walletId), eq14(customerFrozenWallets.version, wallet.version))
+    );
+    if (result.rowsAffected === 0) {
+      throw new TRPCError7({
+        code: "CONFLICT",
+        message: "Frozen Wallet balance was updated concurrently. Please try again."
+      });
+    }
+    const [transaction] = await tx.insert(frozenWalletTransactions).values({
+      walletId: params.walletId,
+      type: params.type,
+      amount: params.amount,
+      direction: params.direction,
+      balanceBefore: currentBalance.toFixed(2),
+      balanceAfter: newBalance.toFixed(2),
+      referenceId: params.referenceId,
+      referenceType: params.referenceType,
+      description: params.description,
+      internalNote: params.internalNote,
+      createdBy: params.createdBy
+    }).returning();
+    return { wallet: { ...wallet, balance: newBalance.toFixed(2) }, transaction };
+  }
+  /**
+   * Execute a frozen wallet transaction with optimistic locking.
+   * Accepts an optional external transaction object to avoid nested transactions (SQLITE_BUSY).
+   */
+  async frozenTransact(params, externalTx) {
+    if (externalTx) {
+      return await this._frozenTransactWithTx(externalTx, params);
+    }
+    const db = getDb();
+    if (!db) throw new Error("Database not initialized");
+    return await db.transaction(async (tx) => {
+      return await this._frozenTransactWithTx(tx, params);
     });
   }
   /**
@@ -7432,47 +7885,51 @@ var WalletService = class {
     });
   }
   /**
-   * Release funds from frozen wallet to main wallet (e.g. after employee termination)
+   * Release funds from frozen wallet to a credit note (e.g. after employee termination)
+   * The Credit Note will then be processed by Finance to either credit Main Wallet or refund to Bank.
+   * Accepts an optional external transaction object to avoid nested transactions.
    */
-  async releaseFrozenToMain(customerId, currency, amount, reason, createdBy) {
-    const frozenWallet = await this.getFrozenWallet(customerId, currency);
-    const mainWallet = await this.getWallet(customerId, currency);
-    const db = getDb();
-    if (!db) throw new Error("Database not initialized");
-    return await db.transaction(async (tx) => {
-      await this.frozenTransact({
-        walletId: frozenWallet.id,
-        type: "deposit_release",
-        amount,
-        direction: "debit",
-        referenceId: 0,
-        // Manual
-        referenceType: "manual",
-        description: `Deposit release: ${reason}`,
-        createdBy
-      });
-      await this.transact({
-        walletId: mainWallet.id,
-        type: "manual_adjustment",
-        amount,
-        direction: "credit",
-        referenceId: 0,
-        referenceType: "manual",
-        description: `Deposit released from frozen wallet: ${reason}`,
-        createdBy
-      });
+  async releaseDepositToCreditNote(customerId, currency, amount, creditNoteId, reason, createdBy, externalTx) {
+    const frozenWallet = await this.getFrozenWallet(customerId, currency, externalTx);
+    return await this.frozenTransact({
+      walletId: frozenWallet.id,
+      type: "deposit_release",
+      amount,
+      direction: "debit",
+      referenceId: creditNoteId,
+      referenceType: "credit_note",
+      description: `Deposit released to Credit Note #${creditNoteId}: ${reason}`,
+      createdBy
+    }, externalTx);
+  }
+  /**
+   * Withdraw funds from main wallet (Refund Out)
+   */
+  async withdrawFromWallet(customerId, currency, amount, reason, createdBy) {
+    const wallet = await this.getWallet(customerId, currency);
+    return await this.transact({
+      walletId: wallet.id,
+      type: "payout",
+      // or "refund_out"
+      amount,
+      direction: "debit",
+      referenceId: 0,
+      // Manual withdrawal request
+      referenceType: "manual",
+      description: `Withdrawal (Refund Out): ${reason}`,
+      createdBy
     });
   }
 };
 var walletService = new WalletService();
 
 // server/services/creditNoteService.ts
-async function approveCreditNote(creditNoteId, approvedBy) {
+async function approveCreditNote(creditNoteId, approvedBy, disposition) {
   const db = getDb();
   if (!db) throw new Error("Database not initialized");
   return await db.transaction(async (tx) => {
     const creditNote = await tx.query.invoices.findFirst({
-      where: eq16(invoices.id, creditNoteId)
+      where: eq15(invoices.id, creditNoteId)
     });
     if (!creditNote) throw new Error("Credit note not found");
     if (creditNote.invoiceType !== "credit_note" && creditNote.invoiceType !== "deposit_refund") {
@@ -7481,25 +7938,50 @@ async function approveCreditNote(creditNoteId, approvedBy) {
     if (creditNote.status === "paid") {
       throw new Error("Credit note is already processed");
     }
-    const creditAmount = Math.abs(parseFloat(creditNote.total));
-    await walletService.transact({
-      walletId: (await walletService.getWallet(creditNote.customerId, creditNote.currency)).id,
-      type: "credit_note_in",
-      amount: creditAmount.toFixed(2),
-      direction: "credit",
-      referenceId: creditNote.id,
-      referenceType: "credit_note",
-      description: `Credit Note #${creditNote.invoiceNumber} approved`,
-      createdBy: approvedBy
-    });
+    const finalDisposition = disposition || creditNote.creditNoteDisposition || "to_wallet";
+    if (disposition) {
+      await tx.update(invoices).set({ creditNoteDisposition: disposition }).where(eq15(invoices.id, creditNoteId));
+    }
+    if (creditNote.relatedInvoiceId) {
+      const relatedInvoice = await getInvoiceById(creditNote.relatedInvoiceId);
+      if (relatedInvoice && relatedInvoice.invoiceType === "deposit") {
+        const releaseAmount = Math.abs(parseFloat(creditNote.total)).toFixed(2);
+        await walletService.releaseDepositToCreditNote(
+          creditNote.customerId,
+          creditNote.currency,
+          releaseAmount,
+          creditNote.id,
+          "Deposit Release Approved",
+          approvedBy,
+          tx
+          // Pass outer transaction to avoid nested db.transaction() (SQLITE_BUSY)
+        );
+      }
+    }
+    if (finalDisposition === "to_wallet") {
+      const creditAmount = Math.abs(parseFloat(creditNote.total));
+      const wallet = await walletService.getWallet(creditNote.customerId, creditNote.currency, tx);
+      await walletService.transact({
+        walletId: wallet.id,
+        type: "credit_note_in",
+        amount: creditAmount.toFixed(2),
+        direction: "credit",
+        referenceId: creditNote.id,
+        referenceType: "credit_note",
+        description: `Credit Note #${creditNote.invoiceNumber} approved`,
+        createdBy: approvedBy
+      }, tx);
+    } else {
+      console.log(`Credit Note #${creditNote.invoiceNumber} approved for Bank Refund.`);
+    }
     await tx.update(invoices).set({
       status: "paid",
       paidDate: /* @__PURE__ */ new Date(),
       paidAmount: creditNote.total,
       // Negative amount
       amountDue: "0"
-    }).where(eq16(invoices.id, creditNoteId));
-    return { success: true, message: "Credit note approved and credited to wallet" };
+    }).where(eq15(invoices.id, creditNoteId));
+    return { success: true, message: `Credit note approved (${finalDisposition})` };
   });
 }
 async function generateCreditNoteNumber(billingEntityId, invoiceMonth) {
@@ -7535,19 +8017,13 @@ async function generateCreditNote(params) {
   try {
     const originalInvoice = await getInvoiceById(params.originalInvoiceId);
     if (!originalInvoice) {
-      return { invoiceId: null, message: "Original invoice not found" };
+      throw new Error("Original invoice not found");
     }
     if (originalInvoice.status !== "paid") {
-      return {
-        invoiceId: null,
-        message: `Cannot create credit note for invoice in '${originalInvoice.status}' status. Only paid invoices can be credited.`
-      };
+      throw new Error(`Cannot create credit note for invoice in '${originalInvoice.status}' status. Only paid invoices can be credited.`);
     }
     if (["credit_note", "deposit_refund"].includes(originalInvoice.invoiceType || "")) {
-      return {
-        invoiceId: null,
-        message: `Cannot create credit note for a ${originalInvoice.invoiceType} invoice.`
-      };
+      throw new Error(`Cannot create credit note for a ${originalInvoice.invoiceType} invoice.`);
     }
     if (originalInvoice.invoiceType === "deposit") {
       const originalItems = await listInvoiceItemsByInvoice(params.originalInvoiceId);
@@ -7556,64 +8032,52 @@ async function generateCreditNote(params) {
         const { getEmployeeById: getEmp } = await Promise.resolve().then(() => (init_db2(), db_exports));
         const employee = await getEmp(depositItem.employeeId);
         if (employee && employee.status !== "terminated") {
-          return {
-            invoiceId: null,
-            message: "Employee must be in 'terminated' status before creating a credit note for a deposit invoice"
-          };
+          throw new Error("Employee must be in 'terminated' status before creating a credit note for a deposit invoice");
         }
       }
       const existingRefunds = await db.select({ id: invoices.id, status: invoices.status }).from(invoices).where(
-        and14(
-          eq16(invoices.relatedInvoiceId, params.originalInvoiceId),
-          eq16(invoices.invoiceType, "deposit_refund")
+        and13(
+          eq15(invoices.relatedInvoiceId, params.originalInvoiceId),
+          eq15(invoices.invoiceType, "deposit_refund")
         )
       );
       const hasActiveRefund = existingRefunds.some(
         (r) => r.status !== "cancelled"
       );
       if (hasActiveRefund) {
-        return {
-          invoiceId: null,
-          message: "This deposit has already been refunded. Cannot create a credit note for a refunded deposit (refund and credit note are mutually exclusive)."
-        };
+        throw new Error("This deposit has already been refunded. Cannot create a credit note for a refunded deposit.");
       }
       if (!params.isFullCredit) {
-        return {
-          invoiceId: null,
-          message: "Deposit invoices only support full-amount credit notes. Partial credit is not allowed for deposits."
-        };
+        throw new Error("Deposit invoices only support full-amount credit notes. Partial credit is not allowed for deposits.");
       }
       const existingCreditNotes = await db.select({ id: invoices.id, status: invoices.status }).from(invoices).where(
-        and14(
-          eq16(invoices.relatedInvoiceId, params.originalInvoiceId),
-          eq16(invoices.invoiceType, "credit_note")
+        and13(
+          eq15(invoices.relatedInvoiceId, params.originalInvoiceId),
+          eq15(invoices.invoiceType, "credit_note")
         )
       );
       const hasActiveCreditNote = existingCreditNotes.some(
         (cn) => cn.status !== "cancelled"
       );
       if (hasActiveCreditNote) {
-        return {
-          invoiceId: null,
-          message: "This deposit already has a credit note. Only one credit note is allowed per deposit."
-        };
+        throw new Error("This deposit already has a credit note. Only one credit note is allowed per deposit.");
       }
     }
     if (originalInvoice.invoiceType !== "deposit") {
       const existingCreditNotes = await db.select({ total: invoices.total, status: invoices.status }).from(invoices).where(
-        and14(
-          eq16(invoices.relatedInvoiceId, params.originalInvoiceId),
-          eq16(invoices.invoiceType, "credit_note")
+        and13(
+          eq15(invoices.relatedInvoiceId, params.originalInvoiceId),
+          eq15(invoices.invoiceType, "credit_note")
         )
       );
-      const existingCreditTotal = existingCreditNotes.filter((cn) => cn.status !== "cancelled").reduce((sum4, cn) => sum4 + Math.abs(parseFloat(cn.total?.toString() ?? "0")), 0);
+      const existingCreditTotal = existingCreditNotes.filter((cn) => cn.status !== "cancelled").reduce((sum3, cn) => sum3 + Math.abs(parseFloat(cn.total?.toString() ?? "0")), 0);
       const originalTotal = Math.abs(parseFloat(originalInvoice.total?.toString() ?? "0"));
       let pendingCreditAmount;
       if (params.isFullCredit) {
         pendingCreditAmount = originalTotal;
       } else if (params.lineItems && params.lineItems.length > 0) {
         pendingCreditAmount = params.lineItems.reduce(
-          (sum4, item) => sum4 + Math.abs(parseFloat(item.amount)),
+          (sum3, item) => sum3 + Math.abs(parseFloat(item.amount)),
           0
         );
       } else {
@@ -7621,10 +8085,7 @@ async function generateCreditNote(params) {
       }
       if (existingCreditTotal + pendingCreditAmount > originalTotal + 0.01) {
         const remaining = (originalTotal - existingCreditTotal).toFixed(2);
-        return {
-          invoiceId: null,
-          message: `Cumulative credit notes (${existingCreditTotal.toFixed(2)} existing + ${pendingCreditAmount.toFixed(2)} new) would exceed the original invoice total (${originalTotal.toFixed(2)}). Maximum remaining credit: ${remaining}.`
-        };
+        throw new Error(`Cumulative credit notes (${existingCreditTotal.toFixed(2)} existing + ${pendingCreditAmount.toFixed(2)} new) would exceed the original invoice total (${originalTotal.toFixed(2)}). Maximum remaining credit: ${remaining}.`);
       }
     }
     const customer = await getCustomerById(originalInvoice.customerId);
@@ -7650,7 +8111,7 @@ async function generateCreditNote(params) {
       }));
     } else if (params.lineItems && params.lineItems.length > 0) {
       creditTotal = params.lineItems.reduce(
-        (sum4, item) => sum4 + Math.abs(parseFloat(item.amount)),
+        (sum3, item) => sum3 + Math.abs(parseFloat(item.amount)),
         0
       );
       creditItems = params.lineItems.map((item) => ({
@@ -7664,10 +8125,7 @@ async function generateCreditNote(params) {
         countryCode: item.countryCode
       }));
     } else {
-      return {
-        invoiceId: null,
-        message: "Either isFullCredit must be true or lineItems must be provided"
-      };
+      throw new Error("Either isFullCredit must be true or lineItems must be provided");
     }
     const billingEntityId = originalInvoice.billingEntityId || customer?.billingEntityId || null;
     const creditNoteNumber = await generateCreditNoteNumber(
@@ -7689,30 +8147,32 @@ async function generateCreditNote(params) {
       serviceFeeTotal: "0",
       tax: "0",
       total: (-creditTotal).toFixed(2),
-      status: "draft",
+      status: "sent",
+      // CHANGED from 'draft' to 'sent'
+      sentDate: /* @__PURE__ */ new Date(),
+      // Set sentDate immediately
       dueDate,
       relatedInvoiceId: params.originalInvoiceId,
       notes: `Credit Note for ${originalInvoice.invoiceNumber}. Reason: ${params.reason}`
     };
-    const invoiceResult = await db.insert(invoices).values(invoiceData);
-    const invoiceId = invoiceResult[0]?.insertId;
+    const invoiceResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+    const invoiceId = invoiceResult[0]?.id;
+    if (!invoiceId) {
+      throw new Error("Failed to get credit note invoice ID after insert");
+    }
     for (const item of creditItems) {
       await db.insert(invoiceItems).values({
         ...item,
         invoiceId
       });
     }
-    await approveCreditNote(invoiceId);
     return {
       invoiceId,
-      message: `Credit note ${creditNoteNumber} created and credited to wallet (${(-creditTotal).toFixed(2)} ${originalInvoice.currency || "USD"})`
+      message: `Credit note ${creditNoteNumber} created (Sent). Please process in Release Tasks.`
     };
   } catch (error) {
     console.error("[CreditNote] Error generating credit note:", error);
-    return {
-      invoiceId: null,
-      message: `Failed to generate credit note: ${error instanceof Error ? error.message : "Unknown error"}`
-    };
+    throw error;
   }
 }
 
@@ -7722,7 +8182,7 @@ init_notification();
 // server/services/notificationService.ts
 init_db2();
 init_schema();
-import { eq as eq17, and as and15, like as like9 } from "drizzle-orm";
+import { eq as eq16, and as and14, like as like9 } from "drizzle-orm";
 
 // server/services/invoicePdfService.ts
 init_db2();
@@ -7764,32 +8224,24 @@ async function generateInvoicePdf(options) {
   const billingEntity = invoice.billingEntityId ? await getBillingEntityById(invoice.billingEntityId) : null;
   const items = await listInvoiceItemsByInvoice(invoice.id);
   let logoBuffer = null;
-  if (billingEntity && billingEntity.logoUrl) {
+  if (billingEntity && (billingEntity.logoFileKey || billingEntity.logoUrl)) {
     try {
-      const logoResponse = await fetch(billingEntity.logoUrl);
-      if (logoResponse.ok) {
-        logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
+      let logoUrl = billingEntity.logoUrl;
+      if (billingEntity.logoFileKey) {
+        const { url: signedUrl } = await storageGet(billingEntity.logoFileKey);
+        logoUrl = signedUrl;
+      }
+      if (logoUrl) {
+        const logoResponse = await fetch(logoUrl);
+        if (logoResponse.ok) {
+          logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
+        }
       }
     } catch (logoErr) {
       console.warn("[InvoicePDF] Failed to fetch billing entity logo:", logoErr);
     }
   }
   const cjkFontPath = await ensureCJKFont();
-  const creditAppliedAmt = parseFloat(invoice.creditApplied?.toString() || "0");
-  let creditApps = [];
-  if (creditAppliedAmt > 0.01) {
-    const rawApps = await listApplicationsForInvoice(invoice.id);
-    creditApps = await Promise.all(
-      rawApps.map(async (app) => {
-        const cn = await getInvoiceById(app.creditNoteId);
-        return {
-          creditNoteId: app.creditNoteId,
-          appliedAmount: app.appliedAmount,
-          creditNoteNumber: cn?.invoiceNumber || `CN-${app.creditNoteId}`
-        };
-      })
-    );
-  }
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: "A4",
@@ -8030,7 +8482,9 @@ async function generateInvoicePdf(options) {
     doc.text("Tax / VAT", totalsLabelX, tableY, { width: 110 });
     doc.text(`${currency} ${formatNum(invoice.tax)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
     tableY += 14;
-    if (creditAppliedAmt > 0.01 && creditApps.length > 0) {
+    const walletAppliedAmt = parseFloat(invoice.walletAppliedAmount?.toString() || "0");
+    const hasDeductions = walletAppliedAmt > 0.01;
+    if (hasDeductions) {
       tableY += 4;
       doc.moveTo(totalsLabelX, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.3).strokeColor("#aaaaaa").stroke();
       tableY += 8;
@@ -8039,16 +8493,16 @@ async function generateInvoicePdf(options) {
       doc.text(`${currency} ${formatNum(invoice.total)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
       tableY += 14;
       doc.fontSize(8).font("Helvetica").fillColor("#2563eb");
-      doc.text("Less: Credit Note Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 5 });
-      doc.text(`- ${currency} ${formatNum(creditAppliedAmt)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+      doc.text("Less: Wallet Balance Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 5 });
+      doc.text(`- ${currency} ${formatNum(walletAppliedAmt)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
       tableY += 12;
       tableY += 2;
     }
     tableY += 4;
     doc.moveTo(totalsLabelX, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.5).strokeColor("#333333").stroke();
     tableY += 8;
-    const finalAmountDue = creditAppliedAmt > 0.01 ? parseFloat(invoice.amountDue?.toString() || (parseFloat(invoice.total?.toString() || "0") - creditAppliedAmt).toFixed(2)) : parseFloat(invoice.total?.toString() || "0");
-    const totalLabel = creditAppliedAmt > 0.01 ? "AMOUNT DUE" : "TOTAL DUE";
+    const finalAmountDue = walletAppliedAmt > 0.01 ? parseFloat(invoice.amountDue?.toString() || (parseFloat(invoice.total?.toString() || "0") - walletAppliedAmt).toFixed(2)) : parseFloat(invoice.total?.toString() || "0");
+    const totalLabel = walletAppliedAmt > 0.01 ? "AMOUNT DUE" : "TOTAL DUE";
     doc.fontSize(11).font("Helvetica-Bold").fillColor("#1a1a1a");
     doc.text(totalLabel, totalsLabelX, tableY, { width: 110 });
     doc.text(`${currency} ${formatNum(finalAmountDue.toFixed(2))}`, totalsValX, tableY, { width: totalsValW, align: "right" });
@@ -8295,7 +8749,7 @@ var notificationService = {
     const db = getDb();
     if (!db) return null;
     const setting = await db.query.systemSettings.findFirst({
-      where: eq17(systemSettings.key, "notification_rules")
+      where: eq16(systemSettings.key, "notification_rules")
     });
     if (setting && setting.value) {
       try {
@@ -8317,7 +8771,7 @@ var notificationService = {
       const [portal, role] = rule.split(":");
       if (portal === "worker" && workerId) {
         const worker = await db.query.workerUsers.findFirst({
-          where: eq17(workerUsers.id, workerId)
+          where: eq16(workerUsers.id, workerId)
         });
         if (worker) {
           targets.push({
@@ -8332,8 +8786,8 @@ var notificationService = {
         }
       } else if (portal === "admin") {
         const adminUsers = await db.query.users.findMany({
-          where: and15(
-            eq17(users.isActive, true),
+          where: and14(
+            eq16(users.isActive, true),
             like9(users.role, `%${role}%`)
             // Role is comma-separated string
           )
@@ -8348,19 +8802,19 @@ var notificationService = {
         })));
       } else if (portal === "client" && customerId) {
         const contacts = await db.query.customerContacts.findMany({
-          where: and15(
-            eq17(customerContacts.customerId, customerId),
-            eq17(customerContacts.portalRole, role),
+          where: and14(
+            eq16(customerContacts.customerId, customerId),
+            eq16(customerContacts.portalRole, role),
             // portalRole is enum
-            eq17(customerContacts.hasPortalAccess, true)
+            eq16(customerContacts.hasPortalAccess, true)
           )
         });
         if (role === "finance" && contacts.length === 0) {
           const adminContacts = await db.query.customerContacts.findMany({
-            where: and15(
-              eq17(customerContacts.customerId, customerId),
-              eq17(customerContacts.portalRole, "admin"),
-              eq17(customerContacts.hasPortalAccess, true)
+            where: and14(
+              eq16(customerContacts.customerId, customerId),
+              eq16(customerContacts.portalRole, "admin"),
+              eq16(customerContacts.hasPortalAccess, true)
             )
           });
           targets.push(...adminContacts.map((c) => ({
@@ -8509,6 +8963,7 @@ var invoicesRouter = router({
       status: z6.string().optional(),
       invoiceType: z6.string().optional(),
       invoiceMonth: z6.string().optional(),
+      excludeCreditNotes: z6.boolean().optional(),
       limit: z6.number().default(50),
       offset: z6.number().default(0)
     })
@@ -8518,14 +8973,22 @@ var invoicesRouter = router({
         customerId: input.customerId,
         status: input.status,
         invoiceType: input.invoiceType,
-        invoiceMonth: input.invoiceMonth
+        invoiceMonth: input.invoiceMonth,
+        excludeCreditNotes: input.excludeCreditNotes
       },
       input.limit,
       input.offset
     );
   }),
   get: userProcedure.input(z6.object({ id: z6.number() })).query(async ({ input }) => {
-    return await getInvoiceById(input.id);
+    const invoice = await getInvoiceById(input.id);
+    if (!invoice) throw new TRPCError8({ code: "NOT_FOUND", message: "Invoice not found" });
+    return invoice;
+  }),
+  getByNumber: userProcedure.input(z6.object({ invoiceNumber: z6.string() })).query(async ({ input }) => {
+    const invoice = await getInvoiceByNumber(input.invoiceNumber);
+    if (!invoice) throw new TRPCError8({ code: "NOT_FOUND", message: "Invoice not found" });
+    return invoice;
   }),
   getItems: userProcedure.input(z6.object({ invoiceId: z6.number() })).query(async ({ input }) => {
     return await listInvoiceItemsByInvoice(input.invoiceId);
@@ -8640,7 +9103,7 @@ var invoicesRouter = router({
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    const [customer] = await db.select({ id: customers.id }).from(customers).where(eq18(customers.id, input.customerId)).limit(1);
+    const [customer] = await db.select({ id: customers.id }).from(customers).where(eq17(customers.id, input.customerId)).limit(1);
     if (!customer) {
       throw new TRPCError8({ code: "BAD_REQUEST", message: `Customer with ID ${input.customerId} does not exist` });
     }
@@ -8763,24 +9226,21 @@ var invoicesRouter = router({
     if (!invoice) throw new TRPCError8({ code: "NOT_FOUND", message: "Invoice not found" });
     const oldStatus = invoice.status;
     const newStatus = input.status;
+    const validTransitions = {
+      draft: ["pending_review", "cancelled"],
+      pending_review: ["sent", "draft", "cancelled"],
+      sent: ["paid", "cancelled"],
+      overdue: ["paid", "cancelled"]
+    };
+    const allowed = validTransitions[oldStatus || "draft"] || [];
+    if (!allowed.includes(newStatus)) {
+      throw new TRPCError8({
+        code: "BAD_REQUEST",
+        message: `Cannot transition from '${oldStatus}' to '${newStatus}'`
+      });
+    }
+    ;
     if (oldStatus === "draft" && newStatus === "pending_review") {
-      const total = invoice.total;
-      const deducted = await walletService.attemptAutoDeduction(
-        invoice.id,
-        invoice.customerId,
-        invoice.currency,
-        total
-      );
-      if (parseFloat(deducted) > 0) {
-        const amountDue = (parseFloat(total) - parseFloat(deducted)).toFixed(2);
-        await updateInvoice(invoice.id, {
-          walletAppliedAmount: deducted,
-          amountDue
-          // If fully paid by wallet, can we auto-move to paid? 
-          // Spec says: Pending Review -> Sent shows deduction. 
-          // Let's keep it in pending_review but with reduced due amount.
-        });
-      }
     }
     if (oldStatus === "pending_review" && newStatus === "draft") {
       const walletApplied = parseFloat(invoice.walletAppliedAmount || "0");
@@ -8795,24 +9255,6 @@ var invoicesRouter = router({
           walletAppliedAmount: "0",
           amountDue: invoice.total
           // Reset to full total
-        });
-      }
-    }
-    if (newStatus === "paid" && input.paidAmount) {
-      const amountDue = parseFloat(invoice.amountDue || invoice.total);
-      const paid = parseFloat(input.paidAmount);
-      if (paid > amountDue) {
-        const overpayment = (paid - amountDue).toFixed(2);
-        const wallet = await walletService.getWallet(invoice.customerId, invoice.currency);
-        await walletService.transact({
-          walletId: wallet.id,
-          type: "overpayment_in",
-          amount: overpayment,
-          direction: "credit",
-          referenceId: invoice.id,
-          referenceType: "invoice",
-          description: `Overpayment for Invoice #${invoice.invoiceNumber}`,
-          createdBy: ctx.user.id
         });
       }
     }
@@ -8844,9 +9286,8 @@ var invoicesRouter = router({
       const invoice2 = await getInvoiceById(input.id);
       if (invoice2) {
         const invoiceTotal = parseFloat(invoice2.total?.toString() ?? "0");
-        const creditApplied = parseFloat(invoice2.creditApplied?.toString() ?? "0");
         const walletApplied = parseFloat(invoice2.walletAppliedAmount?.toString() ?? "0");
-        const effectiveAmountDue = creditApplied > 0 || walletApplied > 0 ? parseFloat(invoice2.amountDue?.toString() ?? (invoiceTotal - creditApplied - walletApplied).toFixed(2)) : invoiceTotal;
+        const effectiveAmountDue = walletApplied > 0 ? parseFloat(invoice2.amountDue?.toString() ?? (invoiceTotal - walletApplied).toFixed(2)) : invoiceTotal;
         const paidAmt = parseFloat(input.paidAmount);
         const diff = paidAmt - effectiveAmountDue;
         if (Math.abs(diff) < 0.01) {
@@ -8898,7 +9339,7 @@ var invoicesRouter = router({
             notes: `Outstanding balance from ${invoice2.invoiceNumber}. Original total: ${invoice2.currency} ${paymentResult.invoiceTotal}, Paid: ${invoice2.currency} ${input.paidAmount}, Shortfall: ${invoice2.currency} ${paymentResult.difference}`,
             dueDate: new Date(followUpMonth.getTime() + 30 * 24 * 60 * 60 * 1e3).toISOString().slice(0, 10)
           });
-          followUpInvoiceId = followUpResult?.insertId || followUpResult?.[0]?.insertId;
+          followUpInvoiceId = followUpResult?.[0]?.id;
           if (followUpInvoiceId) {
             await createInvoiceItem({
               invoiceId: followUpInvoiceId,
@@ -8934,6 +9375,18 @@ Please review and send the follow-up invoice to the client.`
             }).catch((err) => console.warn("[Notification] Failed to notify about follow-up invoice:", err));
           }
         } else if (paymentResult.type === "overpayment") {
+          const overpaymentAmount = paymentResult.difference;
+          const wallet = await walletService.getWallet(invoice2.customerId, invoice2.currency);
+          await walletService.transact({
+            walletId: wallet.id,
+            type: "overpayment_in",
+            amount: overpaymentAmount,
+            direction: "credit",
+            referenceId: invoice2.id,
+            referenceType: "invoice",
+            description: `Overpayment for Invoice #${invoice2.invoiceNumber}`,
+            createdBy: ctx.user.id
+          });
           await logAuditAction({
             userId: ctx.user.id,
             userName: ctx.user.name || null,
@@ -9099,6 +9552,83 @@ Excess Credited: ${invoice2.currency} ${paymentResult.difference}`
     });
     return { success: true };
   }),
+  pay: financeManagerProcedure.input(z6.object({
+    id: z6.number(),
+    walletAmount: z6.string().optional(),
+    externalAmount: z6.string().optional(),
+    externalReference: z6.string().optional(),
+    notes: z6.string().optional()
+  })).mutation(async ({ input, ctx }) => {
+    const invoice = await getInvoiceById(input.id);
+    if (!invoice) throw new TRPCError8({ code: "NOT_FOUND", message: "Invoice not found" });
+    if (invoice.status === "paid" || invoice.status === "cancelled" || invoice.status === "void") {
+      throw new TRPCError8({ code: "PRECONDITION_FAILED", message: `Invoice is already ${invoice.status}` });
+    }
+    const walletAmt = parseFloat(input.walletAmount || "0");
+    const externalAmt = parseFloat(input.externalAmount || "0");
+    const totalPay = walletAmt + externalAmt;
+    if (totalPay <= 0) throw new TRPCError8({ code: "BAD_REQUEST", message: "Payment amount must be greater than 0" });
+    if (walletAmt > 0) {
+      const wallet = await walletService.getWallet(invoice.customerId, invoice.currency);
+      if (parseFloat(wallet.balance) < walletAmt) {
+        throw new TRPCError8({ code: "PRECONDITION_FAILED", message: "Insufficient wallet balance" });
+      }
+      await walletService.transact({
+        walletId: wallet.id,
+        type: "invoice_deduction",
+        amount: walletAmt.toFixed(2),
+        direction: "debit",
+        referenceId: invoice.id,
+        referenceType: "invoice",
+        description: `Payment for Invoice #${invoice.invoiceNumber}`,
+        createdBy: ctx.user.id
+      });
+    }
+    const currentPaid = parseFloat(invoice.paidAmount || "0");
+    const currentWalletApplied = parseFloat(invoice.walletAppliedAmount || "0");
+    const newPaid = currentPaid + externalAmt;
+    const newWalletApplied = currentWalletApplied + walletAmt;
+    const total = parseFloat(invoice.total);
+    const totalPaidSoFar = newPaid + newWalletApplied;
+    const remainingDue = total - totalPaidSoFar;
+    let newStatus = invoice.status;
+    if (remainingDue <= 0.01) {
+      newStatus = "paid";
+    } else {
+      newStatus = "partially_paid";
+    }
+    const updateData = {
+      paidAmount: newPaid.toFixed(2),
+      walletAppliedAmount: newWalletApplied.toFixed(2),
+      amountDue: Math.max(0, remainingDue).toFixed(2),
+      status: newStatus,
+      paidDate: newStatus === "paid" ? /* @__PURE__ */ new Date() : void 0
+    };
+    await updateInvoice(invoice.id, updateData);
+    if (invoice.invoiceType === "deposit") {
+      await walletService.depositToFrozen(
+        invoice.customerId,
+        invoice.currency,
+        totalPay.toFixed(2),
+        invoice.id,
+        ctx.user.id
+      );
+    }
+    await logAuditAction({
+      userId: ctx.user.id,
+      userName: ctx.user.name || null,
+      action: "pay",
+      entityType: "invoice",
+      entityId: invoice.id,
+      changes: JSON.stringify({
+        walletAmount: walletAmt,
+        externalAmount: externalAmt,
+        newStatus,
+        remainingDue: updateData.amountDue
+      })
+    });
+    return { success: true, newStatus, remainingDue: updateData.amountDue };
+  }),
   /**
    * Delete invoice — any draft or cancelled invoice can be deleted
    * Auto-generated invoices can be recreated via Regenerate if needed
@@ -9112,6 +9642,19 @@ Excess Credited: ${invoice2.currency} ${paymentResult.difference}`
         code: "BAD_REQUEST",
         message: `Only draft or cancelled invoices can be deleted. Current status: ${invoice.status}`
       });
+    }
+    if (parseFloat(invoice.walletAppliedAmount || "0") > 0) {
+      throw new TRPCError8({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice with wallet funds applied. Void/Cancel instead." });
+    }
+    if (invoice.relatedInvoiceId) {
+      throw new TRPCError8({ code: "PRECONDITION_FAILED", message: "Cannot delete linked invoice (has related invoice). Void/Cancel instead." });
+    }
+    const db = getDb();
+    if (db) {
+      const children = await db.select().from(invoices).where(eq17(invoices.relatedInvoiceId, input.id));
+      if (children.length > 0) {
+        throw new TRPCError8({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice referenced by other invoices. Void/Cancel downstream invoices first." });
+      }
     }
     await deleteInvoice(input.id);
     await logAuditAction({
@@ -9152,7 +9695,7 @@ Excess Credited: ${invoice2.currency} ${paymentResult.difference}`
       billingEntityId: invoices.billingEntityId,
       createdAt: invoices.createdAt,
       paidAmount: invoices.paidAmount
-    }).from(invoices).orderBy(sql6`${invoices.invoiceMonth} DESC, ${invoices.createdAt} DESC`);
+    }).from(invoices).orderBy(sql7`${invoices.invoiceMonth} DESC, ${invoices.createdAt} DESC`);
     const monthMap = /* @__PURE__ */ new Map();
     for (const inv of allInvoices) {
       const monthKey = inv.invoiceMonth ? new Date(inv.invoiceMonth).toISOString().slice(0, 7) : inv.createdAt ? new Date(inv.createdAt).toISOString().slice(0, 7) : "unknown";
@@ -9174,29 +9717,35 @@ Excess Credited: ${invoice2.currency} ${paymentResult.difference}`
       if (inv.customerId) entry.customers.add(inv.customerId);
       const ccy = inv.currency || "USD";
       if (!entry.currencyBreakdowns.has(ccy)) {
-        entry.currencyBreakdowns.set(ccy, { totalAmount: 0, paidAmount: 0, invoiceCount: 0 });
+        entry.currencyBreakdowns.set(ccy, { totalAmount: 0, paidAmount: 0, depositAmount: 0, invoiceCount: 0 });
       }
       const ccyEntry = entry.currencyBreakdowns.get(ccy);
       const invTotal = parseFloat(inv.total?.toString() ?? "0");
       if (inv.status !== "cancelled") {
-        ccyEntry.totalAmount += invTotal;
-        ccyEntry.invoiceCount++;
-        if (inv.status === "paid" && inv.paidAmount) {
-          ccyEntry.paidAmount += parseFloat(inv.paidAmount.toString());
+        if (inv.invoiceType === "deposit") {
+          ccyEntry.depositAmount += invTotal;
+        } else if (inv.invoiceType === "credit_note" || inv.invoiceType === "deposit_refund") {
+        } else {
+          ccyEntry.invoiceCount++;
+          ccyEntry.totalAmount += invTotal;
+          if (inv.status === "paid" && inv.paidAmount) {
+            ccyEntry.paidAmount += parseFloat(inv.paidAmount.toString());
+          }
         }
       }
     }
-    const result = Array.from(monthMap.values()).map(({ customers: customers2, currencyBreakdowns, ...rest }) => {
+    const result = Array.from(monthMap.values()).map(({ customers: customers3, currencyBreakdowns, ...rest }) => {
       const currencies = Array.from(currencyBreakdowns.entries()).map(([currency, data]) => ({
         currency,
         totalAmount: data.totalAmount,
         paidAmount: data.paidAmount,
+        depositAmount: data.depositAmount,
         invoiceCount: data.invoiceCount,
         collectionRate: data.totalAmount > 0 ? Math.round(data.paidAmount / data.totalAmount * 1e4) / 100 : 0
       })).sort((a, b) => b.totalAmount - a.totalAmount);
       return {
         ...rest,
-        customerCount: customers2.size,
+        customerCount: customers3.size,
         currencies
       };
     }).sort((a, b) => b.month.localeCompare(a.month)).slice(0, input.limit);
@@ -9266,6 +9815,27 @@ Please review and process accordingly.`
     }
     return result;
   }),
+  /**
+   * Approve a credit note (e.g. Deposit Release)
+   * Disposition:
+   * - to_wallet: Credit amount to Main Wallet
+   * - to_bank: Mark as refunded externally
+   */
+  approveCreditNote: financeManagerProcedure.input(z6.object({
+    creditNoteId: z6.number(),
+    disposition: z6.enum(["to_wallet", "to_bank"])
+  })).mutation(async ({ input, ctx }) => {
+    await approveCreditNote(input.creditNoteId, ctx.user.id, input.disposition);
+    await logAuditAction({
+      userId: ctx.user.id,
+      userName: ctx.user.name || null,
+      action: "approve",
+      entityType: "invoice",
+      entityId: input.creditNoteId,
+      changes: JSON.stringify({ disposition: input.disposition })
+    });
+    return { success: true };
+  }),
   // ── Deposit Refund (manual trigger) ─────────────────────────────────
   /**
    * Manually generate a deposit refund for an employee
@@ -9309,7 +9879,7 @@ Please review and process accordingly.`
     const results = [];
     const validTransitions = {
       draft: ["pending_review", "cancelled"],
-      pending_review: ["sent", "cancelled"],
+      pending_review: ["sent", "draft", "cancelled"],
       sent: ["paid", "cancelled"],
       overdue: ["paid", "cancelled"]
     };
@@ -9378,367 +9948,201 @@ Please review and process accordingly.`
         failed: input.invoiceIds.length - successCount
       }
     };
-  }),
-  // ── Credit Note Apply Mechanism ──────────────────────────────────────
-  /**
-   * Apply a credit note to an invoice (offset credit against outstanding amount)
-   */
-  applyCreditToInvoice: financeManagerProcedure.input(
-    z6.object({
-      creditNoteId: z6.number(),
-      appliedToInvoiceId: z6.number(),
-      appliedAmount: z6.string(),
-      // Decimal as string
-      notes: z6.string().optional()
-    })
-  ).mutation(async ({ ctx, input }) => {
-    const creditNote = await getInvoiceById(input.creditNoteId);
-    if (!creditNote || creditNote.invoiceType !== "credit_note") {
-      throw new TRPCError8({ code: "BAD_REQUEST", message: "Invalid credit note" });
-    }
-    if (creditNote.status !== "sent") {
-      throw new TRPCError8({ code: "BAD_REQUEST", message: "Credit note must be in 'sent' status to be applied. Current status: " + creditNote.status });
-    }
-    const targetInvoice = await getInvoiceById(input.appliedToInvoiceId);
-    if (!targetInvoice) {
-      throw new TRPCError8({ code: "BAD_REQUEST", message: "Target invoice not found" });
-    }
-    if (targetInvoice.status !== "pending_review") {
-      throw new TRPCError8({ code: "BAD_REQUEST", message: "Credit can only be applied to invoices in Pending Review status. Once an invoice is sent to the customer, it cannot be modified with credit." });
-    }
-    if (creditNote.customerId !== targetInvoice.customerId) {
-      throw new TRPCError8({ code: "BAD_REQUEST", message: "Credit note and target invoice must belong to the same customer" });
-    }
-    if (targetInvoice.invoiceType === "credit_note" || targetInvoice.invoiceType === "deposit_refund") {
-      throw new TRPCError8({ code: "BAD_REQUEST", message: "Cannot apply credit to a credit note or deposit refund" });
-    }
-    const balance = await getCreditNoteRemainingBalance(input.creditNoteId);
-    if (!balance) {
-      throw new TRPCError8({ code: "INTERNAL_SERVER_ERROR", message: "Could not calculate credit note balance" });
-    }
-    const applyAmount = parseFloat(input.appliedAmount);
-    if (applyAmount <= 0) {
-      throw new TRPCError8({ code: "BAD_REQUEST", message: "Applied amount must be positive" });
-    }
-    if (applyAmount > balance.remainingBalance + 0.01) {
-      throw new TRPCError8({
-        code: "BAD_REQUEST",
-        message: `Applied amount (${applyAmount.toFixed(2)}) exceeds credit note remaining balance (${balance.remainingBalance.toFixed(2)})`
-      });
-    }
-    const targetInvoiceTotal = Math.abs(parseFloat(targetInvoice.total?.toString() ?? "0"));
-    const existingApplications = await listApplicationsForInvoice(input.appliedToInvoiceId);
-    const alreadyAppliedToTarget = existingApplications.reduce(
-      (sum4, app) => sum4 + parseFloat(app.appliedAmount?.toString() ?? "0"),
-      0
-    );
-    const cashAlreadyPaid = parseFloat(targetInvoice.paidAmount?.toString() ?? "0");
-    const targetRemainingBalance = targetInvoiceTotal - alreadyAppliedToTarget - cashAlreadyPaid;
-    if (targetRemainingBalance <= 0.01) {
-      throw new TRPCError8({
-        code: "BAD_REQUEST",
-        message: `Target invoice is already fully covered (total: ${targetInvoiceTotal.toFixed(2)}, applied: ${alreadyAppliedToTarget.toFixed(2)}, cash paid: ${cashAlreadyPaid.toFixed(2)})`
-      });
-    }
-    if (applyAmount > targetRemainingBalance + 0.01) {
-      throw new TRPCError8({
-        code: "BAD_REQUEST",
-        message: `Applied amount (${applyAmount.toFixed(2)}) exceeds target invoice remaining balance (${targetRemainingBalance.toFixed(2)})`
-      });
-    }
-    const applicationId = await applyCreditNote({
-      creditNoteId: input.creditNoteId,
-      appliedToInvoiceId: input.appliedToInvoiceId,
-      appliedAmount: applyAmount.toFixed(2),
-      notes: input.notes || null,
-      appliedBy: ctx.user.id
-    });
-    const newBalance = await getCreditNoteRemainingBalance(input.creditNoteId);
-    if (newBalance && newBalance.remainingBalance <= 0.01) {
-      await updateInvoice(input.creditNoteId, { status: "applied" });
-    }
-    const updatedApplications = await listApplicationsForInvoice(input.appliedToInvoiceId);
-    const totalAppliedToTarget = updatedApplications.reduce(
-      (sum4, app) => sum4 + parseFloat(app.appliedAmount?.toString() ?? "0"),
-      0
-    );
-    const totalCoverage = totalAppliedToTarget + cashAlreadyPaid;
-    const adjustedAmountDue = Math.max(0, targetInvoiceTotal - totalAppliedToTarget);
-    await updateInvoice(input.appliedToInvoiceId, {
-      creditApplied: totalAppliedToTarget.toFixed(2),
-      amountDue: adjustedAmountDue.toFixed(2)
-    });
-    let targetInvoiceNewStatus = targetInvoice.status;
-    const isFullyCovered = totalCoverage >= targetInvoiceTotal - 0.01;
-    if (isFullyCovered) {
-      await updateInvoice(input.appliedToInvoiceId, {
-        status: "paid",
-        paidDate: /* @__PURE__ */ new Date(),
-        paidAmount: totalCoverage.toFixed(2)
-      });
-      targetInvoiceNewStatus = "paid";
-    }
-    await logAuditAction({
-      userId: ctx.user.id,
-      userName: ctx.user.name || null,
-      action: "apply_credit",
-      entityType: "credit_note_application",
-      entityId: applicationId,
-      changes: JSON.stringify({
-        creditNoteId: input.creditNoteId,
-        appliedToInvoiceId: input.appliedToInvoiceId,
-        amount: applyAmount.toFixed(2),
-        creditNoteNumber: creditNote.invoiceNumber,
-        targetInvoiceNumber: targetInvoice.invoiceNumber,
-        targetInvoiceAutoMarkedPaid: isFullyCovered
-      })
-    });
-    return {
-      applicationId,
-      remainingBalance: newBalance?.remainingBalance ?? 0,
-      creditNoteStatus: (newBalance?.remainingBalance ?? 0) <= 0.01 ? "applied" : creditNote.status,
-      targetInvoiceStatus: targetInvoiceNewStatus,
-      targetInvoiceTotalCoverage: totalCoverage.toFixed(2)
-    };
-  }),
-  /**
-   * Get credit note balance and application history
-   */
-  creditNoteBalance: userProcedure.input(z6.object({ creditNoteId: z6.number() })).query(async ({ input }) => {
-    const balance = await getCreditNoteRemainingBalance(input.creditNoteId);
-    if (!balance) {
-      throw new TRPCError8({ code: "NOT_FOUND", message: "Credit note not found" });
-    }
-    const applications = await listCreditNoteApplications(input.creditNoteId);
-    const enrichedApplications = await Promise.all(
-      applications.map(async (app) => {
-        const invoice = await getInvoiceById(app.appliedToInvoiceId);
-        return {
-          ...app,
-          appliedToInvoiceNumber: invoice?.invoiceNumber || "Unknown"
-        };
-      })
-    );
-    return {
-      ...balance,
-      applications: enrichedApplications
-    };
-  }),
-  /**
-   * Get credit applications for a specific invoice (credits applied to this invoice)
-   */
-  invoiceCreditApplications: userProcedure.input(z6.object({ invoiceId: z6.number() })).query(async ({ input }) => {
-    const applications = await listApplicationsForInvoice(input.invoiceId);
-    const enrichedApplications = await Promise.all(
-      applications.map(async (app) => {
-        const creditNote = await getInvoiceById(app.creditNoteId);
-        return {
-          ...app,
-          creditNoteNumber: creditNote?.invoiceNumber || "Unknown"
-        };
-      })
-    );
-    return enrichedApplications;
-  }),
-  /**
-   * List available credit notes for a customer (sent status with remaining balance > 0)
-   */
-  availableCreditNotes: userProcedure.input(z6.object({ customerId: z6.number() })).query(async ({ input }) => {
-    const db = await getDb();
-    if (!db) return [];
-    const creditNotes = await db.select().from(invoices).where(
-      and16(
-        eq18(invoices.customerId, input.customerId),
-        eq18(invoices.invoiceType, "credit_note"),
-        eq18(invoices.status, "sent")
-      )
-    );
-    const result = await Promise.all(
-      creditNotes.map(async (cn) => {
-        const balance = await getCreditNoteRemainingBalance(cn.id);
-        return {
-          id: cn.id,
-          invoiceNumber: cn.invoiceNumber,
-          total: cn.total,
-          currency: cn.currency,
-          remainingBalance: balance?.remainingBalance ?? 0,
-          status: cn.status
-        };
-      })
-    );
-    return result.filter((cn) => cn.remainingBalance > 0.01);
   })
+  // [REMOVED] Credit Note Apply Mechanism — replaced by Wallet-based flow.
+  // Credit notes are now approved via Release Tasks → credited to customer Wallet.
+  // Customers use Wallet balance to pay invoices. No direct CN→Invoice apply.
 });
 
 // server/routers/invoiceGeneration.ts
 import { z as z7 } from "zod";
 
 // server/services/invoiceGenerationService.ts
-init_db2();
 init_schema();
-import { eq as eq19, and as and17, sql as sql7 } from "drizzle-orm";
-async function getExchangeRateWithFallback(from, to, date) {
-  let rateData = await getExchangeRate(from, to, date);
-  if (rateData) return { ...rateData, isFallback: false };
-  for (let i = 1; i <= 3; i++) {
-    const d = new Date(date);
-    d.setDate(d.getDate() - i);
-    rateData = await getExchangeRate(from, to, d);
-    if (rateData) {
-      return { ...rateData, isFallback: true, fallbackDate: rateData.effectiveDate };
-    }
-  }
-  return null;
-}
-var SERVICE_TYPE_TO_INVOICE_TYPE = {
-  eor: "monthly_eor",
-  visa_eor: "monthly_visa_eor",
-  aor: "monthly_aor"
-};
-var SERVICE_TYPE_TO_FEE_TYPE = {
-  eor: "eor_service_fee",
-  visa_eor: "visa_eor_service_fee",
-  aor: "aor_service_fee"
-};
-var SERVICE_TYPE_LABELS = {
-  eor: "EOR Service Fee",
-  visa_eor: "Visa EOR Service Fee",
-  aor: "AOR Service Fee"
-};
-async function generateInvoicesFromPayroll(payrollMonth) {
-  const db = await getDb();
-  if (!db) {
-    return { success: false, message: "Database not available", error: "DB_ERROR" };
-  }
+init_db2();
+import { eq as eq18, and as and16, isNull, inArray as inArray4, desc as desc9 } from "drizzle-orm";
+async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnings = []) {
   try {
-    const warnings = [];
-    const y = payrollMonth.getUTCFullYear();
-    const m = String(payrollMonth.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(payrollMonth.getUTCDate()).padStart(2, "0");
-    const payrollMonthStr2 = `${y}-${m}-${d}`;
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const monthLabel = `${monthNames[payrollMonth.getUTCMonth()]} ${y}`;
-    const payrollRunsData = await db.select().from(payrollRuns).where(
-      and17(
-        sql7`DATE(${payrollRuns.payrollMonth}) = ${payrollMonthStr2}`,
-        eq19(payrollRuns.status, "approved")
+    const db = await getDb();
+    if (!db) throw new Error("Database not available");
+    const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
+    const nonApprovedRuns = await db.select().from(payrollRuns).where(
+      and16(
+        eq18(payrollRuns.payrollMonth, payrollMonthStr),
+        inArray4(payrollRuns.status, ["draft", "pending_approval", "rejected"])
       )
     );
-    if (payrollRunsData.length === 0) {
-      return {
-        success: false,
-        message: `No approved payroll runs found for ${payrollMonthStr2}. Only approved payroll runs can generate invoices.`,
-        error: "NO_APPROVED_PAYROLL"
-      };
-    }
-    const allRunsForMonth = await db.select().from(payrollRuns).where(sql7`DATE(${payrollRuns.payrollMonth}) = ${payrollMonthStr2}`);
-    const nonApprovedRuns = allRunsForMonth.filter((r) => r.status !== "approved");
     if (nonApprovedRuns.length > 0) {
       warnings.push(
         `${nonApprovedRuns.length} payroll run(s) for this month are not yet approved and were excluded from invoice generation.`
       );
     }
-    const allEntries = [];
-    const customerCache = /* @__PURE__ */ new Map();
-    const countryConfigCache = /* @__PURE__ */ new Map();
-    for (const run of payrollRunsData) {
-      const items = await db.select().from(payrollItems).where(eq19(payrollItems.payrollRunId, run.id));
-      if (items.length === 0) continue;
-      if (!countryConfigCache.has(run.countryCode)) {
-        const cc = await getCountryConfig(run.countryCode);
-        countryConfigCache.set(run.countryCode, cc);
-      }
-      for (const item of items) {
-        const empData = await db.select().from(employees).where(eq19(employees.id, item.employeeId)).limit(1);
-        if (empData.length === 0) continue;
-        const emp = empData[0];
-        if (!customerCache.has(emp.customerId)) {
-          const custData = await db.select().from(customers).where(eq19(customers.id, emp.customerId)).limit(1);
-          if (custData.length === 0) continue;
-          customerCache.set(emp.customerId, custData[0]);
-        }
-        allEntries.push({
-          item,
-          employee: emp,
-          run,
-          customer: customerCache.get(emp.customerId),
-          countryConfig: countryConfigCache.get(run.countryCode)
-        });
-      }
-    }
-    const invoiceGroups = /* @__PURE__ */ new Map();
-    for (const entry of allEntries) {
-      const customerId = entry.employee.customerId;
-      const serviceType = entry.employee.serviceType || "eor";
-      const countryCode = entry.run.countryCode;
-      const localCurrency = entry.run.currency || entry.employee.salaryCurrency || "USD";
-      const serviceFeeRate = await getServiceFeeRate(
-        customerId,
-        countryCode,
-        serviceType,
-        entry.countryConfig,
-        entry.customer.settlementCurrency || "USD",
-        warnings
-      );
-      const key = `${customerId}|${serviceType}|${countryCode}|${localCurrency}|${serviceFeeRate.toFixed(2)}`;
-      if (!invoiceGroups.has(key)) {
-        invoiceGroups.set(key, []);
-      }
-      invoiceGroups.get(key).push(entry);
-    }
-    const invoiceIds = [];
-    let skippedDuplicates = 0;
-    const existingInvoicesForMonth = await db.select().from(invoices).where(
-      and17(
-        sql7`${invoices.invoiceMonth} = ${payrollMonthStr2}`,
-        sql7`${invoices.status} != 'cancelled'`,
-        sql7`${invoices.status} != 'void'`
+    const aorResult = await generateAorInvoices(payrollMonth, monthLabel, warnings);
+    const approvedRuns = await db.select().from(payrollRuns).where(
+      and16(
+        eq18(payrollRuns.payrollMonth, payrollMonthStr),
+        eq18(payrollRuns.status, "approved")
       )
     );
-    for (const [key, entries] of Array.from(invoiceGroups.entries())) {
-      const [customerIdStr, serviceType, countryCode, localCurrency, serviceFeeRateStr] = key.split("|");
-      const customerId = parseInt(customerIdStr);
-      const customer = customerCache.get(customerId);
-      const serviceFeeRate = parseFloat(serviceFeeRateStr);
-      const invoiceType = SERVICE_TYPE_TO_INVOICE_TYPE[serviceType] || "monthly_eor";
-      const duplicate = existingInvoicesForMonth.find(
-        (inv) => inv.customerId === customerId && inv.invoiceType === invoiceType && inv.currency === localCurrency
-      );
-      if (duplicate) {
-        skippedDuplicates++;
-        warnings.push(
-          `Skipped: Invoice for ${customer.companyName} (${invoiceType}, ${countryCode}, ${localCurrency}) already exists for this month (Invoice #${duplicate.invoiceNumber}).`
-        );
-        continue;
-      }
-      const invoiceId = await createGroupInvoice(
-        customerId,
-        customer,
-        serviceType,
-        countryCode,
-        localCurrency,
-        serviceFeeRate,
-        entries,
-        payrollMonth,
-        monthLabel,
-        warnings
-      );
-      if (invoiceId) {
-        invoiceIds.push(invoiceId);
-      }
-    }
-    if (skippedDuplicates > 0 && invoiceIds.length === 0) {
+    if (approvedRuns.length === 0 && (!aorResult.invoiceIds || aorResult.invoiceIds.length === 0)) {
       return {
         success: true,
         invoiceIds: [],
-        message: `All invoices for this month already exist. ${skippedDuplicates} duplicate(s) skipped.`,
+        message: "No approved payroll runs or contractor invoices found for this month.",
         warnings: warnings.length > 0 ? warnings : void 0
       };
+    }
+    const runIds = approvedRuns.map((r) => r.id);
+    let payrollItemsData = [];
+    if (runIds.length > 0) {
+      payrollItemsData = await db.select({
+        item: payrollItems,
+        employee: employees,
+        run: payrollRuns
+      }).from(payrollItems).innerJoin(employees, eq18(payrollItems.employeeId, employees.id)).innerJoin(payrollRuns, eq18(payrollItems.payrollRunId, payrollRuns.id)).where(inArray4(payrollItems.payrollRunId, runIds));
+    }
+    const groups = /* @__PURE__ */ new Map();
+    for (const row of payrollItemsData) {
+      const key = `${row.employee.customerId}|${row.run.currency}`;
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key).push(row);
+    }
+    const invoiceIds = [...aorResult.invoiceIds || []];
+    let skippedDuplicates = 0;
+    for (const [key, items] of groups.entries()) {
+      const [customerIdStr, currency] = key.split("|");
+      const customerId = parseInt(customerIdStr);
+      const existing = await db.select().from(invoices).where(
+        and16(
+          eq18(invoices.customerId, customerId),
+          eq18(invoices.invoiceMonth, payrollMonthStr),
+          inArray4(invoices.invoiceType, ["monthly_eor", "monthly_visa_eor"])
+        )
+      );
+      const existingForCurrency = existing.find((i) => i.currency === currency);
+      const customerResult = await db.select().from(customers).where(eq18(customers.id, customerId)).limit(1);
+      if (customerResult.length === 0) continue;
+      const customer = customerResult[0];
+      const settlementCurrency = customer.settlementCurrency || "USD";
+      if (existing.some((i) => i.currency === settlementCurrency)) {
+      }
+      let exchangeRate = 1;
+      let rateWithMarkup = 1;
+      let rateFallbackNote = "";
+      if (currency !== settlementCurrency) {
+        const rateData = await getExchangeRateWithFallback(currency, settlementCurrency, /* @__PURE__ */ new Date());
+        if (rateData) {
+          exchangeRate = rateData.rate;
+          rateWithMarkup = rateData.rateWithMarkup;
+          if (rateData.isFallback) {
+            rateFallbackNote = ` [Rate Fallback: ${rateData.fallbackDate}]`;
+            warnings.push(`EOR Exchange rate for ${currency} fallback to ${rateData.fallbackDate}`);
+          }
+        } else {
+          warnings.push(`No exchange rate found for ${currency} \u2192 ${settlementCurrency}. Using 1:1.`);
+        }
+      }
+      const lineItemsList = [];
+      let totalSubtotal = 0;
+      let totalServiceFee = 0;
+      const employeeItems = /* @__PURE__ */ new Map();
+      for (const row of items) {
+        if (!employeeItems.has(row.employee.id)) {
+          employeeItems.set(row.employee.id, []);
+        }
+        employeeItems.get(row.employee.id).push(row);
+      }
+      for (const [empId, empRows] of employeeItems.entries()) {
+        const employee = empRows[0].employee;
+        let empTotalCost = 0;
+        for (const row of empRows) {
+          empTotalCost += parseFloat(row.item.totalEmploymentCost);
+        }
+        const amountSettlement = empTotalCost * rateWithMarkup;
+        totalSubtotal += amountSettlement;
+        lineItemsList.push({
+          invoiceId: 0,
+          description: `Employment Cost - ${employee.firstName} ${employee.lastName} (${monthLabel})`,
+          quantity: "1",
+          unitPrice: empTotalCost.toFixed(2),
+          amount: amountSettlement.toFixed(2),
+          itemType: "employment_cost",
+          vatRate: "0",
+          countryCode: employee.country,
+          localCurrency: currency,
+          localAmount: empTotalCost.toFixed(2),
+          exchangeRate: exchangeRate.toString(),
+          exchangeRateWithMarkup: rateWithMarkup.toString(),
+          employeeId: empId
+        });
+        const ccResult = await db.select().from(countriesConfig).where(eq18(countriesConfig.countryCode, employee.country)).limit(1);
+        const cc = ccResult.length > 0 ? ccResult[0] : null;
+        const fee = await getServiceFeeRate(
+          customerId,
+          employee.country,
+          employee.serviceType === "visa_eor" ? "visa_eor" : "eor",
+          cc,
+          settlementCurrency,
+          warnings
+        );
+        totalServiceFee += fee;
+        lineItemsList.push({
+          invoiceId: 0,
+          description: `${employee.serviceType === "visa_eor" ? "Visa EOR" : "EOR"} Service Fee - ${employee.firstName} ${employee.lastName}`,
+          quantity: "1",
+          unitPrice: fee.toFixed(2),
+          amount: fee.toFixed(2),
+          itemType: employee.serviceType === "visa_eor" ? "visa_eor_service_fee" : "eor_service_fee",
+          vatRate: "0",
+          countryCode: employee.country,
+          employeeId: empId
+        });
+      }
+      const finalTotal = totalSubtotal + totalServiceFee;
+      const billingEntityId = customer.billingEntityId || null;
+      const invoiceNumber = await generateInvoiceNumber(billingEntityId, payrollMonth);
+      const termDays = customer.paymentTermDays || 30;
+      const issueDate = /* @__PURE__ */ new Date();
+      const dueDate = new Date(issueDate);
+      dueDate.setDate(dueDate.getDate() + termDays);
+      const invoiceData = {
+        customerId,
+        billingEntityId,
+        invoiceNumber,
+        invoiceType: "monthly_eor",
+        // or mixed?
+        invoiceMonth: payrollMonthStr,
+        currency: settlementCurrency,
+        exchangeRate: exchangeRate.toString(),
+        exchangeRateWithMarkup: rateWithMarkup.toString(),
+        subtotal: totalSubtotal.toFixed(2),
+        serviceFeeTotal: totalServiceFee.toFixed(2),
+        tax: "0.00",
+        total: finalTotal.toFixed(2),
+        status: "draft",
+        dueDate: dueDate.toISOString().slice(0, 10),
+        amountDue: finalTotal.toFixed(2),
+        notes: `Payroll Invoice for ${monthLabel}`,
+        internalNotes: rateFallbackNote ? `Exchange Rate Fallback: ${rateFallbackNote.trim()}` : void 0
+      };
+      const invoiceInsertResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+      const invoiceId = invoiceInsertResult[0]?.id;
+      if (!invoiceId) {
+        warnings.push(`Failed to get invoice ID after insert for customer ${customerId}`);
+        continue;
+      }
+      invoiceIds.push(invoiceId);
+      const finalLineItems = lineItemsList.map((li) => ({ ...li, invoiceId }));
+      if (finalLineItems.length > 0) {
+        await db.insert(invoiceItems).values(finalLineItems);
+      }
     }
     return {
       success: true,
       invoiceIds,
-      message: `Successfully generated ${invoiceIds.length} draft invoice(s) from ${payrollRunsData.length} approved payroll run(s)`,
+      message: `Successfully generated ${invoiceIds.length} draft invoice(s) (Payroll: ${invoiceIds.length - (aorResult.invoiceIds?.length || 0)}, AOR: ${aorResult.invoiceIds?.length || 0})`,
       warnings: warnings.length > 0 ? warnings : void 0
     };
   } catch (error) {
@@ -9750,254 +10154,294 @@ async function generateInvoicesFromPayroll(payrollMonth) {
     };
   }
 }
-async function getServiceFeeRate(customerId, countryCode, serviceType, countryConfig, settlementCurrency, warnings) {
-  const customerPricingData = await listCustomerPricing(customerId);
-  const countrySpecificPricing = customerPricingData?.find(
-    (p) => p.pricingType === "country_specific" && p.countryCode === countryCode && p.serviceType === serviceType && p.isActive
-  );
-  if (countrySpecificPricing && countrySpecificPricing.fixedPrice) {
-    const perEmployeeFee = parseFloat(countrySpecificPricing.fixedPrice?.toString() ?? "0");
-    const pricingCurrency = countrySpecificPricing.currency || "USD";
-    let feeInSettlement2 = perEmployeeFee;
-    if (pricingCurrency !== settlementCurrency) {
-      const feeRate = await getExchangeRateWithFallback(pricingCurrency, settlementCurrency, /* @__PURE__ */ new Date());
-      if (feeRate) {
-        feeInSettlement2 = perEmployeeFee * feeRate.rate;
-        if (feeRate.isFallback) {
-          warnings.push(`Service Fee Rate: Exchange rate for ${pricingCurrency} fallback to ${feeRate.fallbackDate}`);
-        }
-      }
-    }
-    return feeInSettlement2;
-  }
-  const globalDiscount = customerPricingData?.find(
-    (p) => p.pricingType === "global_discount" && p.isActive
-  );
-  let standardRate = 0;
-  if (countryConfig) {
-    if (serviceType === "eor") {
-      standardRate = parseFloat(countryConfig.standardEorRate?.toString() ?? "0");
-    } else if (serviceType === "visa_eor") {
-      standardRate = parseFloat(countryConfig.standardVisaEorRate?.toString() ?? "0");
-    } else if (serviceType === "aor") {
-      standardRate = parseFloat(countryConfig.standardAorRate?.toString() ?? "0");
-    }
-  }
-  if (globalDiscount) {
-    const discountPct = parseFloat(globalDiscount.globalDiscountPercent?.toString() ?? "0");
-    standardRate = standardRate * (1 - discountPct / 100);
-  }
-  const rateCurrency = countryConfig?.standardRateCurrency || "USD";
-  let feeInSettlement = standardRate;
-  if (rateCurrency !== settlementCurrency) {
-    const feeRate = await getExchangeRateWithFallback(rateCurrency, settlementCurrency, /* @__PURE__ */ new Date());
-    if (feeRate) {
-      feeInSettlement = standardRate * feeRate.rate;
-      if (feeRate.isFallback) {
-        warnings.push(`Standard Rate: Exchange rate for ${rateCurrency} fallback to ${feeRate.fallbackDate}`);
-      }
-    }
-  }
-  return feeInSettlement;
-}
-async function createGroupInvoice(customerId, customer, serviceType, countryCode, localCurrency, serviceFeeRate, entries, payrollMonth, monthLabel, warnings) {
+async function generateAorInvoices(payrollMonth, monthLabel, warnings) {
   const db = await getDb();
-  if (!db) return null;
-  try {
+  if (!db) return { invoiceIds: [] };
+  const invoiceIds = [];
+  const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
+  const unbilledInvoices = await db.select().from(contractorInvoices).where(
+    and16(
+      eq18(contractorInvoices.status, "approved"),
+      isNull(contractorInvoices.clientInvoiceId)
+    )
+  );
+  if (unbilledInvoices.length === 0) return { invoiceIds: [] };
+  const groups = /* @__PURE__ */ new Map();
+  for (const inv of unbilledInvoices) {
+    const key = `${inv.customerId}|${inv.currency}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(inv);
+  }
+  for (const [key, batch] of groups.entries()) {
+    const [customerIdStr, currency] = key.split("|");
+    const customerId = parseInt(customerIdStr);
+    const customerResult = await db.select().from(customers).where(eq18(customers.id, customerId)).limit(1);
+    if (customerResult.length === 0) continue;
+    const customer = customerResult[0];
     const settlementCurrency = customer.settlementCurrency || "USD";
-    const invoiceType = SERVICE_TYPE_TO_INVOICE_TYPE[serviceType] || "monthly_eor";
-    const feeItemType = SERVICE_TYPE_TO_FEE_TYPE[serviceType] || "eor_service_fee";
-    const feeLabel = SERVICE_TYPE_LABELS[serviceType] || "Service Fee";
-    const countryConfig = entries[0].countryConfig;
-    const vatApplicable = countryConfig?.vatApplicable ?? false;
-    const vatRate = vatApplicable ? parseFloat(countryConfig?.vatRate?.toString() ?? "0") : 0;
-    let totalSubtotal = 0;
-    let totalTax = 0;
-    const lineItems = [];
     let exchangeRate = 1;
     let rateWithMarkup = 1;
     let rateFallbackNote = "";
-    if (localCurrency !== settlementCurrency) {
-      const rateData = await getExchangeRateWithFallback(localCurrency, settlementCurrency, /* @__PURE__ */ new Date());
+    if (currency !== settlementCurrency) {
+      const rateData = await getExchangeRateWithFallback(currency, settlementCurrency, /* @__PURE__ */ new Date());
       if (rateData) {
         exchangeRate = rateData.rate;
         rateWithMarkup = rateData.rateWithMarkup;
         if (rateData.isFallback) {
           rateFallbackNote = ` [Rate Fallback: ${rateData.fallbackDate}]`;
-          warnings.push(
-            `Exchange rate for ${localCurrency} fallback to ${rateData.fallbackDate} (3-day lookback).`
-          );
+          warnings.push(`AOR Exchange rate for ${currency} fallback to ${rateData.fallbackDate}`);
         }
       } else {
-        warnings.push(
-          `No exchange rate found for ${localCurrency} \u2192 ${settlementCurrency} (checked past 3 days). Using 1:1 rate.`
-        );
+        warnings.push(`No exchange rate found for ${currency} \u2192 ${settlementCurrency}. Using 1:1.`);
       }
     }
-    for (const entry of entries) {
-      const emp = entry.employee;
-      const totalCostLocal = parseFloat(entry.item.totalEmploymentCost?.toString() ?? "0");
-      const costInSettlement = totalCostLocal * rateWithMarkup;
-      const taxAmount = costInSettlement * (vatRate / 100);
-      totalSubtotal += costInSettlement;
-      totalTax += taxAmount;
-      const empCode = emp.employeeCode || `EMP${emp.id}`;
-      const empName = `${emp.firstName} ${emp.lastName}`;
+    const lineItems = [];
+    let totalSubtotal = 0;
+    const contractorIds = /* @__PURE__ */ new Set();
+    for (const inv of batch) {
+      contractorIds.add(inv.contractorId);
+      const contractorResult = await db.select().from(contractors).where(eq18(contractors.id, inv.contractorId)).limit(1);
+      const contractorName = contractorResult.length > 0 ? `${contractorResult[0].firstName} ${contractorResult[0].lastName}` : `Contractor #${inv.contractorId}`;
+      const amountLocal = parseFloat(inv.totalAmount);
+      const amountSettlement = amountLocal * rateWithMarkup;
+      totalSubtotal += amountSettlement;
       lineItems.push({
         invoiceId: 0,
-        employeeId: entry.item.employeeId,
-        description: `${empCode} ${empName} - ${monthLabel}`,
+        description: `Contractor Payment: ${contractorName} (${inv.invoiceNumber})`,
         quantity: "1",
-        unitPrice: totalCostLocal.toFixed(2),
-        amount: totalCostLocal.toFixed(2),
-        itemType: "employment_cost",
-        vatRate: vatRate.toFixed(2),
-        countryCode: entry.run.countryCode,
-        localCurrency,
-        localAmount: totalCostLocal.toFixed(2),
+        unitPrice: amountLocal.toFixed(2),
+        // Show local amount in unit price? Or settlement?
+        // Standard: Unit Price = Local Amount, Amount = Settlement Amount
+        // Actually, schema expects 'amount' to be in invoice currency.
+        // Let's store settlement amount in 'amount' and local in 'localAmount'
+        amount: amountSettlement.toFixed(2),
+        itemType: "consulting_fee",
+        // Changed from "employment_cost" to "consulting_fee" for AOR
+        vatRate: "0",
+        // No VAT on international contractor payments usually
+        countryCode: contractorResult[0]?.country || void 0,
+        localCurrency: currency,
+        localAmount: amountLocal.toFixed(2),
         exchangeRate: exchangeRate.toString(),
         exchangeRateWithMarkup: rateWithMarkup.toString()
       });
     }
-    if (serviceFeeRate > 0) {
-      const totalFee = serviceFeeRate * entries.length;
-      totalSubtotal += totalFee;
+    let totalFee = 0;
+    for (const cid of contractorIds) {
+      const contractorResult = await db.select().from(contractors).where(eq18(contractors.id, cid)).limit(1);
+      if (contractorResult.length === 0) continue;
+      const ctr = contractorResult[0];
+      const ccResult = await db.select().from(countriesConfig).where(eq18(countriesConfig.countryCode, ctr.country)).limit(1);
+      const cc = ccResult.length > 0 ? ccResult[0] : null;
+      const fee = await getServiceFeeRate(
+        customerId,
+        ctr.country,
+        "aor",
+        // Service Type
+        cc,
+        settlementCurrency,
+        warnings
+      );
+      totalFee += fee;
       lineItems.push({
         invoiceId: 0,
-        description: `${feeLabel} - ${monthLabel}`,
-        quantity: entries.length.toString(),
-        unitPrice: serviceFeeRate.toFixed(2),
-        amount: totalFee.toFixed(2),
-        itemType: feeItemType,
-        vatRate: "0.00",
-        countryCode
+        description: `AOR Service Fee - ${ctr.firstName} ${ctr.lastName}`,
+        quantity: "1",
+        unitPrice: fee.toFixed(2),
+        amount: fee.toFixed(2),
+        itemType: "aor_service_fee",
+        vatRate: "0",
+        // Service fees no VAT? Usually they do if domestic.
+        // Assuming 0 for now as per previous logic
+        countryCode: ctr.country
       });
     }
-    const total = totalSubtotal + totalTax;
+    totalSubtotal += totalFee;
     const billingEntityId = customer.billingEntityId || null;
     const invoiceNumber = await generateInvoiceNumber(billingEntityId, payrollMonth);
-    const issueDate = /* @__PURE__ */ new Date();
     const termDays = customer.paymentTermDays || 30;
+    const issueDate = /* @__PURE__ */ new Date();
     const dueDate = new Date(issueDate);
     dueDate.setDate(dueDate.getDate() + termDays);
-    const countryName = countryConfig?.countryName || countryCode;
     const invoiceData = {
       customerId,
       billingEntityId,
       invoiceNumber,
-      invoiceType,
+      invoiceType: "monthly_aor",
       invoiceMonth: payrollMonthStr,
-      // text column: use YYYY-MM-DD string
       currency: settlementCurrency,
       exchangeRate: exchangeRate.toString(),
       exchangeRateWithMarkup: rateWithMarkup.toString(),
       subtotal: totalSubtotal.toFixed(2),
       serviceFeeTotal: "0.00",
-      // Service fees are included in subtotal
-      tax: totalTax.toFixed(2),
-      total: total.toFixed(2),
+      // Included in subtotal
+      tax: "0.00",
+      // Assuming 0 tax for now
+      total: totalSubtotal.toFixed(2),
       status: "draft",
       dueDate: dueDate.toISOString().slice(0, 10),
-      // text column: use YYYY-MM-DD string
-      amountDue: total.toFixed(2),
-      notes: `Auto-generated ${feeLabel.replace(" Fee", "")} invoice for ${monthLabel} \u2014 ${countryName}`,
+      amountDue: totalSubtotal.toFixed(2),
+      notes: `Aggregated AOR Invoice for ${monthLabel}`,
       internalNotes: rateFallbackNote ? `Exchange Rate Fallback: ${rateFallbackNote.trim()}` : void 0
     };
-    const invoiceInsertResult = await db.insert(invoices).values(invoiceData);
-    const invoiceId = invoiceInsertResult[0]?.insertId;
+    const invoiceInsertResult = await db.insert(invoices).values(invoiceData).returning({ id: invoices.id });
+    const invoiceId = invoiceInsertResult[0]?.id;
+    if (!invoiceId) {
+      warnings.push(`Failed to get invoice ID after insert for AOR customer ${customerId}`);
+      continue;
+    }
+    invoiceIds.push(invoiceId);
     const finalLineItems = lineItems.map((li) => ({ ...li, invoiceId }));
     if (finalLineItems.length > 0) {
       await db.insert(invoiceItems).values(finalLineItems);
     }
-    return invoiceId;
-  } catch (error) {
-    console.error("[InvoiceGeneration] Error creating group invoice:", error);
-    return null;
+    const batchIds = batch.map((b) => b.id);
+    await db.update(contractorInvoices).set({ clientInvoiceId: invoiceId }).where(inArray4(contractorInvoices.id, batchIds));
   }
+  return { invoiceIds };
 }
 async function getInvoiceGenerationStatus(payrollMonth) {
   const db = await getDb();
   if (!db) return null;
-  const y = payrollMonth.getUTCFullYear();
-  const m = String(payrollMonth.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(payrollMonth.getUTCDate()).padStart(2, "0");
-  const monthStr = `${y}-${m}-${d}`;
-  const invoicesData = await db.select().from(invoices).where(sql7`DATE(${invoices.invoiceMonth}) = ${monthStr}`);
+  const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
+  const monthInvoices = await db.select({ status: invoices.status }).from(invoices).where(eq18(invoices.invoiceMonth, payrollMonthStr));
+  const statusCounts = {};
+  for (const inv of monthInvoices) {
+    const s = inv.status || "unknown";
+    statusCounts[s] = (statusCounts[s] || 0) + 1;
+  }
   return {
-    payrollMonth: payrollMonth.toISOString().split("T")[0],
-    totalInvoices: invoicesData.length,
-    byStatus: {
-      draft: invoicesData.filter((i) => i.status === "draft").length,
-      sent: invoicesData.filter((i) => i.status === "sent").length,
-      paid: invoicesData.filter((i) => i.status === "paid").length,
-      overdue: invoicesData.filter((i) => i.status === "overdue").length
-    }
+    totalInvoices: monthInvoices.length,
+    byStatus: statusCounts
   };
-}
-async function regenerateSingleInvoice(invoiceId) {
-  const db = await getDb();
-  if (!db) {
-    return { success: false, message: "Database not available", error: "DB_ERROR" };
-  }
-  try {
-    const invoiceData = await db.select().from(invoices).where(eq19(invoices.id, invoiceId)).limit(1);
-    if (invoiceData.length === 0) {
-      return { success: false, message: "Invoice not found", error: "NOT_FOUND" };
-    }
-    const invoice = invoiceData[0];
-    if (invoice.status !== "draft") {
-      return { success: false, message: "Only draft invoices can be regenerated", error: "INVALID_STATUS" };
-    }
-    if (!invoice.invoiceMonth) {
-      return { success: false, message: "Invoice has no invoice month, cannot regenerate", error: "NO_MONTH" };
-    }
-    await db.delete(invoiceItems).where(eq19(invoiceItems.invoiceId, invoiceId));
-    await db.delete(invoices).where(eq19(invoices.id, invoiceId));
-    const result = await generateInvoicesFromPayroll(new Date(invoice.invoiceMonth));
-    return {
-      ...result,
-      message: result.success ? `Invoice #${invoice.invoiceNumber} regenerated successfully (${result.invoiceIds?.length || 0} invoices created for the month)` : result.message
-    };
-  } catch (error) {
-    console.error("[InvoiceGeneration] Error regenerating single invoice:", error);
-    return {
-      success: false,
-      message: "Failed to regenerate invoice",
-      error: error instanceof Error ? error.message : "UNKNOWN_ERROR"
-    };
-  }
 }
 async function regenerateInvoices(payrollMonth) {
   const db = await getDb();
-  if (!db) {
-    return { success: false, message: "Database not available", error: "DB_ERROR" };
+  if (!db) return { success: false, warnings: ["Database unavailable"] };
+  const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
+  const drafts = await db.select({ id: invoices.id }).from(invoices).where(
+    and16(
+      eq18(invoices.invoiceMonth, payrollMonthStr),
+      eq18(invoices.status, "draft")
+    )
+  );
+  const draftIds = drafts.map((d) => d.id);
+  if (draftIds.length > 0) {
+    await db.delete(invoiceItems).where(inArray4(invoiceItems.invoiceId, draftIds));
+    await db.delete(invoices).where(inArray4(invoices.id, draftIds));
   }
-  try {
-    const ry = payrollMonth.getUTCFullYear();
-    const rm = String(payrollMonth.getUTCMonth() + 1).padStart(2, "0");
-    const rd = String(payrollMonth.getUTCDate()).padStart(2, "0");
-    const regenMonthStr = `${ry}-${rm}-${rd}`;
-    const draftInvoices = await db.select().from(invoices).where(
-      and17(
-        sql7`DATE(${invoices.invoiceMonth}) = ${regenMonthStr}`,
-        eq19(invoices.status, "draft")
+  return await generateInvoicesFromPayroll(payrollMonth, "Regenerated Invoices");
+}
+async function regenerateSingleInvoice(invoiceId) {
+  const db = await getDb();
+  if (!db) return { success: false, message: "Database unavailable" };
+  const invoice = await db.query.invoices.findFirst({
+    where: eq18(invoices.id, invoiceId)
+  });
+  if (!invoice) return { success: false, message: "Invoice not found" };
+  if (invoice.status !== "draft") {
+    return { success: false, message: "Only draft invoices can be regenerated" };
+  }
+  if (!invoice.invoiceMonth) {
+    return { success: false, message: "Invoice does not have a month set" };
+  }
+  await db.delete(invoiceItems).where(eq18(invoiceItems.invoiceId, invoiceId));
+  await db.delete(invoices).where(eq18(invoices.id, invoiceId));
+  const payrollMonth = new Date(invoice.invoiceMonth);
+  return await generateInvoicesFromPayroll(payrollMonth, "Regenerated Single Invoice");
+}
+async function getServiceFeeRate(customerId, countryCode, serviceType, countryConfig, settlementCurrency, warnings) {
+  const db = await getDb();
+  if (!db) return 0;
+  let feeAmount = 0;
+  let feeCurrency = "USD";
+  if (serviceType === "aor") {
+    const aorFixedPrice = await db.select().from(customerPricing).where(
+      and16(
+        eq18(customerPricing.customerId, customerId),
+        eq18(customerPricing.isActive, true),
+        eq18(customerPricing.pricingType, "client_aor_fixed")
       )
-    );
-    for (const invoice of draftInvoices) {
-      if (invoice.id) {
-        await db.delete(invoiceItems).where(eq19(invoiceItems.invoiceId, invoice.id));
-        await db.delete(invoices).where(eq19(invoices.id, invoice.id));
-      }
+    ).limit(1);
+    if (aorFixedPrice.length > 0 && aorFixedPrice[0].fixedPrice) {
+      feeAmount = parseFloat(aorFixedPrice[0].fixedPrice);
+      feeCurrency = aorFixedPrice[0].currency || "USD";
+      return convertFee(feeAmount, feeCurrency, settlementCurrency, warnings, db);
     }
-    return await generateInvoicesFromPayroll(payrollMonth);
-  } catch (error) {
-    console.error("[InvoiceGeneration] Error regenerating invoices:", error);
+  }
+  const countryPrice = await db.select().from(customerPricing).where(
+    and16(
+      eq18(customerPricing.customerId, customerId),
+      eq18(customerPricing.isActive, true),
+      eq18(customerPricing.pricingType, "country_specific"),
+      eq18(customerPricing.countryCode, countryCode),
+      eq18(customerPricing.serviceType, serviceType)
+    )
+  ).limit(1);
+  if (countryPrice.length > 0 && countryPrice[0].fixedPrice) {
+    feeAmount = parseFloat(countryPrice[0].fixedPrice);
+    feeCurrency = countryPrice[0].currency || "USD";
+  } else {
+    const globalDiscount = await db.select().from(customerPricing).where(
+      and16(
+        eq18(customerPricing.customerId, customerId),
+        eq18(customerPricing.isActive, true),
+        eq18(customerPricing.pricingType, "global_discount")
+      )
+    ).limit(1);
+    let standardRate = 0;
+    if (countryConfig) {
+      if (serviceType === "eor") standardRate = parseFloat(countryConfig.standardEorRate || "0");
+      else if (serviceType === "visa_eor") standardRate = parseFloat(countryConfig.standardVisaEorRate || "0");
+      else if (serviceType === "aor") standardRate = parseFloat(countryConfig.standardAorRate || "0");
+      feeCurrency = countryConfig.standardRateCurrency || "USD";
+    }
+    if (globalDiscount.length > 0 && globalDiscount[0].globalDiscountPercent) {
+      const discount = parseFloat(globalDiscount[0].globalDiscountPercent);
+      feeAmount = standardRate * (1 - discount / 100);
+    } else {
+      feeAmount = standardRate;
+    }
+  }
+  return convertFee(feeAmount, feeCurrency, settlementCurrency, warnings, db);
+}
+async function convertFee(amount, currency, settlementCurrency, warnings, db) {
+  if (currency !== settlementCurrency && amount > 0) {
+    const rateData = await getExchangeRateWithFallback(currency, settlementCurrency, /* @__PURE__ */ new Date());
+    if (rateData) {
+      return amount * rateData.rateWithMarkup;
+    } else {
+      warnings.push(`Service Fee conversion failed ${currency} -> ${settlementCurrency}. Using 1:1.`);
+      return amount;
+    }
+  }
+  return amount;
+}
+async function getExchangeRateWithFallback(from, to, date) {
+  const db = await getDb();
+  if (!db) return null;
+  const rate = await getExchangeRate(from, to, date);
+  if (rate) return { ...rate, isFallback: false };
+  const latest = await db.query.exchangeRates.findFirst({
+    where: and16(
+      eq18(exchangeRates.fromCurrency, from),
+      eq18(exchangeRates.toCurrency, to)
+    ),
+    orderBy: [desc9(exchangeRates.effectiveDate)]
+  });
+  if (latest) {
     return {
-      success: false,
-      message: "Failed to regenerate invoices",
-      error: error instanceof Error ? error.message : "UNKNOWN_ERROR"
+      rate: parseFloat(latest.rate),
+      rateWithMarkup: parseFloat(latest.rateWithMarkup),
+      markupPercentage: parseFloat(latest.markupPercentage),
+      effectiveDate: latest.effectiveDate,
+      isFallback: true,
+      fallbackDate: latest.effectiveDate
     };
   }
+  return null;
 }
 
 // server/routers/invoiceGeneration.ts
@@ -10405,7 +10849,7 @@ import { TRPCError as TRPCError9 } from "@trpc/server";
 import { z as z9 } from "zod";
 init_db2();
 init_schema();
-import { and as and18, eq as eq20, sql as sql8, ne as ne3 } from "drizzle-orm";
+import { and as and17, eq as eq19, sql as sql8, ne as ne3 } from "drizzle-orm";
 
 // server/utils/cutoff.ts
 init_db2();
@@ -10518,7 +10962,7 @@ function splitLeaveByMonth(startDate, endDate, totalDays, workingDaysPerWeek = 5
     }
     currentStart = new Date(currentYear, currentMonth + 1, 1);
   }
-  const totalWorkingDays = portions.reduce((sum4, p) => sum4 + p.workingDays, 0);
+  const totalWorkingDays = portions.reduce((sum3, p) => sum3 + p.workingDays, 0);
   if (totalWorkingDays === 0) {
     return [{
       startDate,
@@ -10560,18 +11004,18 @@ function formatDate(date) {
   return `${y}-${m}-${d}`;
 }
 function countWorkingDays(start, end, workingDaysPerWeek) {
-  let count20 = 0;
+  let count19 = 0;
   const current = new Date(start);
   while (current <= end) {
     const dayOfWeek = current.getDay();
     if (workingDaysPerWeek >= 6) {
-      if (dayOfWeek !== 0) count20++;
+      if (dayOfWeek !== 0) count19++;
     } else {
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) count20++;
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) count19++;
     }
     current.setDate(current.getDate() + 1);
   }
-  return count20;
+  return count19;
 }
 function getLastBusinessDay(referenceDate) {
   const year = referenceDate.getUTCFullYear();
@@ -10640,7 +11084,7 @@ async function findOverlappingLeave(employeeId, startDate, endDate, excludeIds =
   const db = await getDb();
   if (!db) return [];
   const conditions = [
-    eq20(leaveRecords.employeeId, employeeId),
+    eq19(leaveRecords.employeeId, employeeId),
     // Overlap: existing.start <= new.end AND existing.end >= new.start
     sql8`${leaveRecords.startDate} <= ${endDate}`,
     sql8`${leaveRecords.endDate} >= ${startDate}`,
@@ -10657,7 +11101,7 @@ async function findOverlappingLeave(employeeId, startDate, endDate, excludeIds =
     startDate: leaveRecords.startDate,
     endDate: leaveRecords.endDate,
     days: leaveRecords.days
-  }).from(leaveRecords).where(and18(...conditions));
+  }).from(leaveRecords).where(and17(...conditions));
   return overlapping.map((r) => ({
     id: r.id,
     startDate: String(r.startDate),
@@ -10946,7 +11390,7 @@ var adjustmentsRouter = router({
     })
   ).query(async ({ input }) => {
     const page = Math.floor(input.offset / input.limit) + 1;
-    return await listAdjustments({
+    const { data: items, total } = await listAdjustments({
       page,
       pageSize: input.limit,
       customerId: input.customerId,
@@ -10955,6 +11399,18 @@ var adjustmentsRouter = router({
       adjustmentType: input.adjustmentType,
       effectiveMonth: input.effectiveMonth
     });
+    const processedItems = await Promise.all(items.map(async (item) => {
+      if (item.receiptFileKey) {
+        try {
+          const { url } = await storageGet(item.receiptFileKey);
+          return { ...item, receiptFileUrl: url };
+        } catch (e) {
+          return item;
+        }
+      }
+      return item;
+    }));
+    return { data: processedItems, total };
   }),
   get: userProcedure.input(z10.object({ id: z10.number() })).query(async ({ input }) => {
     return await getAdjustmentById(input.id);
@@ -10984,7 +11440,20 @@ var adjustmentsRouter = router({
     })
   ).mutation(async ({ input, ctx }) => {
     const parts = input.effectiveMonth.split("-");
+    if (parts.length < 2) {
+      throw new TRPCError10({ code: "BAD_REQUEST", message: "Invalid effective month format" });
+    }
     const normalizedMonth = `${parts[0]}-${parts[1].padStart(2, "0")}-01`;
+    const employee = await getEmployeeById(input.employeeId);
+    if (!employee) throw new TRPCError10({ code: "BAD_REQUEST", message: "Employee not found" });
+    const { findPayrollRunByCountryMonth: findPayrollRunByCountryMonth2 } = await Promise.resolve().then(() => (init_db2(), db_exports));
+    const existingPayroll = await findPayrollRunByCountryMonth2(employee.country, normalizedMonth);
+    if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
+      throw new TRPCError10({
+        code: "BAD_REQUEST",
+        message: `Payroll run for ${normalizedMonth.substring(0, 7)} is already ${existingPayroll.status}. Adjustments cannot be added.`
+      });
+    }
     const now = /* @__PURE__ */ new Date();
     await enforceCutoff(normalizedMonth, ctx.user.role, "create adjustment");
     const { passed, cutoffDate } = await checkCutoffPassed(normalizedMonth);
@@ -10995,8 +11464,6 @@ var adjustmentsRouter = router({
         cutoffWarning = `Cutoff for ${parts[0]}-${parts[1]} payroll is in ${Math.round(hoursUntilCutoff)} hours. Submit before the deadline.`;
       }
     }
-    const employee = await getEmployeeById(input.employeeId);
-    if (!employee) throw new TRPCError10({ code: "BAD_REQUEST", message: "Employee not found" });
     const currency = employee.salaryCurrency || "USD";
     const customerId = employee.customerId;
     const payrollMonth = getAdjustmentPayrollMonth(normalizedMonth);
@@ -11009,6 +11476,7 @@ var adjustmentsRouter = router({
       amount: input.amount,
       currency,
       effectiveMonth: new Date(normalizedMonth),
+      // Safe conversion
       receiptFileUrl: input.receiptFileUrl,
       receiptFileKey: input.receiptFileKey,
       status: "submitted",
@@ -11207,6 +11675,24 @@ var reimbursementsRouter = router({
     }));
     return { data: processedItems, total };
   }),
+  downloadReceipt: userProcedure.input(z11.object({ id: z11.number() })).mutation(async ({ input }) => {
+    const item = await getReimbursementById(input.id);
+    if (!item || !item.receiptFileKey) {
+      throw new TRPCError11({ code: "NOT_FOUND", message: "Receipt not found" });
+    }
+    try {
+      const buffer = await storageDownload(item.receiptFileKey);
+      return {
+        content: buffer.toString("base64"),
+        filename: item.receiptFileKey.split("/").pop() || "receipt.pdf",
+        contentType: "application/pdf"
+        // Simplified, ideally store mimeType
+      };
+    } catch (error) {
+      console.error("Failed to download receipt:", error);
+      throw new TRPCError11({ code: "INTERNAL_SERVER_ERROR", message: "Failed to download receipt" });
+    }
+  }),
   get: userProcedure.input(z11.object({ id: z11.number() })).query(async ({ input }) => {
     return await getReimbursementById(input.id);
   }),
@@ -11393,7 +11879,7 @@ var reimbursementsRouter = router({
 // server/routers/dashboard.ts
 init_db2();
 init_schema();
-import { eq as eq21, and as and19, sql as sql9, count as count7, desc as desc10, inArray as inArray4, isNotNull } from "drizzle-orm";
+import { eq as eq20, and as and18, sql as sql9, count as count7, desc as desc10, inArray as inArray5, isNotNull } from "drizzle-orm";
 function getLastNMonths(n) {
   const months = [];
   const now = /* @__PURE__ */ new Date();
@@ -11432,22 +11918,22 @@ var dashboardRouter = router({
       const monthEnd = new Date(y, mo, 0, 23, 59, 59);
       const monthStart = `${m}-01`;
       const nextMonth = mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, "0")}-01`;
-      const [empResult] = await db.select({ count: count7() }).from(employees).where(and19(
+      const [empResult] = await db.select({ count: count7() }).from(employees).where(and18(
         sql9`${employees.createdAt} <= ${monthEnd}`,
-        inArray4(employees.status, ["active", "contract_signed", "onboarding", "offboarding"])
+        inArray5(employees.status, ["active", "contract_signed", "onboarding", "offboarding"])
       ));
       employeeTrend.push(empResult?.count ?? 0);
-      const [custResult] = await db.select({ count: count7() }).from(customers).where(and19(
+      const [custResult] = await db.select({ count: count7() }).from(customers).where(and18(
         sql9`${customers.createdAt} <= ${monthEnd}`,
-        eq21(customers.status, "active")
+        eq20(customers.status, "active")
       ));
       customerTrend.push(custResult?.count ?? 0);
-      const [invResult] = await db.select({ count: count7() }).from(invoices).where(and19(
+      const [invResult] = await db.select({ count: count7() }).from(invoices).where(and18(
         sql9`${invoices.createdAt} >= ${monthStart}`,
         sql9`${invoices.createdAt} < ${nextMonth}`
       ));
       invoiceTrend.push(invResult?.count ?? 0);
-      const [prResult] = await db.select({ count: count7() }).from(payrollRuns).where(and19(
+      const [prResult] = await db.select({ count: count7() }).from(payrollRuns).where(and18(
         sql9`${payrollRuns.payrollMonth} >= ${monthStart}`,
         sql9`${payrollRuns.payrollMonth} < ${nextMonth}`
       ));
@@ -11471,30 +11957,30 @@ var dashboardRouter = router({
     const [paidTotal] = await db.select({
       total: sql9`COALESCE(SUM(${invoices.total}), 0)`,
       count: count7()
-    }).from(invoices).where(and19(
-      eq21(invoices.status, "paid"),
+    }).from(invoices).where(and18(
+      eq20(invoices.status, "paid"),
       sql9`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
     ));
     const [depositTotal] = await db.select({
       total: sql9`COALESCE(SUM(${invoices.total}), 0)`,
       count: count7()
-    }).from(invoices).where(and19(
-      eq21(invoices.status, "paid"),
-      eq21(invoices.invoiceType, "deposit")
+    }).from(invoices).where(and18(
+      eq20(invoices.status, "paid"),
+      eq20(invoices.invoiceType, "deposit")
     ));
     const [serviceFeeTotal] = await db.select({
       total: sql9`COALESCE(SUM(ii.amount), 0)`
-    }).from(invoices).innerJoin(sql9`invoice_items ii`, sql9`ii.invoiceId = ${invoices.id}`).where(and19(
-      eq21(invoices.status, "paid"),
+    }).from(invoices).innerJoin(sql9`invoice_items ii`, sql9`ii.invoiceId = ${invoices.id}`).where(and18(
+      eq20(invoices.status, "paid"),
       sql9`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
       sql9`ii.itemType IN ('eor_service_fee', 'visa_eor_service_fee', 'aor_service_fee')`
     ));
     const [outstanding] = await db.select({
       total: sql9`COALESCE(SUM(${invoices.total}), 0)`
-    }).from(invoices).where(inArray4(invoices.status, ["sent", "overdue"]));
+    }).from(invoices).where(inArray5(invoices.status, ["sent", "overdue"]));
     const [overdue] = await db.select({
       total: sql9`COALESCE(SUM(${invoices.total}), 0)`
-    }).from(invoices).where(eq21(invoices.status, "overdue"));
+    }).from(invoices).where(eq20(invoices.status, "overdue"));
     const months = getLastNMonths(12);
     const monthlyRevenue = [];
     for (const m of months) {
@@ -11504,16 +11990,16 @@ var dashboardRouter = router({
       const [monthTotal] = await db.select({
         total: sql9`COALESCE(SUM(${invoices.total}), 0)`,
         count: count7()
-      }).from(invoices).where(and19(
-        eq21(invoices.status, "paid"),
+      }).from(invoices).where(and18(
+        eq20(invoices.status, "paid"),
         sql9`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
         sql9`(${invoices.paidDate} >= ${monthStart} AND ${invoices.paidDate} < ${nextMonth})
             OR (${invoices.paidDate} IS NULL AND ${invoices.createdAt} >= ${monthStart} AND ${invoices.createdAt} < ${nextMonth})`
       ));
       const [monthServiceFee] = await db.select({
         total: sql9`COALESCE(SUM(ii.amount), 0)`
-      }).from(invoices).innerJoin(sql9`invoice_items ii`, sql9`ii.invoiceId = ${invoices.id}`).where(and19(
-        eq21(invoices.status, "paid"),
+      }).from(invoices).innerJoin(sql9`invoice_items ii`, sql9`ii.invoiceId = ${invoices.id}`).where(and18(
+        eq20(invoices.status, "paid"),
         sql9`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
         sql9`ii.itemType IN ('eor_service_fee', 'visa_eor_service_fee', 'aor_service_fee')`,
         sql9`(${invoices.paidDate} >= ${monthStart} AND ${invoices.paidDate} < ${nextMonth})
@@ -11551,9 +12037,9 @@ var dashboardRouter = router({
       status: payrollRuns.status,
       count: count7()
     }).from(payrollRuns).groupBy(payrollRuns.status);
-    const [pendingPayrolls] = await db.select({ count: count7() }).from(payrollRuns).where(eq21(payrollRuns.status, "pending_approval"));
-    const [pendingAdj] = await db.select({ count: count7() }).from(adjustments).where(eq21(adjustments.status, "submitted"));
-    const [pendingLeaves] = await db.select({ count: count7() }).from(leaveRecords).where(eq21(leaveRecords.status, "submitted"));
+    const [pendingPayrolls] = await db.select({ count: count7() }).from(payrollRuns).where(eq20(payrollRuns.status, "pending_approval"));
+    const [pendingAdj] = await db.select({ count: count7() }).from(adjustments).where(eq20(adjustments.status, "submitted"));
+    const [pendingLeaves] = await db.select({ count: count7() }).from(leaveRecords).where(eq20(leaveRecords.status, "submitted"));
     const recentPayrollRuns = await db.select({
       id: payrollRuns.id,
       countryCode: payrollRuns.countryCode,
@@ -11563,8 +12049,8 @@ var dashboardRouter = router({
       totalEmployerCost: payrollRuns.totalDeductions,
       createdAt: payrollRuns.createdAt
     }).from(payrollRuns).orderBy(desc10(payrollRuns.createdAt)).limit(10);
-    const [onboarding] = await db.select({ count: count7() }).from(employees).where(inArray4(employees.status, ["pending_review", "documents_incomplete", "onboarding", "contract_signed"]));
-    const [offboarding] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "offboarding"));
+    const [onboarding] = await db.select({ count: count7() }).from(employees).where(inArray5(employees.status, ["pending_review", "documents_incomplete", "onboarding", "contract_signed"]));
+    const [offboarding] = await db.select({ count: count7() }).from(employees).where(eq20(employees.status, "offboarding"));
     return {
       payrollByStatus: payrollByStatus.map((r) => ({ status: r.status, count: r.count })),
       pendingApprovals: {
@@ -11604,16 +12090,16 @@ var dashboardRouter = router({
     const todayStr = now.toISOString().slice(0, 10);
     const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
     const nextMonthStart = now.getMonth() === 11 ? `${now.getFullYear() + 1}-01-01` : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, "0")}-01`;
-    const [activeResult] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "active"));
-    const [onLeaveResult] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "on_leave"));
-    const [onboardingResult] = await db.select({ count: count7() }).from(employees).where(inArray4(employees.status, ["pending_review", "documents_incomplete", "onboarding", "contract_signed"]));
-    const [offboardingResult] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "offboarding"));
-    const [newHiresResult] = await db.select({ count: count7() }).from(employees).where(and19(
+    const [activeResult] = await db.select({ count: count7() }).from(employees).where(eq20(employees.status, "active"));
+    const [onLeaveResult] = await db.select({ count: count7() }).from(employees).where(eq20(employees.status, "on_leave"));
+    const [onboardingResult] = await db.select({ count: count7() }).from(employees).where(inArray5(employees.status, ["pending_review", "documents_incomplete", "onboarding", "contract_signed"]));
+    const [offboardingResult] = await db.select({ count: count7() }).from(employees).where(eq20(employees.status, "offboarding"));
+    const [newHiresResult] = await db.select({ count: count7() }).from(employees).where(and18(
       sql9`${employees.startDate} >= ${currentMonthStart}`,
       sql9`${employees.startDate} < ${nextMonthStart}`
     ));
-    const [terminationsResult] = await db.select({ count: count7() }).from(employees).where(and19(
-      eq21(employees.status, "terminated"),
+    const [terminationsResult] = await db.select({ count: count7() }).from(employees).where(and18(
+      eq20(employees.status, "terminated"),
       sql9`${employees.updatedAt} >= ${currentMonthStart}`,
       sql9`${employees.updatedAt} < ${nextMonthStart}`
     ));
@@ -11628,12 +12114,12 @@ var dashboardRouter = router({
         firstName: employees.firstName,
         lastName: employees.lastName,
         employeeCode: employees.employeeCode
-      }).from(employeeContracts).innerJoin(employees, eq21(employeeContracts.employeeId, employees.id)).where(and19(
+      }).from(employeeContracts).innerJoin(employees, eq20(employeeContracts.employeeId, employees.id)).where(and18(
         isNotNull(employeeContracts.expiryDate),
         sql9`${employeeContracts.expiryDate} >= ${todayStr}`,
         sql9`${employeeContracts.expiryDate} <= ${futureDateStr}`,
-        eq21(employeeContracts.status, "signed"),
-        inArray4(employees.status, ["active", "on_leave"])
+        eq20(employeeContracts.status, "signed"),
+        inArray5(employees.status, ["active", "on_leave"])
       )).orderBy(employeeContracts.expiryDate);
       return results.map((r) => ({
         employeeId: r.employeeId,
@@ -11653,22 +12139,22 @@ var dashboardRouter = router({
       const monthEnd = new Date(y, mo, 0, 23, 59, 59);
       const monthStart = `${m}-01`;
       const mNextMonth = mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, "0")}-01`;
-      const [activeAtMonth] = await db.select({ count: count7() }).from(employees).where(and19(
+      const [activeAtMonth] = await db.select({ count: count7() }).from(employees).where(and18(
         sql9`${employees.createdAt} <= ${monthEnd}`,
-        inArray4(employees.status, ["active", "on_leave", "offboarding"])
+        inArray5(employees.status, ["active", "on_leave", "offboarding"])
       ));
-      const [newInMonth] = await db.select({ count: count7() }).from(employees).where(and19(
+      const [newInMonth] = await db.select({ count: count7() }).from(employees).where(and18(
         sql9`${employees.startDate} >= ${monthStart}`,
         sql9`${employees.startDate} < ${mNextMonth}`
       ));
-      const [termInMonth] = await db.select({ count: count7() }).from(employees).where(and19(
-        eq21(employees.status, "terminated"),
+      const [termInMonth] = await db.select({ count: count7() }).from(employees).where(and18(
+        eq20(employees.status, "terminated"),
         sql9`${employees.updatedAt} >= ${monthStart}`,
         sql9`${employees.updatedAt} < ${mNextMonth}`
       ));
-      const [onLeaveAtMonth] = await db.select({ count: count7() }).from(employees).where(and19(
+      const [onLeaveAtMonth] = await db.select({ count: count7() }).from(employees).where(and18(
         sql9`${employees.createdAt} <= ${monthEnd}`,
-        eq21(employees.status, "on_leave")
+        eq20(employees.status, "on_leave")
       ));
       monthlyWorkforce.push({
         month: m,
@@ -11699,7 +12185,7 @@ var dashboardRouter = router({
       const [result] = await db.select({
         count: count7(),
         totalDays: sql9`COALESCE(SUM(${leaveRecords.days}), 0)`
-      }).from(leaveRecords).where(and19(
+      }).from(leaveRecords).where(and18(
         sql9`${leaveRecords.startDate} >= ${monthStart}`,
         sql9`${leaveRecords.startDate} < ${mNextMonth}`
       ));
@@ -11732,12 +12218,26 @@ var dashboardRouter = router({
 import { z as z12 } from "zod";
 init_db2();
 import { TRPCError as TRPCError12 } from "@trpc/server";
+async function resolveLogoUrl(entity) {
+  if (entity.logoFileKey) {
+    try {
+      const { url } = await storageGet(entity.logoFileKey);
+      return { ...entity, logoUrl: url };
+    } catch (err) {
+      console.warn(`[BillingEntities] Failed to sign logo URL for key ${entity.logoFileKey}:`, err);
+    }
+  }
+  return entity;
+}
 var billingEntitiesRouter = router({
   list: userProcedure.query(async () => {
-    return await listBillingEntities();
+    const entities = await listBillingEntities();
+    return await Promise.all(entities.map((e) => resolveLogoUrl(e)));
   }),
   get: userProcedure.input(z12.object({ id: z12.number() })).query(async ({ input }) => {
-    return await getBillingEntityById(input.id);
+    const entity = await getBillingEntityById(input.id);
+    if (!entity) return entity;
+    return await resolveLogoUrl(entity);
   }),
   create: financeManagerProcedure.input(
     z12.object({
@@ -11851,17 +12351,24 @@ var billingEntitiesRouter = router({
     const fileBuffer = Buffer.from(input.fileBase64, "base64");
     const randomSuffix = Math.random().toString(36).substring(2, 10);
     const fileKey = `billing-entity-logos/${input.id}/${randomSuffix}-${input.fileName}`;
-    const { url } = await storagePut(fileKey, fileBuffer, input.mimeType);
-    await updateBillingEntity(input.id, { logoUrl: url, logoFileKey: fileKey });
+    const { url: rawUrl } = await storagePut(fileKey, fileBuffer, input.mimeType);
+    await updateBillingEntity(input.id, { logoUrl: rawUrl, logoFileKey: fileKey });
+    let signedUrl = rawUrl;
+    try {
+      const { url } = await storageGet(fileKey);
+      signedUrl = url;
+    } catch (err) {
+      console.warn("[BillingEntities] Failed to sign logo URL after upload:", err);
+    }
     await logAuditAction({
       userId: ctx.user.id,
       userName: ctx.user.name || null,
       action: "update",
       entityType: "billing_entity",
       entityId: input.id,
-      changes: JSON.stringify({ logoUrl: url, logoFileKey: fileKey })
+      changes: JSON.stringify({ logoUrl: rawUrl, logoFileKey: fileKey })
     });
-    return { success: true, logoUrl: url };
+    return { success: true, logoUrl: signedUrl };
   }),
   delete: adminProcedure2.input(z12.object({ id: z12.number() })).mutation(async ({ input, ctx }) => {
     await deleteBillingEntity(input.id);
@@ -11881,7 +12388,7 @@ import { z as z13 } from "zod";
 import { TRPCError as TRPCError13 } from "@trpc/server";
 init_db2();
 init_schema();
-import { eq as eq22 } from "drizzle-orm";
+import { eq as eq21 } from "drizzle-orm";
 import crypto3 from "crypto";
 var userManagementRouter = router({
   list: adminProcedure2.input(
@@ -12039,7 +12546,7 @@ var userManagementRouter = router({
       inviteToken: null,
       inviteExpiresAt: null,
       lastSignedIn: /* @__PURE__ */ new Date()
-    }).where(eq22(users.id, user.id));
+    }).where(eq21(users.id, user.id));
     const payload = {
       sub: String(user.id),
       email: user.email || "",
@@ -12079,7 +12586,7 @@ var userManagementRouter = router({
     const newHash = await hashPassword(input.newPassword);
     const db = await getDb();
     if (!db) throw new TRPCError13({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    await db.update(users).set({ passwordHash: newHash }).where(eq22(users.id, ctx.user.id));
+    await db.update(users).set({ passwordHash: newHash }).where(eq21(users.id, ctx.user.id));
     return { success: true };
   }),
   /**
@@ -12101,7 +12608,7 @@ var userManagementRouter = router({
     await db.update(users).set({
       passwordHash,
       mustChangePassword: true
-    }).where(eq22(users.id, input.id));
+    }).where(eq21(users.id, input.id));
     await logAuditAction({
       userId: ctx.user.id,
       userName: ctx.user.name || null,
@@ -12132,7 +12639,7 @@ var userManagementRouter = router({
     const inviteExpiresAt = getInviteExpiryDate();
     const db = await getDb();
     if (!db) throw new TRPCError13({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    await db.update(users).set({ inviteToken, inviteExpiresAt }).where(eq22(users.id, input.id));
+    await db.update(users).set({ inviteToken, inviteExpiresAt }).where(eq21(users.id, input.id));
     const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
     const inviteUrl = `${origin}/invite?token=${inviteToken}`;
     return { success: true, inviteUrl, inviteToken };
@@ -12168,7 +12675,7 @@ init_db2();
 // server/services/exchangeRateFetchService.ts
 init_db2();
 init_schema();
-import { eq as eq23 } from "drizzle-orm";
+import { eq as eq22 } from "drizzle-orm";
 var EXCHANGERATE_API_URL = "https://open.er-api.com/v6/latest";
 var FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1";
 var FRANKFURTER_SUPPORTED = /* @__PURE__ */ new Set([
@@ -12261,7 +12768,7 @@ async function getDefaultMarkup() {
   try {
     const db = await getDb();
     if (!db) return 5;
-    const result = await db.select().from(systemConfig).where(eq23(systemConfig.configKey, "exchange_rate_markup_percentage")).limit(1);
+    const result = await db.select().from(systemConfig).where(eq22(systemConfig.configKey, "exchange_rate_markup_percentage")).limit(1);
     if (result.length > 0) {
       return parseFloat(result[0].configValue) || 5;
     }
@@ -12533,7 +13040,7 @@ init_db2();
 // server/services/contractorInvoiceGenerationService.ts
 init_connection();
 init_schema();
-import { eq as eq24, and as and20, isNull, or as or5 } from "drizzle-orm";
+import { eq as eq23, and as and19, isNull as isNull2, or as or5 } from "drizzle-orm";
 var ContractorInvoiceGenerationService = {
   /**
    * Main entry point to process all pending invoices.
@@ -12592,19 +13099,19 @@ var ContractorInvoiceGenerationService = {
     if (!isCycleRun) return 0;
     const invoiceDate = targetDate.toISOString().split("T")[0];
     const eligibleContractors = await db.select().from(contractors).where(
-      and20(
-        eq24(contractors.status, "active"),
-        eq24(contractors.paymentFrequency, "semi_monthly"),
-        or5(eq24(contractors.rateType, "fixed_monthly"))
+      and19(
+        eq23(contractors.status, "active"),
+        eq23(contractors.paymentFrequency, "semi_monthly"),
+        or5(eq23(contractors.rateType, "fixed_monthly"))
       )
     );
-    let count20 = 0;
+    let count19 = 0;
     for (const contractor of eligibleContractors) {
       const existing = await db.select().from(contractorInvoices).where(
-        and20(
-          eq24(contractorInvoices.contractorId, contractor.id),
-          eq24(contractorInvoices.periodStart, periodStart),
-          eq24(contractorInvoices.periodEnd, periodEnd)
+        and19(
+          eq23(contractorInvoices.contractorId, contractor.id),
+          eq23(contractorInvoices.periodStart, periodStart),
+          eq23(contractorInvoices.periodEnd, periodEnd)
         )
       ).limit(1);
       if (existing.length > 0) continue;
@@ -12627,10 +13134,10 @@ var ContractorInvoiceGenerationService = {
       const adjustmentsToLink = [];
       if (d === lastDayOfMonth) {
         const pendingAdjustments = await db.select().from(contractorAdjustments).where(
-          and20(
-            eq24(contractorAdjustments.contractorId, contractor.id),
-            eq24(contractorAdjustments.status, "approved"),
-            isNull(contractorAdjustments.invoiceId)
+          and19(
+            eq23(contractorAdjustments.contractorId, contractor.id),
+            eq23(contractorAdjustments.status, "approved"),
+            isNull2(contractorAdjustments.invoiceId)
           )
         );
         for (const adj of pendingAdjustments) {
@@ -12670,11 +13177,11 @@ var ContractorInvoiceGenerationService = {
         await db.insert(contractorInvoiceItems).values(itemsWithId);
       }
       for (const adjId of adjustmentsToLink) {
-        await db.update(contractorAdjustments).set({ invoiceId: invoice.id, status: "invoiced" }).where(eq24(contractorAdjustments.id, adjId));
+        await db.update(contractorAdjustments).set({ invoiceId: invoice.id, status: "invoiced" }).where(eq23(contractorAdjustments.id, adjId));
       }
-      count20++;
+      count19++;
     }
-    return count20;
+    return count19;
   },
   /**
    * Generate invoices for active contractors with 'monthly' frequency.
@@ -12685,26 +13192,26 @@ var ContractorInvoiceGenerationService = {
   async processMonthlyInvoices(targetDate) {
     const db = await getDb();
     if (!db) return 0;
-    let count20 = 0;
+    let count19 = 0;
     const y = targetDate.getFullYear();
     const m = targetDate.getMonth();
     const periodStart = new Date(Date.UTC(y, m, 1)).toISOString().split("T")[0];
     const periodEnd = new Date(Date.UTC(y, m + 1, 0)).toISOString().split("T")[0];
     const invoiceDate = targetDate.toISOString().split("T")[0];
     const eligibleContractors = await db.select().from(contractors).where(
-      and20(
-        eq24(contractors.status, "active"),
-        eq24(contractors.paymentFrequency, "monthly"),
+      and19(
+        eq23(contractors.status, "active"),
+        eq23(contractors.paymentFrequency, "monthly"),
         // Only process if rateType is fixed_monthly (otherwise they might be hourly which needs timesheets)
-        or5(eq24(contractors.rateType, "fixed_monthly"))
+        or5(eq23(contractors.rateType, "fixed_monthly"))
       )
     );
     for (const contractor of eligibleContractors) {
       const existing = await db.select().from(contractorInvoices).where(
-        and20(
-          eq24(contractorInvoices.contractorId, contractor.id),
-          eq24(contractorInvoices.periodStart, periodStart),
-          eq24(contractorInvoices.periodEnd, periodEnd)
+        and19(
+          eq23(contractorInvoices.contractorId, contractor.id),
+          eq23(contractorInvoices.periodStart, periodStart),
+          eq23(contractorInvoices.periodEnd, periodEnd)
         )
       ).limit(1);
       if (existing.length > 0) continue;
@@ -12726,10 +13233,10 @@ var ContractorInvoiceGenerationService = {
         });
       }
       const pendingAdjustments = await db.select().from(contractorAdjustments).where(
-        and20(
-          eq24(contractorAdjustments.contractorId, contractor.id),
-          eq24(contractorAdjustments.status, "approved"),
-          isNull(contractorAdjustments.invoiceId)
+        and19(
+          eq23(contractorAdjustments.contractorId, contractor.id),
+          eq23(contractorAdjustments.status, "approved"),
+          isNull2(contractorAdjustments.invoiceId)
         )
       );
       const adjustmentsToLink = [];
@@ -12770,11 +13277,11 @@ var ContractorInvoiceGenerationService = {
         await db.insert(contractorInvoiceItems).values(itemsWithId);
       }
       for (const adjId of adjustmentsToLink) {
-        await db.update(contractorAdjustments).set({ invoiceId: invoice.id, status: "invoiced" }).where(eq24(contractorAdjustments.id, adjId));
+        await db.update(contractorAdjustments).set({ invoiceId: invoice.id, status: "invoiced" }).where(eq23(contractorAdjustments.id, adjId));
       }
-      count20++;
+      count19++;
     }
-    return count20;
+    return count19;
   },
   /**
    * Generate invoices for Approved Milestones.
@@ -12783,16 +13290,16 @@ var ContractorInvoiceGenerationService = {
   async processMilestoneInvoices(targetDate) {
     const db = await getDb();
     if (!db) return 0;
-    let count20 = 0;
+    let count19 = 0;
     const invoiceDate = targetDate.toISOString().split("T")[0];
     const approvedMilestones = await db.select().from(contractorMilestones).where(
-      and20(
-        eq24(contractorMilestones.status, "approved"),
-        isNull(contractorMilestones.invoiceId)
+      and19(
+        eq23(contractorMilestones.status, "approved"),
+        isNull2(contractorMilestones.invoiceId)
       )
     );
     for (const milestone of approvedMilestones) {
-      const contractorResult = await db.select().from(contractors).where(eq24(contractors.id, milestone.contractorId)).limit(1);
+      const contractorResult = await db.select().from(contractors).where(eq23(contractors.id, milestone.contractorId)).limit(1);
       if (contractorResult.length === 0) continue;
       const contractor = contractorResult[0];
       const invoiceNumber = `CTR-MIL-${milestone.id}-${Math.floor(Math.random() * 1e3)}`;
@@ -12808,10 +13315,10 @@ var ContractorInvoiceGenerationService = {
         milestoneId: milestone.id
       });
       const pendingAdjustments = await db.select().from(contractorAdjustments).where(
-        and20(
-          eq24(contractorAdjustments.contractorId, contractor.id),
-          eq24(contractorAdjustments.status, "approved"),
-          isNull(contractorAdjustments.invoiceId)
+        and19(
+          eq23(contractorAdjustments.contractorId, contractor.id),
+          eq23(contractorAdjustments.status, "approved"),
+          isNull2(contractorAdjustments.invoiceId)
         )
       );
       const adjustmentsToLink = [];
@@ -12845,19 +13352,19 @@ var ContractorInvoiceGenerationService = {
       const invoice = result[0];
       const itemsWithId = lineItems.map((item) => ({ ...item, invoiceId: invoice.id }));
       await db.insert(contractorInvoiceItems).values(itemsWithId);
-      await db.update(contractorMilestones).set({ invoiceId: invoice.id }).where(eq24(contractorMilestones.id, milestone.id));
+      await db.update(contractorMilestones).set({ invoiceId: invoice.id }).where(eq23(contractorMilestones.id, milestone.id));
       for (const adjId of adjustmentsToLink) {
-        await db.update(contractorAdjustments).set({ invoiceId: invoice.id, status: "invoiced" }).where(eq24(contractorAdjustments.id, adjId));
+        await db.update(contractorAdjustments).set({ invoiceId: invoice.id, status: "invoiced" }).where(eq23(contractorAdjustments.id, adjId));
       }
-      count20++;
+      count19++;
     }
-    return count20;
+    return count19;
   }
 };
 
 // server/cronJobs.ts
 init_schema();
-import { eq as eq25 } from "drizzle-orm";
+import { eq as eq24 } from "drizzle-orm";
 function getWorkingDaysInMonth(year, month, workingDaysPerWeek = 5) {
   const daysInMonth = new Date(year, month, 0).getDate();
   let workingDays = 0;
@@ -12917,7 +13424,7 @@ async function runEmployeeAutoActivation() {
     activated++;
     console.log(`[CronJob] Activated employee ${emp.employeeCode} (${emp.firstName} ${emp.lastName})`);
     try {
-      await initializeLeaveBalancesForEmployee(emp.id, emp.country, currentYear, emp.customerId);
+      await initializeLeaveBalancesForEmployee(emp.id);
       console.log(`[CronJob] Initialized leave balances for ${emp.employeeCode}`);
     } catch (err) {
       console.error(`[CronJob] Failed to initialize leave balances for ${emp.employeeCode}:`, err);
@@ -13032,7 +13539,7 @@ async function runAutoCreatePayrollRuns() {
       console.log(`[CronJob] Payroll run already exists for ${countryCode} ${targetMonthStr}, skipping`);
       continue;
     }
-    const [config] = await db.select().from(countriesConfig).where(eq25(countriesConfig.countryCode, countryCode)).limit(1);
+    const [config] = await db.select().from(countriesConfig).where(eq24(countriesConfig.countryCode, countryCode)).limit(1);
     if (!config) {
       console.log(`[CronJob] No country config for ${countryCode}, skipping`);
       continue;
@@ -13167,7 +13674,7 @@ async function runLeaveStatusTransition() {
   console.log(`[CronJob] Leave status transition check for ${todayStr}`);
   let toOnLeave = 0;
   let toActive = 0;
-  const activeLeaves = await getActiveLeaveRecordsForDate(todayStr);
+  const activeLeaves = await getAllActiveLeaveRecordsForDate(todayStr);
   const employeesWithActiveLeave = /* @__PURE__ */ new Set();
   for (const leave of activeLeaves) {
     employeesWithActiveLeave.add(leave.employeeId);
@@ -13180,7 +13687,7 @@ async function runLeaveStatusTransition() {
   }
   const { employees: employees2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
   for (const empId of Array.from(employeesWithActiveLeave)) {
-    const [emp] = await db.select({ id: employees2.id, status: employees2.status, employeeCode: employees2.employeeCode }).from(employees2).where(eq25(employees2.id, empId)).limit(1);
+    const [emp] = await db.select({ id: employees2.id, status: employees2.status, employeeCode: employees2.employeeCode }).from(employees2).where(eq24(employees2.id, empId)).limit(1);
     if (emp && emp.status === "active") {
       await updateEmployee(empId, { status: "on_leave" });
       toOnLeave++;
@@ -13218,19 +13725,18 @@ async function runOverdueInvoiceDetection() {
     return { overdueCount: 0 };
   }
   const { invoices: invoices2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-  const { eq: eq66, and: and51, lt: lt3, isNotNull: isNotNull3 } = await import("drizzle-orm");
-  const today = /* @__PURE__ */ new Date();
-  today.setHours(0, 0, 0, 0);
+  const { eq: eq65, and: and50, lt: lt3, isNotNull: isNotNull3 } = await import("drizzle-orm");
+  const todayStr = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
   const overdueInvoices = await db.select({ id: invoices2.id, invoiceNumber: invoices2.invoiceNumber, dueDate: invoices2.dueDate, customerId: invoices2.customerId }).from(invoices2).where(
-    and51(
-      eq66(invoices2.status, "sent"),
+    and50(
+      eq65(invoices2.status, "sent"),
       isNotNull3(invoices2.dueDate),
-      lt3(invoices2.dueDate, today)
+      lt3(invoices2.dueDate, todayStr)
     )
   );
   let overdueCount = 0;
   for (const inv of overdueInvoices) {
-    await db.update(invoices2).set({ status: "overdue" }).where(eq66(invoices2.id, inv.id));
+    await db.update(invoices2).set({ status: "overdue" }).where(eq65(invoices2.id, inv.id));
     overdueCount++;
     console.log(`[CronJob] Invoice ${inv.invoiceNumber || inv.id} marked as overdue (due: ${inv.dueDate})`);
     notificationService.send({
@@ -13310,7 +13816,7 @@ async function runMonthlyLeaveAccrual() {
             remaining: Math.max(0, newRemaining)
           });
           updated++;
-          console.log(`[CronJob] Updated leave balance for ${emp.firstName} ${emp.lastName} (${emp.employeeCode}): leaveType=${balance.leaveTypeName}, months=${fullMonthsServed}, accrued=${finalAccrued}/${annualEntitlement}`);
+          console.log(`[CronJob] Updated leave balance for ${emp.firstName} ${emp.lastName} (${emp.employeeCode}): leaveTypeId=${balance.leaveTypeId}, months=${fullMonthsServed}, accrued=${finalAccrued}/${annualEntitlement}`);
         }
       }
     } catch (err) {
@@ -14002,7 +14508,7 @@ var vendorBillsRouter = router({
 import { z as z20 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq26, and as and21, sql as sql11, inArray as inArray5, count as count8 } from "drizzle-orm";
+import { eq as eq25, and as and20, sql as sql11, inArray as inArray6, count as count8 } from "drizzle-orm";
 function getLastNMonths2(n, fromDate) {
   const d = fromDate ? new Date(fromDate) : /* @__PURE__ */ new Date();
   const months = [];
@@ -14075,8 +14581,8 @@ var reportsRouter = router({
         total: sql11`COALESCE(SUM(${invoices.total}), 0)`,
         cnt: count8()
       }).from(invoices).where(
-        and21(
-          eq26(invoices.status, "paid"),
+        and20(
+          eq25(invoices.status, "paid"),
           sql11`${invoices.invoiceMonth} >= ${monthStart}`,
           sql11`${invoices.invoiceMonth} < ${nextMonth}`,
           // Exclude deposit & deposit_refund — they are not revenue
@@ -14089,8 +14595,8 @@ var reportsRouter = router({
         total: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)`,
         cnt: count8()
       }).from(vendorBills).where(
-        and21(
-          inArray5(vendorBills.status, ["paid", "approved", "partially_paid"]),
+        and20(
+          inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
           sql11`${vendorBills.billMonth} >= ${monthStart}`,
           sql11`${vendorBills.billMonth} < ${nextMonth}`
         )
@@ -14118,8 +14624,8 @@ var reportsRouter = router({
       type: invoices.invoiceType,
       amount: sql11`COALESCE(SUM(${invoices.total}), 0)`
     }).from(invoices).where(
-      and21(
-        eq26(invoices.status, "paid"),
+      and20(
+        eq25(invoices.status, "paid"),
         sql11`${invoices.invoiceMonth} >= ${globalStart}`,
         sql11`${invoices.invoiceMonth} < ${globalEnd}`,
         sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
@@ -14129,8 +14635,8 @@ var reportsRouter = router({
       category: vendorBills.category,
       amount: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)`
     }).from(vendorBills).where(
-      and21(
-        inArray5(vendorBills.status, ["paid", "approved", "partially_paid"]),
+      and20(
+        inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
         sql11`${vendorBills.billMonth} >= ${globalStart}`,
         sql11`${vendorBills.billMonth} < ${globalEnd}`
       )
@@ -14139,9 +14645,9 @@ var reportsRouter = router({
       vendorId: vendorBills.vendorId,
       vendorName: vendors.name,
       amount: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)`
-    }).from(vendorBills).innerJoin(vendors, eq26(vendorBills.vendorId, vendors.id)).where(
-      and21(
-        inArray5(vendorBills.status, ["paid", "approved", "partially_paid"]),
+    }).from(vendorBills).innerJoin(vendors, eq25(vendorBills.vendorId, vendors.id)).where(
+      and20(
+        inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
         sql11`${vendorBills.billMonth} >= ${globalStart}`,
         sql11`${vendorBills.billMonth} < ${globalEnd}`
       )
@@ -14150,9 +14656,9 @@ var reportsRouter = router({
       customerId: invoices.customerId,
       customerName: customers.companyName,
       amount: sql11`COALESCE(SUM(${invoices.total}), 0)`
-    }).from(invoices).innerJoin(customers, eq26(invoices.customerId, customers.id)).where(
-      and21(
-        eq26(invoices.status, "paid"),
+    }).from(invoices).innerJoin(customers, eq25(invoices.customerId, customers.id)).where(
+      and20(
+        eq25(invoices.status, "paid"),
         sql11`${invoices.invoiceMonth} >= ${globalStart}`,
         sql11`${invoices.invoiceMonth} < ${globalEnd}`,
         sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
@@ -14163,9 +14669,9 @@ var reportsRouter = router({
       customerName: customers.companyName,
       revenue: sql11`COALESCE(SUM(DISTINCT ${invoices.total}), 0)`,
       costAllocated: sql11`COALESCE(SUM(${billInvoiceAllocations.allocatedAmount}), 0)`
-    }).from(invoices).innerJoin(customers, eq26(invoices.customerId, customers.id)).leftJoin(billInvoiceAllocations, eq26(billInvoiceAllocations.invoiceId, invoices.id)).where(
-      and21(
-        eq26(invoices.status, "paid"),
+    }).from(invoices).innerJoin(customers, eq25(invoices.customerId, customers.id)).leftJoin(billInvoiceAllocations, eq25(billInvoiceAllocations.invoiceId, invoices.id)).where(
+      and20(
+        eq25(invoices.status, "paid"),
         sql11`${invoices.invoiceMonth} >= ${globalStart}`,
         sql11`${invoices.invoiceMonth} < ${globalEnd}`,
         sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
@@ -14174,8 +14680,8 @@ var reportsRouter = router({
     const unallocatedResult = await db.select({
       total: sql11`COALESCE(SUM(${vendorBills.unallocatedAmount}), 0)`
     }).from(vendorBills).where(
-      and21(
-        inArray5(vendorBills.status, ["paid", "approved", "partially_paid"]),
+      and20(
+        inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
         sql11`${vendorBills.billMonth} >= ${globalStart}`,
         sql11`${vendorBills.billMonth} < ${globalEnd}`
       )
@@ -14248,39 +14754,39 @@ var reportsRouter = router({
     const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const prevMonthStart = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, "0")}-01`;
     const [curRevenue] = await db.select({ total: sql11`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and21(
-        eq26(invoices.status, "paid"),
+      and20(
+        eq25(invoices.status, "paid"),
         sql11`${invoices.invoiceMonth} >= ${currentMonthStart}`,
         sql11`${invoices.invoiceMonth} < ${nextMonthStart}`,
         sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     );
     const [curExpenses] = await db.select({ total: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(
-      and21(
-        inArray5(vendorBills.status, ["paid", "approved", "partially_paid"]),
+      and20(
+        inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
         sql11`${vendorBills.billMonth} >= ${currentMonthStart}`,
         sql11`${vendorBills.billMonth} < ${nextMonthStart}`
       )
     );
     const [prevRevenue] = await db.select({ total: sql11`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and21(
-        eq26(invoices.status, "paid"),
+      and20(
+        eq25(invoices.status, "paid"),
         sql11`${invoices.invoiceMonth} >= ${prevMonthStart}`,
         sql11`${invoices.invoiceMonth} < ${currentMonthStart}`,
         sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     );
     const [prevExpenses] = await db.select({ total: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(
-      and21(
-        inArray5(vendorBills.status, ["paid", "approved", "partially_paid"]),
+      and20(
+        inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
         sql11`${vendorBills.billMonth} >= ${prevMonthStart}`,
         sql11`${vendorBills.billMonth} < ${currentMonthStart}`
       )
     );
-    const [outstandingBills] = await db.select({ total: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(inArray5(vendorBills.status, ["pending_approval", "approved", "overdue"]));
+    const [outstandingBills] = await db.select({ total: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(inArray6(vendorBills.status, ["pending_approval", "approved", "overdue"]));
     const [outstandingInvoices] = await db.select({ total: sql11`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and21(
-        inArray5(invoices.status, ["sent", "overdue"]),
+      and20(
+        inArray6(invoices.status, ["sent", "overdue"]),
         sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     );
@@ -14306,7 +14812,7 @@ import { z as z21 } from "zod";
 init_db2();
 init_schema();
 import { TRPCError as TRPCError17 } from "@trpc/server";
-import { eq as eq27, sql as sql12, and as and22, desc as desc11 } from "drizzle-orm";
+import { eq as eq26, sql as sql12, and as and21, desc as desc11 } from "drizzle-orm";
 var allocationsRouter = router({
   // List allocations for a specific vendor bill (with employee + invoice details)
   listByBill: userProcedure.input(z21.object({ vendorBillId: z21.number() })).query(async ({ input }) => {
@@ -14356,7 +14862,7 @@ var allocationsRouter = router({
     if (!bill) throw new TRPCError17({ code: "NOT_FOUND", message: "Vendor bill not found" });
     const db = await getDb();
     if (!db) throw new TRPCError17({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    const invRows = await db.select().from(invoices).where(eq27(invoices.id, input.invoiceId)).limit(1);
+    const invRows = await db.select().from(invoices).where(eq26(invoices.id, input.invoiceId)).limit(1);
     if (!invRows[0]) throw new TRPCError17({ code: "NOT_FOUND", message: "Invoice not found" });
     const inv = invRows[0];
     const billType = bill.billType || "operational";
@@ -14369,7 +14875,7 @@ var allocationsRouter = router({
     if (billType === "operational" && inv.invoiceType === "deposit") {
       throw new TRPCError17({ code: "BAD_REQUEST", message: "Operational vendor bills should not be allocated to deposit invoices. Use a deposit-type vendor bill instead." });
     }
-    const empRows = await db.select().from(employees).where(eq27(employees.id, input.employeeId)).limit(1);
+    const empRows = await db.select().from(employees).where(eq26(employees.id, input.employeeId)).limit(1);
     if (!empRows[0]) throw new TRPCError17({ code: "NOT_FOUND", message: "Employee not found" });
     const billAllocated = await getBillAllocatedTotal(input.vendorBillId);
     const billTotal = parseFloat(String(bill.totalAmount));
@@ -14516,7 +15022,7 @@ var allocationsRouter = router({
     if (input.endMonth) {
       conditions.push(sql12`${invoices.invoiceMonth} <= ${input.endMonth + "-01"}`);
     }
-    const where = conditions.length > 0 ? and22(...conditions) : void 0;
+    const where = conditions.length > 0 ? and21(...conditions) : void 0;
     const invList = await db.select().from(invoices).where(where).orderBy(desc11(invoices.invoiceMonth));
     const results = [];
     for (const inv of invList) {
@@ -14526,7 +15032,7 @@ var allocationsRouter = router({
       const margin = revenue > 0 ? profit / revenue * 100 : 0;
       const customerRows = await db.select().from(
         (await Promise.resolve().then(() => (init_schema(), schema_exports))).customers
-      ).where(eq27((await Promise.resolve().then(() => (init_schema(), schema_exports))).customers.id, inv.customerId)).limit(1);
+      ).where(eq26((await Promise.resolve().then(() => (init_schema(), schema_exports))).customers.id, inv.customerId)).limit(1);
       results.push({
         invoiceId: inv.id,
         invoiceNumber: inv.invoiceNumber,
@@ -14540,8 +15046,8 @@ var allocationsRouter = router({
         isLoss: profit < 0
       });
     }
-    const totalRevenue = results.reduce((sum4, r) => sum4 + r.revenue, 0);
-    const totalCost = results.reduce((sum4, r) => sum4 + r.costAllocated, 0);
+    const totalRevenue = results.reduce((sum3, r) => sum3 + r.revenue, 0);
+    const totalCost = results.reduce((sum3, r) => sum3 + r.costAllocated, 0);
     const totalProfit = totalRevenue - totalCost;
     const lossInvoices = results.filter((r) => r.isLoss);
     return {
@@ -14560,7 +15066,7 @@ var allocationsRouter = router({
   vendorComparison: userProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError17({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    const vendorList = await db.select().from(vendors).where(eq27(vendors.status, "active"));
+    const vendorList = await db.select().from(vendors).where(eq26(vendors.status, "active"));
     const results = [];
     for (const vendor of vendorList) {
       const analysis = await getVendorProfitAnalysis(vendor.id);
@@ -14594,9 +15100,8 @@ function extractTokenUsage(result) {
   };
 }
 function estimateCost(task, inputTokens, outputTokens) {
-  const isVisual = task === "vendor_bill_parse";
-  const inRate = isVisual ? 12e-7 : 4e-7;
-  const outRate = isVisual ? 36e-7 : 12e-7;
+  const inRate = 5e-7;
+  const outRate = 2e-6;
   return Number((inputTokens * inRate + outputTokens * outRate).toFixed(6));
 }
 async function logTaskExecution(payload) {
@@ -14620,22 +15125,33 @@ async function logTaskExecution(payload) {
   }
 }
 async function invokeOpenAICompatible(baseUrl, apiKey, model, params) {
+  const responseFormat = params.responseFormat || params.response_format;
+  const hasStructuredOutput = responseFormat?.type === "json_schema";
+  const body = {
+    model,
+    messages: params.messages
+  };
+  if (responseFormat) {
+    body.response_format = responseFormat;
+  }
+  if (!hasStructuredOutput) {
+    body.max_tokens = params.maxTokens || params.max_tokens || 4096;
+  }
+  if (params.temperature !== void 0) {
+    body.temperature = params.temperature;
+  }
+  console.log(`[AI Gateway] Invoking ${model} with${hasStructuredOutput ? "" : "out"} structured output`);
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${apiKey}`
     },
-    body: JSON.stringify({
-      model,
-      messages: params.messages,
-      response_format: params.responseFormat || params.response_format,
-      max_tokens: params.maxTokens || params.max_tokens || 4096,
-      temperature: params.temperature
-    })
+    body: JSON.stringify(body)
   });
   if (!response.ok) {
     const errorText = await response.text();
+    console.error(`[AI Gateway] API error ${response.status}:`, errorText);
     throw new Error(`Provider call failed: ${response.status} - ${errorText}`);
   }
   return await response.json();
@@ -14646,8 +15162,9 @@ async function executeTaskLLM(task, params) {
   if (!apiKey) {
     throw new Error("Missing DASHSCOPE_API_KEY environment variable");
   }
-  const model = task === "vendor_bill_parse" ? "qwen-vl-plus" : "qwen-plus";
+  const model = task === "vendor_bill_parse" ? "qwen-long-latest" : "qwen-plus";
   const baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+  console.log(`[AI Gateway] Task: ${task}, Model: ${model}`);
   try {
     const result = await invokeOpenAICompatible(baseUrl, apiKey, model, params);
     const usage = extractTokenUsage(result);
@@ -14679,11 +15196,45 @@ async function executeTaskLLM(task, params) {
     throw error;
   }
 }
+async function uploadFileToDashScope(buffer, filename) {
+  const apiKey = resolveEnvKey("DASHSCOPE_API_KEY");
+  if (!apiKey) {
+    throw new Error("Missing DASHSCOPE_API_KEY environment variable");
+  }
+  const formData = new FormData();
+  const blob = new Blob([new Uint8Array(buffer)]);
+  formData.append("file", blob, filename);
+  formData.append("purpose", "file-extract");
+  try {
+    const response = await fetch("https://dashscope.aliyuncs.com/compatible-mode/v1/files", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+        // Note: Do NOT set Content-Type header manually when using FormData,
+        // the browser/runtime will set it with the boundary.
+      },
+      body: formData
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`DashScope upload failed: ${response.status} - ${errorText}`);
+    }
+    const data = await response.json();
+    const fileId = data?.id || data?.data?.uploaded_files?.[0]?.file_id || data?.output?.id;
+    if (!fileId) {
+      throw new Error(`DashScope upload returned unexpected format: ${JSON.stringify(data)}`);
+    }
+    return fileId;
+  } catch (error) {
+    console.error("[AI Gateway] File upload failed", error);
+    throw error;
+  }
+}
 
 // server/routers/pdfParsing.ts
 init_db2();
 init_schema();
-import { eq as eq28, sql as sql13, inArray as inArray6, desc as desc12 } from "drizzle-orm";
+import { eq as eq27, sql as sql13, inArray as inArray7, desc as desc12 } from "drizzle-orm";
 import { TRPCError as TRPCError18 } from "@trpc/server";
 async function buildSystemContext(serviceMonth) {
   const db = await getDb();
@@ -14698,14 +15249,14 @@ async function buildSystemContext(serviceMonth) {
     jobTitle: employees.jobTitle,
     baseSalary: employees.baseSalary,
     salaryCurrency: employees.salaryCurrency
-  }).from(employees).where(eq28(employees.status, "active"));
+  }).from(employees).where(eq27(employees.status, "active"));
   const custRows = await db.select({
     id: customers.id,
     clientCode: customers.clientCode,
     companyName: customers.companyName,
     country: customers.country,
     settlementCurrency: customers.settlementCurrency
-  }).from(customers).where(eq28(customers.status, "active"));
+  }).from(customers).where(eq27(customers.status, "active"));
   let invQuery = db.select({
     id: invoices.id,
     invoiceNumber: invoices.invoiceNumber,
@@ -14719,7 +15270,7 @@ async function buildSystemContext(serviceMonth) {
   let invRows;
   if (serviceMonth) {
     invRows = await invQuery.where(
-      sql13`DATE_FORMAT(${invoices.invoiceMonth}, '%Y-%m') = ${serviceMonth} OR DATE_FORMAT(${invoices.createdAt}, '%Y-%m') = ${serviceMonth}`
+      sql13`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth} OR strftime('%Y-%m', ${invoices.createdAt}, 'unixepoch') = ${serviceMonth}`
     ).orderBy(desc12(invoices.createdAt)).limit(200);
   } else {
     invRows = await invQuery.orderBy(desc12(invoices.createdAt)).limit(100);
@@ -14733,7 +15284,7 @@ async function buildSystemContext(serviceMonth) {
       description: invoiceItems.description,
       amount: invoiceItems.amount,
       countryCode: invoiceItems.countryCode
-    }).from(invoiceItems).where(inArray6(invoiceItems.invoiceId, invIds));
+    }).from(invoiceItems).where(inArray7(invoiceItems.invoiceId, invIds));
   }
   const empInvoiceMap = {};
   for (const item of invItemRows) {
@@ -14785,21 +15336,20 @@ async function buildSystemContext(serviceMonth) {
     summary: `${empContext.length} active employees, ${custContext.length} active customers, ${invContext.length} invoices`
   };
 }
-function detectMimeType(fileName) {
-  const ext = fileName.toLowerCase().split(".").pop();
-  switch (ext) {
-    case "pdf":
-      return "application/pdf";
-    case "png":
-      return "image/png";
-    case "jpg":
-    case "jpeg":
-      return "image/jpeg";
-    case "webp":
-      return "image/webp";
-    default:
-      return "application/pdf";
+async function uploadFileForAI(fileUrl, fileKey, fileName) {
+  let fileBuffer;
+  if (fileKey) {
+    const { content } = await storageDownload(fileKey);
+    fileBuffer = content;
+  } else if (fileUrl.startsWith("data:")) {
+    const base64Content = fileUrl.split(",")[1];
+    fileBuffer = Buffer.from(base64Content, "base64");
+  } else {
+    const resp = await fetch(fileUrl);
+    const arrayBuffer = await resp.arrayBuffer();
+    fileBuffer = Buffer.from(arrayBuffer);
   }
+  return await uploadFileToDashScope(fileBuffer, fileName);
 }
 var pdfParsingRouter = router({
   // Multi-file AI parse: Upload multiple files for one vendor, cross-validate, and suggest allocations
@@ -14819,13 +15369,24 @@ var pdfParsingRouter = router({
     })
   ).mutation(async ({ input, ctx }) => {
     const systemContext = await buildSystemContext(input.serviceMonth);
-    const fileMessages = input.files.map((f) => ({
-      type: "file_url",
-      file_url: {
-        url: f.fileUrl,
-        mime_type: detectMimeType(f.fileName)
+    const fileIds = [];
+    const fileUploadErrors = [];
+    for (const f of input.files) {
+      try {
+        const fileId = await uploadFileForAI(f.fileUrl, f.fileKey, f.fileName);
+        fileIds.push(fileId);
+      } catch (e) {
+        console.warn(`Failed to upload file ${f.fileName} to DashScope:`, e?.message);
+        fileUploadErrors.push(`${f.fileName}: ${e?.message || "upload failed"}`);
       }
-    }));
+    }
+    if (fileIds.length === 0) {
+      throw new TRPCError18({
+        code: "INTERNAL_SERVER_ERROR",
+        message: `All file uploads failed: ${fileUploadErrors.join("; ")}`
+      });
+    }
+    const fileIdReferences = fileIds.map((id) => `fileid://${id}`).join(",");
     const response = await executeTaskLLM("vendor_bill_parse", {
       messages: [
         {
@@ -14922,20 +15483,21 @@ IMPORTANT RULES:
 - For operational costs (bank fees, office rent, etc.), set vendorType to "operational" and skip allocation suggestions.`
         },
         {
+          // 2nd system message: document content via fileid:// references
+          // Qwen-Long will parse and understand all referenced files (PDF, Excel, images, etc.)
+          role: "system",
+          content: fileIdReferences
+        },
+        {
           role: "user",
-          content: [
-            ...fileMessages,
-            {
-              type: "text",
-              text: `I'm uploading ${input.files.length} document(s) from a single vendor for service month ${input.serviceMonth}. File types: ${input.files.map((f) => `${f.fileName} (${f.fileType})`).join(", ")}. Please analyze all documents together, cross-validate the information, and provide structured extraction with confidence scores and allocation suggestions.`
-            }
-          ]
+          content: `I'm uploading ${input.files.length} document(s) from a single vendor for service month ${input.serviceMonth}. File types: ${input.files.map((f) => `${f.fileName} (${f.fileType})`).join(", ")}. Please analyze all documents together, cross-validate the information, and provide structured extraction with confidence scores and allocation suggestions.`
         }
       ],
       response_format: {
         type: "json_schema",
         json_schema: {
           name: "multi_file_vendor_parse",
+          description: "Structured extraction from multiple vendor documents including invoice details, payment info, line items, and cross-validation results.",
           strict: true,
           schema: {
             type: "object",
@@ -15054,7 +15616,7 @@ IMPORTANT RULES:
     const parsed2 = JSON.parse(content);
     parsed2.vendorMatch = null;
     if (parsed2.vendor?.name && !input.vendorId) {
-      const vendorList = await listVendors({ search: parsed2.vendor.name }, 5, 0);
+      const vendorList = await listVendors({ search: parsed2.vendor.name, pageSize: 5 });
       if (vendorList.data.length > 0) {
         parsed2.vendorMatch = {
           status: "matched",
@@ -15109,10 +15671,10 @@ IMPORTANT RULES:
         }
       }
     } else if (input.vendorId) {
-      const vendorList = await listVendors({}, 1, 0);
+      const vendorList = await listVendors({ pageSize: 1 });
       const db = await getDb();
       if (db) {
-        const vRows = await db.select().from(vendors).where(eq28(vendors.id, input.vendorId)).limit(1);
+        const vRows = await db.select().from(vendors).where(eq27(vendors.id, input.vendorId)).limit(1);
         if (vRows[0]) {
           parsed2.vendorMatch = {
             status: "pre_selected",
@@ -15221,7 +15783,7 @@ IMPORTANT RULES:
           vendorBillId: billId,
           ...item
         });
-        itemIds.push(itemId);
+        if (itemId) itemIds.push(itemId);
       }
     }
     let allocationsCreated = 0;
@@ -15304,6 +15866,7 @@ IMPORTANT RULES:
     return { url, key };
   }),
   // Legacy: Single file parse (kept for backward compatibility)
+  // Now uses Qwen-Long with fileid:// for document understanding
   parseVendorInvoice: financeManagerProcedure.input(
     z22.object({
       fileUrl: z22.string(),
@@ -15311,6 +15874,15 @@ IMPORTANT RULES:
       vendorId: z22.number().optional()
     })
   ).mutation(async ({ input, ctx }) => {
+    let fileId;
+    try {
+      fileId = await uploadFileForAI(input.fileUrl, input.fileKey, "vendor-invoice");
+    } catch (e) {
+      throw new TRPCError18({
+        code: "INTERNAL_SERVER_ERROR",
+        message: `Failed to upload file for AI processing: ${e?.message}`
+      });
+    }
     const response = await executeTaskLLM("vendor_bill_parse", {
       messages: [
         {
@@ -15337,20 +15909,20 @@ Return a JSON object with these fields:
 Be precise with numbers. If a field is not found, use null.`
         },
         {
+          // 2nd system message: document content via fileid://
+          role: "system",
+          content: `fileid://${fileId}`
+        },
+        {
           role: "user",
-          content: [
-            {
-              type: "file_url",
-              file_url: { url: input.fileUrl, mime_type: "application/pdf" }
-            },
-            { type: "text", text: "Parse this vendor invoice." }
-          ]
+          content: "Parse this vendor invoice."
         }
       ],
       response_format: {
         type: "json_schema",
         json_schema: {
           name: "vendor_invoice_parse",
+          description: "Structured extraction from a single vendor invoice including vendor info, amounts, line items, and categorization.",
           strict: true,
           schema: {
             type: "object",
@@ -15397,7 +15969,7 @@ Be precise with numbers. If a field is not found, use null.`
     }
     const parsed2 = JSON.parse(content);
     if (parsed2.vendorName && !input.vendorId) {
-      const vendorList = await listVendors({ search: parsed2.vendorName }, 5, 0);
+      const vendorList = await listVendors({ search: parsed2.vendorName, pageSize: 5 });
       parsed2.matchedVendors = vendorList.data.map((v) => ({
         id: v.id,
         name: v.name,
@@ -15488,7 +16060,7 @@ Be precise with numbers. If a field is not found, use null.`
 import { z as z23 } from "zod";
 init_db2();
 init_schema();
-import { desc as desc13, eq as eq29, and as and24 } from "drizzle-orm";
+import { desc as desc13, eq as eq28, and as and23 } from "drizzle-orm";
 import { TRPCError as TRPCError19 } from "@trpc/server";
 var salesRouter = router({
   // ── List all sales leads ──────────────────────────────────────────────
@@ -15622,9 +16194,9 @@ var salesRouter = router({
       const db = getDb();
       if (db) {
         const hasSentQuotation = await db.query.quotations.findFirst({
-          where: (q, { eq: eq66, or: or9 }) => and24(
-            eq66(q.leadId, input.id),
-            or9(eq66(q.status, "sent"), eq66(q.status, "accepted"))
+          where: (q, { eq: eq65, or: or10 }) => and23(
+            eq65(q.leadId, input.id),
+            or10(eq65(q.status, "sent"), eq65(q.status, "accepted"))
           )
         });
         if (!hasSentQuotation) {
@@ -15639,9 +16211,9 @@ var salesRouter = router({
       const db = getDb();
       if (db) {
         const hasAcceptedQuotation = await db.query.quotations.findFirst({
-          where: and24(
-            eq29(quotations.leadId, input.id),
-            eq29(quotations.status, "accepted")
+          where: and23(
+            eq28(quotations.leadId, input.id),
+            eq28(quotations.status, "accepted")
           )
         });
         if (!hasAcceptedQuotation) {
@@ -15651,9 +16223,9 @@ var salesRouter = router({
           });
         }
         const msaDoc = await db.query.salesDocuments.findFirst({
-          where: and24(
-            eq29(salesDocuments.leadId, input.id),
-            eq29(salesDocuments.docType, "contract")
+          where: and23(
+            eq28(salesDocuments.leadId, input.id),
+            eq28(salesDocuments.docType, "contract")
             // Assuming 'contract' is used for MSA
           )
         });
@@ -15742,7 +16314,7 @@ var salesRouter = router({
     const db = getDb();
     if (db) {
       const latestQuotation = await db.query.quotations.findFirst({
-        where: eq29(quotations.leadId, input.leadId),
+        where: eq28(quotations.leadId, input.leadId),
         orderBy: [desc13(quotations.createdAt)]
       });
       if (latestQuotation && latestQuotation.snapshotData) {
@@ -15756,18 +16328,30 @@ var salesRouter = router({
             }
           }
           for (const item of pricingMap.values()) {
-            await createCustomerPricing({
-              customerId,
-              pricingType: "country_specific",
-              countryCode: item.countryCode,
-              serviceType: item.serviceType,
-              fixedPrice: String(item.serviceFee),
-              visaOneTimeFee: item.oneTimeFee ? String(item.oneTimeFee) : void 0,
-              currency: item.currency || input.settlementCurrency,
-              effectiveFrom: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
-              sourceQuotationId: latestQuotation.id,
-              isActive: true
-            });
+            if (item.serviceType === "aor") {
+              await createCustomerPricing({
+                customerId,
+                pricingType: "client_aor_fixed",
+                fixedPrice: String(item.serviceFee),
+                currency: item.currency || input.settlementCurrency,
+                effectiveFrom: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+                sourceQuotationId: latestQuotation.id,
+                isActive: true
+              });
+            } else {
+              await createCustomerPricing({
+                customerId,
+                pricingType: "country_specific",
+                countryCode: item.countryCode,
+                serviceType: item.serviceType,
+                fixedPrice: String(item.serviceFee),
+                visaOneTimeFee: item.oneTimeFee ? String(item.oneTimeFee) : void 0,
+                currency: item.currency || input.settlementCurrency,
+                effectiveFrom: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+                sourceQuotationId: latestQuotation.id,
+                isActive: true
+              });
+            }
           }
         } catch (e) {
           console.error("Failed to sync pricing from quotation", e);
@@ -15778,7 +16362,7 @@ var salesRouter = router({
       convertedCustomerId: customerId
     });
     const salesDocs = await db.query.salesDocuments.findMany({
-      where: eq29(salesDocuments.leadId, input.leadId)
+      where: eq28(salesDocuments.leadId, input.leadId)
     });
     for (const doc of salesDocs) {
       if (doc.docType === "contract") {
@@ -15946,7 +16530,7 @@ var salesRouter = router({
       const db = getDb();
       if (!db) return [];
       const docs = await db.query.salesDocuments.findMany({
-        where: eq29(salesDocuments.leadId, input.leadId),
+        where: eq28(salesDocuments.leadId, input.leadId),
         orderBy: [desc13(salesDocuments.createdAt)]
       });
       return await Promise.all(docs.map(async (d) => {
@@ -15980,10 +16564,11 @@ var salesRouter = router({
       const [doc] = await db.insert(salesDocuments).values({
         leadId: input.leadId,
         docType: input.docType,
-        fileName: input.fileName,
+        title: input.fileName,
+        // Using fileName as title
         fileKey,
         fileUrl: url,
-        uploadedBy: ctx.user.id,
+        generatedBy: ctx.user.id,
         createdAt: /* @__PURE__ */ new Date()
       }).returning();
       await logAuditAction({
@@ -15995,10 +16580,32 @@ var salesRouter = router({
       });
       return { success: true, url, doc };
     }),
+    download: userProcedure.input(z23.object({ id: z23.number() })).mutation(async ({ input }) => {
+      const db = getDb();
+      if (!db) throw new TRPCError19({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const doc = await db.query.salesDocuments.findFirst({
+        where: eq28(salesDocuments.id, input.id)
+      });
+      if (!doc) throw new TRPCError19({ code: "NOT_FOUND", message: "Document not found" });
+      if (doc.fileKey) {
+        try {
+          const { content, contentType } = await storageDownload(doc.fileKey);
+          return {
+            content: content.toString("base64"),
+            filename: doc.title || `Document-${doc.id}`,
+            contentType: contentType || "application/octet-stream"
+          };
+        } catch (e) {
+          console.error("Failed to download document:", e);
+          throw new TRPCError19({ code: "INTERNAL_SERVER_ERROR", message: "Failed to download file" });
+        }
+      }
+      throw new TRPCError19({ code: "NOT_FOUND", message: "File key missing" });
+    }),
     delete: crmProcedure.input(z23.object({ id: z23.number() })).mutation(async ({ input, ctx }) => {
       const db = getDb();
       if (!db) throw new TRPCError19({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-      await db.delete(salesDocuments).where(eq29(salesDocuments.id, input.id));
+      await db.delete(salesDocuments).where(eq28(salesDocuments.id, input.id));
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -16022,7 +16629,7 @@ var salesRouter = router({
 
 // server/routers/knowledgeBaseAdmin.ts
 import { z as z24 } from "zod";
-import { desc as desc14, eq as eq30, gte as gte4, inArray as inArray7 } from "drizzle-orm";
+import { desc as desc14, eq as eq29, gte as gte4, inArray as inArray8 } from "drizzle-orm";
 import { TRPCError as TRPCError20 } from "@trpc/server";
 init_db2();
 init_schema();
@@ -16265,7 +16872,7 @@ var knowledgeBaseAdminRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError20({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
     const statuses = input?.statuses?.length ? input.statuses : ["pending_review"];
-    const rows = await db.select().from(knowledgeItems).where(inArray7(knowledgeItems.status, statuses)).orderBy(desc14(knowledgeItems.createdAt)).limit(200);
+    const rows = await db.select().from(knowledgeItems).where(inArray8(knowledgeItems.status, statuses)).orderBy(desc14(knowledgeItems.createdAt)).limit(200);
     return rows.map((row) => {
       const meta = row.metadata || {};
       const riskScore = computeRiskScore({
@@ -16309,7 +16916,8 @@ var knowledgeBaseAdminRouter = router({
         latestAt: row.createdAt
       };
       current.hits += 1;
-      for (const topic of row.topics || []) current.topics.add(topic);
+      const topicsArr = Array.isArray(row.topics) ? row.topics : [];
+      for (const topic of topicsArr) current.topics.add(String(topic));
       if (row.createdAt > current.latestAt) current.latestAt = row.createdAt;
       bucket.set(key, current);
     }
@@ -16351,7 +16959,7 @@ var knowledgeBaseAdminRouter = router({
         authorityReason: authority.reason,
         aiReviewedAt: /* @__PURE__ */ new Date(),
         updatedBy: ctx.user.id
-      }).where(eq30(knowledgeSources.id, input.id));
+      }).where(eq29(knowledgeSources.id, input.id));
       return { success: true, id: input.id };
     }
     const result = await db.insert(knowledgeSources).values({
@@ -16372,7 +16980,7 @@ var knowledgeBaseAdminRouter = router({
   auditSourceAuthority: adminProcedure2.input(z24.object({ sourceId: z24.number() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError20({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const [source] = await db.select().from(knowledgeSources).where(eq30(knowledgeSources.id, input.sourceId)).limit(1);
+    const [source] = await db.select().from(knowledgeSources).where(eq29(knowledgeSources.id, input.sourceId)).limit(1);
     if (!source) throw new TRPCError20({ code: "NOT_FOUND", message: "Source not found" });
     const authority = await evaluateSourceAuthorityWithAI({
       sourceName: source.name,
@@ -16384,13 +16992,13 @@ var knowledgeBaseAdminRouter = router({
       authorityLevel: authority.level,
       authorityReason: authority.reason,
       aiReviewedAt: /* @__PURE__ */ new Date()
-    }).where(eq30(knowledgeSources.id, source.id));
+    }).where(eq29(knowledgeSources.id, source.id));
     return { success: true, authority };
   }),
   ingestSourceNow: adminProcedure2.input(z24.object({ sourceId: z24.number(), customerId: z24.number().optional() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError20({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const [source] = await db.select().from(knowledgeSources).where(eq30(knowledgeSources.id, input.sourceId)).limit(1);
+    const [source] = await db.select().from(knowledgeSources).where(eq29(knowledgeSources.id, input.sourceId)).limit(1);
     if (!source) throw new TRPCError20({ code: "NOT_FOUND", message: "Source not found" });
     const pulled = await pullFromSource(source.url);
     if (!pulled.length) return { success: true, created: 0 };
@@ -16444,13 +17052,13 @@ ${item.content}`
         };
       })
     );
-    await db.update(knowledgeSources).set({ lastFetchedAt: /* @__PURE__ */ new Date() }).where(eq30(knowledgeSources.id, source.id));
+    await db.update(knowledgeSources).set({ lastFetchedAt: /* @__PURE__ */ new Date() }).where(eq29(knowledgeSources.id, source.id));
     return { success: true, created: drafts.length };
   }),
   reviewItem: adminProcedure2.input(z24.object({ id: z24.number(), action: z24.enum(["publish", "reject"]), note: z24.string().optional() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError20({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const [item] = await db.select().from(knowledgeItems).where(eq30(knowledgeItems.id, input.id)).limit(1);
+    const [item] = await db.select().from(knowledgeItems).where(eq29(knowledgeItems.id, input.id)).limit(1);
     if (!item) throw new TRPCError20({ code: "NOT_FOUND", message: "Item not found" });
     await db.update(knowledgeItems).set({
       status: input.action === "publish" ? "published" : "rejected",
@@ -16458,1391 +17066,31 @@ ${item.content}`
       reviewedAt: /* @__PURE__ */ new Date(),
       publishedAt: input.action === "publish" ? /* @__PURE__ */ new Date() : item.publishedAt,
       reviewNote: input.note || null
-    }).where(eq30(knowledgeItems.id, input.id));
+    }).where(eq29(knowledgeItems.id, input.id));
     return { success: true };
   })
 });
 
-// server/routers/copilot.ts
-import { z as z25 } from "zod";
-import { TRPCError as TRPCError21 } from "@trpc/server";
-
-// server/services/copilotService.ts
-init_db2();
-init_schema();
-import { eq as eq31, desc as desc15, sql as sql14 } from "drizzle-orm";
-
-// server/services/copilotCache.ts
-init_db2();
-import { LRUCache } from "lru-cache";
-var DEFAULT_CACHE_CONFIG = {
-  maxSize: 1e3,
-  ttl: 5 * 60 * 1e3,
-  // 5分钟
-  checkPeriod: 60 * 1e3
-  // 1分钟
-};
-var CopilotCacheManager = class {
-  userConfigCache;
-  conversationCache;
-  predictionsCache;
-  shortcutsCache;
-  dataContextCache;
-  aiResponseCache;
-  cleanupInterval = null;
-  metrics = {
-    hits: 0,
-    misses: 0,
-    evictions: 0,
-    updates: 0
-  };
-  constructor(config = {}) {
-    const finalConfig = { ...DEFAULT_CACHE_CONFIG, ...config };
-    this.userConfigCache = new LRUCache({
-      max: 500,
-      ttl: finalConfig.ttl,
-      updateAgeOnGet: true,
-      updateAgeOnHas: true
-    });
-    this.conversationCache = new LRUCache({
-      max: 200,
-      ttl: finalConfig.ttl * 2,
-      // 对话缓存更久
-      updateAgeOnGet: true
-    });
-    this.predictionsCache = new LRUCache({
-      max: 300,
-      ttl: 2 * 60 * 1e3,
-      // 2分钟，预测更新频繁
-      updateAgeOnGet: true
-    });
-    this.shortcutsCache = new LRUCache({
-      max: 400,
-      ttl: finalConfig.ttl,
-      updateAgeOnGet: true
-    });
-    this.dataContextCache = new LRUCache({
-      max: 600,
-      ttl: 3 * 60 * 1e3,
-      // 3分钟
-      updateAgeOnGet: true
-    });
-    this.aiResponseCache = new LRUCache({
-      max: 800,
-      ttl: 10 * 60 * 1e3,
-      // 10分钟，AI响应相对稳定
-      updateAgeOnGet: true
-    });
-    this.startCleanupTask(finalConfig.checkPeriod);
-    this.setupCacheEventListeners();
-  }
-  // 设置缓存事件监听器
-  setupCacheEventListeners() {
-    this.userConfigCache.addEventListener("evict", () => {
-      this.metrics.evictions++;
-    });
-    this.conversationCache.addEventListener("evict", () => {
-      this.metrics.evictions++;
-    });
-  }
-  // 启动清理任务
-  startCleanupTask(period) {
-    this.cleanupInterval = setInterval(() => {
-      this.performMaintenance();
-    }, period);
-  }
-  // 执行维护任务
-  performMaintenance() {
-    const now = Date.now();
-    this.logMetrics();
-  }
-  // 记录缓存指标
-  logMetrics() {
-    const totalRequests = this.metrics.hits + this.metrics.misses;
-    const hitRate = totalRequests > 0 ? this.metrics.hits / totalRequests * 100 : 0;
-    console.log(`[CopilotCache] Hit rate: ${hitRate.toFixed(2)}%, Hits: ${this.metrics.hits}, Misses: ${this.metrics.misses}, Evictions: ${this.metrics.evictions}`);
-  }
-  // 用户配置缓存
-  async getUserConfig(userId) {
-    const cacheKey = userId;
-    if (this.userConfigCache.has(cacheKey)) {
-      this.metrics.hits++;
-      return this.userConfigCache.get(cacheKey) || null;
-    }
-    this.metrics.misses++;
-    const db = await getDb();
-    const configs = await db.select().from(copilotUserConfigs).where(eq(copilotUserConfigs.userId, userId)).limit(1);
-    if (configs.length > 0) {
-      this.userConfigCache.set(cacheKey, configs[0]);
-      return configs[0];
-    }
-    return null;
-  }
-  setUserConfig(userId, config) {
-    const cacheKey = userId;
-    this.userConfigCache.set(cacheKey, config);
-    this.metrics.updates++;
-  }
-  // 对话缓存
-  async getActiveConversation(userId) {
-    const cacheKey = `conv_active_${userId}`;
-    if (this.conversationCache.has(cacheKey)) {
-      this.metrics.hits++;
-      return this.conversationCache.get(cacheKey) || null;
-    }
-    this.metrics.misses++;
-    const db = await getDb();
-    const conversations = await db.select().from(copilotConversations).where(and(
-      eq(copilotConversations.userId, userId),
-      eq(copilotConversations.isActive, true)
-    )).orderBy(desc(copilotConversations.lastMessageAt)).limit(1);
-    if (conversations.length > 0) {
-      this.conversationCache.set(cacheKey, conversations[0]);
-      return conversations[0];
-    }
-    return null;
-  }
-  setActiveConversation(userId, conversation) {
-    const cacheKey = `conv_active_${userId}`;
-    this.conversationCache.set(cacheKey, conversation);
-    this.metrics.updates++;
-  }
-  // 消息缓存
-  async getConversationMessages(conversationId, limit = 100) {
-    const cacheKey = `messages_${conversationId}_${limit}`;
-    if (this.conversationCache.has(cacheKey)) {
-      this.metrics.hits++;
-      return this.conversationCache.get(cacheKey) || [];
-    }
-    this.metrics.misses++;
-    const db = await getDb();
-    const messages = await db.select().from(copilotMessages).where(eq(copilotMessages.conversationId, conversationId)).orderBy(copilotMessages.createdAt).limit(limit);
-    this.conversationCache.set(cacheKey, messages);
-    return messages;
-  }
-  // 预测缓存
-  async getPredictions(userId) {
-    const cacheKey = `predictions_${userId}`;
-    if (this.predictionsCache.has(cacheKey)) {
-      this.metrics.hits++;
-      return this.predictionsCache.get(cacheKey) || [];
-    }
-    this.metrics.misses++;
-    const db = await getDb();
-    const predictions = await db.select().from(copilotPredictions).where(and(
-      eq(copilotPredictions.userId, userId),
-      eq(copilotPredictions.isDismissed, false)
-    )).orderBy(desc(copilotPredictions.createdAt)).limit(20);
-    this.predictionsCache.set(cacheKey, predictions);
-    return predictions;
-  }
-  setPredictions(userId, predictions) {
-    const cacheKey = `predictions_${userId}`;
-    this.predictionsCache.set(cacheKey, predictions);
-    this.metrics.updates++;
-  }
-  // 快捷操作缓存
-  async getShortcuts(userId) {
-    const cacheKey = `shortcuts_${userId}`;
-    if (this.shortcutsCache.has(cacheKey)) {
-      this.metrics.hits++;
-      return this.shortcutsCache.get(cacheKey) || [];
-    }
-    this.metrics.misses++;
-    const db = await getDb();
-    const shortcuts = await db.select().from(copilotShortcuts).where(and(
-      eq(copilotShortcuts.userId, userId),
-      eq(copilotShortcuts.isActive, true)
-    )).orderBy(desc(copilotShortcuts.usageCount), desc(copilotShortcuts.lastUsedAt)).limit(20);
-    this.shortcutsCache.set(cacheKey, shortcuts);
-    return shortcuts;
-  }
-  setShortcuts(userId, shortcuts) {
-    const cacheKey = `shortcuts_${userId}`;
-    this.shortcutsCache.set(cacheKey, shortcuts);
-    this.metrics.updates++;
-  }
-  // 数据上下文缓存
-  async getDataContext(cacheKey) {
-    if (this.dataContextCache.has(cacheKey)) {
-      this.metrics.hits++;
-      return this.dataContextCache.get(cacheKey) || null;
-    }
-    this.metrics.misses++;
-    return null;
-  }
-  setDataContext(cacheKey, context) {
-    this.dataContextCache.set(cacheKey, context);
-    this.metrics.updates++;
-  }
-  // AI响应缓存
-  async getAIResponse(cacheKey) {
-    if (this.aiResponseCache.has(cacheKey)) {
-      this.metrics.hits++;
-      return this.aiResponseCache.get(cacheKey) || null;
-    }
-    this.metrics.misses++;
-    return null;
-  }
-  setAIResponse(cacheKey, response) {
-    this.aiResponseCache.set(cacheKey, response);
-    this.metrics.updates++;
-  }
-  // 生成AI响应缓存键
-  generateAIResponseCacheKey(userMessage, dataContext, userRole) {
-    const contextHash = this.hashObject(dataContext);
-    const messageHash = this.hashString(userMessage);
-    return `ai_response_${userRole}_${messageHash}_${contextHash}`;
-  }
-  // 生成数据上下文缓存键
-  generateDataContextCacheKey(userId, message, context) {
-    const contextHash = this.hashObject(context);
-    const messageHash = this.hashString(message);
-    return `data_context_${userId}_${messageHash}_${contextHash}`;
-  }
-  // 简单的哈希函数
-  hashString(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return Math.abs(hash).toString(36);
-  }
-  hashObject(obj) {
-    const str = JSON.stringify(obj, Object.keys(obj).sort());
-    return this.hashString(str);
-  }
-  // 批量清除缓存
-  async invalidateUserCache(userId) {
-    this.userConfigCache.delete(userId);
-    this.conversationCache.delete(`conv_active_${userId}`);
-    this.predictionsCache.delete(`predictions_${userId}`);
-    this.shortcutsCache.delete(`shortcuts_${userId}`);
-    console.log(`[CopilotCache] Invalidated cache for user ${userId}`);
-  }
-  // 清除特定类型的缓存
-  async invalidateCacheByType(type) {
-    switch (type) {
-      case "predictions":
-        this.predictionsCache.clear();
-        break;
-      case "shortcuts":
-        this.shortcutsCache.clear();
-        break;
-      case "conversations":
-        const keysToDelete = [];
-        for (const key of this.conversationCache.keys()) {
-          if (key.startsWith("conv_")) {
-            keysToDelete.push(key);
-          }
-        }
-        keysToDelete.forEach((key) => this.conversationCache.delete(key));
-        break;
-    }
-    console.log(`[CopilotCache] Invalidated ${type} cache`);
-  }
-  // 获取缓存统计
-  getCacheStats() {
-    return {
-      userConfig: {
-        size: this.userConfigCache.size,
-        maxSize: this.userConfigCache.max
-      },
-      conversation: {
-        size: this.conversationCache.size,
-        maxSize: this.conversationCache.max
-      },
-      predictions: {
-        size: this.predictionsCache.size,
-        maxSize: this.predictionsCache.max
-      },
-      shortcuts: {
-        size: this.shortcutsCache.size,
-        maxSize: this.shortcutsCache.max
-      },
-      dataContext: {
-        size: this.dataContextCache.size,
-        maxSize: this.dataContextCache.max
-      },
-      aiResponse: {
-        size: this.aiResponseCache.size,
-        maxSize: this.aiResponseCache.max
-      },
-      metrics: { ...this.metrics }
-    };
-  }
-  // 清理资源
-  async cleanup() {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-    }
-    this.userConfigCache.clear();
-    this.conversationCache.clear();
-    this.predictionsCache.clear();
-    this.shortcutsCache.clear();
-    this.dataContextCache.clear();
-    this.aiResponseCache.clear();
-    console.log("[CopilotCache] Cleanup completed");
-  }
-};
-var cacheManagerInstance = null;
-function getCopilotCacheManager() {
-  if (!cacheManagerInstance) {
-    cacheManagerInstance = new CopilotCacheManager();
-  }
-  return cacheManagerInstance;
-}
-
-// server/services/copilotService.ts
-var SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-var SUPPORTED_DOCUMENT_TYPES = [
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/plain",
-  "text/csv"
-];
-var SUPPORTED_SPREADSHEET_TYPES = [
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-];
-function sanitizeContent(content) {
-  return content.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "").replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "").replace(/javascript:/gi, "").replace(/on\w+\s*=/gi, "").replace(/data:text\/html/gi, "").trim();
-}
-function validateFileType(mimeType) {
-  const allSupportedTypes = [
-    ...SUPPORTED_IMAGE_TYPES,
-    ...SUPPORTED_DOCUMENT_TYPES,
-    ...SUPPORTED_SPREADSHEET_TYPES
-  ];
-  return allSupportedTypes.includes(mimeType);
-}
-var CopilotService = class {
-  db;
-  userId;
-  userRole;
-  cacheManager;
-  constructor(userId, userRole) {
-    this.userId = userId;
-    this.userRole = userRole;
-    this.cacheManager = getCopilotCacheManager();
-  }
-  // 获取数据库连接
-  async getDb() {
-    if (!this.db) {
-      this.db = await getDb();
-    }
-    return this.db;
-  }
-  // 获取用户配置
-  async getUserConfig() {
-    try {
-      const cached = await this.cacheManager.getUserConfig(this.userId);
-      if (cached) return cached;
-      const db = await this.getDb();
-      const configs = await db.select().from(copilotUserConfigs2).where(eq31(copilotUserConfigs2.userId, this.userId)).limit(1);
-      if (configs.length === 0) {
-        return null;
-      }
-      this.cacheManager.setUserConfig(this.userId, configs[0]);
-      return configs[0];
-    } catch (error) {
-      console.error("[CopilotService] Failed to get user config:", error);
-      return null;
-    }
-  }
-  // 更新用户配置
-  async updateUserConfig(config) {
-    const db = await this.getDb();
-    try {
-      const existing = await db.select().from(copilotUserConfigs2).where(eq31(copilotUserConfigs2.userId, this.userId)).limit(1);
-      if (existing.length === 0) {
-        await db.insert(copilotUserConfigs2).values({
-          userId: this.userId,
-          preferences: config.preferences || {},
-          hotkeys: config.hotkeys || {},
-          enabledFeatures: config.enabledFeatures || ["chat", "predictions", "shortcuts"],
-          disabledPredictions: config.disabledPredictions || [],
-          theme: config.theme || "auto",
-          language: config.language || "zh",
-          position: config.position || "bottom-right",
-          isEnabled: config.isEnabled !== false,
-          createdAt: /* @__PURE__ */ new Date(),
-          updatedAt: /* @__PURE__ */ new Date()
-        });
-      } else {
-        await db.update(copilotUserConfigs2).set({
-          ...config,
-          updatedAt: /* @__PURE__ */ new Date()
-        }).where(eq31(copilotUserConfigs2.id, existing[0].id));
-      }
-      await this.cacheManager.invalidateUserCache(this.userId);
-      return true;
-    } catch (error) {
-      console.error("[CopilotService] Failed to update user config:", error);
-      return false;
-    }
-  }
-  // 处理聊天消息 - 增强的多模态支持
-  async processChatMessage(userMessage, context, attachments) {
-    try {
-      if (!userMessage || userMessage.trim().length === 0) {
-        throw new Error("\u6D88\u606F\u5185\u5BB9\u4E0D\u80FD\u4E3A\u7A7A");
-      }
-      const sanitizedMessage = sanitizeContent(userMessage);
-      if (attachments && attachments.length > 0) {
-        for (const attachment of attachments) {
-          if (!validateFileType(attachment.mimeType || "")) {
-            throw new Error(`\u4E0D\u652F\u6301\u7684\u6587\u4EF6\u7C7B\u578B: ${attachment.mimeType}`);
-          }
-        }
-      }
-      const dataContext = await this.buildDataContext(sanitizedMessage, context);
-      const systemPrompt = this.generateSystemPrompt(dataContext);
-      const userPrompt = this.generateUserPrompt(sanitizedMessage, dataContext, attachments);
-      const taskType = this.selectOptimalTaskType(sanitizedMessage, attachments, dataContext);
-      const invokeParams = {
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        maxTokens: this.calculateOptimalMaxTokens(dataContext),
-        temperature: this.calculateOptimalTemperature(sanitizedMessage)
-      };
-      const result = await executeTaskLLM(taskType, invokeParams);
-      const suggestedActions = this.extractSuggestedActions(result.content, sanitizedMessage, dataContext);
-      return {
-        text: sanitizeContent(result.content),
-        // 对AI响应也进行安全验证
-        suggestedActions,
-        confidence: 85,
-        // 默认置信度
-        providerUsed: "ai_gateway",
-        modelUsed: "default",
-        costEstimate: 0.01
-      };
-    } catch (error) {
-      console.error("[CopilotService] Failed to process chat message:", error);
-      if (error instanceof Error && error.message.includes("\u4E0D\u652F\u6301\u7684\u6587\u4EF6\u7C7B\u578B")) {
-        throw error;
-      }
-      throw new Error("\u5904\u7406\u6D88\u606F\u65F6\u53D1\u751F\u9519\u8BEF\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5");
-    }
-  }
-  // 选择最优任务类型 - 增强的多模态支持
-  selectOptimalTaskType(message, attachments, dataContext) {
-    if (attachments && attachments.length > 0) {
-      const hasImages = attachments.some((a) => a.type === "image");
-      const hasFiles = attachments.some((a) => a.type === "file");
-      if (hasImages) return "knowledge_summarize";
-      if (hasFiles) {
-        const fileTypes = attachments.map((a) => this.getFileExtension(a.name));
-        if (fileTypes.some((ext) => ["pdf", "doc", "docx", "xls", "xlsx"].includes(ext))) {
-          return "vendor_bill_parse";
-        }
-      }
-    }
-    const lowerMessage = message.toLowerCase();
-    if (this.containsPayrollKeywords(lowerMessage)) {
-      return "knowledge_summarize";
-    }
-    if (this.containsLeaveKeywords(lowerMessage)) {
-      return "knowledge_summarize";
-    }
-    if (this.containsFinancialKeywords(lowerMessage)) {
-      return "invoice_audit";
-    }
-    if (this.containsReportKeywords(lowerMessage)) {
-      return "knowledge_summarize";
-    }
-    if (this.containsInsightKeywords(lowerMessage)) {
-      return "source_authority_review";
-    }
-    return "knowledge_summarize";
-  }
-  // 构建数据上下文 - 增强错误处理
-  async buildDataContext(message, context) {
-    const dataContext = {
-      userRole: this.userRole,
-      timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-      messageType: this.classifyMessageType(message)
-    };
-    if (context?.currentPage) {
-      dataContext.currentPage = context.currentPage;
-    }
-    try {
-      if (this.containsPayrollKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ["admin", "operations_manager"])) {
-        dataContext.payroll = await this.getPayrollContext(context);
-      }
-      if (this.containsLeaveKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ["admin", "operations_manager"])) {
-        dataContext.leave = await this.getLeaveContext(context);
-      }
-      if (this.containsFinancialKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ["admin", "finance_manager"])) {
-        dataContext.financial = await this.getFinancialContext(context);
-      }
-      if (this.containsEmployeeKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ["admin", "operations_manager"])) {
-        dataContext.employees = await this.getEmployeeContext(context);
-      }
-      if (this.containsCustomerKeywords(message.toLowerCase()) && hasAnyRole(this.userRole, ["admin", "customer_manager"])) {
-        dataContext.customers = await this.getCustomerContext(context);
-      }
-    } catch (error) {
-      console.error("[CopilotService] Error building data context:", error);
-      dataContext.dataError = "\u90E8\u5206\u6570\u636E\u83B7\u53D6\u5931\u8D25\uFF0C\u53EF\u80FD\u5F71\u54CD\u5206\u6790\u51C6\u786E\u6027";
-    }
-    return dataContext;
-  }
-  // 获取薪酬上下文 - 增强错误处理
-  async getPayrollContext(context) {
-    try {
-      const db = await this.getDb();
-      const recentBatches = await db.select({
-        id: sql14`id`,
-        country: sql14`country`,
-        month: sql14`month`,
-        year: sql14`year`,
-        status: sql14`status`,
-        totalAmount: sql14`totalAmount`,
-        createdAt: sql14`createdAt`
-      }).from(sql14`payrollRuns`).where(sql14`status IN ('draft', 'pending_review', 'submitted')`).orderBy(desc15(sql14`createdAt`)).limit(5);
-      const currentMonth = (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
-      const stats = await db.select({
-        draftCount: sql14`COUNT(CASE WHEN status = 'draft' THEN 1 END)`,
-        pendingCount: sql14`COUNT(CASE WHEN status = 'pending_review' THEN 1 END)`,
-        submittedCount: sql14`COUNT(CASE WHEN status = 'submitted' THEN 1 END)`
-      }).from(sql14`payrollRuns`).where(sql14`strftime('%Y-%m', createdAt) = ${currentMonth}`);
-      return {
-        recentBatches,
-        stats: stats[0] || { draftCount: 0, pendingCount: 0, submittedCount: 0 }
-      };
-    } catch (error) {
-      console.error("[CopilotService] Failed to get payroll context:", error);
-      return {
-        recentBatches: [],
-        stats: { draftCount: 0, pendingCount: 0, submittedCount: 0 },
-        error: "\u85AA\u916C\u6570\u636E\u83B7\u53D6\u5931\u8D25"
-      };
-    }
-  }
-  // 获取休假上下文 - 增强错误处理
-  async getLeaveContext(context) {
-    try {
-      const db = await this.getDb();
-      const thirtyDaysAgo = /* @__PURE__ */ new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const pendingLeave = await db.select({
-        id: sql14`id`,
-        employeeName: sql14`name`,
-        startDate: sql14`startDate`,
-        endDate: sql14`endDate`,
-        days: sql14`days`,
-        type: sql14`type`,
-        status: sql14`status`
-      }).from(sql14`leaveRecords`).where(sql14`status = 'pending' AND startDate >= ${thirtyDaysAgo}`).orderBy(desc15(sql14`createdAt`)).limit(10);
-      const stats = await db.select({
-        pendingCount: sql14`COUNT(CASE WHEN status = 'pending' THEN 1 END)`,
-        approvedCount: sql14`COUNT(CASE WHEN status = 'approved' THEN 1 END)`,
-        rejectedCount: sql14`COUNT(CASE WHEN status = 'rejected' THEN 1 END)`
-      }).from(sql14`leaveRecords`).where(sql14`createdAt >= ${thirtyDaysAgo}`);
-      return {
-        pendingLeave,
-        stats: stats[0] || { pendingCount: 0, approvedCount: 0, rejectedCount: 0 }
-      };
-    } catch (error) {
-      console.error("[CopilotService] Failed to get leave context:", error);
-      return {
-        pendingLeave: [],
-        stats: { pendingCount: 0, approvedCount: 0, rejectedCount: 0 },
-        error: "\u4F11\u5047\u6570\u636E\u83B7\u53D6\u5931\u8D25"
-      };
-    }
-  }
-  // 获取财务上下文 - 增强错误处理
-  async getFinancialContext(context) {
-    try {
-      const db = await this.getDb();
-      const overdueInvoices = await db.select({
-        id: sql14`id`,
-        invoiceNumber: sql14`invoiceNumber`,
-        customerName: sql14`name`,
-        amount: sql14`amount`,
-        dueDate: sql14`dueDate`,
-        status: sql14`status`,
-        daysOverdue: sql14`julianday('now') - julianday(dueDate)`
-      }).from(sql14`invoices`).where(sql14`status = 'overdue'`).orderBy(sql14`dueDate ASC`).limit(10);
-      const currentMonth = (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
-      const stats = await db.select({
-        draftCount: sql14`COUNT(CASE WHEN status = 'draft' THEN 1 END)`,
-        pendingCount: sql14`COUNT(CASE WHEN status = 'pending_review' THEN 1 END)`,
-        sentCount: sql14`COUNT(CASE WHEN status = 'sent' THEN 1 END)`,
-        paidCount: sql14`COUNT(CASE WHEN status = 'paid' THEN 1 END)`,
-        overdueCount: sql14`COUNT(CASE WHEN status = 'overdue' THEN 1 END)`
-      }).from(sql14`invoices`).where(sql14`strftime('%Y-%m', createdAt) = ${currentMonth}`);
-      return {
-        overdueInvoices,
-        stats: stats[0] || { draftCount: 0, pendingCount: 0, sentCount: 0, paidCount: 0, overdueCount: 0 }
-      };
-    } catch (error) {
-      console.error("[CopilotService] Failed to get financial context:", error);
-      return {
-        overdueInvoices: [],
-        stats: { draftCount: 0, pendingCount: 0, sentCount: 0, paidCount: 0, overdueCount: 0 },
-        error: "\u8D22\u52A1\u6570\u636E\u83B7\u53D6\u5931\u8D25"
-      };
-    }
-  }
-  // 获取员工上下文 - 增强错误处理
-  async getEmployeeContext(context) {
-    try {
-      const db = await this.getDb();
-      const probationEmployees = await db.select({
-        id: sql14`id`,
-        name: sql14`name`,
-        employeeId: sql14`employeeId`,
-        department: sql14`department`,
-        status: sql14`status`,
-        startDate: sql14`startDate`,
-        probationEndDate: sql14`probationEndDate`
-      }).from(sql14`employees`).where(sql14`status = 'probation' AND probationEndDate > date('now')`).orderBy(sql14`probationEndDate ASC`).limit(10);
-      const stats = await db.select({
-        activeCount: sql14`COUNT(CASE WHEN status = 'active' THEN 1 END)`,
-        probationCount: sql14`COUNT(CASE WHEN status = 'probation' THEN 1 END)`,
-        inactiveCount: sql14`COUNT(CASE WHEN status = 'inactive' THEN 1 END)`
-      }).from(sql14`employees`);
-      return {
-        probationEmployees,
-        stats: stats[0] || { activeCount: 0, probationCount: 0, inactiveCount: 0 }
-      };
-    } catch (error) {
-      console.error("[CopilotService] Failed to get employee context:", error);
-      return {
-        probationEmployees: [],
-        stats: { activeCount: 0, probationCount: 0, inactiveCount: 0 },
-        error: "\u5458\u5DE5\u6570\u636E\u83B7\u53D6\u5931\u8D25"
-      };
-    }
-  }
-  // 获取客户上下文 - 增强错误处理
-  async getCustomerContext(context) {
-    try {
-      const db = await this.getDb();
-      const activeCustomers = await db.select({
-        id: sql14`id`,
-        name: sql14`name`,
-        country: sql14`country`,
-        status: sql14`status`,
-        lastActivity: sql14`updatedAt`
-      }).from(sql14`customers`).where(sql14`status = 'active'`).orderBy(desc15(sql14`updatedAt`)).limit(10);
-      const stats = await db.select({
-        activeCount: sql14`COUNT(CASE WHEN status = 'active' THEN 1 END)`,
-        inactiveCount: sql14`COUNT(CASE WHEN status = 'inactive' THEN 1 END)`,
-        prospectCount: sql14`COUNT(CASE WHEN status = 'prospect' THEN 1 END)`
-      }).from(sql14`customers`);
-      return {
-        activeCustomers,
-        stats: stats[0] || { activeCount: 0, inactiveCount: 0, prospectCount: 0 }
-      };
-    } catch (error) {
-      console.error("[CopilotService] Failed to get customer context:", error);
-      return {
-        activeCustomers: [],
-        stats: { activeCount: 0, inactiveCount: 0, prospectCount: 0 },
-        error: "\u5BA2\u6237\u6570\u636E\u83B7\u53D6\u5931\u8D25"
-      };
-    }
-  }
-  // 生成系统提示词
-  generateSystemPrompt(dataContext) {
-    const role = this.userRole;
-    const permissions = this.getRolePermissions(role);
-    let contextStr = JSON.stringify(dataContext, null, 2);
-    if (dataContext.dataError) {
-      contextStr += `
-\u6CE8\u610F: ${dataContext.dataError}`;
-    }
-    return `\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u4F01\u4E1A\u8FD0\u8425\u52A9\u624B\uFF0C\u4E13\u95E8\u4E3AGEA EOR SaaS\u5E73\u53F0\u63D0\u4F9B\u667A\u80FD\u5206\u6790\u670D\u52A1\u3002
-
-\u89D2\u8272\u6743\u9650\uFF1A${permissions}
-\u5F53\u524D\u6570\u636E\u4E0A\u4E0B\u6587\uFF1A${contextStr}
-
-\u8BF7\u57FA\u4E8E\u7528\u6237\u7684\u89D2\u8272\u6743\u9650\u548C\u6570\u636E\u4E0A\u4E0B\u6587\uFF0C\u63D0\u4F9B\u51C6\u786E\u3001\u6709\u7528\u7684\u5206\u6790\u548C\u5EFA\u8BAE\u3002\u6CE8\u610F\u4FDD\u62A4\u654F\u611F\u4FE1\u606F\uFF0C\u53EA\u63D0\u4F9B\u7528\u6237\u6709\u6743\u9650\u67E5\u770B\u7684\u6570\u636E\u3002
-
-\u56DE\u7B54\u8981\u6C42\uFF1A
-1. \u4F7F\u7528\u4E2D\u6587\u56DE\u7B54
-2. \u63D0\u4F9B\u5177\u4F53\u7684\u6570\u636E\u548C\u89C1\u89E3
-3. \u5982\u6709\u98CE\u9669\u6216\u95EE\u9898\uFF0C\u660E\u786E\u63D0\u9192
-4. \u53EF\u4EE5\u5EFA\u8BAE\u5177\u4F53\u7684\u64CD\u4F5C\u6B65\u9AA4
-5. \u4FDD\u6301\u4E13\u4E1A\u548C\u53CB\u597D\u7684\u8BED\u6C14
-6. \u5982\u679C\u6570\u636E\u83B7\u53D6\u6709\u95EE\u9898\uFF0C\u8BF7\u660E\u786E\u544A\u77E5\u7528\u6237`;
-  }
-  // 生成用户提示词
-  generateUserPrompt(message, dataContext, attachments) {
-    let prompt = `\u7528\u6237\u95EE\u9898\uFF1A${message}
-
-`;
-    if (attachments && attachments.length > 0) {
-      prompt += `\u7528\u6237\u4E0A\u4F20\u4E86 ${attachments.length} \u4E2A\u6587\u4EF6\uFF1A
-`;
-      attachments.forEach((att, index4) => {
-        prompt += `${index4 + 1}. ${att.name} (${att.type}, ${att.mimeType})
-`;
-      });
-      prompt += "\n";
-    }
-    prompt += `\u8BF7\u57FA\u4E8E\u4EE5\u4E0B\u6570\u636E\u4E0A\u4E0B\u6587\u56DE\u7B54\u95EE\u9898\uFF1A
-${JSON.stringify(dataContext, null, 2)}
-
-`;
-    prompt += "\u8BF7\u63D0\u4F9B\u8BE6\u7EC6\u3001\u51C6\u786E\u7684\u56DE\u7B54\uFF0C\u5E76\u7ED9\u51FA\u53EF\u64CD\u4F5C\u7684\u5EFA\u8BAE\u3002";
-    return prompt;
-  }
-  // 提取建议操作
-  extractSuggestedActions(aiResponse, originalMessage, dataContext) {
-    const actions = [];
-    const lowerResponse = aiResponse.toLowerCase();
-    const lowerMessage = originalMessage.toLowerCase();
-    if (lowerResponse.includes("\u67E5\u770B") && lowerResponse.includes("\u85AA\u916C")) {
-      actions.push({
-        label: "\u67E5\u770B\u85AA\u916C\u8BE6\u60C5",
-        action: "navigate_payroll",
-        params: { filter: "recent" }
-      });
-    }
-    if (lowerResponse.includes("\u5BA1\u6279") && lowerResponse.includes("\u4F11\u5047")) {
-      actions.push({
-        label: "\u5904\u7406\u4F11\u5047\u7533\u8BF7",
-        action: "navigate_leave",
-        params: { filter: "pending" }
-      });
-    }
-    if (lowerResponse.includes("\u903E\u671F") && lowerResponse.includes("\u53D1\u7968")) {
-      actions.push({
-        label: "\u67E5\u770B\u903E\u671F\u53D1\u7968",
-        action: "navigate_invoices",
-        params: { filter: "overdue" }
-      });
-    }
-    if (lowerResponse.includes("\u5BFC\u51FA") || lowerResponse.includes("\u62A5\u8868")) {
-      actions.push({
-        label: "\u5BFC\u51FA\u6570\u636E",
-        action: "export_current_data",
-        params: { format: "excel" }
-      });
-    }
-    return actions;
-  }
-  // 辅助方法
-  getRolePermissions(role) {
-    const permissions = {
-      "admin": "\u5168\u90E8\u6743\u9650 - \u53EF\u8BBF\u95EE\u6240\u6709\u6570\u636E\u548C\u529F\u80FD",
-      "operations_manager": "\u8FD0\u8425\u7BA1\u7406\u6743\u9650 - \u53EF\u8BBF\u95EE\u85AA\u916C\u3001\u4F11\u5047\u3001\u5458\u5DE5\u6570\u636E",
-      "finance_manager": "\u8D22\u52A1\u7BA1\u7406\u6743\u9650 - \u53EF\u8BBF\u95EE\u53D1\u7968\u3001\u8D22\u52A1\u6570\u636E",
-      "customer_manager": "\u5BA2\u6237\u7BA1\u7406\u6743\u9650 - \u53EF\u8BBF\u95EE\u5BA2\u6237\u3001\u5408\u540C\u6570\u636E",
-      "user": "\u57FA\u7840\u6743\u9650 - \u53EA\u8BFB\u8BBF\u95EE\u4E2A\u4EBA\u76F8\u5173\u6570\u636E"
-    };
-    return permissions[role] || "\u57FA\u7840\u6743\u9650";
-  }
-  classifyMessageType(message) {
-    const lower = message.toLowerCase();
-    if (this.containsPayrollKeywords(lower)) return "payroll";
-    if (this.containsLeaveKeywords(lower)) return "leave";
-    if (this.containsFinancialKeywords(lower)) return "financial";
-    if (this.containsEmployeeKeywords(lower)) return "employee";
-    if (this.containsCustomerKeywords(lower)) return "customer";
-    return "general";
-  }
-  containsPayrollKeywords(text4) {
-    return /薪酬|工资|payroll|salary|wage/.test(text4);
-  }
-  containsLeaveKeywords(text4) {
-    return /休假|请假|leave|vacation|holiday/.test(text4);
-  }
-  containsFinancialKeywords(text4) {
-    return /财务|发票|invoice|finance|payment|billing/.test(text4);
-  }
-  containsEmployeeKeywords(text4) {
-    return /员工|employee|staff|人事|hr/.test(text4);
-  }
-  containsCustomerKeywords(text4) {
-    return /客户|customer|client|用户|user/.test(text4);
-  }
-  containsReportKeywords(text4) {
-    return /报表|报告|report|统计|statistics/.test(text4);
-  }
-  containsInsightKeywords(text4) {
-    return /洞察|insight|分析|analysis|趋势|trend/.test(text4);
-  }
-  getFileExtension(filename) {
-    return filename.split(".").pop()?.toLowerCase() || "";
-  }
-  calculateOptimalMaxTokens(dataContext) {
-    const baseTokens = 1e3;
-    const complexity = Object.keys(dataContext).length;
-    return Math.min(baseTokens + complexity * 200, 4e3);
-  }
-  calculateOptimalTemperature(message) {
-    if (this.containsFinancialKeywords(message) || this.containsPayrollKeywords(message)) {
-      return 0.1;
-    }
-    return 0.3;
-  }
-};
-
-// server/services/copilotGenerators.ts
-var QuickActionGenerator = class {
-  static generateRoleBasedShortcuts(role) {
-    const baseActions = this.getBaseActions();
-    const roleActions = this.getRoleSpecificActions(role);
-    return [...baseActions, ...roleActions];
-  }
-  static getBaseActions() {
-    return [
-      {
-        id: "quick_search",
-        title: "\u5FEB\u901F\u641C\u7D22",
-        description: "\u641C\u7D22\u5458\u5DE5\u3001\u5BA2\u6237\u3001\u6587\u6863\u7B49",
-        icon: "zap",
-        action: "open_search",
-        hotkey: "ctrl+shift+f",
-        badge: "hot"
-      },
-      {
-        id: "recent_activity",
-        title: "\u6700\u8FD1\u6D3B\u52A8",
-        description: "\u67E5\u770B\u6700\u8FD1\u7684\u64CD\u4F5C\u8BB0\u5F55",
-        icon: "trending-up",
-        action: "show_recent_activity",
-        hotkey: "ctrl+shift+r"
-      },
-      {
-        id: "export_data",
-        title: "\u5BFC\u51FA\u6570\u636E",
-        description: "\u5BFC\u51FA\u5F53\u524D\u9875\u9762\u6570\u636E",
-        icon: "file-text",
-        action: "export_current_data",
-        hotkey: "ctrl+shift+e"
-      }
-    ];
-  }
-  static getRoleSpecificActions(role) {
-    const actions = [];
-    if (hasAnyRole(role, ["admin", "operations_manager"])) {
-      actions.push(
-        {
-          id: "payroll_overview",
-          title: "\u85AA\u916C\u6982\u89C8",
-          description: "\u67E5\u770B\u672C\u6708\u85AA\u916C\u72B6\u6001",
-          icon: "dollar-sign",
-          action: "navigate_payroll",
-          badge: "new"
-        },
-        {
-          id: "leave_summary",
-          title: "\u4F11\u5047\u6C47\u603B",
-          description: "\u67E5\u770B\u4F11\u5047\u7EDF\u8BA1",
-          icon: "calendar",
-          action: "navigate_leave"
-        },
-        {
-          id: "employee_status",
-          title: "\u5458\u5DE5\u72B6\u6001",
-          description: "\u67E5\u770B\u5458\u5DE5\u72B6\u6001\u5206\u5E03",
-          icon: "users",
-          action: "show_employee_status"
-        }
-      );
-    }
-    if (hasAnyRole(role, ["admin", "finance_manager"])) {
-      actions.push(
-        {
-          id: "financial_dashboard",
-          title: "\u8D22\u52A1\u4EEA\u8868\u677F",
-          description: "\u67E5\u770B\u8D22\u52A1\u6982\u89C8",
-          icon: "bar-chart-3",
-          action: "navigate_finance"
-        },
-        {
-          id: "invoice_status",
-          title: "\u53D1\u7968\u72B6\u6001",
-          description: "\u67E5\u770B\u53D1\u7968\u7EDF\u8BA1",
-          icon: "file-text",
-          action: "show_invoice_status"
-        }
-      );
-    }
-    if (hasAnyRole(role, ["admin", "customer_manager"])) {
-      actions.push(
-        {
-          id: "customer_overview",
-          title: "\u5BA2\u6237\u6982\u89C8",
-          description: "\u67E5\u770B\u5BA2\u6237\u7EDF\u8BA1",
-          icon: "users",
-          action: "navigate_customers"
-        },
-        {
-          id: "contract_status",
-          title: "\u5408\u540C\u72B6\u6001",
-          description: "\u67E5\u770B\u5408\u540C\u6982\u89C8",
-          icon: "file-text",
-          action: "show_contract_status"
-        }
-      );
-    }
-    return actions;
-  }
-};
-
-// server/routers/copilot.ts
-init_schema();
-init_db2();
-import { eq as eq32, and as and26, desc as desc16, sql as sql15, sum as sum3, avg } from "drizzle-orm";
-var attachmentSchema = z25.object({
-  type: z25.enum(["image", "file"]),
-  url: z25.string().url(),
-  name: z25.string().min(1).max(255),
-  mimeType: z25.string().optional(),
-  size: z25.number().max(10 * 1024 * 1024).optional()
-  // 10MB限制
-});
-var contextSchema = z25.object({
-  currentPage: z25.string().max(100).optional(),
-  selectedCustomerId: z25.string().max(50).optional(),
-  selectedEmployeeId: z25.string().max(50).optional(),
-  selectedPayrollId: z25.string().max(50).optional(),
-  payrollBatches: z25.array(z25.any()).max(100).optional(),
-  leaveRecords: z25.array(z25.any()).max(100).optional(),
-  userRole: z25.string().optional()
-}).strict();
-var sendMessageInput = z25.object({
-  message: z25.string().min(1).max(5e3),
-  attachments: z25.array(attachmentSchema).max(5).optional(),
-  // 最多5个附件
-  context: contextSchema.optional()
-}).strict();
-var updateUserConfigInput = z25.object({
-  preferences: z25.object({}).passthrough().optional(),
-  hotkeys: z25.object({}).passthrough().optional(),
-  enabledFeatures: z25.array(z25.string().max(50)).max(20).optional(),
-  disabledPredictions: z25.array(z25.string().max(50)).max(20).optional(),
-  theme: z25.enum(["auto", "light", "dark"]).optional(),
-  language: z25.string().min(2).max(10).optional(),
-  position: z25.string().max(50).optional(),
-  isEnabled: z25.boolean().optional()
-}).strict();
-var uploadFileInput = z25.object({
-  fileName: z25.string().min(1).max(255),
-  fileSize: z25.number().int().min(1).max(10 * 1024 * 1024),
-  // 10MB限制
-  mimeType: z25.string().max(100),
-  analysisType: z25.enum(["invoice", "contract", "document", "receipt", "general", "image", "spreadsheet"])
-}).strict();
-var createShortcutInput = z25.object({
-  title: z25.string().min(1).max(100),
-  description: z25.string().max(500).optional(),
-  action: z25.string().min(1).max(100),
-  params: z25.object({}).passthrough().optional(),
-  icon: z25.string().max(50).optional(),
-  hotkey: z25.string().max(50).optional()
-}).strict();
-var ALLOWED_MIME_TYPES = {
-  image: ["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"],
-  document: ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
-  spreadsheet: ["application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
-  text: ["text/plain", "text/csv"]
-};
-function sanitizeContent2(content) {
-  return content.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "").replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "").replace(/javascript:/gi, "").replace(/on\w+\s*=/gi, "").trim();
-}
-function validateFileType2(mimeType, analysisType) {
-  switch (analysisType) {
-    case "image":
-      return ALLOWED_MIME_TYPES.image.includes(mimeType);
-    case "document":
-    case "contract":
-    case "receipt":
-      return [...ALLOWED_MIME_TYPES.document, ...ALLOWED_MIME_TYPES.text].includes(mimeType);
-    case "spreadsheet":
-      return ALLOWED_MIME_TYPES.spreadsheet.includes(mimeType);
-    case "general":
-      return true;
-    // 通用类型接受所有
-    default:
-      return false;
-  }
-}
-async function recordUsage(userId, usageType, cost) {
-  const db = await getDb();
-  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  try {
-    const existing = await db.select().from(copilotMetrics).where(and26(
-      eq32(copilotMetrics.userId, userId),
-      eq32(copilotMetrics.date, today)
-    )).limit(1);
-    if (existing.length === 0) {
-      await db.insert(copilotMetrics).values({
-        userId,
-        date: today,
-        messageCount: usageType === "message" ? 1 : 0,
-        fileAnalysisCount: usageType === "file_upload" ? 1 : 0,
-        predictionCount: 0,
-        shortcutUsageCount: 0,
-        totalCost: cost.toFixed(4),
-        averageResponseTime: 0,
-        createdAt: /* @__PURE__ */ new Date()
-      });
-    } else {
-      const updateData = {
-        totalCost: sql15`${copilotMetrics.totalCost} + ${cost.toFixed(4)}`,
-        updatedAt: /* @__PURE__ */ new Date()
-      };
-      if (usageType === "message") {
-        updateData.messageCount = sql15`${copilotMetrics.messageCount} + 1`;
-      } else if (usageType === "file_upload") {
-        updateData.fileAnalysisCount = sql15`${copilotMetrics.fileAnalysisCount} + 1`;
-      } else if (usageType === "shortcut") {
-        updateData.shortcutUsageCount = sql15`${copilotMetrics.shortcutUsageCount} + 1`;
-      }
-      await db.update(copilotMetrics).set(updateData).where(eq32(copilotMetrics.id, existing[0].id));
-    }
-  } catch (error) {
-    console.error("[CopilotRouter] Failed to record usage:", error);
-    throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u8BB0\u5F55\u4F7F\u7528\u7EDF\u8BA1\u5931\u8D25" });
-  }
-}
-var copilotRouter = router({
-  // 获取用户配置
-  getUserConfig: protectedProcedure.query(async ({ ctx }) => {
-    try {
-      const db = await getDb();
-      const configs = await db.select().from(copilotUserConfigs2).where(eq32(copilotUserConfigs2.userId, ctx.user.id)).limit(1);
-      if (configs.length === 0) {
-        const [newConfig] = await db.insert(copilotUserConfigs2).values({
-          userId: ctx.user.id,
-          preferences: {
-            showCostInfo: true,
-            showProcessingTime: true,
-            autoSaveConversations: true,
-            enableRealTime: false
-          },
-          hotkeys: {
-            toggleCopilot: "ctrl+shift+c",
-            quickActions: "ctrl+shift+a",
-            focusInput: "ctrl+shift+f"
-          },
-          enabledFeatures: ["chat", "predictions", "shortcuts", "fileUpload"],
-          disabledPredictions: [],
-          theme: "auto",
-          language: ctx.user.language || "zh",
-          position: "bottom-right",
-          isEnabled: true,
-          createdAt: /* @__PURE__ */ new Date(),
-          updatedAt: /* @__PURE__ */ new Date()
-        }).returning();
-        return newConfig;
-      }
-      return configs[0];
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to get user config:", error);
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u83B7\u53D6\u7528\u6237\u914D\u7F6E\u5931\u8D25" });
-    }
-  }),
-  // 更新用户配置
-  updateUserConfig: protectedProcedure.input(updateUserConfigInput).mutation(async ({ ctx, input }) => {
-    try {
-      const db = await getDb();
-      const existing = await db.select().from(copilotUserConfigs2).where(eq32(copilotUserConfigs2.userId, ctx.user.id)).limit(1);
-      if (existing.length === 0) {
-        const [newConfig] = await db.insert(copilotUserConfigs2).values({
-          userId: ctx.user.id,
-          preferences: input.preferences || {},
-          hotkeys: input.hotkeys || {},
-          enabledFeatures: input.enabledFeatures || ["chat", "predictions", "shortcuts"],
-          disabledPredictions: input.disabledPredictions || [],
-          theme: input.theme || "auto",
-          language: input.language || ctx.user.language || "zh",
-          position: input.position || "bottom-right",
-          isEnabled: input.isEnabled !== false,
-          createdAt: /* @__PURE__ */ new Date(),
-          updatedAt: /* @__PURE__ */ new Date()
-        }).returning();
-        return newConfig;
-      }
-      const [updated] = await db.update(copilotUserConfigs2).set({
-        ...input,
-        updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq32(copilotUserConfigs2.id, existing[0].id)).returning();
-      return updated;
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to update user config:", error);
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u66F4\u65B0\u7528\u6237\u914D\u7F6E\u5931\u8D25" });
-    }
-  }),
-  // 发送消息
-  sendMessage: protectedProcedure.input(sendMessageInput).mutation(async ({ ctx, input }) => {
-    try {
-      const sanitizedMessage = sanitizeContent2(input.message);
-      if (input.attachments && input.attachments.length > 0) {
-        for (const attachment of input.attachments) {
-          if (!validateFileType2(attachment.mimeType || "", "general")) {
-            throw new TRPCError21({ code: "BAD_REQUEST", message: `\u4E0D\u652F\u6301\u7684\u6587\u4EF6\u7C7B\u578B: ${attachment.mimeType}` });
-          }
-        }
-      }
-      const copilotService = new CopilotService(ctx.user.id, ctx.user.role);
-      const response = await copilotService.processChatMessage(
-        sanitizedMessage,
-        input.context,
-        input.attachments
-      );
-      await recordUsage(ctx.user.id, "message", response.costEstimate || 0);
-      return response;
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to process message:", error);
-      if (error instanceof TRPCError21) {
-        throw error;
-      }
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u5904\u7406\u6D88\u606F\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5" });
-    }
-  }),
-  // 获取对话历史
-  getConversationHistory: protectedProcedure.query(async ({ ctx }) => {
-    try {
-      const db = await getDb();
-      const conversations = await db.select().from(copilotConversations2).where(and26(
-        eq32(copilotConversations2.userId, ctx.user.id),
-        eq32(copilotConversations2.isActive, true)
-      )).orderBy(desc16(copilotConversations2.lastMessageAt)).limit(1);
-      if (conversations.length === 0) {
-        return [];
-      }
-      const messages = await db.select().from(copilotMessages2).where(eq32(copilotMessages2.conversationId, conversations[0].id)).orderBy(copilotMessages2.createdAt).limit(100);
-      return messages.map((msg) => ({
-        id: msg.id.toString(),
-        role: msg.role,
-        content: msg.content,
-        attachments: msg.attachments,
-        metadata: msg.metadata,
-        createdAt: msg.createdAt
-      }));
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to get conversation history:", error);
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u83B7\u53D6\u5BF9\u8BDD\u5386\u53F2\u5931\u8D25" });
-    }
-  }),
-  // 清空对话历史
-  clearConversationHistory: protectedProcedure.mutation(async ({ ctx }) => {
-    try {
-      const db = await getDb();
-      const conversations = await db.select({ id: copilotConversations2.id }).from(copilotConversations2).where(and26(
-        eq32(copilotConversations2.userId, ctx.user.id),
-        eq32(copilotConversations2.isActive, true)
-      ));
-      if (conversations.length > 0) {
-        await db.delete(copilotMessages2).where(eq32(copilotMessages2.conversationId, conversations[0].id));
-        await db.update(copilotConversations2).set({
-          isActive: false,
-          updatedAt: /* @__PURE__ */ new Date()
-        }).where(eq32(copilotConversations2.id, conversations[0].id));
-      }
-      return { success: true };
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to clear conversation history:", error);
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u6E05\u7A7A\u5BF9\u8BDD\u5386\u53F2\u5931\u8D25" });
-    }
-  }),
-  // 获取预测
-  getPredictions: protectedProcedure.query(async ({ ctx }) => {
-    try {
-      const db = await getDb();
-      const userConfig = await db.select().from(copilotUserConfigs2).where(eq32(copilotUserConfigs2.userId, ctx.user.id)).limit(1);
-      if (userConfig.length === 0 || !userConfig[0].isEnabled) {
-        return [];
-      }
-      const disabledTypes = userConfig[0].disabledPredictions || [];
-      const predictions = await db.select().from(copilotPredictions2).where(and26(
-        eq32(copilotPredictions2.userId, ctx.user.id),
-        eq32(copilotPredictions2.isDismissed, false)
-      )).orderBy(desc16(copilotPredictions2.createdAt)).limit(20);
-      return predictions.filter((p) => !disabledTypes.includes(p.predictionType));
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to get predictions:", error);
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u83B7\u53D6\u9884\u6D4B\u5931\u8D25" });
-    }
-  }),
-  // 忽略预测
-  dismissPrediction: protectedProcedure.input(z25.object({ predictionId: z25.number() })).mutation(async ({ ctx, input }) => {
-    try {
-      const db = await getDb();
-      await db.update(copilotPredictions2).set({
-        isDismissed: true,
-        dismissedAt: /* @__PURE__ */ new Date(),
-        updatedAt: /* @__PURE__ */ new Date()
-      }).where(and26(
-        eq32(copilotPredictions2.id, input.predictionId),
-        eq32(copilotPredictions2.userId, ctx.user.id)
-      ));
-      return { success: true };
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to dismiss prediction:", error);
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u5FFD\u7565\u9884\u6D4B\u5931\u8D25" });
-    }
-  }),
-  // 获取快捷操作
-  getShortcuts: protectedProcedure.query(async ({ ctx }) => {
-    try {
-      const db = await getDb();
-      const userShortcuts = await db.select().from(copilotShortcuts2).where(and26(
-        eq32(copilotShortcuts2.userId, ctx.user.id),
-        eq32(copilotShortcuts2.isActive, true)
-      )).orderBy(desc16(copilotShortcuts2.usageCount), desc16(copilotShortcuts2.lastUsedAt)).limit(20);
-      const roleBasedShortcuts = QuickActionGenerator.generateRoleBasedShortcuts(ctx.user.role);
-      const allShortcuts = [...userShortcuts, ...roleBasedShortcuts];
-      return allShortcuts.map((shortcut) => ({
-        id: shortcut.id.toString(),
-        title: shortcut.title,
-        description: shortcut.description,
-        icon: shortcut.icon,
-        action: shortcut.action,
-        badge: shortcut.badge,
-        hotkey: shortcut.hotkey,
-        params: shortcut.params,
-        usageCount: shortcut.usageCount || 0,
-        lastUsedAt: shortcut.lastUsedAt
-      }));
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to get shortcuts:", error);
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u83B7\u53D6\u5FEB\u6377\u64CD\u4F5C\u5931\u8D25" });
-    }
-  }),
-  // 创建快捷操作
-  createShortcut: protectedProcedure.input(createShortcutInput).mutation(async ({ ctx, input }) => {
-    try {
-      const db = await getDb();
-      const [shortcut] = await db.insert(copilotShortcuts2).values({
-        userId: ctx.user.id,
-        title: input.title,
-        description: input.description,
-        action: input.action,
-        params: input.params || {},
-        icon: input.icon,
-        hotkey: input.hotkey,
-        usageCount: 0,
-        isActive: true,
-        createdAt: /* @__PURE__ */ new Date(),
-        updatedAt: /* @__PURE__ */ new Date()
-      }).returning();
-      return shortcut;
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to create shortcut:", error);
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u521B\u5EFA\u5FEB\u6377\u64CD\u4F5C\u5931\u8D25" });
-    }
-  }),
-  // 更新快捷操作使用统计
-  updateShortcutUsage: protectedProcedure.input(z25.object({ shortcutId: z25.number() })).mutation(async ({ ctx, input }) => {
-    try {
-      const db = await getDb();
-      await db.update(copilotShortcuts2).set({
-        usageCount: sql15`${copilotShortcuts2.usageCount} + 1`,
-        lastUsedAt: /* @__PURE__ */ new Date(),
-        updatedAt: /* @__PURE__ */ new Date()
-      }).where(and26(
-        eq32(copilotShortcuts2.id, input.shortcutId),
-        eq32(copilotShortcuts2.userId, ctx.user.id)
-      ));
-      return { success: true };
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to update shortcut usage:", error);
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u66F4\u65B0\u5FEB\u6377\u64CD\u4F5C\u4F7F\u7528\u7EDF\u8BA1\u5931\u8D25" });
-    }
-  }),
-  // 上传文件并分析
-  uploadFile: protectedProcedure.input(uploadFileInput).mutation(async ({ ctx, input }) => {
-    try {
-      const db = await getDb();
-      if (!validateFileType2(input.mimeType, input.analysisType)) {
-        throw new TRPCError21({ code: "BAD_REQUEST", message: `\u4E0D\u652F\u6301\u7684\u6587\u4EF6\u7C7B\u578B: ${input.mimeType} for analysis type: ${input.analysisType}` });
-      }
-      const [analysis] = await db.insert(copilotFileAnalyses).values({
-        userId: ctx.user.id,
-        fileName: input.fileName,
-        fileUrl: "",
-        // 将在上传后更新
-        fileKey: "",
-        // 将在上传后更新
-        fileSize: input.fileSize,
-        mimeType: input.mimeType,
-        analysisType: input.analysisType,
-        status: "pending",
-        createdAt: /* @__PURE__ */ new Date(),
-        updatedAt: /* @__PURE__ */ new Date()
-      }).returning();
-      await recordUsage(ctx.user.id, "file_upload", 0.01);
-      return {
-        analysisId: analysis.id,
-        uploadUrl: "",
-        // 这里应该返回预签名URL
-        status: "pending"
-      };
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to create file analysis:", error);
-      if (error instanceof TRPCError21) {
-        throw error;
-      }
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u521B\u5EFA\u6587\u4EF6\u5206\u6790\u5931\u8D25" });
-    }
-  }),
-  // 获取使用统计
-  getUsageStats: protectedProcedure.input(z25.object({
-    startDate: z25.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    endDate: z25.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
-  }).optional()).query(async ({ ctx, input }) => {
-    try {
-      const db = await getDb();
-      const startDate = input?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1e3).toISOString().slice(0, 10);
-      const endDate = input?.endDate || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-      const stats = await db.select({
-        totalMessages: sum3(copilotMetrics.messageCount),
-        totalFileAnalyses: sum3(copilotMetrics.fileAnalysisCount),
-        totalPredictions: sum3(copilotMetrics.predictionCount),
-        totalShortcuts: sum3(copilotMetrics.shortcutUsageCount),
-        totalCost: sum3(copilotMetrics.totalCost),
-        avgResponseTime: avg(copilotMetrics.averageResponseTime)
-      }).from(copilotMetrics).where(and26(
-        eq32(copilotMetrics.userId, ctx.user.id),
-        sql15`${copilotMetrics.date} >= ${startDate}`,
-        sql15`${copilotMetrics.date} <= ${endDate}`
-      ));
-      return stats[0];
-    } catch (error) {
-      console.error("[CopilotRouter] Failed to get usage stats:", error);
-      throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "\u83B7\u53D6\u4F7F\u7528\u7EDF\u8BA1\u5931\u8D25" });
-    }
-  })
-});
-
 // server/routers/notifications.ts
-import { z as z26 } from "zod";
+import { z as z25 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq33, and as and27, desc as desc17 } from "drizzle-orm";
-import { TRPCError as TRPCError22 } from "@trpc/server";
-var NotificationConfigSchema = z26.object({
-  enabled: z26.boolean().default(false),
-  channels: z26.array(z26.enum(["email", "in_app"])).default([]),
-  recipients: z26.array(z26.string()).default([]),
-  templates: z26.object({
-    en: z26.object({
-      emailSubject: z26.string().default(""),
-      emailBody: z26.string().default(""),
-      inAppMessage: z26.string().default("")
+import { eq as eq30, and as and24, desc as desc15 } from "drizzle-orm";
+import { TRPCError as TRPCError21 } from "@trpc/server";
+var NotificationConfigSchema = z25.object({
+  enabled: z25.boolean().default(false),
+  channels: z25.array(z25.enum(["email", "in_app"])).default([]),
+  recipients: z25.array(z25.string()).default([]),
+  templates: z25.object({
+    en: z25.object({
+      emailSubject: z25.string().default(""),
+      emailBody: z25.string().default(""),
+      inAppMessage: z25.string().default("")
     }).default({}),
-    zh: z26.object({
-      emailSubject: z26.string().default(""),
-      emailBody: z26.string().default(""),
-      inAppMessage: z26.string().default("")
+    zh: z25.object({
+      emailSubject: z25.string().default(""),
+      emailBody: z25.string().default(""),
+      inAppMessage: z25.string().default("")
     }).default({})
   }).default({})
 });
@@ -17853,9 +17101,9 @@ var notificationsRouter = router({
    */
   getSettings: adminProcedure2.query(async () => {
     const db = getDb();
-    if (!db) throw new TRPCError22({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const setting = await db.query.systemSettings.findFirst({
-      where: eq33(systemSettings.key, "notification_rules")
+      where: eq30(systemSettings.key, "notification_rules")
     });
     const config = JSON.parse(JSON.stringify(DEFAULT_RULES));
     if (setting && setting.value) {
@@ -17881,16 +17129,16 @@ var notificationsRouter = router({
    * Update a specific notification rule
    */
   updateRule: adminProcedure2.input(
-    z26.object({
-      type: z26.string(),
+    z25.object({
+      type: z25.string(),
       // e.g. "invoice_sent"
       config: NotificationConfigSchema
     })
   ).mutation(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError22({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const setting = await db.query.systemSettings.findFirst({
-      where: eq33(systemSettings.key, "notification_rules")
+      where: eq30(systemSettings.key, "notification_rules")
     });
     let rules = {};
     if (setting && setting.value) {
@@ -17918,35 +17166,35 @@ var notificationsRouter = router({
    * Get unread notifications for the current user
    */
   getUnread: userProcedure.input(
-    z26.object({
-      limit: z26.number().default(20)
+    z25.object({
+      limit: z25.number().default(20)
     })
   ).query(async ({ ctx, input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError22({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const userId = ctx.user.id;
     const userRoles = (ctx.user.role || "").split(",");
-    const roleConditions = userRoles.map((role) => eq33(notifications.targetRole, role.trim()));
+    const roleConditions = userRoles.map((role) => eq30(notifications.targetRole, role.trim()));
     return await db.query.notifications.findMany({
-      where: (t4, { and: and51, or: or9, eq: eq66 }) => and51(
-        eq66(t4.targetPortal, "admin"),
-        eq66(t4.isRead, false),
-        or9(
-          eq66(t4.targetUserId, userId),
+      where: (t4, { and: and50, or: or10, eq: eq65 }) => and50(
+        eq65(t4.targetPortal, "admin"),
+        eq65(t4.isRead, false),
+        or10(
+          eq65(t4.targetUserId, userId),
           ...roleConditions
         )
       ),
-      orderBy: [desc17(notifications.createdAt)],
+      orderBy: [desc15(notifications.createdAt)],
       limit: input.limit
     });
   }),
   /**
    * Mark a notification as read
    */
-  markAsRead: userProcedure.input(z26.object({ id: z26.number() })).mutation(async ({ ctx, input }) => {
+  markAsRead: userProcedure.input(z25.object({ id: z25.number() })).mutation(async ({ ctx, input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError22({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(eq33(notifications.id, input.id));
+    if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(eq30(notifications.id, input.id));
     return { success: true };
   }),
   /**
@@ -17954,13 +17202,13 @@ var notificationsRouter = router({
    */
   markAllAsRead: userProcedure.mutation(async ({ ctx }) => {
     const db = getDb();
-    if (!db) throw new TRPCError22({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const userId = ctx.user.id;
     await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(
-      and27(
-        eq33(notifications.targetPortal, "admin"),
-        eq33(notifications.targetUserId, userId),
-        eq33(notifications.isRead, false)
+      and24(
+        eq30(notifications.targetPortal, "admin"),
+        eq30(notifications.targetUserId, userId),
+        eq30(notifications.isRead, false)
       )
     );
     return { success: true };
@@ -17968,12 +17216,12 @@ var notificationsRouter = router({
 });
 
 // server/routers/calculationRouter.ts
-import { z as z27 } from "zod";
+import { z as z26 } from "zod";
 
 // server/services/calculationService.ts
 init_db2();
 init_schema();
-import { eq as eq34, and as and28, or as or7, isNull as isNull2 } from "drizzle-orm";
+import { eq as eq31, and as and25, or as or7, isNull as isNull3 } from "drizzle-orm";
 var calculationService = {
   /**
    * Calculate social insurance contributions for a given salary
@@ -17982,21 +17230,40 @@ var calculationService = {
     const { countryCode, year, salary, regionCode, age } = input;
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
-    const whereClause = regionCode ? and28(
-      eq34(countrySocialInsuranceItems.countryCode, countryCode),
-      eq34(countrySocialInsuranceItems.effectiveYear, year),
-      eq34(countrySocialInsuranceItems.isActive, true),
+    const whereClause = regionCode ? and25(
+      eq31(countrySocialInsuranceItems.countryCode, countryCode),
+      eq31(countrySocialInsuranceItems.effectiveYear, year),
+      eq31(countrySocialInsuranceItems.isActive, true),
       or7(
-        eq34(countrySocialInsuranceItems.regionCode, regionCode),
-        isNull2(countrySocialInsuranceItems.regionCode)
+        eq31(countrySocialInsuranceItems.regionCode, regionCode),
+        isNull3(countrySocialInsuranceItems.regionCode)
       )
-    ) : and28(
-      eq34(countrySocialInsuranceItems.countryCode, countryCode),
-      eq34(countrySocialInsuranceItems.effectiveYear, year),
-      eq34(countrySocialInsuranceItems.isActive, true),
-      isNull2(countrySocialInsuranceItems.regionCode)
+    ) : and25(
+      eq31(countrySocialInsuranceItems.countryCode, countryCode),
+      eq31(countrySocialInsuranceItems.effectiveYear, year),
+      eq31(countrySocialInsuranceItems.isActive, true),
+      isNull3(countrySocialInsuranceItems.regionCode)
     );
-    const rules = await db.select().from(countrySocialInsuranceItems).where(whereClause).orderBy(countrySocialInsuranceItems.sortOrder);
+    const db_rules = await db.select().from(countrySocialInsuranceItems).where(whereClause).orderBy(countrySocialInsuranceItems.sortOrder);
+    let rules = db_rules;
+    if (rules.length === 0 && !regionCode) {
+      const anyRules = await db.query.countrySocialInsuranceItems.findMany({
+        where: and25(
+          eq31(countrySocialInsuranceItems.countryCode, countryCode),
+          eq31(countrySocialInsuranceItems.effectiveYear, year),
+          eq31(countrySocialInsuranceItems.isActive, true)
+        ),
+        orderBy: [countrySocialInsuranceItems.sortOrder]
+      });
+      if (anyRules.length > 0) {
+        const firstRegion = anyRules.find((r) => r.regionCode !== null)?.regionCode;
+        if (firstRegion) {
+          rules = anyRules.filter((r) => r.regionCode === firstRegion || r.regionCode === null);
+        } else {
+          rules = anyRules;
+        }
+      }
+    }
     const items = [];
     let totalEmployer = 0;
     let totalEmployee = 0;
@@ -18081,16 +17348,16 @@ var calculationService = {
 // server/routers/calculationRouter.ts
 init_db2();
 init_schema();
-import { eq as eq35, and as and29, isNotNull as isNotNull2 } from "drizzle-orm";
-import { TRPCError as TRPCError23 } from "@trpc/server";
+import { eq as eq32, and as and26, isNotNull as isNotNull2 } from "drizzle-orm";
+import { TRPCError as TRPCError22 } from "@trpc/server";
 var calculationRouter = router({
   calculateContributions: protectedProcedure.input(
-    z27.object({
-      countryCode: z27.string(),
-      year: z27.number().optional().default(2025),
-      salary: z27.number(),
-      regionCode: z27.string().optional(),
-      age: z27.number().optional()
+    z26.object({
+      countryCode: z26.string(),
+      year: z26.number().optional().default(2025),
+      salary: z26.number(),
+      regionCode: z26.string().optional(),
+      age: z26.number().optional()
     })
   ).mutation(async ({ input }) => {
     return await calculationService.calculateSocialInsurance({
@@ -18099,36 +17366,36 @@ var calculationRouter = router({
     });
   }),
   listSocialInsuranceRules: protectedProcedure.input(
-    z27.object({
-      countryCode: z27.string(),
-      year: z27.number()
+    z26.object({
+      countryCode: z26.string(),
+      year: z26.number()
     })
   ).query(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    if (!db) throw new TRPCError22({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     return await db.select().from(countrySocialInsuranceItems).where(
-      and29(
-        eq35(countrySocialInsuranceItems.countryCode, input.countryCode),
-        eq35(countrySocialInsuranceItems.effectiveYear, input.year),
-        eq35(countrySocialInsuranceItems.isActive, true)
+      and26(
+        eq32(countrySocialInsuranceItems.countryCode, input.countryCode),
+        eq32(countrySocialInsuranceItems.effectiveYear, input.year),
+        eq32(countrySocialInsuranceItems.isActive, true)
       )
     ).orderBy(countrySocialInsuranceItems.sortOrder);
   }),
   listRegions: protectedProcedure.input(
-    z27.object({
-      countryCode: z27.string(),
-      year: z27.number()
+    z26.object({
+      countryCode: z26.string(),
+      year: z26.number()
     })
   ).query(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    if (!db) throw new TRPCError22({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const result = await db.selectDistinct({
       regionCode: countrySocialInsuranceItems.regionCode,
       regionName: countrySocialInsuranceItems.regionName
     }).from(countrySocialInsuranceItems).where(
-      and29(
-        eq35(countrySocialInsuranceItems.countryCode, input.countryCode),
-        eq35(countrySocialInsuranceItems.effectiveYear, input.year),
+      and26(
+        eq32(countrySocialInsuranceItems.countryCode, input.countryCode),
+        eq32(countrySocialInsuranceItems.effectiveYear, input.year),
         isNotNull2(countrySocialInsuranceItems.regionCode)
       )
     );
@@ -18137,12 +17404,12 @@ var calculationRouter = router({
 });
 
 // server/routers/quotationRouter.ts
-import { z as z28 } from "zod";
+import { z as z27 } from "zod";
 
 // server/services/quotationService.ts
 init_db2();
 init_schema();
-import { eq as eq37 } from "drizzle-orm";
+import { eq as eq34 } from "drizzle-orm";
 
 // server/services/pdfBrandTemplateService.ts
 import PDFDocument2 from "pdfkit";
@@ -18334,19 +17601,19 @@ async function mergePdfs(buffers, options = {}) {
 // server/services/countryGuidePdfService.ts
 init_db2();
 init_schema();
-import { eq as eq36, and as and30, asc } from "drizzle-orm";
+import { eq as eq33, and as and27, asc } from "drizzle-orm";
 var countryGuidePdfService = {
   generatePdf: async (countryCode) => {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
     const country = await db.query.countriesConfig.findFirst({
-      where: eq36(countriesConfig.countryCode, countryCode)
+      where: eq33(countriesConfig.countryCode, countryCode)
     });
     if (!country) return null;
     const chapters = await db.query.countryGuideChapters.findMany({
-      where: and30(
-        eq36(countryGuideChapters.countryCode, countryCode),
-        eq36(countryGuideChapters.status, "published")
+      where: and27(
+        eq33(countryGuideChapters.countryCode, countryCode),
+        eq33(countryGuideChapters.status, "published")
       ),
       orderBy: [asc(countryGuideChapters.sortOrder)]
     });
@@ -18400,6 +17667,32 @@ var quotationService = {
     const quotationCurrency = "USD";
     const year = 2025;
     for (const item of input.items) {
+      if (item.serviceType === "aor") {
+        const employerCost2 = 0;
+        const totalEmploymentCostLocal2 = item.salary;
+        let exchangeRate2 = 1;
+        let usdEmploymentCost2 = totalEmploymentCostLocal2;
+        if (item.currency !== "USD") {
+          const rateData = await getExchangeRate("USD", item.currency);
+          if (rateData) {
+            exchangeRate2 = rateData.rateWithMarkup;
+            usdEmploymentCost2 = totalEmploymentCostLocal2 / exchangeRate2;
+          }
+        }
+        const subtotal2 = (usdEmploymentCost2 + item.serviceFee) * item.headcount;
+        calculatedItems.push({
+          ...item,
+          employerCost: employerCost2,
+          totalEmploymentCost: totalEmploymentCostLocal2,
+          exchangeRate: exchangeRate2,
+          usdEmploymentCost: usdEmploymentCost2,
+          subtotal: subtotal2,
+          calcDetails: []
+          // No social insurance breakdown
+        });
+        totalMonthly += subtotal2;
+        continue;
+      }
       const calcResult = await calculationService.calculateSocialInsurance({
         countryCode: item.countryCode,
         year,
@@ -18458,7 +17751,7 @@ var quotationService = {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
     const existing = await db.query.quotations.findFirst({
-      where: eq37(quotations.id, input.id)
+      where: eq34(quotations.id, input.id)
     });
     if (!existing) throw new Error("Quotation not found");
     if (existing.status !== "draft") throw new Error("Only draft quotations can be edited");
@@ -18467,6 +17760,31 @@ var quotationService = {
     const quotationCurrency = "USD";
     const year = 2025;
     for (const item of input.items) {
+      if (item.serviceType === "aor") {
+        const employerCost2 = 0;
+        const totalEmploymentCostLocal2 = item.salary;
+        let exchangeRate2 = 1;
+        let usdEmploymentCost2 = totalEmploymentCostLocal2;
+        if (item.currency !== "USD") {
+          const rateData = await getExchangeRate("USD", item.currency);
+          if (rateData) {
+            exchangeRate2 = rateData.rateWithMarkup;
+            usdEmploymentCost2 = totalEmploymentCostLocal2 / exchangeRate2;
+          }
+        }
+        const subtotal2 = (usdEmploymentCost2 + item.serviceFee) * item.headcount;
+        calculatedItems.push({
+          ...item,
+          employerCost: employerCost2,
+          totalEmploymentCost: totalEmploymentCostLocal2,
+          exchangeRate: exchangeRate2,
+          usdEmploymentCost: usdEmploymentCost2,
+          subtotal: subtotal2,
+          calcDetails: []
+        });
+        totalMonthly += subtotal2;
+        continue;
+      }
       const calcResult = await calculationService.calculateSocialInsurance({
         countryCode: item.countryCode,
         year,
@@ -18505,7 +17823,7 @@ var quotationService = {
       snapshotData: calculatedItems,
       validUntil: input.validUntil,
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq37(quotations.id, input.id));
+    }).where(eq34(quotations.id, input.id));
     await quotationService.generatePdf(input.id, input.includeCountryGuide);
     return { id: input.id };
   },
@@ -18513,14 +17831,14 @@ var quotationService = {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
     const quotation = await db.query.quotations.findFirst({
-      where: eq37(quotations.id, quotationId)
+      where: eq34(quotations.id, quotationId)
     });
     if (!quotation) throw new Error("Quotation not found");
     let customerName = "Valued Customer";
     let customerAddress = "";
     if (quotation.customerId) {
       const customer = await db.query.customers.findFirst({
-        where: eq37(customers.id, quotation.customerId)
+        where: eq34(customers.id, quotation.customerId)
       });
       if (customer) {
         customerName = customer.companyName;
@@ -18528,7 +17846,7 @@ var quotationService = {
       }
     } else if (quotation.leadId) {
       const lead = await db.query.salesLeads.findFirst({
-        where: eq37(salesLeads.id, quotation.leadId)
+        where: eq34(salesLeads.id, quotation.leadId)
       });
       if (lead) {
         customerName = lead.companyName;
@@ -18620,7 +17938,7 @@ var quotationService = {
     });
     const fileName = `Quotation-${quotation.quotationNumber}.pdf`;
     const { key, url } = await storagePut(`quotations/${fileName}`, finalPdfBuffer, "application/pdf");
-    await db.update(quotations).set({ pdfKey: key, pdfUrl: url }).where(eq37(quotations.id, quotationId));
+    await db.update(quotations).set({ pdfKey: key, pdfUrl: url }).where(eq34(quotations.id, quotationId));
     return { key, url, buffer: finalPdfBuffer };
   }
 };
@@ -18631,28 +17949,28 @@ function formatMoney(amount) {
 // server/routers/quotationRouter.ts
 init_db2();
 init_schema();
-import { eq as eq38 } from "drizzle-orm";
-import { TRPCError as TRPCError24 } from "@trpc/server";
+import { eq as eq35 } from "drizzle-orm";
+import { TRPCError as TRPCError23 } from "@trpc/server";
 var quotationRouter = router({
   create: crmProcedure.input(
-    z28.object({
-      leadId: z28.number().optional(),
-      customerId: z28.number().optional(),
-      includeCountryGuide: z28.boolean().optional(),
-      items: z28.array(
-        z28.object({
-          countryCode: z28.string(),
-          regionCode: z28.string().optional(),
-          headcount: z28.number().min(1),
-          salary: z28.number(),
-          currency: z28.string().default("USD"),
-          serviceType: z28.enum(["eor", "visa_eor"]),
-          serviceFee: z28.number(),
-          oneTimeFee: z28.number().optional()
+    z27.object({
+      leadId: z27.number().optional(),
+      customerId: z27.number().optional(),
+      includeCountryGuide: z27.boolean().optional(),
+      items: z27.array(
+        z27.object({
+          countryCode: z27.string(),
+          regionCode: z27.string().optional(),
+          headcount: z27.number().min(1),
+          salary: z27.number(),
+          currency: z27.string().default("USD"),
+          serviceType: z27.enum(["eor", "visa_eor", "aor"]),
+          serviceFee: z27.number(),
+          oneTimeFee: z27.number().optional()
         })
       ),
-      validUntil: z28.string().optional(),
-      notes: z28.string().optional()
+      validUntil: z27.string().optional(),
+      notes: z27.string().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     return await quotationService.createQuotation({
@@ -18661,25 +17979,25 @@ var quotationRouter = router({
     });
   }),
   update: crmProcedure.input(
-    z28.object({
-      id: z28.number(),
-      leadId: z28.number().optional(),
-      customerId: z28.number().optional(),
-      includeCountryGuide: z28.boolean().optional(),
-      items: z28.array(
-        z28.object({
-          countryCode: z28.string(),
-          regionCode: z28.string().optional(),
-          headcount: z28.number().min(1),
-          salary: z28.number(),
-          currency: z28.string().default("USD"),
-          serviceType: z28.enum(["eor", "visa_eor"]),
-          serviceFee: z28.number(),
-          oneTimeFee: z28.number().optional()
+    z27.object({
+      id: z27.number(),
+      leadId: z27.number().optional(),
+      customerId: z27.number().optional(),
+      includeCountryGuide: z27.boolean().optional(),
+      items: z27.array(
+        z27.object({
+          countryCode: z27.string(),
+          regionCode: z27.string().optional(),
+          headcount: z27.number().min(1),
+          salary: z27.number(),
+          currency: z27.string().default("USD"),
+          serviceType: z27.enum(["eor", "visa_eor", "aor"]),
+          serviceFee: z27.number(),
+          oneTimeFee: z27.number().optional()
         })
       ),
-      validUntil: z28.string().optional(),
-      notes: z28.string().optional()
+      validUntil: z27.string().optional(),
+      notes: z27.string().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     return await quotationService.updateQuotation({
@@ -18688,30 +18006,30 @@ var quotationRouter = router({
     });
   }),
   list: crmProcedure.input(
-    z28.object({
-      limit: z28.number().default(20),
-      offset: z28.number().default(0),
-      search: z28.string().optional(),
-      customerId: z28.number().optional(),
-      leadId: z28.number().optional()
+    z27.object({
+      limit: z27.number().default(20),
+      offset: z27.number().default(0),
+      search: z27.string().optional(),
+      customerId: z27.number().optional(),
+      leadId: z27.number().optional()
     })
   ).query(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const whereConditions = [];
-    if (input.customerId) whereConditions.push(eq38(quotations.customerId, input.customerId));
-    if (input.leadId) whereConditions.push(eq38(quotations.leadId, input.leadId));
+    if (input.customerId) whereConditions.push(eq35(quotations.customerId, input.customerId));
+    if (input.leadId) whereConditions.push(eq35(quotations.leadId, input.leadId));
     if (input.search) {
     }
     const items = await db.query.quotations.findMany({
-      where: (quotations2, { eq: eq66, or: or9, and: and51, like: like12 }) => {
+      where: (quotations2, { eq: eq65, or: or10, and: and50, like: like13 }) => {
         const conditions = [];
-        if (input.customerId) conditions.push(eq66(quotations2.customerId, input.customerId));
-        if (input.leadId) conditions.push(eq66(quotations2.leadId, input.leadId));
+        if (input.customerId) conditions.push(eq65(quotations2.customerId, input.customerId));
+        if (input.leadId) conditions.push(eq65(quotations2.leadId, input.leadId));
         if (input.search) {
-          conditions.push(like12(quotations2.quotationNumber, `%${input.search}%`));
+          conditions.push(like13(quotations2.quotationNumber, `%${input.search}%`));
         }
-        return and51(...conditions);
+        return and50(...conditions);
       },
       orderBy: (quotations2, { desc: desc25 }) => [desc25(quotations2.createdAt)],
       limit: input.limit,
@@ -18725,115 +18043,109 @@ var quotationRouter = router({
     const total = allItems.length;
     return { items, total };
   }),
-  get: crmProcedure.input(z28.number()).query(async ({ input }) => {
+  get: crmProcedure.input(z27.number()).query(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const quotation = await db.query.quotations.findFirst({
-      where: eq38(quotations.id, input)
+      where: eq35(quotations.id, input)
     });
     return quotation;
   }),
-  updateStatus: crmProcedure.input(z28.object({
-    id: z28.number(),
-    status: z28.enum(["draft", "sent", "accepted", "expired", "rejected"])
+  updateStatus: crmProcedure.input(z27.object({
+    id: z27.number(),
+    status: z27.enum(["draft", "sent", "accepted", "expired", "rejected"])
   })).mutation(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    await db.update(quotations).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq38(quotations.id, input.id));
+    if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    await db.update(quotations).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq35(quotations.id, input.id));
     return { success: true };
   }),
-  downloadPdf: crmProcedure.input(z28.number()).mutation(async ({ input }) => {
+  downloadPdf: crmProcedure.input(z27.number()).mutation(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const quotation = await db.query.quotations.findFirst({
-      where: eq38(quotations.id, input)
+      where: eq35(quotations.id, input)
     });
-    if (!quotation) throw new TRPCError24({ code: "NOT_FOUND", message: "Quotation not found" });
-    const isMock = !process.env.OSS_ACCESS_KEY_ID;
-    if (isMock) {
-      try {
-        const { buffer } = await quotationService.generatePdf(input);
-        return {
-          url: null,
-          content: buffer.toString("base64"),
-          filename: `Quotation-${quotation.quotationNumber}.pdf`
-        };
-      } catch (err) {
-        console.error("Failed to generate PDF in mock mode:", err);
-        throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "PDF generation failed" });
-      }
-    }
-    if (!quotation.pdfKey) {
-      try {
-        const { url } = await quotationService.generatePdf(quotation.id);
-        return { url };
-      } catch (err) {
-        console.error("Failed to regenerate PDF:", err);
-        throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "PDF generation failed" });
-      }
-    }
+    if (!quotation) throw new TRPCError23({ code: "NOT_FOUND", message: "Quotation not found" });
     if (quotation.pdfKey) {
-      const { url } = await storageGet(quotation.pdfKey);
-      return { url };
+      try {
+        const { content, contentType } = await storageDownload(quotation.pdfKey);
+        return {
+          content: content.toString("base64"),
+          filename: `Quotation-${quotation.quotationNumber}.pdf`,
+          contentType
+        };
+      } catch (e) {
+        console.warn("Failed to fetch existing PDF from storage, regenerating...", e);
+      }
     }
-    throw new TRPCError24({ code: "NOT_FOUND", message: "PDF not available" });
+    try {
+      const { buffer } = await quotationService.generatePdf(input);
+      return {
+        content: buffer.toString("base64"),
+        filename: `Quotation-${quotation.quotationNumber}.pdf`
+      };
+    } catch (err) {
+      console.error("Failed to generate PDF:", err);
+      throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "PDF generation failed" });
+    }
   })
 });
 
 // server/routers/countryGuideRouter.ts
 init_db2();
 init_schema();
-import { z as z29 } from "zod";
-import { eq as eq39, and as and31, asc as asc2 } from "drizzle-orm";
-import { TRPCError as TRPCError25 } from "@trpc/server";
+import { z as z28 } from "zod";
+import { eq as eq36, and as and28, asc as asc2 } from "drizzle-orm";
+import { TRPCError as TRPCError24 } from "@trpc/server";
 var countryGuideRouter = router({
-  generateContent: protectedProcedure.input(z29.object({ countryCode: z29.string(), topic: z29.string() })).mutation(async ({ input }) => {
+  generateContent: protectedProcedure.input(z28.object({ countryCode: z28.string(), topic: z28.string() })).mutation(async ({ input }) => {
     return await generateCountryGuideDraft(input);
   }),
-  listChapters: protectedProcedure.input(z29.object({ countryCode: z29.string() })).query(async ({ input }) => {
+  listChapters: protectedProcedure.input(z28.object({ countryCode: z28.string() })).query(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     return await db.select().from(countryGuideChapters).where(
-      and31(
-        eq39(countryGuideChapters.countryCode, input.countryCode),
-        eq39(countryGuideChapters.status, "published")
+      and28(
+        eq36(countryGuideChapters.countryCode, input.countryCode),
+        eq36(countryGuideChapters.status, "published")
       )
     ).orderBy(asc2(countryGuideChapters.sortOrder));
   }),
-  listAllChapters: protectedProcedure.input(z29.object({ countryCode: z29.string() })).query(async ({ input }) => {
+  listAllChapters: protectedProcedure.input(z28.object({ countryCode: z28.string() })).query(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    return await db.select().from(countryGuideChapters).where(eq39(countryGuideChapters.countryCode, input.countryCode)).orderBy(asc2(countryGuideChapters.sortOrder));
+    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    return await db.select().from(countryGuideChapters).where(eq36(countryGuideChapters.countryCode, input.countryCode)).orderBy(asc2(countryGuideChapters.sortOrder));
   }),
-  getChapter: protectedProcedure.input(z29.number()).query(async ({ input }) => {
+  getChapter: protectedProcedure.input(z28.number()).query(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const chapter = await db.query.countryGuideChapters.findFirst({
-      where: eq39(countryGuideChapters.id, input)
+      where: eq36(countryGuideChapters.id, input)
     });
     return chapter;
   }),
   // Admin only
-  upsertChapter: protectedProcedure.input(z29.object({
-    id: z29.number().optional(),
-    countryCode: z29.string(),
-    part: z29.number(),
-    chapterKey: z29.string(),
-    titleEn: z29.string(),
-    titleZh: z29.string(),
-    contentEn: z29.string(),
-    contentZh: z29.string(),
-    sortOrder: z29.number().default(0),
-    version: z29.string().default("2026-Q1"),
-    status: z29.enum(["draft", "review", "published", "archived"]).default("draft")
+  upsertChapter: protectedProcedure.input(z28.object({
+    id: z28.number().optional(),
+    countryCode: z28.string(),
+    part: z28.number(),
+    chapterKey: z28.string(),
+    titleEn: z28.string(),
+    titleZh: z28.string(),
+    contentEn: z28.string(),
+    contentZh: z28.string(),
+    sortOrder: z28.number().default(0),
+    version: z28.string().default("2026-Q1"),
+    status: z28.enum(["draft", "review", "published", "archived"]).default("draft")
   })).mutation(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     if (input.id) {
       await db.update(countryGuideChapters).set({
         ...input,
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq39(countryGuideChapters.id, input.id));
+      }).where(eq36(countryGuideChapters.id, input.id));
       return { id: input.id };
     } else {
       const [res] = await db.insert(countryGuideChapters).values(input).returning({ id: countryGuideChapters.id });
@@ -18845,48 +18157,48 @@ var countryGuideRouter = router({
 // server/routers/salaryBenchmarkRouter.ts
 init_db2();
 init_schema();
-import { z as z30 } from "zod";
-import { eq as eq40, and as and32 } from "drizzle-orm";
-import { TRPCError as TRPCError26 } from "@trpc/server";
+import { z as z29 } from "zod";
+import { eq as eq37, and as and29 } from "drizzle-orm";
+import { TRPCError as TRPCError25 } from "@trpc/server";
 var salaryBenchmarkRouter = router({
-  getBenchmark: protectedProcedure.input(z30.object({
-    countryCode: z30.string(),
-    jobCategory: z30.string(),
-    seniorityLevel: z30.enum(["junior", "mid", "senior", "lead", "director"])
+  getBenchmark: protectedProcedure.input(z29.object({
+    countryCode: z29.string(),
+    jobCategory: z29.string(),
+    seniorityLevel: z29.enum(["junior", "mid", "senior", "lead", "director"])
   })).query(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError26({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     return await db.query.salaryBenchmarks.findFirst({
-      where: and32(
-        eq40(salaryBenchmarks.countryCode, input.countryCode),
-        eq40(salaryBenchmarks.jobCategory, input.jobCategory),
-        eq40(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
+      where: and29(
+        eq37(salaryBenchmarks.countryCode, input.countryCode),
+        eq37(salaryBenchmarks.jobCategory, input.jobCategory),
+        eq37(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
       )
     });
   }),
-  listJobFunctions: protectedProcedure.input(z30.object({ countryCode: z30.string() })).query(async ({ input }) => {
+  listJobFunctions: protectedProcedure.input(z29.object({ countryCode: z29.string() })).query(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError26({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    const rows = await db.selectDistinct({ category: salaryBenchmarks.jobCategory }).from(salaryBenchmarks).where(eq40(salaryBenchmarks.countryCode, input.countryCode));
+    if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    const rows = await db.selectDistinct({ category: salaryBenchmarks.jobCategory }).from(salaryBenchmarks).where(eq37(salaryBenchmarks.countryCode, input.countryCode));
     return rows.map((r) => r.category);
   }),
-  upsertBenchmark: protectedProcedure.input(z30.object({
-    id: z30.number().optional(),
-    countryCode: z30.string(),
-    jobCategory: z30.string(),
-    jobTitle: z30.string(),
-    seniorityLevel: z30.enum(["junior", "mid", "senior", "lead", "director"]),
-    salaryP25: z30.string(),
-    salaryP50: z30.string(),
-    salaryP75: z30.string(),
-    currency: z30.string(),
-    dataYear: z30.number(),
-    source: z30.string().optional()
+  upsertBenchmark: protectedProcedure.input(z29.object({
+    id: z29.number().optional(),
+    countryCode: z29.string(),
+    jobCategory: z29.string(),
+    jobTitle: z29.string(),
+    seniorityLevel: z29.enum(["junior", "mid", "senior", "lead", "director"]),
+    salaryP25: z29.string(),
+    salaryP50: z29.string(),
+    salaryP75: z29.string(),
+    currency: z29.string(),
+    dataYear: z29.number(),
+    source: z29.string().optional()
   })).mutation(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError26({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     if (input.id) {
-      await db.update(salaryBenchmarks).set({ ...input, updatedAt: /* @__PURE__ */ new Date() }).where(eq40(salaryBenchmarks.id, input.id));
+      await db.update(salaryBenchmarks).set({ ...input, updatedAt: /* @__PURE__ */ new Date() }).where(eq37(salaryBenchmarks.id, input.id));
       return { id: input.id };
     } else {
       const [res] = await db.insert(salaryBenchmarks).values(input).returning({ id: salaryBenchmarks.id });
@@ -18896,24 +18208,24 @@ var salaryBenchmarkRouter = router({
 });
 
 // server/routers/contractors.ts
-import { TRPCError as TRPCError27 } from "@trpc/server";
-import { z as z31 } from "zod";
+import { TRPCError as TRPCError26 } from "@trpc/server";
+import { z as z30 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq41 } from "drizzle-orm";
+import { eq as eq38 } from "drizzle-orm";
 var contractorsRouter = router({
   getApprovers: userProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
-    return await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq41(users.isActive, true));
+    return await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq38(users.isActive, true));
   }),
   list: userProcedure.input(
-    z31.object({
-      customerId: z31.number().optional(),
-      status: z31.string().optional(),
-      search: z31.string().optional(),
-      limit: z31.number().default(50),
-      offset: z31.number().default(0)
+    z30.object({
+      customerId: z30.number().optional(),
+      status: z30.string().optional(),
+      search: z30.string().optional(),
+      limit: z30.number().default(50),
+      offset: z30.number().default(0)
     })
   ).query(async ({ input }) => {
     return await listContractors(
@@ -18926,42 +18238,41 @@ var contractorsRouter = router({
       input.offset
     );
   }),
-  get: userProcedure.input(z31.object({ id: z31.number() })).query(async ({ input }) => {
+  get: userProcedure.input(z30.object({ id: z30.number() })).query(async ({ input }) => {
     return await getContractorById(input.id);
   }),
   create: customerManagerProcedure.input(
-    z31.object({
-      customerId: z31.number(),
-      firstName: z31.string().min(1),
-      lastName: z31.string().min(1),
-      email: z31.string().email(),
-      phone: z31.string().optional(),
-      dateOfBirth: z31.string().optional(),
-      nationality: z31.string().optional(),
-      idNumber: z31.string().optional(),
-      idType: z31.string().optional(),
-      address: z31.string().optional(),
-      city: z31.string().optional(),
-      state: z31.string().optional(),
-      country: z31.string(),
-      postalCode: z31.string().optional(),
-      department: z31.string().optional(),
-      jobTitle: z31.string(),
-      startDate: z31.string(),
-      endDate: z31.string().optional(),
+    z30.object({
+      customerId: z30.number(),
+      firstName: z30.string().min(1),
+      lastName: z30.string().min(1),
+      email: z30.string().email(),
+      phone: z30.string().optional(),
+      dateOfBirth: z30.string().optional(),
+      nationality: z30.string().optional(),
+      idNumber: z30.string().optional(),
+      idType: z30.string().optional(),
+      address: z30.string().optional(),
+      city: z30.string().optional(),
+      state: z30.string().optional(),
+      country: z30.string(),
+      postalCode: z30.string().optional(),
+      department: z30.string().optional(),
+      jobTitle: z30.string(),
+      startDate: z30.string(),
+      endDate: z30.string().optional(),
       // Financials
-      currency: z31.string().default("USD"),
-      paymentFrequency: z31.enum(["monthly", "semi_monthly", "milestone"]).default("monthly"),
-      rateType: z31.enum(["fixed_monthly", "hourly", "daily", "milestone_only"]).default("fixed_monthly"),
-      rateAmount: z31.string().optional(),
-      defaultApproverId: z31.number().optional(),
-      bankDetails: z31.string().optional(),
+      currency: z30.string().default("USD"),
+      paymentFrequency: z30.enum(["monthly", "semi_monthly", "milestone"]).default("monthly"),
+      rateAmount: z30.string().optional(),
+      defaultApproverId: z30.number().optional(),
+      bankDetails: z30.string().optional(),
       // JSON string
-      notes: z31.string().optional()
+      notes: z30.string().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     if (input.endDate && new Date(input.endDate) <= new Date(input.startDate)) {
-      throw new TRPCError27({ code: "BAD_REQUEST", message: "End date must be after start date." });
+      throw new TRPCError26({ code: "BAD_REQUEST", message: "End date must be after start date." });
     }
     const randomCode = Math.floor(Math.random() * 1e4).toString().padStart(4, "0");
     const contractorCode = `CTR-${(/* @__PURE__ */ new Date()).getFullYear()}${randomCode}`;
@@ -18971,12 +18282,6 @@ var contractorsRouter = router({
       status: "active",
       // Default to active or pending_review? Let's say active for now as per simple flow
       bankDetails: input.bankDetails ? JSON.parse(input.bankDetails) : void 0
-      // Parse if it was sent as string, but schema expects string in DB? Wait, DB is json mode text.
-      // Drizzle text({ mode: 'json' }) expects the value to be passed as object when inserting if we use $inferInsert? 
-      // No, Drizzle ORM handles the stringification if defined as mode: 'json'.
-      // Let's check schema: bankDetails: text("bankDetails", { mode: "json" })
-      // So we should pass an object.
-      // But Zod input says string (JSON string from frontend). So we parse it.
     });
     const newContractor = result[0];
     await logAuditAction({
@@ -18990,34 +18295,33 @@ var contractorsRouter = router({
     return newContractor;
   }),
   update: customerManagerProcedure.input(
-    z31.object({
-      id: z31.number(),
-      data: z31.object({
-        firstName: z31.string().optional(),
-        lastName: z31.string().optional(),
-        email: z31.string().optional(),
-        phone: z31.string().optional(),
-        dateOfBirth: z31.string().optional(),
-        nationality: z31.string().optional(),
-        idNumber: z31.string().optional(),
-        idType: z31.string().optional(),
-        address: z31.string().optional(),
-        city: z31.string().optional(),
-        state: z31.string().optional(),
-        country: z31.string().optional(),
-        postalCode: z31.string().optional(),
-        department: z31.string().optional(),
-        jobTitle: z31.string().optional(),
-        startDate: z31.string().optional(),
-        endDate: z31.string().optional(),
-        status: z31.enum(["pending_review", "active", "terminated"]).optional(),
-        currency: z31.string().optional(),
-        paymentFrequency: z31.enum(["monthly", "semi_monthly", "milestone"]).optional(),
-        rateType: z31.enum(["fixed_monthly", "hourly", "daily", "milestone_only"]).optional(),
-        rateAmount: z31.string().optional(),
-        defaultApproverId: z31.number().optional(),
-        bankDetails: z31.string().optional(),
-        notes: z31.string().optional()
+    z30.object({
+      id: z30.number(),
+      data: z30.object({
+        firstName: z30.string().optional(),
+        lastName: z30.string().optional(),
+        email: z30.string().optional(),
+        phone: z30.string().optional(),
+        dateOfBirth: z30.string().optional(),
+        nationality: z30.string().optional(),
+        idNumber: z30.string().optional(),
+        idType: z30.string().optional(),
+        address: z30.string().optional(),
+        city: z30.string().optional(),
+        state: z30.string().optional(),
+        country: z30.string().optional(),
+        postalCode: z30.string().optional(),
+        department: z30.string().optional(),
+        jobTitle: z30.string().optional(),
+        startDate: z30.string().optional(),
+        endDate: z30.string().optional(),
+        status: z30.enum(["pending_review", "active", "terminated"]).optional(),
+        currency: z30.string().optional(),
+        paymentFrequency: z30.enum(["monthly", "semi_monthly", "milestone"]).optional(),
+        rateAmount: z30.string().optional(),
+        defaultApproverId: z30.number().optional(),
+        bankDetails: z30.string().optional(),
+        notes: z30.string().optional()
       })
     })
   ).mutation(async ({ input, ctx }) => {
@@ -19036,7 +18340,7 @@ var contractorsRouter = router({
     });
     return { success: true };
   }),
-  terminate: customerManagerProcedure.input(z31.object({ id: z31.number() })).mutation(async ({ input, ctx }) => {
+  terminate: customerManagerProcedure.input(z30.object({ id: z30.number() })).mutation(async ({ input, ctx }) => {
     await updateContractor(input.id, { status: "terminated", endDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0] });
     await logAuditAction({
       userId: ctx.user.id,
@@ -19049,16 +18353,23 @@ var contractorsRouter = router({
   }),
   // ── Milestones Sub-Router ──
   milestones: router({
-    list: userProcedure.input(z31.object({ contractorId: z31.number() })).query(async ({ input }) => {
+    list: userProcedure.input(z30.object({ contractorId: z30.number() })).query(async ({ input }) => {
       return await listContractorMilestones(input.contractorId);
     }),
-    create: customerManagerProcedure.input(z31.object({
-      contractorId: z31.number(),
-      title: z31.string().min(1),
-      description: z31.string().optional(),
-      amount: z31.string(),
-      currency: z31.string(),
-      dueDate: z31.string().optional()
+    listAll: userProcedure.input(z30.object({
+      customerId: z30.number().optional(),
+      status: z30.string().optional(),
+      search: z30.string().optional()
+    })).query(async ({ input }) => {
+      return await listAllContractorMilestones(input);
+    }),
+    create: customerManagerProcedure.input(z30.object({
+      contractorId: z30.number(),
+      title: z30.string().min(1),
+      description: z30.string().optional(),
+      amount: z30.string(),
+      currency: z30.string(),
+      dueDate: z30.string().optional()
     })).mutation(async ({ input, ctx }) => {
       const result = await createContractorMilestone({
         ...input,
@@ -19073,14 +18384,14 @@ var contractorsRouter = router({
       });
       return result;
     }),
-    update: customerManagerProcedure.input(z31.object({
-      id: z31.number(),
-      data: z31.object({
-        title: z31.string().optional(),
-        description: z31.string().optional(),
-        amount: z31.string().optional(),
-        dueDate: z31.string().optional(),
-        status: z31.enum(["pending", "in_progress", "submitted", "approved", "paid", "cancelled"]).optional()
+    update: customerManagerProcedure.input(z30.object({
+      id: z30.number(),
+      data: z30.object({
+        title: z30.string().optional(),
+        description: z30.string().optional(),
+        amount: z30.string().optional(),
+        dueDate: z30.string().optional(),
+        status: z30.enum(["pending", "in_progress", "submitted", "approved", "paid", "cancelled"]).optional()
       })
     })).mutation(async ({ input, ctx }) => {
       const updateData = { ...input.data };
@@ -19091,24 +18402,31 @@ var contractorsRouter = router({
       await updateContractorMilestone(input.id, updateData);
       return { success: true };
     }),
-    delete: customerManagerProcedure.input(z31.object({ id: z31.number() })).mutation(async ({ input }) => {
+    delete: customerManagerProcedure.input(z30.object({ id: z30.number() })).mutation(async ({ input }) => {
       await deleteContractorMilestone(input.id);
       return { success: true };
     })
   }),
   // ── Adjustments Sub-Router ──
   adjustments: router({
-    list: userProcedure.input(z31.object({ contractorId: z31.number() })).query(async ({ input }) => {
+    list: userProcedure.input(z30.object({ contractorId: z30.number() })).query(async ({ input }) => {
       return await listContractorAdjustments(input.contractorId);
     }),
-    create: customerManagerProcedure.input(z31.object({
-      contractorId: z31.number(),
-      type: z31.enum(["bonus", "expense", "deduction"]),
-      description: z31.string().min(1),
-      amount: z31.string(),
-      currency: z31.string(),
-      date: z31.string(),
-      attachmentUrl: z31.string().optional()
+    listAll: userProcedure.input(z30.object({
+      customerId: z30.number().optional(),
+      status: z30.string().optional(),
+      search: z30.string().optional()
+    })).query(async ({ input }) => {
+      return await listAllContractorAdjustments(input);
+    }),
+    create: customerManagerProcedure.input(z30.object({
+      contractorId: z30.number(),
+      type: z30.enum(["bonus", "expense", "deduction"]),
+      description: z30.string().min(1),
+      amount: z30.string(),
+      currency: z30.string(),
+      date: z30.string(),
+      attachmentUrl: z30.string().optional()
     })).mutation(async ({ input, ctx }) => {
       const result = await createContractorAdjustment({
         ...input,
@@ -19116,99 +18434,158 @@ var contractorsRouter = router({
       });
       return result;
     }),
-    update: customerManagerProcedure.input(z31.object({
-      id: z31.number(),
-      data: z31.object({
-        type: z31.enum(["bonus", "expense", "deduction"]).optional(),
-        description: z31.string().optional(),
-        amount: z31.string().optional(),
-        date: z31.string().optional(),
-        status: z31.enum(["pending", "approved", "rejected", "invoiced"]).optional()
+    update: customerManagerProcedure.input(z30.object({
+      id: z30.number(),
+      data: z30.object({
+        type: z30.enum(["bonus", "expense", "deduction"]).optional(),
+        description: z30.string().optional(),
+        amount: z30.string().optional(),
+        date: z30.string().optional(),
+        status: z30.enum(["pending", "approved", "rejected", "invoiced"]).optional()
       })
     })).mutation(async ({ input }) => {
       await updateContractorAdjustment(input.id, input.data);
       return { success: true };
     }),
-    delete: customerManagerProcedure.input(z31.object({ id: z31.number() })).mutation(async ({ input }) => {
+    delete: customerManagerProcedure.input(z30.object({ id: z30.number() })).mutation(async ({ input }) => {
       await deleteContractorAdjustment(input.id);
       return { success: true };
     })
   }),
   // ── Invoices Sub-Router ──
   invoices: router({
-    list: userProcedure.input(z31.object({ contractorId: z31.number() })).query(async ({ input }) => {
+    list: userProcedure.input(z30.object({ contractorId: z30.number() })).query(async ({ input }) => {
       return await listContractorInvoices(input.contractorId);
     }),
-    get: userProcedure.input(z31.object({ id: z31.number() })).query(async ({ input }) => {
+    listAll: userProcedure.input(z30.object({
+      customerId: z30.number().optional(),
+      status: z30.string().optional(),
+      search: z30.string().optional(),
+      limit: z30.number().default(50),
+      offset: z30.number().default(0)
+    })).query(async ({ input }) => {
+      return await listAllContractorInvoices(
+        {
+          customerId: input.customerId,
+          status: input.status,
+          search: input.search
+        },
+        input.limit,
+        input.offset
+      );
+    }),
+    get: userProcedure.input(z30.object({ id: z30.number() })).query(async ({ input }) => {
       return await getContractorInvoiceById(input.id);
     }),
-    generate: customerManagerProcedure.input(z31.object({
-      targetDate: z31.string().optional()
+    generate: customerManagerProcedure.input(z30.object({
+      targetDate: z30.string().optional()
       // YYYY-MM-DD
     })).mutation(async ({ input }) => {
       const date = input.targetDate ? new Date(input.targetDate) : /* @__PURE__ */ new Date();
       const result = await ContractorInvoiceGenerationService.processAll(date);
       return result;
+    }),
+    approve: customerManagerProcedure.input(z30.object({ id: z30.number() })).mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError26({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const invoice = await getContractorInvoiceById(input.id);
+      if (!invoice) throw new TRPCError26({ code: "NOT_FOUND", message: "Invoice not found" });
+      if (invoice.status !== "draft" && invoice.status !== "pending_approval") {
+        throw new TRPCError26({
+          code: "PRECONDITION_FAILED",
+          message: `Cannot approve invoice in status ${invoice.status}`
+        });
+      }
+      await db.update(contractorInvoices).set({
+        status: "approved",
+        approvedBy: ctx.user.id,
+        approvedAt: /* @__PURE__ */ new Date()
+      }).where(eq38(contractorInvoices.id, input.id));
+      await logAuditAction({
+        userId: ctx.user.id,
+        userName: ctx.user.name || null,
+        action: "approve",
+        entityType: "contractor_invoice",
+        entityId: input.id
+      });
+      return { success: true };
+    }),
+    reject: customerManagerProcedure.input(z30.object({ id: z30.number(), reason: z30.string() })).mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError26({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db.update(contractorInvoices).set({
+        status: "rejected",
+        rejectedReason: input.reason
+      }).where(eq38(contractorInvoices.id, input.id));
+      await logAuditAction({
+        userId: ctx.user.id,
+        userName: ctx.user.name || null,
+        action: "reject",
+        entityType: "contractor_invoice",
+        entityId: input.id,
+        changes: JSON.stringify({ reason: input.reason })
+      });
+      return { success: true };
     })
   })
 });
 
 // server/routers/billing/walletRouter.ts
-import { z as z32 } from "zod";
-import { TRPCError as TRPCError28 } from "@trpc/server";
+import { z as z31 } from "zod";
+import { TRPCError as TRPCError27 } from "@trpc/server";
 init_db2();
 init_schema();
-import { eq as eq42, desc as desc19 } from "drizzle-orm";
+import { eq as eq39, desc as desc17 } from "drizzle-orm";
 var walletRouter = router({
-  get: userProcedure.input(z32.object({
-    customerId: z32.number(),
-    currency: z32.string()
+  get: userProcedure.input(z31.object({
+    customerId: z31.number(),
+    currency: z31.string()
   })).query(async ({ input }) => {
     return await walletService.getWallet(input.customerId, input.currency);
   }),
-  getFrozen: userProcedure.input(z32.object({
-    customerId: z32.number(),
-    currency: z32.string()
+  getFrozen: userProcedure.input(z31.object({
+    customerId: z31.number(),
+    currency: z31.string()
   })).query(async ({ input }) => {
     return await walletService.getFrozenWallet(input.customerId, input.currency);
   }),
-  listTransactions: userProcedure.input(z32.object({
-    walletId: z32.number(),
-    limit: z32.number().default(50),
-    offset: z32.number().default(0)
+  listTransactions: userProcedure.input(z31.object({
+    walletId: z31.number(),
+    limit: z31.number().default(50),
+    offset: z31.number().default(0)
   })).query(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError28({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
+    if (!db) throw new TRPCError27({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     return await db.query.walletTransactions.findMany({
-      where: eq42(walletTransactions.walletId, input.walletId),
-      orderBy: [desc19(walletTransactions.createdAt)],
+      where: eq39(walletTransactions.walletId, input.walletId),
+      orderBy: [desc17(walletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
     });
   }),
-  listFrozenTransactions: userProcedure.input(z32.object({
-    walletId: z32.number(),
-    limit: z32.number().default(50),
-    offset: z32.number().default(0)
+  listFrozenTransactions: userProcedure.input(z31.object({
+    walletId: z31.number(),
+    limit: z31.number().default(50),
+    offset: z31.number().default(0)
   })).query(async ({ input }) => {
     const db = getDb();
-    if (!db) throw new TRPCError28({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
+    if (!db) throw new TRPCError27({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     return await db.query.frozenWalletTransactions.findMany({
-      where: eq42(frozenWalletTransactions.walletId, input.walletId),
-      orderBy: [desc19(frozenWalletTransactions.createdAt)],
+      where: eq39(frozenWalletTransactions.walletId, input.walletId),
+      orderBy: [desc17(frozenWalletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
     });
   }),
   // Admin manual adjustment
-  manualAdjustment: financeManagerProcedure.input(z32.object({
-    customerId: z32.number(),
-    currency: z32.string(),
-    amount: z32.string(),
+  manualAdjustment: financeManagerProcedure.input(z31.object({
+    customerId: z31.number(),
+    currency: z31.string(),
+    amount: z31.string(),
     // Positive number
-    direction: z32.enum(["credit", "debit"]),
-    description: z32.string(),
-    internalNote: z32.string().optional()
+    direction: z31.enum(["credit", "debit"]),
+    description: z31.string(),
+    internalNote: z31.string().optional()
   })).mutation(async ({ input, ctx }) => {
     const wallet = await walletService.getWallet(input.customerId, input.currency);
     return await walletService.transact({
@@ -19225,14 +18602,14 @@ var walletRouter = router({
     });
   }),
   // Admin manual frozen adjustment
-  manualFrozenAdjustment: financeManagerProcedure.input(z32.object({
-    customerId: z32.number(),
-    currency: z32.string(),
-    amount: z32.string(),
+  manualFrozenAdjustment: financeManagerProcedure.input(z31.object({
+    customerId: z31.number(),
+    currency: z31.string(),
+    amount: z31.string(),
     // Positive number
-    direction: z32.enum(["credit", "debit"]),
-    description: z32.string(),
-    internalNote: z32.string().optional()
+    direction: z31.enum(["credit", "debit"]),
+    description: z31.string(),
+    internalNote: z31.string().optional()
   })).mutation(async ({ input, ctx }) => {
     const wallet = await walletService.getFrozenWallet(input.customerId, input.currency);
     return await walletService.frozenTransact({
@@ -19249,11 +18626,11 @@ var walletRouter = router({
     });
   }),
   // Release frozen funds to main wallet
-  releaseFrozen: financeManagerProcedure.input(z32.object({
-    customerId: z32.number(),
-    currency: z32.string(),
-    amount: z32.string(),
-    reason: z32.string()
+  releaseFrozen: financeManagerProcedure.input(z31.object({
+    customerId: z31.number(),
+    currency: z31.string(),
+    amount: z31.string(),
+    reason: z31.string()
   })).mutation(async ({ input, ctx }) => {
     await walletService.releaseFrozenToMain(
       input.customerId,
@@ -19302,7 +18679,7 @@ var appRouter = router({
   pdfParsing: pdfParsingRouter,
   sales: salesRouter,
   knowledgeBaseAdmin: knowledgeBaseAdminRouter,
-  copilot: copilotRouter,
+  // copilot: copilotRouter, // Copilot disabled
   notifications: notificationsRouter,
   calculation: calculationRouter,
   quotations: quotationRouter,
@@ -19330,7 +18707,7 @@ async function createContext(opts) {
 // server/portal/portalTrpc.ts
 init_portalAuth();
 init_const();
-import { initTRPC as initTRPC2, TRPCError as TRPCError29 } from "@trpc/server";
+import { initTRPC as initTRPC2, TRPCError as TRPCError28 } from "@trpc/server";
 import superjson2 from "superjson";
 async function createPortalContext(opts) {
   let portalUser = null;
@@ -19352,7 +18729,7 @@ var portalRouter = t2.router;
 var portalPublicProcedure = t2.procedure;
 var requirePortalUser = t2.middleware(async ({ ctx, next }) => {
   if (!ctx.portalUser) {
-    throw new TRPCError29({
+    throw new TRPCError28({
       code: "UNAUTHORIZED",
       message: PORTAL_UNAUTHED_ERR_MSG
     });
@@ -19369,13 +18746,13 @@ var protectedPortalProcedure = t2.procedure.use(requirePortalUser);
 var portalAdminProcedure = t2.procedure.use(
   t2.middleware(async ({ ctx, next }) => {
     if (!ctx.portalUser) {
-      throw new TRPCError29({
+      throw new TRPCError28({
         code: "UNAUTHORIZED",
         message: PORTAL_UNAUTHED_ERR_MSG
       });
     }
     if (ctx.portalUser.portalRole !== "admin") {
-      throw new TRPCError29({
+      throw new TRPCError28({
         code: "FORBIDDEN",
         message: PORTAL_FORBIDDEN_ERR_MSG
       });
@@ -19391,13 +18768,13 @@ var portalAdminProcedure = t2.procedure.use(
 var portalHrProcedure = t2.procedure.use(
   t2.middleware(async ({ ctx, next }) => {
     if (!ctx.portalUser) {
-      throw new TRPCError29({
+      throw new TRPCError28({
         code: "UNAUTHORIZED",
         message: PORTAL_UNAUTHED_ERR_MSG
       });
     }
     if (!["admin", "hr_manager"].includes(ctx.portalUser.portalRole)) {
-      throw new TRPCError29({
+      throw new TRPCError28({
         code: "FORBIDDEN",
         message: PORTAL_FORBIDDEN_ERR_MSG
       });
@@ -19413,13 +18790,13 @@ var portalHrProcedure = t2.procedure.use(
 var portalFinanceProcedure = t2.procedure.use(
   t2.middleware(async ({ ctx, next }) => {
     if (!ctx.portalUser) {
-      throw new TRPCError29({
+      throw new TRPCError28({
         code: "UNAUTHORIZED",
         message: PORTAL_UNAUTHED_ERR_MSG
       });
     }
     if (!["admin", "finance"].includes(ctx.portalUser.portalRole)) {
-      throw new TRPCError29({
+      throw new TRPCError28({
         code: "FORBIDDEN",
         message: PORTAL_FORBIDDEN_ERR_MSG
       });
@@ -19434,9 +18811,9 @@ var portalFinanceProcedure = t2.procedure.use(
 );
 
 // server/portal/routers/portalAuthRouter.ts
-import { z as z33 } from "zod";
-import { TRPCError as TRPCError30 } from "@trpc/server";
-import { eq as eq43 } from "drizzle-orm";
+import { z as z32 } from "zod";
+import { TRPCError as TRPCError29 } from "@trpc/server";
+import { eq as eq40 } from "drizzle-orm";
 init_portalAuth();
 init_db2();
 init_schema();
@@ -19459,7 +18836,7 @@ function assertPortalLoginRateLimit(identifier) {
     return;
   }
   if (record.count >= LOGIN_ATTEMPT_LIMIT) {
-    throw new TRPCError30({ code: "TOO_MANY_REQUESTS", message: "Too many login attempts. Please try again later." });
+    throw new TRPCError29({ code: "TOO_MANY_REQUESTS", message: "Too many login attempts. Please try again later." });
   }
   record.count += 1;
   loginAttemptTracker.set(identifier, record);
@@ -19469,32 +18846,32 @@ var portalAuthRouter = portalRouter({
    * Login with email + password
    */
   login: portalPublicProcedure.input(
-    z33.object({
-      email: z33.string().email(),
-      password: z33.string().min(1)
+    z32.object({
+      email: z32.string().email(),
+      password: z32.string().min(1)
     })
   ).mutation(async ({ input, ctx }) => {
     assertPortalLoginRateLimit(input.email.toLowerCase().trim());
     const db = await getDb();
-    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select().from(customerContacts).where(eq43(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
+    if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const contacts = await db.select().from(customerContacts).where(eq40(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
     if (contacts.length === 0) {
-      throw new TRPCError30({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+      throw new TRPCError29({ code: "UNAUTHORIZED", message: "Invalid email or password" });
     }
     const contact = contacts[0];
     if (!contact.hasPortalAccess || !contact.isPortalActive) {
-      throw new TRPCError30({ code: "UNAUTHORIZED", message: "Portal access not enabled" });
+      throw new TRPCError29({ code: "UNAUTHORIZED", message: "Portal access not enabled" });
     }
     if (!contact.passwordHash) {
-      throw new TRPCError30({ code: "UNAUTHORIZED", message: "Account not activated. Please use your invite link." });
+      throw new TRPCError29({ code: "UNAUTHORIZED", message: "Account not activated. Please use your invite link." });
     }
     const passwordValid = await verifyPassword2(input.password, contact.passwordHash);
     if (!passwordValid) {
-      throw new TRPCError30({ code: "UNAUTHORIZED", message: "Invalid email or password" });
+      throw new TRPCError29({ code: "UNAUTHORIZED", message: "Invalid email or password" });
     }
-    const customerRows = await db.select({ companyName: customers.companyName, status: customers.status }).from(customers).where(eq43(customers.id, contact.customerId)).limit(1);
+    const customerRows = await db.select({ companyName: customers.companyName, status: customers.status }).from(customers).where(eq40(customers.id, contact.customerId)).limit(1);
     if (customerRows.length === 0 || customerRows[0].status !== "active") {
-      throw new TRPCError30({ code: "FORBIDDEN", message: "Company account is not active" });
+      throw new TRPCError29({ code: "FORBIDDEN", message: "Company account is not active" });
     }
     const payload = {
       sub: String(contact.id),
@@ -19505,7 +18882,7 @@ var portalAuthRouter = portalRouter({
     };
     const token = await signPortalToken(payload);
     setPortalCookie(ctx.res, token);
-    await db.update(customerContacts).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq43(customerContacts.id, contact.id));
+    await db.update(customerContacts).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq40(customerContacts.id, contact.id));
     return {
       success: true,
       user: {
@@ -19521,9 +18898,9 @@ var portalAuthRouter = portalRouter({
   /**
    * Verify invite token (check if valid before showing register form)
    */
-  verifyInvite: portalPublicProcedure.input(z33.object({ token: z33.string() })).query(async ({ input }) => {
+  verifyInvite: portalPublicProcedure.input(z32.object({ token: z32.string() })).query(async ({ input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
     const contacts = await db.select({
       id: customerContacts.id,
       email: customerContacts.email,
@@ -19531,7 +18908,7 @@ var portalAuthRouter = portalRouter({
       inviteExpiresAt: customerContacts.inviteExpiresAt,
       isPortalActive: customerContacts.isPortalActive,
       customerId: customerContacts.customerId
-    }).from(customerContacts).where(eq43(customerContacts.inviteToken, input.token)).limit(1);
+    }).from(customerContacts).where(eq40(customerContacts.inviteToken, input.token)).limit(1);
     if (contacts.length === 0) {
       return { valid: false, reason: "Invalid invite link" };
     }
@@ -19542,7 +18919,7 @@ var portalAuthRouter = portalRouter({
     if (contact.inviteExpiresAt && contact.inviteExpiresAt < /* @__PURE__ */ new Date()) {
       return { valid: false, reason: "Invite link has expired" };
     }
-    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq43(customers.id, contact.customerId)).limit(1);
+    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq40(customers.id, contact.customerId)).limit(1);
     return {
       valid: true,
       email: contact.email,
@@ -19554,27 +18931,27 @@ var portalAuthRouter = portalRouter({
    * Register (accept invite and set password)
    */
   register: portalPublicProcedure.input(
-    z33.object({
-      token: z33.string(),
-      password: z33.string().min(8, "Password must be at least 8 characters"),
-      confirmPassword: z33.string()
+    z32.object({
+      token: z32.string(),
+      password: z32.string().min(8, "Password must be at least 8 characters"),
+      confirmPassword: z32.string()
     })
   ).mutation(async ({ input, ctx }) => {
     if (input.password !== input.confirmPassword) {
-      throw new TRPCError30({ code: "BAD_REQUEST", message: "Passwords do not match" });
+      throw new TRPCError29({ code: "BAD_REQUEST", message: "Passwords do not match" });
     }
     const db = await getDb();
-    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select().from(customerContacts).where(eq43(customerContacts.inviteToken, input.token)).limit(1);
+    if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const contacts = await db.select().from(customerContacts).where(eq40(customerContacts.inviteToken, input.token)).limit(1);
     if (contacts.length === 0) {
-      throw new TRPCError30({ code: "BAD_REQUEST", message: "Invalid invite link" });
+      throw new TRPCError29({ code: "BAD_REQUEST", message: "Invalid invite link" });
     }
     const contact = contacts[0];
     if (contact.isPortalActive) {
-      throw new TRPCError30({ code: "BAD_REQUEST", message: "Account already activated" });
+      throw new TRPCError29({ code: "BAD_REQUEST", message: "Account already activated" });
     }
     if (contact.inviteExpiresAt && contact.inviteExpiresAt < /* @__PURE__ */ new Date()) {
-      throw new TRPCError30({ code: "BAD_REQUEST", message: "Invite link has expired" });
+      throw new TRPCError29({ code: "BAD_REQUEST", message: "Invite link has expired" });
     }
     const passwordHash = await hashPassword2(input.password);
     await db.update(customerContacts).set({
@@ -19585,8 +18962,8 @@ var portalAuthRouter = portalRouter({
       // Clear invite token after use
       inviteExpiresAt: null,
       lastLoginAt: /* @__PURE__ */ new Date()
-    }).where(eq43(customerContacts.id, contact.id));
-    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq43(customers.id, contact.customerId)).limit(1);
+    }).where(eq40(customerContacts.id, contact.id));
+    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq40(customers.id, contact.customerId)).limit(1);
     const payload = {
       sub: String(contact.id),
       customerId: contact.customerId,
@@ -19626,20 +19003,20 @@ var portalAuthRouter = portalRouter({
    * Returns the reset link (in production, this would be emailed)
    */
   forgotPassword: portalPublicProcedure.input(
-    z33.object({
-      email: z33.string().email(),
-      origin: z33.string().url()
+    z32.object({
+      email: z32.string().email(),
+      origin: z32.string().url()
       // Frontend origin for building reset URL
     })
   ).mutation(async ({ input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
     const contacts = await db.select({
       id: customerContacts.id,
       email: customerContacts.email,
       isPortalActive: customerContacts.isPortalActive,
       hasPortalAccess: customerContacts.hasPortalAccess
-    }).from(customerContacts).where(eq43(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
+    }).from(customerContacts).where(eq40(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
     if (contacts.length === 0 || !contacts[0].isPortalActive || !contacts[0].hasPortalAccess) {
       return {
         success: true,
@@ -19649,7 +19026,7 @@ var portalAuthRouter = portalRouter({
     const contact = contacts[0];
     const resetToken = generateResetToken();
     const resetExpiresAt = getResetExpiryDate();
-    await db.update(customerContacts).set({ resetToken, resetExpiresAt }).where(eq43(customerContacts.id, contact.id));
+    await db.update(customerContacts).set({ resetToken, resetExpiresAt }).where(eq40(customerContacts.id, contact.id));
     const origin = input.origin;
     const isPortalDomain = origin.includes("app.geahr.com");
     const resetUrl = isPortalDomain ? `${origin}/reset-password?token=${resetToken}` : `${origin}/portal/reset-password?token=${resetToken}`;
@@ -19663,15 +19040,15 @@ var portalAuthRouter = portalRouter({
   /**
    * Verify reset token (check if valid before showing reset form)
    */
-  verifyResetToken: portalPublicProcedure.input(z33.object({ token: z33.string() })).query(async ({ input }) => {
+  verifyResetToken: portalPublicProcedure.input(z32.object({ token: z32.string() })).query(async ({ input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
     const contacts = await db.select({
       id: customerContacts.id,
       email: customerContacts.email,
       contactName: customerContacts.contactName,
       resetExpiresAt: customerContacts.resetExpiresAt
-    }).from(customerContacts).where(eq43(customerContacts.resetToken, input.token)).limit(1);
+    }).from(customerContacts).where(eq40(customerContacts.resetToken, input.token)).limit(1);
     if (contacts.length === 0) {
       return { valid: false, reason: "Invalid reset link" };
     }
@@ -19689,32 +19066,32 @@ var portalAuthRouter = portalRouter({
    * Reset password using token
    */
   resetPassword: portalPublicProcedure.input(
-    z33.object({
-      token: z33.string(),
-      password: z33.string().min(8, "Password must be at least 8 characters"),
-      confirmPassword: z33.string()
+    z32.object({
+      token: z32.string(),
+      password: z32.string().min(8, "Password must be at least 8 characters"),
+      confirmPassword: z32.string()
     })
   ).mutation(async ({ input, ctx }) => {
     if (input.password !== input.confirmPassword) {
-      throw new TRPCError30({ code: "BAD_REQUEST", message: "Passwords do not match" });
+      throw new TRPCError29({ code: "BAD_REQUEST", message: "Passwords do not match" });
     }
     const db = await getDb();
-    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select().from(customerContacts).where(eq43(customerContacts.resetToken, input.token)).limit(1);
+    if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const contacts = await db.select().from(customerContacts).where(eq40(customerContacts.resetToken, input.token)).limit(1);
     if (contacts.length === 0) {
-      throw new TRPCError30({ code: "BAD_REQUEST", message: "Invalid reset link" });
+      throw new TRPCError29({ code: "BAD_REQUEST", message: "Invalid reset link" });
     }
     const contact = contacts[0];
     if (contact.resetExpiresAt && contact.resetExpiresAt < /* @__PURE__ */ new Date()) {
-      throw new TRPCError30({ code: "BAD_REQUEST", message: "Reset link has expired" });
+      throw new TRPCError29({ code: "BAD_REQUEST", message: "Reset link has expired" });
     }
     const passwordHash = await hashPassword2(input.password);
     await db.update(customerContacts).set({
       passwordHash,
       resetToken: null,
       resetExpiresAt: null
-    }).where(eq43(customerContacts.id, contact.id));
-    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq43(customers.id, contact.customerId)).limit(1);
+    }).where(eq40(customerContacts.id, contact.id));
+    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq40(customers.id, contact.customerId)).limit(1);
     const payload = {
       sub: String(contact.id),
       customerId: contact.customerId,
@@ -19740,33 +19117,33 @@ var portalAuthRouter = portalRouter({
    * Change password
    */
   changePassword: protectedPortalProcedure.input(
-    z33.object({
-      currentPassword: z33.string(),
-      newPassword: z33.string().min(8, "Password must be at least 8 characters"),
-      confirmNewPassword: z33.string()
+    z32.object({
+      currentPassword: z32.string(),
+      newPassword: z32.string().min(8, "Password must be at least 8 characters"),
+      confirmNewPassword: z32.string()
     })
   ).mutation(async ({ input, ctx }) => {
     if (input.newPassword !== input.confirmNewPassword) {
-      throw new TRPCError30({ code: "BAD_REQUEST", message: "Passwords do not match" });
+      throw new TRPCError29({ code: "BAD_REQUEST", message: "Passwords do not match" });
     }
     const db = await getDb();
-    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select({ passwordHash: customerContacts.passwordHash }).from(customerContacts).where(eq43(customerContacts.id, ctx.portalUser.contactId)).limit(1);
+    if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const contacts = await db.select({ passwordHash: customerContacts.passwordHash }).from(customerContacts).where(eq40(customerContacts.id, ctx.portalUser.contactId)).limit(1);
     if (contacts.length === 0 || !contacts[0].passwordHash) {
-      throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR", message: "Account error" });
+      throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Account error" });
     }
     const valid = await verifyPassword2(input.currentPassword, contacts[0].passwordHash);
     if (!valid) {
-      throw new TRPCError30({ code: "BAD_REQUEST", message: "Current password is incorrect" });
+      throw new TRPCError29({ code: "BAD_REQUEST", message: "Current password is incorrect" });
     }
     const newHash = await hashPassword2(input.newPassword);
-    await db.update(customerContacts).set({ passwordHash: newHash }).where(eq43(customerContacts.id, ctx.portalUser.contactId));
+    await db.update(customerContacts).set({ passwordHash: newHash }).where(eq40(customerContacts.id, ctx.portalUser.contactId));
     return { success: true };
   })
 });
 
 // server/portal/routers/portalDashboardRouter.ts
-import { sql as sql17, eq as eq44, and as and35, count as count11, inArray as inArray8 } from "drizzle-orm";
+import { sql as sql15, eq as eq41, and as and32, count as count9, inArray as inArray9 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalDashboardRouter = portalRouter({
@@ -19777,18 +19154,18 @@ var portalDashboardRouter = portalRouter({
     const db = await getDb();
     if (!db) return null;
     const cid = ctx.portalUser.customerId;
-    const [empCount] = await db.select({ count: count11() }).from(employees).where(and35(eq44(employees.customerId, cid), eq44(employees.status, "active")));
-    const activeCountries = await db.select({ countryCode: employees.country }).from(employees).where(and35(eq44(employees.customerId, cid), eq44(employees.status, "active"))).groupBy(employees.country);
-    const [onboardingCount] = await db.select({ count: count11() }).from(employees).where(
-      and35(
-        eq44(employees.customerId, cid),
-        inArray8(employees.status, ["pending_review", "documents_incomplete", "onboarding"])
+    const [empCount] = await db.select({ count: count9() }).from(employees).where(and32(eq41(employees.customerId, cid), eq41(employees.status, "active")));
+    const activeCountries = await db.select({ countryCode: employees.country }).from(employees).where(and32(eq41(employees.customerId, cid), eq41(employees.status, "active"))).groupBy(employees.country);
+    const [onboardingCount] = await db.select({ count: count9() }).from(employees).where(
+      and32(
+        eq41(employees.customerId, cid),
+        inArray9(employees.status, ["pending_review", "documents_incomplete", "onboarding"])
       )
     );
-    const [adjCount] = await db.select({ count: count11() }).from(adjustments).where(and35(eq44(adjustments.customerId, cid), eq44(adjustments.status, "submitted")));
-    const [leaveCount] = await db.select({ count: count11() }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(and35(eq44(employees.customerId, cid), eq44(leaveRecords.status, "submitted")));
-    const [overdueCount] = await db.select({ count: count11() }).from(invoices).where(and35(eq44(invoices.customerId, cid), eq44(invoices.status, "overdue")));
-    const [unpaidCount] = await db.select({ count: count11() }).from(invoices).where(and35(eq44(invoices.customerId, cid), eq44(invoices.status, "sent")));
+    const [adjCount] = await db.select({ count: count9() }).from(adjustments).where(and32(eq41(adjustments.customerId, cid), eq41(adjustments.status, "submitted")));
+    const [leaveCount] = await db.select({ count: count9() }).from(leaveRecords).innerJoin(employees, eq41(leaveRecords.employeeId, employees.id)).where(and32(eq41(employees.customerId, cid), eq41(leaveRecords.status, "submitted")));
+    const [overdueCount] = await db.select({ count: count9() }).from(invoices).where(and32(eq41(invoices.customerId, cid), eq41(invoices.status, "overdue")));
+    const [unpaidCount] = await db.select({ count: count9() }).from(invoices).where(and32(eq41(invoices.customerId, cid), eq41(invoices.status, "sent")));
     return {
       activeEmployees: empCount?.count ?? 0,
       activeCountries: activeCountries.length,
@@ -19809,8 +19186,8 @@ var portalDashboardRouter = portalRouter({
     const result = await db.select({
       countryCode: employees.country,
       countryName: countriesConfig.countryName,
-      count: count11()
-    }).from(employees).leftJoin(countriesConfig, eq44(employees.country, countriesConfig.countryCode)).where(and35(eq44(employees.customerId, cid), eq44(employees.status, "active"))).groupBy(employees.country, countriesConfig.countryName);
+      count: count9()
+    }).from(employees).leftJoin(countriesConfig, eq41(employees.country, countriesConfig.countryCode)).where(and32(eq41(employees.customerId, cid), eq41(employees.status, "active"))).groupBy(employees.country, countriesConfig.countryName);
     return result.map((r) => ({
       countryCode: r.countryCode,
       countryName: r.countryName || r.countryCode,
@@ -19826,25 +19203,25 @@ var portalDashboardRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const recentEmployees = await db.select({
       id: employees.id,
-      type: sql17`'employee'`,
-      title: sql17`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
+      type: sql15`'employee'`,
+      title: sql15`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
       status: employees.status,
       date: employees.updatedAt
-    }).from(employees).where(eq44(employees.customerId, cid)).orderBy(sql17`${employees.updatedAt} DESC`).limit(10);
+    }).from(employees).where(eq41(employees.customerId, cid)).orderBy(sql15`${employees.updatedAt} DESC`).limit(10);
     const recentAdj = await db.select({
       id: adjustments.id,
-      type: sql17`'adjustment'`,
+      type: sql15`'adjustment'`,
       title: adjustments.adjustmentType,
       status: adjustments.status,
       date: adjustments.updatedAt
-    }).from(adjustments).where(eq44(adjustments.customerId, cid)).orderBy(sql17`${adjustments.updatedAt} DESC`).limit(10);
+    }).from(adjustments).where(eq41(adjustments.customerId, cid)).orderBy(sql15`${adjustments.updatedAt} DESC`).limit(10);
     const recentLeave = await db.select({
       id: leaveRecords.id,
-      type: sql17`'leave'`,
-      title: sql17`CONCAT('Leave #', ${leaveRecords.id})`,
+      type: sql15`'leave'`,
+      title: sql15`CONCAT('Leave #', ${leaveRecords.id})`,
       status: leaveRecords.status,
       date: leaveRecords.updatedAt
-    }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(eq44(employees.customerId, cid)).orderBy(sql17`${leaveRecords.updatedAt} DESC`).limit(10);
+    }).from(leaveRecords).innerJoin(employees, eq41(leaveRecords.employeeId, employees.id)).where(eq41(employees.customerId, cid)).orderBy(sql15`${leaveRecords.updatedAt} DESC`).limit(10);
     const all = [...recentEmployees, ...recentAdj, ...recentLeave].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 20);
     return all;
   }),
@@ -19858,15 +19235,15 @@ var portalDashboardRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const result = await db.select({
       month: payrollRuns.payrollMonth,
-      totalGross: sql17`COALESCE(SUM(${payrollItems.gross}), 0)`,
-      totalNet: sql17`COALESCE(SUM(${payrollItems.net}), 0)`,
-      totalEmployerCost: sql17`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`,
+      totalGross: sql15`COALESCE(SUM(${payrollItems.gross}), 0)`,
+      totalNet: sql15`COALESCE(SUM(${payrollItems.net}), 0)`,
+      totalEmployerCost: sql15`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`,
       currency: payrollRuns.currency
-    }).from(payrollItems).innerJoin(payrollRuns, eq44(payrollItems.payrollRunId, payrollRuns.id)).innerJoin(employees, eq44(payrollItems.employeeId, employees.id)).where(
-      and35(
-        eq44(employees.customerId, cid),
-        sql17`${payrollRuns.status} IN ('approved', 'locked', 'paid')`,
-        sql17`${payrollRuns.payrollMonth} >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)`
+    }).from(payrollItems).innerJoin(payrollRuns, eq41(payrollItems.payrollRunId, payrollRuns.id)).innerJoin(employees, eq41(payrollItems.employeeId, employees.id)).where(
+      and32(
+        eq41(employees.customerId, cid),
+        sql15`${payrollRuns.status} IN ('approved', 'locked', 'paid')`,
+        sql15`${payrollRuns.payrollMonth} >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)`
       )
     ).groupBy(payrollRuns.payrollMonth, payrollRuns.currency).orderBy(payrollRuns.payrollMonth);
     return result.map((r) => ({
@@ -19886,8 +19263,8 @@ var portalDashboardRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const result = await db.select({
       status: employees.status,
-      count: count11()
-    }).from(employees).where(eq44(employees.customerId, cid)).groupBy(employees.status);
+      count: count9()
+    }).from(employees).where(eq41(employees.customerId, cid)).groupBy(employees.status);
     return result.map((r) => ({
       status: r.status,
       count: r.count
@@ -19896,9 +19273,9 @@ var portalDashboardRouter = portalRouter({
 });
 
 // server/portal/routers/portalEmployeesRouter.ts
-import { z as z34 } from "zod";
-import { TRPCError as TRPCError31 } from "@trpc/server";
-import { sql as sql18, eq as eq45, and as and36, count as count12 } from "drizzle-orm";
+import { z as z33 } from "zod";
+import { TRPCError as TRPCError30 } from "@trpc/server";
+import { sql as sql16, eq as eq42, and as and33, count as count10 } from "drizzle-orm";
 import crypto4 from "crypto";
 init_db2();
 init_schema();
@@ -19940,36 +19317,36 @@ var portalEmployeesRouter = portalRouter({
    * List employees — scoped to customerId
    */
   list: protectedPortalProcedure.input(
-    z34.object({
-      page: z34.number().min(1).default(1),
-      pageSize: z34.number().min(1).max(100).default(20),
-      search: z34.string().optional(),
-      status: z34.string().optional(),
-      country: z34.string().optional(),
-      serviceType: z34.string().optional()
+    z33.object({
+      page: z33.number().min(1).default(1),
+      pageSize: z33.number().min(1).max(100).default(20),
+      search: z33.string().optional(),
+      status: z33.string().optional(),
+      country: z33.string().optional(),
+      serviceType: z33.string().optional()
     })
   ).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const conditions = [eq45(employees.customerId, cid)];
+    const conditions = [eq42(employees.customerId, cid)];
     if (input.status) {
-      conditions.push(eq45(employees.status, input.status));
+      conditions.push(eq42(employees.status, input.status));
     }
     if (input.country) {
-      conditions.push(eq45(employees.country, input.country));
+      conditions.push(eq42(employees.country, input.country));
     }
     if (input.serviceType) {
-      conditions.push(eq45(employees.serviceType, input.serviceType));
+      conditions.push(eq42(employees.serviceType, input.serviceType));
     }
     if (input.search) {
       conditions.push(
-        sql18`(${employees.firstName} LIKE ${`%${input.search}%`} OR ${employees.lastName} LIKE ${`%${input.search}%`} OR ${employees.email} LIKE ${`%${input.search}%`})`
+        sql16`(${employees.firstName} LIKE ${`%${input.search}%`} OR ${employees.lastName} LIKE ${`%${input.search}%`} OR ${employees.email} LIKE ${`%${input.search}%`})`
       );
     }
-    const where = and36(...conditions);
-    const [totalResult] = await db.select({ count: count12() }).from(employees).where(where);
-    const items = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(where).orderBy(sql18`${employees.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    const where = and33(...conditions);
+    const [totalResult] = await db.select({ count: count10() }).from(employees).where(where);
+    const items = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(where).orderBy(sql16`${employees.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return {
       items,
       total: totalResult?.count ?? 0
@@ -19978,13 +19355,13 @@ var portalEmployeesRouter = portalRouter({
   /**
    * Get employee detail — scoped to customerId
    */
-  detail: protectedPortalProcedure.input(z34.object({ id: z34.number() })).query(async ({ input, ctx }) => {
+  detail: protectedPortalProcedure.input(z33.object({ id: z33.number() })).query(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(and36(eq45(employees.id, input.id), eq45(employees.customerId, cid)));
+    const [emp] = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(and33(eq42(employees.id, input.id), eq42(employees.customerId, cid)));
     if (!emp) {
-      throw new TRPCError31({ code: "NOT_FOUND", message: "Employee not found" });
+      throw new TRPCError30({ code: "NOT_FOUND", message: "Employee not found" });
     }
     const contracts = await db.select({
       id: employeeContracts.id,
@@ -19994,7 +19371,7 @@ var portalEmployeesRouter = portalRouter({
       effectiveDate: employeeContracts.effectiveDate,
       expiryDate: employeeContracts.expiryDate,
       status: employeeContracts.status
-    }).from(employeeContracts).where(eq45(employeeContracts.employeeId, input.id));
+    }).from(employeeContracts).where(eq42(employeeContracts.employeeId, input.id));
     const documents = await db.select({
       id: employeeDocuments.id,
       documentType: employeeDocuments.documentType,
@@ -20002,7 +19379,7 @@ var portalEmployeesRouter = portalRouter({
       fileUrl: employeeDocuments.fileUrl,
       mimeType: employeeDocuments.mimeType,
       uploadedAt: employeeDocuments.uploadedAt
-    }).from(employeeDocuments).where(eq45(employeeDocuments.employeeId, input.id));
+    }).from(employeeDocuments).where(eq42(employeeDocuments.employeeId, input.id));
     const balances = await db.select({
       id: leaveBalances.id,
       leaveTypeId: leaveBalances.leaveTypeId,
@@ -20011,7 +19388,7 @@ var portalEmployeesRouter = portalRouter({
       totalEntitlement: leaveBalances.totalEntitlement,
       used: leaveBalances.used,
       remaining: leaveBalances.remaining
-    }).from(leaveBalances).leftJoin(leaveTypes, eq45(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq45(leaveBalances.employeeId, input.id));
+    }).from(leaveBalances).leftJoin(leaveTypes, eq42(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq42(leaveBalances.employeeId, input.id));
     return {
       ...emp,
       contracts,
@@ -20024,34 +19401,34 @@ var portalEmployeesRouter = portalRouter({
    * Only HR managers and admins can do this
    */
   submitOnboarding: portalHrProcedure.input(
-    z34.object({
-      firstName: z34.string().min(1),
-      lastName: z34.string().min(1),
-      email: z34.string().email(),
-      phone: z34.string().optional(),
-      dateOfBirth: z34.string().optional(),
-      gender: z34.enum(["male", "female", "other", "prefer_not_to_say"]).optional(),
-      nationality: z34.string().optional(),
-      idType: z34.string().optional(),
-      idNumber: z34.string().optional(),
-      address: z34.string().optional(),
-      country: z34.string().min(1),
-      city: z34.string().optional(),
-      state: z34.string().optional(),
-      postalCode: z34.string().optional(),
-      department: z34.string().optional(),
-      jobTitle: z34.string().min(1),
-      serviceType: z34.enum(["eor", "visa_eor"]).default("eor"),
-      employmentType: z34.enum(["fixed_term", "long_term"]).default("long_term"),
-      startDate: z34.string().min(1),
-      endDate: z34.string().optional(),
-      baseSalary: z34.string().min(1),
-      salaryCurrency: z34.string().default("USD"),
-      requiresVisa: z34.boolean().default(false)
+    z33.object({
+      firstName: z33.string().min(1),
+      lastName: z33.string().min(1),
+      email: z33.string().email(),
+      phone: z33.string().optional(),
+      dateOfBirth: z33.string().optional(),
+      gender: z33.enum(["male", "female", "other", "prefer_not_to_say"]).optional(),
+      nationality: z33.string().optional(),
+      idType: z33.string().optional(),
+      idNumber: z33.string().optional(),
+      address: z33.string().optional(),
+      country: z33.string().min(1),
+      city: z33.string().optional(),
+      state: z33.string().optional(),
+      postalCode: z33.string().optional(),
+      department: z33.string().optional(),
+      jobTitle: z33.string().min(1),
+      serviceType: z33.enum(["eor", "visa_eor"]).default("eor"),
+      employmentType: z33.enum(["fixed_term", "long_term"]).default("long_term"),
+      startDate: z33.string().min(1),
+      endDate: z33.string().optional(),
+      baseSalary: z33.string().min(1),
+      salaryCurrency: z33.string().default("USD"),
+      requiresVisa: z33.boolean().default(false)
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     const result = await createEmployee({
       customerId: cid,
@@ -20080,7 +19457,7 @@ var portalEmployeesRouter = portalRouter({
       requiresVisa: input.requiresVisa,
       status: "pending_review"
     });
-    const [customer] = await db.select({ companyName: customers.companyName }).from(customers).where(eq45(customers.id, cid));
+    const [customer] = await db.select({ companyName: customers.companyName }).from(customers).where(eq42(customers.id, cid));
     notificationService.send({
       type: "new_employee_request",
       data: {
@@ -20097,22 +19474,22 @@ var portalEmployeesRouter = portalRouter({
    * Only HR managers and admins can do this
    */
   uploadDocument: portalHrProcedure.input(
-    z34.object({
-      employeeId: z34.number(),
-      documentType: z34.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "other"]),
-      documentName: z34.string().min(1),
-      fileBase64: z34.string(),
-      fileName: z34.string(),
-      mimeType: z34.string().default("application/pdf"),
-      fileSize: z34.number().optional()
+    z33.object({
+      employeeId: z33.number(),
+      documentType: z33.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "other"]),
+      documentName: z33.string().min(1),
+      fileBase64: z33.string(),
+      fileName: z33.string(),
+      mimeType: z33.string().default("application/pdf"),
+      fileSize: z33.number().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and36(eq45(employees.id, input.employeeId), eq45(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id }).from(employees).where(and33(eq42(employees.id, input.employeeId), eq42(employees.customerId, cid)));
     if (!emp) {
-      throw new TRPCError31({ code: "NOT_FOUND", message: "Employee not found" });
+      throw new TRPCError30({ code: "NOT_FOUND", message: "Employee not found" });
     }
     const fileBuffer = Buffer.from(input.fileBase64, "base64");
     const randomSuffix = Math.random().toString(36).substring(2, 10);
@@ -20139,13 +19516,13 @@ var portalEmployeesRouter = portalRouter({
       countryCode: countriesConfig.countryCode,
       countryName: countriesConfig.countryName,
       currency: countriesConfig.localCurrency
-    }).from(countriesConfig).where(eq45(countriesConfig.isActive, true)).orderBy(countriesConfig.countryName);
+    }).from(countriesConfig).where(eq42(countriesConfig.isActive, true)).orderBy(countriesConfig.countryName);
     return countries;
   }),
   /**
    * Get leave types for a specific country
    */
-  leaveTypesByCountry: protectedPortalProcedure.input(z34.object({ countryCode: z34.string() })).query(async ({ input }) => {
+  leaveTypesByCountry: protectedPortalProcedure.input(z33.object({ countryCode: z33.string() })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) return [];
     const types = await db.select({
@@ -20154,7 +19531,7 @@ var portalEmployeesRouter = portalRouter({
       annualEntitlement: leaveTypes.annualEntitlement,
       isPaid: leaveTypes.isPaid,
       requiresApproval: leaveTypes.requiresApproval
-    }).from(leaveTypes).where(eq45(leaveTypes.countryCode, input.countryCode));
+    }).from(leaveTypes).where(eq42(leaveTypes.countryCode, input.countryCode));
     return types;
   }),
   /**
@@ -20162,13 +19539,26 @@ var portalEmployeesRouter = portalRouter({
    * The employee will receive a link to fill in their own information
    */
   sendOnboardingInvite: portalHrProcedure.input(
-    z34.object({
-      employeeName: z34.string().min(1),
-      employeeEmail: z34.string().email()
+    z33.object({
+      employeeName: z33.string().min(1),
+      employeeEmail: z33.string().email(),
+      // Employer-provided fields from invite flow step 2
+      serviceType: z33.enum(["eor", "visa_eor", "aor"]).default("eor"),
+      country: z33.string().optional(),
+      jobTitle: z33.string().optional(),
+      department: z33.string().optional(),
+      startDate: z33.string().optional(),
+      endDate: z33.string().optional(),
+      employmentType: z33.string().optional(),
+      baseSalary: z33.string().optional(),
+      salaryCurrency: z33.string().optional(),
+      paymentFrequency: z33.string().optional(),
+      rateAmount: z33.string().optional(),
+      contractorCurrency: z33.string().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     const token = crypto4.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1e3);
@@ -20179,7 +19569,20 @@ var portalEmployeesRouter = portalRouter({
       token,
       status: "pending",
       expiresAt,
-      createdBy: ctx.portalUser.contactId
+      createdBy: ctx.portalUser.contactId,
+      // Employer-provided fields
+      serviceType: input.serviceType,
+      country: input.country || null,
+      jobTitle: input.jobTitle || null,
+      department: input.department || null,
+      startDate: input.startDate || null,
+      endDate: input.endDate || null,
+      employmentType: input.employmentType || null,
+      baseSalary: input.baseSalary || null,
+      salaryCurrency: input.salaryCurrency || null,
+      paymentFrequency: input.paymentFrequency || null,
+      rateAmount: input.rateAmount || null,
+      contractorCurrency: input.contractorCurrency || null
     });
     return { success: true, token };
   }),
@@ -20196,47 +19599,49 @@ var portalEmployeesRouter = portalRouter({
       employeeEmail: onboardingInvites.employeeEmail,
       token: onboardingInvites.token,
       status: onboardingInvites.status,
+      serviceType: onboardingInvites.serviceType,
       employeeId: onboardingInvites.employeeId,
+      contractorId: onboardingInvites.contractorId,
       expiresAt: onboardingInvites.expiresAt,
       completedAt: onboardingInvites.completedAt,
       createdAt: onboardingInvites.createdAt
-    }).from(onboardingInvites).where(eq45(onboardingInvites.customerId, cid)).orderBy(sql18`${onboardingInvites.createdAt} DESC`);
+    }).from(onboardingInvites).where(eq42(onboardingInvites.customerId, cid)).orderBy(sql16`${onboardingInvites.createdAt} DESC`);
     return invites;
   }),
   /**
    * Resend an onboarding invite (regenerate token + extend expiry)
    */
-  resendOnboardingInvite: portalHrProcedure.input(z34.object({ id: z34.number() })).mutation(async ({ input, ctx }) => {
+  resendOnboardingInvite: portalHrProcedure.input(z33.object({ id: z33.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     const [invite] = await db.select().from(onboardingInvites).where(
-      and36(
-        eq45(onboardingInvites.id, input.id),
-        eq45(onboardingInvites.customerId, cid),
-        eq45(onboardingInvites.status, "pending")
+      and33(
+        eq42(onboardingInvites.id, input.id),
+        eq42(onboardingInvites.customerId, cid),
+        eq42(onboardingInvites.status, "pending")
       )
     );
     if (!invite) {
-      throw new TRPCError31({ code: "NOT_FOUND", message: "Invite not found or not pending" });
+      throw new TRPCError30({ code: "NOT_FOUND", message: "Invite not found or not pending" });
     }
     const newToken = crypto4.randomBytes(32).toString("hex");
     const newExpiresAt = new Date(Date.now() + 72 * 60 * 60 * 1e3);
-    await db.update(onboardingInvites).set({ token: newToken, expiresAt: newExpiresAt }).where(eq45(onboardingInvites.id, input.id));
+    await db.update(onboardingInvites).set({ token: newToken, expiresAt: newExpiresAt }).where(eq42(onboardingInvites.id, input.id));
     return { success: true, token: newToken };
   }),
   /**
    * Cancel an onboarding invite
    */
-  cancelOnboardingInvite: portalHrProcedure.input(z34.object({ id: z34.number() })).mutation(async ({ input, ctx }) => {
+  cancelOnboardingInvite: portalHrProcedure.input(z33.object({ id: z33.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     await db.update(onboardingInvites).set({ status: "cancelled" }).where(
-      and36(
-        eq45(onboardingInvites.id, input.id),
-        eq45(onboardingInvites.customerId, cid),
-        eq45(onboardingInvites.status, "pending")
+      and33(
+        eq42(onboardingInvites.id, input.id),
+        eq42(onboardingInvites.customerId, cid),
+        eq42(onboardingInvites.status, "pending")
       )
     );
     return { success: true };
@@ -20244,17 +19649,29 @@ var portalEmployeesRouter = portalRouter({
   /**
    * Validate self-service onboarding token (public — no auth required)
    */
-  validateOnboardingToken: portalPublicProcedure.input(z34.object({ token: z34.string() })).query(async ({ input }) => {
+  validateOnboardingToken: portalPublicProcedure.input(z33.object({ token: z33.string() })).query(async ({ input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const [invite] = await db.select({
       id: onboardingInvites.id,
       employeeName: onboardingInvites.employeeName,
       employeeEmail: onboardingInvites.employeeEmail,
       status: onboardingInvites.status,
       expiresAt: onboardingInvites.expiresAt,
-      customerId: onboardingInvites.customerId
-    }).from(onboardingInvites).where(eq45(onboardingInvites.token, input.token));
+      customerId: onboardingInvites.customerId,
+      serviceType: onboardingInvites.serviceType,
+      country: onboardingInvites.country,
+      jobTitle: onboardingInvites.jobTitle,
+      department: onboardingInvites.department,
+      startDate: onboardingInvites.startDate,
+      endDate: onboardingInvites.endDate,
+      employmentType: onboardingInvites.employmentType,
+      baseSalary: onboardingInvites.baseSalary,
+      salaryCurrency: onboardingInvites.salaryCurrency,
+      paymentFrequency: onboardingInvites.paymentFrequency,
+      rateAmount: onboardingInvites.rateAmount,
+      contractorCurrency: onboardingInvites.contractorCurrency
+    }).from(onboardingInvites).where(eq42(onboardingInvites.token, input.token));
     if (!invite) {
       return { valid: false, reason: "Invalid invite link" };
     }
@@ -20262,13 +19679,25 @@ var portalEmployeesRouter = portalRouter({
       return { valid: false, reason: invite.status === "completed" ? "This form has already been submitted" : "This invite has been cancelled or expired" };
     }
     if (new Date(invite.expiresAt) < /* @__PURE__ */ new Date()) {
-      await db.update(onboardingInvites).set({ status: "expired" }).where(eq45(onboardingInvites.id, invite.id));
+      await db.update(onboardingInvites).set({ status: "expired" }).where(eq42(onboardingInvites.id, invite.id));
       return { valid: false, reason: "This invite link has expired" };
     }
     return {
       valid: true,
       employeeName: invite.employeeName,
-      employeeEmail: invite.employeeEmail
+      employeeEmail: invite.employeeEmail,
+      serviceType: invite.serviceType,
+      country: invite.country,
+      jobTitle: invite.jobTitle,
+      department: invite.department,
+      startDate: invite.startDate,
+      endDate: invite.endDate,
+      employmentType: invite.employmentType,
+      baseSalary: invite.baseSalary,
+      salaryCurrency: invite.salaryCurrency,
+      paymentFrequency: invite.paymentFrequency,
+      rateAmount: invite.rateAmount,
+      contractorCurrency: invite.contractorCurrency
     };
   }),
   /**
@@ -20276,101 +19705,141 @@ var portalEmployeesRouter = portalRouter({
    * Employee fills in their own information
    */
   submitSelfServiceOnboarding: portalPublicProcedure.input(
-    z34.object({
-      token: z34.string(),
-      firstName: z34.string().min(1),
-      lastName: z34.string().min(1),
-      email: z34.string().email(),
-      phone: z34.string().optional(),
-      dateOfBirth: z34.string().optional(),
-      gender: z34.enum(["male", "female", "other", "prefer_not_to_say"]).optional(),
-      nationality: z34.string().optional(),
-      idType: z34.string().optional(),
-      idNumber: z34.string().optional(),
-      address: z34.string().optional(),
-      country: z34.string().min(1),
-      city: z34.string().optional(),
-      state: z34.string().optional(),
-      postalCode: z34.string().optional(),
-      jobTitle: z34.string().min(1),
-      department: z34.string().optional(),
-      startDate: z34.string().min(1)
+    z33.object({
+      token: z33.string(),
+      firstName: z33.string().min(1),
+      lastName: z33.string().min(1),
+      email: z33.string().email(),
+      phone: z33.string().optional(),
+      dateOfBirth: z33.string().optional(),
+      gender: z33.enum(["male", "female", "other", "prefer_not_to_say"]).optional(),
+      nationality: z33.string().optional(),
+      idType: z33.string().optional(),
+      idNumber: z33.string().optional(),
+      address: z33.string().optional(),
+      country: z33.string().min(1),
+      city: z33.string().optional(),
+      state: z33.string().optional(),
+      postalCode: z33.string().optional(),
+      jobTitle: z33.string().min(1),
+      department: z33.string().optional(),
+      startDate: z33.string().min(1)
     })
   ).mutation(async ({ input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const [invite] = await db.select().from(onboardingInvites).where(
-      and36(
-        eq45(onboardingInvites.token, input.token),
-        eq45(onboardingInvites.status, "pending")
+      and33(
+        eq42(onboardingInvites.token, input.token),
+        eq42(onboardingInvites.status, "pending")
       )
     );
     if (!invite) {
-      throw new TRPCError31({ code: "NOT_FOUND", message: "Invalid or expired invite" });
+      throw new TRPCError30({ code: "NOT_FOUND", message: "Invalid or expired invite" });
     }
     if (new Date(invite.expiresAt) < /* @__PURE__ */ new Date()) {
-      await db.update(onboardingInvites).set({ status: "expired" }).where(eq45(onboardingInvites.id, invite.id));
-      throw new TRPCError31({ code: "BAD_REQUEST", message: "This invite has expired" });
+      await db.update(onboardingInvites).set({ status: "expired" }).where(eq42(onboardingInvites.id, invite.id));
+      throw new TRPCError30({ code: "BAD_REQUEST", message: "This invite has expired" });
     }
-    const result = await createEmployee({
-      customerId: invite.customerId,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      email: input.email,
-      phone: input.phone || null,
-      dateOfBirth: input.dateOfBirth || null,
-      gender: input.gender || null,
-      nationality: input.nationality || null,
-      idType: input.idType || null,
-      idNumber: input.idNumber || null,
-      address: input.address || null,
-      country: input.country,
-      city: input.city || null,
-      state: input.state || null,
-      postalCode: input.postalCode || null,
-      department: input.department || null,
-      jobTitle: input.jobTitle,
-      serviceType: "eor",
-      employmentType: "long_term",
-      startDate: input.startDate,
-      baseSalary: "0",
-      // To be set by employer
-      salaryCurrency: "USD",
-      status: "pending_review"
-    });
-    const employeeId = result[0]?.insertId;
-    await db.update(onboardingInvites).set({
-      status: "completed",
-      employeeId,
-      completedAt: /* @__PURE__ */ new Date()
-    }).where(eq45(onboardingInvites.id, invite.id));
-    return { success: true, employeeId };
+    const serviceType = invite.serviceType || "eor";
+    const country = invite.country || input.country;
+    const jobTitle = invite.jobTitle || input.jobTitle;
+    const department = invite.department || input.department;
+    const startDate = invite.startDate || input.startDate;
+    if (serviceType === "aor") {
+      const result = await createContractor({
+        customerId: invite.customerId,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email,
+        phone: input.phone || null,
+        dateOfBirth: input.dateOfBirth || null,
+        nationality: input.nationality || null,
+        idType: input.idType || null,
+        idNumber: input.idNumber || null,
+        address: input.address || null,
+        country,
+        city: input.city || null,
+        state: input.state || null,
+        postalCode: input.postalCode || null,
+        department: department || null,
+        jobTitle,
+        startDate,
+        endDate: invite.endDate || null,
+        currency: invite.contractorCurrency || "USD",
+        paymentFrequency: invite.paymentFrequency || "monthly",
+        rateType: invite.paymentFrequency === "milestone" ? "milestone_only" : "fixed_monthly",
+        rateAmount: invite.rateAmount || null,
+        status: "pending_review"
+      });
+      const contractorId = result[0]?.id;
+      await db.update(onboardingInvites).set({
+        status: "completed",
+        contractorId,
+        completedAt: /* @__PURE__ */ new Date()
+      }).where(eq42(onboardingInvites.id, invite.id));
+      return { success: true, contractorId };
+    } else {
+      const result = await createEmployee({
+        customerId: invite.customerId,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email,
+        phone: input.phone || null,
+        dateOfBirth: input.dateOfBirth || null,
+        gender: input.gender || null,
+        nationality: input.nationality || null,
+        idType: input.idType || null,
+        idNumber: input.idNumber || null,
+        address: input.address || null,
+        country,
+        city: input.city || null,
+        state: input.state || null,
+        postalCode: input.postalCode || null,
+        department: department || null,
+        jobTitle,
+        serviceType,
+        employmentType: invite.employmentType || "long_term",
+        startDate,
+        endDate: invite.endDate || null,
+        baseSalary: invite.baseSalary || "0",
+        salaryCurrency: invite.salaryCurrency || "USD",
+        status: "pending_review"
+      });
+      const employeeId = result[0]?.insertId;
+      await db.update(onboardingInvites).set({
+        status: "completed",
+        employeeId,
+        completedAt: /* @__PURE__ */ new Date()
+      }).where(eq42(onboardingInvites.id, invite.id));
+      return { success: true, employeeId };
+    }
   }),
   /**
    * Upload document for self-service onboarding (public — uses token)
    */
   uploadSelfServiceDocument: portalPublicProcedure.input(
-    z34.object({
-      token: z34.string(),
-      employeeId: z34.number(),
-      documentType: z34.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "other"]),
-      documentName: z34.string().min(1),
-      fileBase64: z34.string(),
-      fileName: z34.string(),
-      mimeType: z34.string().default("application/pdf"),
-      fileSize: z34.number().optional()
+    z33.object({
+      token: z33.string(),
+      employeeId: z33.number(),
+      documentType: z33.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "other"]),
+      documentName: z33.string().min(1),
+      fileBase64: z33.string(),
+      fileName: z33.string(),
+      mimeType: z33.string().default("application/pdf"),
+      fileSize: z33.number().optional()
     })
   ).mutation(async ({ input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const [invite] = await db.select().from(onboardingInvites).where(
-      and36(
-        eq45(onboardingInvites.token, input.token),
-        eq45(onboardingInvites.employeeId, input.employeeId)
+      and33(
+        eq42(onboardingInvites.token, input.token),
+        eq42(onboardingInvites.employeeId, input.employeeId)
       )
     );
     if (!invite) {
-      throw new TRPCError31({ code: "FORBIDDEN", message: "Invalid token or employee" });
+      throw new TRPCError30({ code: "FORBIDDEN", message: "Invalid token or employee" });
     }
     const fileBuffer = Buffer.from(input.fileBase64, "base64");
     const randomSuffix = Math.random().toString(36).substring(2, 10);
@@ -20391,32 +19860,32 @@ var portalEmployeesRouter = portalRouter({
    * Delete an employee — only allowed for pending_review status
    * Only HR managers and admins can do this
    */
-  delete: portalHrProcedure.input(z34.object({ id: z34.number() })).mutation(async ({ input, ctx }) => {
+  delete: portalHrProcedure.input(z33.object({ id: z33.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(and36(eq45(employees.id, input.id), eq45(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(and33(eq42(employees.id, input.id), eq42(employees.customerId, cid)));
     if (!emp) {
-      throw new TRPCError31({ code: "NOT_FOUND", message: "Employee not found" });
+      throw new TRPCError30({ code: "NOT_FOUND", message: "Employee not found" });
     }
     if (emp.status !== "pending_review") {
-      throw new TRPCError31({
+      throw new TRPCError30({
         code: "BAD_REQUEST",
         message: "Only employees in pending review status can be deleted"
       });
     }
-    await db.delete(employeeDocuments).where(eq45(employeeDocuments.employeeId, input.id));
-    await db.delete(employeeContracts).where(eq45(employeeContracts.employeeId, input.id));
-    await db.delete(leaveBalances).where(eq45(leaveBalances.employeeId, input.id));
-    await db.delete(employees).where(eq45(employees.id, input.id));
+    await db.delete(employeeDocuments).where(eq42(employeeDocuments.employeeId, input.id));
+    await db.delete(employeeContracts).where(eq42(employeeContracts.employeeId, input.id));
+    await db.delete(leaveBalances).where(eq42(leaveBalances.employeeId, input.id));
+    await db.delete(employees).where(eq42(employees.id, input.id));
     return { success: true };
   })
 });
 
 // server/portal/routers/portalAdjustmentsRouter.ts
-import { z as z35 } from "zod";
-import { TRPCError as TRPCError32 } from "@trpc/server";
-import { sql as sql19, eq as eq46, and as and37, count as count13 } from "drizzle-orm";
+import { z as z34 } from "zod";
+import { TRPCError as TRPCError31 } from "@trpc/server";
+import { sql as sql17, eq as eq43, and as and34, count as count11 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalAdjustmentsRouter = portalRouter({
@@ -20424,29 +19893,29 @@ var portalAdjustmentsRouter = portalRouter({
    * List adjustments — scoped to customerId
    */
   list: protectedPortalProcedure.input(
-    z35.object({
-      page: z35.number().min(1).default(1),
-      pageSize: z35.number().min(1).max(100).default(20),
-      status: z35.string().optional(),
-      effectiveMonth: z35.string().optional(),
-      employeeId: z35.number().optional()
+    z34.object({
+      page: z34.number().min(1).default(1),
+      pageSize: z34.number().min(1).max(100).default(20),
+      status: z34.string().optional(),
+      effectiveMonth: z34.string().optional(),
+      employeeId: z34.number().optional()
     })
   ).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const conditions = [eq46(adjustments.customerId, cid)];
+    const conditions = [eq43(adjustments.customerId, cid)];
     if (input.status) {
-      conditions.push(eq46(adjustments.status, input.status));
+      conditions.push(eq43(adjustments.status, input.status));
     }
     if (input.effectiveMonth) {
-      conditions.push(eq46(adjustments.effectiveMonth, input.effectiveMonth));
+      conditions.push(eq43(adjustments.effectiveMonth, input.effectiveMonth));
     }
     if (input.employeeId) {
-      conditions.push(eq46(adjustments.employeeId, input.employeeId));
+      conditions.push(eq43(adjustments.employeeId, input.employeeId));
     }
-    const where = and37(...conditions);
-    const [totalResult] = await db.select({ count: count13() }).from(adjustments).where(where);
+    const where = and34(...conditions);
+    const [totalResult] = await db.select({ count: count11() }).from(adjustments).where(where);
     const items = await db.select({
       id: adjustments.id,
       employeeId: adjustments.employeeId,
@@ -20469,7 +19938,7 @@ var portalAdjustmentsRouter = portalRouter({
       // Join employee name
       employeeFirstName: employees.firstName,
       employeeLastName: employees.lastName
-    }).from(adjustments).innerJoin(employees, eq46(adjustments.employeeId, employees.id)).where(where).orderBy(sql19`${adjustments.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(adjustments).innerJoin(employees, eq43(adjustments.employeeId, employees.id)).where(where).orderBy(sql17`${adjustments.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return {
       items,
       total: totalResult?.count ?? 0
@@ -20479,24 +19948,24 @@ var portalAdjustmentsRouter = portalRouter({
    * Create adjustment — only HR managers and admins
    */
   create: portalHrProcedure.input(
-    z35.object({
-      employeeId: z35.number(),
-      adjustmentType: z35.enum(["bonus", "allowance", "reimbursement", "deduction", "other"]),
-      category: z35.enum(["housing", "transport", "meals", "performance_bonus", "year_end_bonus", "overtime", "travel_reimbursement", "equipment_reimbursement", "absence_deduction", "other"]).optional(),
-      amount: z35.string(),
-      currency: z35.string().default("USD"),
-      effectiveMonth: z35.string(),
-      description: z35.string().optional(),
-      receiptFileUrl: z35.string().optional(),
-      receiptFileKey: z35.string().optional()
+    z34.object({
+      employeeId: z34.number(),
+      adjustmentType: z34.enum(["bonus", "allowance", "reimbursement", "deduction", "other"]),
+      category: z34.enum(["housing", "transport", "meals", "performance_bonus", "year_end_bonus", "overtime", "travel_reimbursement", "equipment_reimbursement", "absence_deduction", "other"]).optional(),
+      amount: z34.string(),
+      currency: z34.string().default("USD"),
+      effectiveMonth: z34.string(),
+      description: z34.string().optional(),
+      receiptFileUrl: z34.string().optional(),
+      receiptFileKey: z34.string().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and37(eq46(employees.id, input.employeeId), eq46(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id }).from(employees).where(and34(eq43(employees.id, input.employeeId), eq43(employees.customerId, cid)));
     if (!emp) {
-      throw new TRPCError32({ code: "NOT_FOUND", message: "Employee not found" });
+      throw new TRPCError31({ code: "NOT_FOUND", message: "Employee not found" });
     }
     const parts = input.effectiveMonth.split("-");
     const normalizedMonth = `${parts[0]}-${parts[1].padStart(2, "0")}-01`;
@@ -20520,23 +19989,23 @@ var portalAdjustmentsRouter = portalRouter({
    * Update adjustment — only if status is 'submitted' (not locked)
    */
   update: portalHrProcedure.input(
-    z35.object({
-      id: z35.number(),
-      amount: z35.string().optional(),
-      description: z35.string().optional(),
-      receiptFileUrl: z35.string().optional(),
-      receiptFileKey: z35.string().optional()
+    z34.object({
+      id: z34.number(),
+      amount: z34.string().optional(),
+      description: z34.string().optional(),
+      receiptFileUrl: z34.string().optional(),
+      receiptFileKey: z34.string().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and37(eq46(adjustments.id, input.id), eq46(adjustments.customerId, cid)));
+    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and34(eq43(adjustments.id, input.id), eq43(adjustments.customerId, cid)));
     if (!adj) {
-      throw new TRPCError32({ code: "NOT_FOUND", message: "Adjustment not found" });
+      throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
     }
     if (adj.status !== "submitted") {
-      throw new TRPCError32({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be edited" });
+      throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be edited" });
     }
     const updates = {};
     if (input.amount !== void 0) updates.amount = input.amount;
@@ -20544,86 +20013,86 @@ var portalAdjustmentsRouter = portalRouter({
     if (input.receiptFileUrl !== void 0) updates.receiptFileUrl = input.receiptFileUrl;
     if (input.receiptFileKey !== void 0) updates.receiptFileKey = input.receiptFileKey;
     if (Object.keys(updates).length > 0) {
-      await db.update(adjustments).set(updates).where(eq46(adjustments.id, input.id));
+      await db.update(adjustments).set(updates).where(eq43(adjustments.id, input.id));
     }
     return { success: true };
   }),
   /**
    * Delete adjustment — only if status is 'submitted'
    */
-  delete: portalHrProcedure.input(z35.object({ id: z35.number() })).mutation(async ({ input, ctx }) => {
+  delete: portalHrProcedure.input(z34.object({ id: z34.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and37(eq46(adjustments.id, input.id), eq46(adjustments.customerId, cid)));
+    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and34(eq43(adjustments.id, input.id), eq43(adjustments.customerId, cid)));
     if (!adj) {
-      throw new TRPCError32({ code: "NOT_FOUND", message: "Adjustment not found" });
+      throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
     }
     if (adj.status !== "submitted") {
-      throw new TRPCError32({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be deleted" });
+      throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be deleted" });
     }
-    await db.delete(adjustments).where(eq46(adjustments.id, input.id));
+    await db.delete(adjustments).where(eq43(adjustments.id, input.id));
     return { success: true };
   }),
   /**
    * Client approve adjustment — HR manager / admin approves a submitted adjustment
    */
-  approve: portalHrProcedure.input(z35.object({ id: z35.number() })).mutation(async ({ input, ctx }) => {
+  approve: portalHrProcedure.input(z34.object({ id: z34.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and37(eq46(adjustments.id, input.id), eq46(adjustments.customerId, cid)));
+    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and34(eq43(adjustments.id, input.id), eq43(adjustments.customerId, cid)));
     if (!adj) {
-      throw new TRPCError32({ code: "NOT_FOUND", message: "Adjustment not found" });
+      throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
     }
     if (adj.status !== "submitted") {
-      throw new TRPCError32({ code: "FORBIDDEN", message: "Only submitted adjustments can be approved" });
+      throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be approved" });
     }
     await db.update(adjustments).set({
       status: "client_approved",
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date()
-    }).where(eq46(adjustments.id, input.id));
+    }).where(eq43(adjustments.id, input.id));
     return { success: true };
   }),
   /**
    * Client reject adjustment
    */
-  reject: portalHrProcedure.input(z35.object({
-    id: z35.number(),
-    reason: z35.string().optional()
+  reject: portalHrProcedure.input(z34.object({
+    id: z34.number(),
+    reason: z34.string().optional()
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and37(eq46(adjustments.id, input.id), eq46(adjustments.customerId, cid)));
+    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and34(eq43(adjustments.id, input.id), eq43(adjustments.customerId, cid)));
     if (!adj) {
-      throw new TRPCError32({ code: "NOT_FOUND", message: "Adjustment not found" });
+      throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
     }
     if (adj.status !== "submitted") {
-      throw new TRPCError32({ code: "FORBIDDEN", message: "Only submitted adjustments can be rejected" });
+      throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be rejected" });
     }
     await db.update(adjustments).set({
       status: "client_rejected",
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date(),
       clientRejectionReason: input.reason || null
-    }).where(eq46(adjustments.id, input.id));
+    }).where(eq43(adjustments.id, input.id));
     return { success: true };
   }),
   /**
    * Upload receipt file for an adjustment
    */
   uploadReceipt: portalHrProcedure.input(
-    z35.object({
-      fileBase64: z35.string(),
-      fileName: z35.string(),
-      mimeType: z35.string().default("application/pdf")
+    z34.object({
+      fileBase64: z34.string(),
+      fileName: z34.string(),
+      mimeType: z34.string().default("application/pdf")
     })
   ).mutation(async ({ input }) => {
     const fileBuffer = Buffer.from(input.fileBase64, "base64");
     if (fileBuffer.length > 20 * 1024 * 1024) {
-      throw new TRPCError32({ code: "BAD_REQUEST", message: "File size must be under 20MB" });
+      throw new TRPCError31({ code: "BAD_REQUEST", message: "File size must be under 20MB" });
     }
     const randomSuffix = Math.random().toString(36).substring(2, 10);
     const fileKey = `adjustment-receipts/${Date.now()}-${randomSuffix}-${input.fileName}`;
@@ -20633,9 +20102,9 @@ var portalAdjustmentsRouter = portalRouter({
 });
 
 // server/portal/routers/portalLeaveRouter.ts
-import { z as z36 } from "zod";
-import { TRPCError as TRPCError33 } from "@trpc/server";
-import { sql as sql20, eq as eq47, and as and38, count as count14 } from "drizzle-orm";
+import { z as z35 } from "zod";
+import { TRPCError as TRPCError32 } from "@trpc/server";
+import { sql as sql18, eq as eq44, and as and35, count as count12 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalLeaveRouter = portalRouter({
@@ -20643,25 +20112,25 @@ var portalLeaveRouter = portalRouter({
    * List leave records — scoped to customerId via employee join
    */
   list: protectedPortalProcedure.input(
-    z36.object({
-      page: z36.number().min(1).default(1),
-      pageSize: z36.number().min(1).max(100).default(20),
-      status: z36.string().optional(),
-      employeeId: z36.number().optional()
+    z35.object({
+      page: z35.number().min(1).default(1),
+      pageSize: z35.number().min(1).max(100).default(20),
+      status: z35.string().optional(),
+      employeeId: z35.number().optional()
     })
   ).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const conditions = [eq47(employees.customerId, cid)];
+    const conditions = [eq44(employees.customerId, cid)];
     if (input.status) {
-      conditions.push(eq47(leaveRecords.status, input.status));
+      conditions.push(eq44(leaveRecords.status, input.status));
     }
     if (input.employeeId) {
-      conditions.push(eq47(leaveRecords.employeeId, input.employeeId));
+      conditions.push(eq44(leaveRecords.employeeId, input.employeeId));
     }
-    const where = and38(...conditions);
-    const [totalResult] = await db.select({ count: count14() }).from(leaveRecords).innerJoin(employees, eq47(leaveRecords.employeeId, employees.id)).where(where);
+    const where = and35(...conditions);
+    const [totalResult] = await db.select({ count: count12() }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(where);
     const items = await db.select({
       id: leaveRecords.id,
       employeeId: leaveRecords.employeeId,
@@ -20683,17 +20152,17 @@ var portalLeaveRouter = portalRouter({
       employeeLastName: employees.lastName,
       // Leave type info
       leaveTypeName: leaveTypes.leaveTypeName
-    }).from(leaveRecords).innerJoin(employees, eq47(leaveRecords.employeeId, employees.id)).leftJoin(leaveTypes, eq47(leaveRecords.leaveTypeId, leaveTypes.id)).where(where).orderBy(sql20`${leaveRecords.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).leftJoin(leaveTypes, eq44(leaveRecords.leaveTypeId, leaveTypes.id)).where(where).orderBy(sql18`${leaveRecords.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return { items, total: totalResult?.count ?? 0 };
   }),
   /**
    * Get leave balances for an employee — scoped to customerId
    */
-  balances: protectedPortalProcedure.input(z36.object({ employeeId: z36.number() })).query(async ({ input, ctx }) => {
+  balances: protectedPortalProcedure.input(z35.object({ employeeId: z35.number() })).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) return [];
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and38(eq47(employees.id, input.employeeId), eq47(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id }).from(employees).where(and35(eq44(employees.id, input.employeeId), eq44(employees.customerId, cid)));
     if (!emp) return [];
     const balances = await db.select({
       id: leaveBalances.id,
@@ -20703,28 +20172,28 @@ var portalLeaveRouter = portalRouter({
       used: leaveBalances.used,
       remaining: leaveBalances.remaining,
       leaveTypeName: leaveTypes.leaveTypeName
-    }).from(leaveBalances).leftJoin(leaveTypes, eq47(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq47(leaveBalances.employeeId, input.employeeId));
+    }).from(leaveBalances).leftJoin(leaveTypes, eq44(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq44(leaveBalances.employeeId, input.employeeId));
     return balances;
   }),
   /**
    * Submit leave record — only HR managers and admins
    */
   create: portalHrProcedure.input(
-    z36.object({
-      employeeId: z36.number(),
-      leaveTypeId: z36.number(),
-      startDate: z36.string(),
-      endDate: z36.string(),
-      days: z36.string(),
-      reason: z36.string().optional()
+    z35.object({
+      employeeId: z35.number(),
+      leaveTypeId: z35.number(),
+      startDate: z35.string(),
+      endDate: z35.string(),
+      days: z35.string(),
+      reason: z35.string().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError33({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and38(eq47(employees.id, input.employeeId), eq47(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id }).from(employees).where(and35(eq44(employees.id, input.employeeId), eq44(employees.customerId, cid)));
     if (!emp) {
-      throw new TRPCError33({ code: "NOT_FOUND", message: "Employee not found" });
+      throw new TRPCError32({ code: "NOT_FOUND", message: "Employee not found" });
     }
     const result = await db.insert(leaveRecords).values({
       employeeId: input.employeeId,
@@ -20740,80 +20209,80 @@ var portalLeaveRouter = portalRouter({
   /**
    * Delete leave record — only if status is 'submitted'
    */
-  delete: portalHrProcedure.input(z36.object({ id: z36.number() })).mutation(async ({ input, ctx }) => {
+  delete: portalHrProcedure.input(z35.object({ id: z35.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError33({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq47(leaveRecords.employeeId, employees.id)).where(and38(eq47(leaveRecords.id, input.id), eq47(employees.customerId, cid)));
+    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(and35(eq44(leaveRecords.id, input.id), eq44(employees.customerId, cid)));
     if (records.length === 0) {
-      throw new TRPCError33({ code: "NOT_FOUND", message: "Leave record not found" });
+      throw new TRPCError32({ code: "NOT_FOUND", message: "Leave record not found" });
     }
     if (records[0].status !== "submitted") {
-      throw new TRPCError33({ code: "FORBIDDEN", message: "Leave record is locked and cannot be deleted" });
+      throw new TRPCError32({ code: "FORBIDDEN", message: "Leave record is locked and cannot be deleted" });
     }
-    await db.delete(leaveRecords).where(eq47(leaveRecords.id, input.id));
+    await db.delete(leaveRecords).where(eq44(leaveRecords.id, input.id));
     return { success: true };
   }),
   /**
    * Client approve leave record — HR manager / admin approves a submitted leave
    */
-  approve: portalHrProcedure.input(z36.object({ id: z36.number() })).mutation(async ({ input, ctx }) => {
+  approve: portalHrProcedure.input(z35.object({ id: z35.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError33({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq47(leaveRecords.employeeId, employees.id)).where(and38(eq47(leaveRecords.id, input.id), eq47(employees.customerId, cid)));
+    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(and35(eq44(leaveRecords.id, input.id), eq44(employees.customerId, cid)));
     if (records.length === 0) {
-      throw new TRPCError33({ code: "NOT_FOUND", message: "Leave record not found" });
+      throw new TRPCError32({ code: "NOT_FOUND", message: "Leave record not found" });
     }
     if (records[0].status !== "submitted") {
-      throw new TRPCError33({ code: "FORBIDDEN", message: "Only submitted leave records can be approved" });
+      throw new TRPCError32({ code: "FORBIDDEN", message: "Only submitted leave records can be approved" });
     }
     await db.update(leaveRecords).set({
       status: "client_approved",
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date()
-    }).where(eq47(leaveRecords.id, input.id));
+    }).where(eq44(leaveRecords.id, input.id));
     return { success: true };
   }),
   /**
    * Client reject leave record
    */
-  reject: portalHrProcedure.input(z36.object({
-    id: z36.number(),
-    reason: z36.string().optional()
+  reject: portalHrProcedure.input(z35.object({
+    id: z35.number(),
+    reason: z35.string().optional()
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError33({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq47(leaveRecords.employeeId, employees.id)).where(and38(eq47(leaveRecords.id, input.id), eq47(employees.customerId, cid)));
+    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(and35(eq44(leaveRecords.id, input.id), eq44(employees.customerId, cid)));
     if (records.length === 0) {
-      throw new TRPCError33({ code: "NOT_FOUND", message: "Leave record not found" });
+      throw new TRPCError32({ code: "NOT_FOUND", message: "Leave record not found" });
     }
     if (records[0].status !== "submitted") {
-      throw new TRPCError33({ code: "FORBIDDEN", message: "Only submitted leave records can be rejected" });
+      throw new TRPCError32({ code: "FORBIDDEN", message: "Only submitted leave records can be rejected" });
     }
     await db.update(leaveRecords).set({
       status: "client_rejected",
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date(),
       clientRejectionReason: input.reason || null
-    }).where(eq47(leaveRecords.id, input.id));
+    }).where(eq44(leaveRecords.id, input.id));
     return { success: true };
   }),
   /**
    * Get public holidays for countries where this customer has active employees
    */
-  publicHolidays: protectedPortalProcedure.input(z36.object({ year: z36.number().default(2026) })).query(async ({ input, ctx }) => {
+  publicHolidays: protectedPortalProcedure.input(z35.object({ year: z35.number().default(2026) })).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) return [];
     const cid = ctx.portalUser.customerId;
-    const activeCountries = await db.select({ country: employees.country }).from(employees).where(and38(eq47(employees.customerId, cid), eq47(employees.status, "active"))).groupBy(employees.country);
+    const activeCountries = await db.select({ country: employees.country }).from(employees).where(and35(eq44(employees.customerId, cid), eq44(employees.status, "active"))).groupBy(employees.country);
     if (activeCountries.length === 0) return [];
     const countryCodes = activeCountries.map((c) => c.country);
     const holidays = await db.select().from(publicHolidays).where(
-      and38(
-        sql20`${publicHolidays.countryCode} IN (${sql20.join(countryCodes.map((c) => sql20`${c}`), sql20`, `)})`,
-        eq47(publicHolidays.year, input.year)
+      and35(
+        sql18`${publicHolidays.countryCode} IN (${sql18.join(countryCodes.map((c) => sql18`${c}`), sql18`, `)})`,
+        eq44(publicHolidays.year, input.year)
       )
     ).orderBy(publicHolidays.holidayDate);
     return holidays;
@@ -20821,9 +20290,9 @@ var portalLeaveRouter = portalRouter({
 });
 
 // server/portal/routers/portalInvoicesRouter.ts
-import { z as z37 } from "zod";
-import { TRPCError as TRPCError34 } from "@trpc/server";
-import { sql as sql21, eq as eq48, and as and39, count as count15, inArray as inArray10 } from "drizzle-orm";
+import { z as z36 } from "zod";
+import { TRPCError as TRPCError33 } from "@trpc/server";
+import { sql as sql19, eq as eq45, and as and36, count as count13, inArray as inArray11 } from "drizzle-orm";
 init_db2();
 init_schema();
 var PORTAL_INVOICE_FIELDS = {
@@ -20841,7 +20310,6 @@ var PORTAL_INVOICE_FIELDS = {
   sentDate: invoices.sentDate,
   paidDate: invoices.paidDate,
   paidAmount: invoices.paidAmount,
-  creditApplied: invoices.creditApplied,
   amountDue: invoices.amountDue,
   relatedInvoiceId: invoices.relatedInvoiceId,
   notes: invoices.notes,
@@ -20850,8 +20318,8 @@ var PORTAL_INVOICE_FIELDS = {
   createdAt: invoices.createdAt,
   updatedAt: invoices.updatedAt
 };
-var VISIBLE_FILTER = sql21`${invoices.status} NOT IN ('draft', 'pending_review')`;
-var ACTIVE_FILTER = sql21`${invoices.status} NOT IN ('draft', 'pending_review', 'cancelled', 'void')`;
+var VISIBLE_FILTER = sql19`${invoices.status} NOT IN ('draft', 'pending_review')`;
+var ACTIVE_FILTER = sql19`${invoices.status} NOT IN ('draft', 'pending_review', 'cancelled', 'void')`;
 var portalInvoicesRouter = portalRouter({
   /**
    * List invoices — scoped to customerId
@@ -20859,54 +20327,47 @@ var portalInvoicesRouter = portalRouter({
    * tab: "active" (default) shows non-cancelled/void; "history" shows paid/applied/cancelled/void
    */
   list: protectedPortalProcedure.input(
-    z37.object({
-      page: z37.number().min(1).default(1),
-      pageSize: z37.number().min(1).max(100).default(20),
-      status: z37.string().optional(),
-      invoiceMonth: z37.string().optional(),
-      tab: z37.enum(["active", "history"]).default("active"),
-      typeCategory: z37.enum(["all", "receivables", "credits", "deposits"]).default("all")
+    z36.object({
+      page: z36.number().min(1).default(1),
+      pageSize: z36.number().min(1).max(100).default(20),
+      status: z36.string().optional(),
+      invoiceMonth: z36.string().optional(),
+      tab: z36.enum(["active", "history"]).default("active"),
+      typeCategory: z36.enum(["all", "receivables", "credits", "deposits"]).default("all"),
+      excludeCreditNotes: z36.boolean().optional()
     })
   ).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
     const conditions = [
-      eq48(invoices.customerId, cid),
+      eq45(invoices.customerId, cid),
       VISIBLE_FILTER
     ];
+    if (input.excludeCreditNotes) {
+      conditions.push(sql19`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`);
+    }
     if (input.tab === "active") {
-      conditions.push(sql21`${invoices.status} NOT IN ('cancelled', 'void')`);
+      conditions.push(sql19`${invoices.status} NOT IN ('cancelled', 'void')`);
     } else {
-      conditions.push(sql21`${invoices.status} IN ('paid', 'applied', 'cancelled', 'void')`);
+      conditions.push(sql19`${invoices.status} IN ('paid', 'applied', 'cancelled', 'void')`);
     }
     if (input.status) {
-      conditions.push(eq48(invoices.status, input.status));
+      conditions.push(eq45(invoices.status, input.status));
     }
     if (input.typeCategory === "receivables") {
-      conditions.push(sql21`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`);
+      conditions.push(sql19`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`);
     } else if (input.typeCategory === "credits") {
-      conditions.push(eq48(invoices.invoiceType, "credit_note"));
+      conditions.push(eq45(invoices.invoiceType, "credit_note"));
     } else if (input.typeCategory === "deposits") {
-      conditions.push(sql21`${invoices.invoiceType} IN ('deposit', 'deposit_refund')`);
+      conditions.push(sql19`${invoices.invoiceType} IN ('deposit', 'deposit_refund')`);
     }
     if (input.invoiceMonth) {
-      conditions.push(eq48(invoices.invoiceMonth, input.invoiceMonth));
+      conditions.push(eq45(invoices.invoiceMonth, input.invoiceMonth));
     }
-    const where = and39(...conditions);
-    const [totalResult] = await db.select({ count: count15() }).from(invoices).where(where);
-    const items = await db.select(PORTAL_INVOICE_FIELDS).from(invoices).where(where).orderBy(sql21`${invoices.createdAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
-    const creditNoteIds = items.filter((inv) => inv.invoiceType === "credit_note").map((inv) => inv.id);
-    let creditNoteBalances = {};
-    if (creditNoteIds.length > 0) {
-      const applications = await db.select({
-        creditNoteId: creditNoteApplications.creditNoteId,
-        totalApplied: sql21`COALESCE(SUM(${creditNoteApplications.appliedAmount}), 0)`
-      }).from(creditNoteApplications).where(inArray10(creditNoteApplications.creditNoteId, creditNoteIds)).groupBy(creditNoteApplications.creditNoteId);
-      for (const app of applications) {
-        creditNoteBalances[app.creditNoteId] = Number(app.totalApplied);
-      }
-    }
+    const where = and36(...conditions);
+    const [totalResult] = await db.select({ count: count13() }).from(invoices).where(where);
+    const items = await db.select(PORTAL_INVOICE_FIELDS).from(invoices).where(where).orderBy(sql19`${invoices.createdAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     const itemIds = items.map((inv) => inv.id);
     let relatedInvoicesMap = {};
     if (itemIds.length > 0) {
@@ -20918,10 +20379,10 @@ var portalInvoicesRouter = portalRouter({
         status: invoices.status,
         relatedInvoiceId: invoices.relatedInvoiceId
       }).from(invoices).where(
-        and39(
-          eq48(invoices.customerId, cid),
+        and36(
+          eq45(invoices.customerId, cid),
           VISIBLE_FILTER,
-          inArray10(invoices.relatedInvoiceId, itemIds)
+          inArray11(invoices.relatedInvoiceId, itemIds)
         )
       );
       for (const rel of relatedInvs) {
@@ -20939,13 +20400,9 @@ var portalInvoicesRouter = portalRouter({
     const enrichedItems = items.map((inv) => {
       const total = Number(inv.total);
       const paidAmount = inv.paidAmount != null ? Number(inv.paidAmount) : 0;
-      const creditApplied = inv.creditApplied != null ? Number(inv.creditApplied) : 0;
       const amountDue = inv.amountDue != null ? Number(inv.amountDue) : total;
       let balanceDue = 0;
-      if (inv.invoiceType === "credit_note") {
-        const totalApplied = creditNoteBalances[inv.id] || 0;
-        balanceDue = Math.abs(total) - totalApplied;
-      } else if (inv.invoiceType === "deposit_refund") {
+      if (inv.invoiceType === "credit_note" || inv.invoiceType === "deposit_refund") {
         balanceDue = 0;
       } else if (inv.status === "paid") {
         const followUps = relatedInvoicesMap[inv.id] || [];
@@ -20978,20 +20435,12 @@ var portalInvoicesRouter = portalRouter({
           isOverpaid = true;
         }
       }
-      let creditNoteRemaining = 0;
-      let creditNoteTotalApplied = 0;
-      if (inv.invoiceType === "credit_note") {
-        creditNoteTotalApplied = creditNoteBalances[inv.id] || 0;
-        creditNoteRemaining = Math.abs(total) - creditNoteTotalApplied;
-      }
       return {
         ...inv,
         balanceDue,
         displayStatus,
         isPartiallyPaid,
         isOverpaid,
-        creditNoteRemaining: inv.invoiceType === "credit_note" ? creditNoteRemaining : void 0,
-        creditNoteTotalApplied: inv.invoiceType === "credit_note" ? creditNoteTotalApplied : void 0,
         relatedDocuments: relatedInvoicesMap[inv.id] || []
       };
     });
@@ -21003,19 +20452,19 @@ var portalInvoicesRouter = portalRouter({
   /**
    * Get invoice detail with line items, credit applications, and related documents
    */
-  detail: protectedPortalProcedure.input(z37.object({ id: z37.number() })).query(async ({ input, ctx }) => {
+  detail: protectedPortalProcedure.input(z36.object({ id: z36.number() })).query(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError33({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     const [invoice] = await db.select(PORTAL_INVOICE_FIELDS).from(invoices).where(
-      and39(
-        eq48(invoices.id, input.id),
-        eq48(invoices.customerId, cid),
+      and36(
+        eq45(invoices.id, input.id),
+        eq45(invoices.customerId, cid),
         VISIBLE_FILTER
       )
     );
     if (!invoice) {
-      throw new TRPCError34({ code: "NOT_FOUND", message: "Invoice not found" });
+      throw new TRPCError33({ code: "NOT_FOUND", message: "Invoice not found" });
     }
     const items = await db.select({
       id: invoiceItems.id,
@@ -21030,59 +20479,7 @@ var portalInvoicesRouter = portalRouter({
       localAmount: invoiceItems.localAmount,
       exchangeRate: invoiceItems.exchangeRate
       // exchangeRateWithMarkup is NOT included — admin-only field
-    }).from(invoiceItems).where(eq48(invoiceItems.invoiceId, input.id));
-    const creditApplicationsToThis = await db.select({
-      id: creditNoteApplications.id,
-      creditNoteId: creditNoteApplications.creditNoteId,
-      appliedAmount: creditNoteApplications.appliedAmount,
-      notes: creditNoteApplications.notes,
-      appliedAt: creditNoteApplications.appliedAt
-    }).from(creditNoteApplications).where(eq48(creditNoteApplications.appliedToInvoiceId, input.id));
-    let creditNoteDetails = [];
-    if (creditApplicationsToThis.length > 0) {
-      const cnIds = creditApplicationsToThis.map((ca) => ca.creditNoteId);
-      creditNoteDetails = await db.select({
-        id: invoices.id,
-        invoiceNumber: invoices.invoiceNumber,
-        total: invoices.total,
-        status: invoices.status
-      }).from(invoices).where(
-        and39(
-          inArray10(invoices.id, cnIds),
-          eq48(invoices.customerId, cid)
-        )
-      );
-    }
-    let creditApplicationsFromThis = [];
-    if (invoice.invoiceType === "credit_note") {
-      const apps = await db.select({
-        id: creditNoteApplications.id,
-        appliedToInvoiceId: creditNoteApplications.appliedToInvoiceId,
-        appliedAmount: creditNoteApplications.appliedAmount,
-        notes: creditNoteApplications.notes,
-        appliedAt: creditNoteApplications.appliedAt
-      }).from(creditNoteApplications).where(eq48(creditNoteApplications.creditNoteId, input.id));
-      if (apps.length > 0) {
-        const appliedToIds = apps.map((a) => a.appliedToInvoiceId);
-        const appliedToInvoices = await db.select({
-          id: invoices.id,
-          invoiceNumber: invoices.invoiceNumber,
-          invoiceType: invoices.invoiceType,
-          total: invoices.total,
-          status: invoices.status
-        }).from(invoices).where(
-          and39(
-            inArray10(invoices.id, appliedToIds),
-            eq48(invoices.customerId, cid)
-          )
-        );
-        creditApplicationsFromThis = apps.map((a) => ({
-          ...a,
-          invoiceNumber: appliedToInvoices.find((inv) => inv.id === a.appliedToInvoiceId)?.invoiceNumber || `INV-${a.appliedToInvoiceId}`,
-          invoiceType: appliedToInvoices.find((inv) => inv.id === a.appliedToInvoiceId)?.invoiceType || "unknown"
-        }));
-      }
-    }
+    }).from(invoiceItems).where(eq45(invoiceItems.invoiceId, input.id));
     const childDocuments = await db.select({
       id: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
@@ -21091,9 +20488,9 @@ var portalInvoicesRouter = portalRouter({
       status: invoices.status,
       createdAt: invoices.createdAt
     }).from(invoices).where(
-      and39(
-        eq48(invoices.relatedInvoiceId, input.id),
-        eq48(invoices.customerId, cid),
+      and36(
+        eq45(invoices.relatedInvoiceId, input.id),
+        eq45(invoices.customerId, cid),
         VISIBLE_FILTER
       )
     );
@@ -21106,25 +20503,12 @@ var portalInvoicesRouter = portalRouter({
         total: invoices.total,
         status: invoices.status
       }).from(invoices).where(
-        and39(
-          eq48(invoices.id, invoice.relatedInvoiceId),
-          eq48(invoices.customerId, cid)
+        and36(
+          eq45(invoices.id, invoice.relatedInvoiceId),
+          eq45(invoices.customerId, cid)
         )
       );
       parentDocument = parent || null;
-    }
-    let creditNoteBalance = null;
-    if (invoice.invoiceType === "credit_note") {
-      const [totalAppliedResult] = await db.select({
-        total: sql21`COALESCE(SUM(${creditNoteApplications.appliedAmount}), 0)`
-      }).from(creditNoteApplications).where(eq48(creditNoteApplications.creditNoteId, input.id));
-      const original = Math.abs(Number(invoice.total));
-      const applied = Number(totalAppliedResult?.total || 0);
-      creditNoteBalance = {
-        original,
-        applied,
-        remaining: Math.max(0, original - applied)
-      };
     }
     const total = Number(invoice.total);
     const paidAmount = invoice.paidAmount != null ? Number(invoice.paidAmount) : 0;
@@ -21142,9 +20526,7 @@ var portalInvoicesRouter = portalRouter({
       if (hasOverpaymentCN) isOverpaid = true;
     }
     let balanceDue = 0;
-    if (invoice.invoiceType === "credit_note") {
-      balanceDue = creditNoteBalance?.remaining ?? 0;
-    } else if (invoice.invoiceType === "deposit_refund") {
+    if (invoice.invoiceType === "credit_note" || invoice.invoiceType === "deposit_refund") {
       balanceDue = 0;
     } else if (invoice.status === "paid") {
       balanceDue = 0;
@@ -21156,17 +20538,7 @@ var portalInvoicesRouter = portalRouter({
     return {
       ...invoice,
       items,
-      // Credits applied TO this invoice
-      creditApplications: creditApplicationsToThis.map((ca) => ({
-        ...ca,
-        creditNoteNumber: creditNoteDetails.find((cn) => cn.id === ca.creditNoteId)?.invoiceNumber || `CN-${ca.creditNoteId}`,
-        creditNoteStatus: creditNoteDetails.find((cn) => cn.id === ca.creditNoteId)?.status || "unknown"
-      })),
-      // If this is a credit note: where it was applied
-      creditApplicationsFrom: creditApplicationsFromThis,
-      // Credit note balance (only for credit notes)
-      creditNoteBalance,
-      // Related documents (bidirectional)
+      // Related documents (bidirectional via relatedInvoiceId)
       relatedDocuments: {
         parent: parentDocument,
         children: childDocuments.map((d) => ({
@@ -21190,48 +20562,45 @@ var portalInvoicesRouter = portalRouter({
     const db = await getDb();
     if (!db) return { totalInvoiced: 0, totalPaid: 0, totalCreditNotes: 0, totalDeposits: 0, outstandingBalance: 0 };
     const cid = ctx.portalUser.customerId;
-    const [invoiced] = await db.select({ total: sql21`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and39(
-        eq48(invoices.customerId, cid),
-        sql21`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`,
+    const [invoiced] = await db.select({ total: sql19`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and36(
+        eq45(invoices.customerId, cid),
+        sql19`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`,
         ACTIVE_FILTER
       )
     );
-    const [paid] = await db.select({ total: sql21`COALESCE(SUM(${invoices.paidAmount}), 0)` }).from(invoices).where(
-      and39(
-        eq48(invoices.customerId, cid),
-        eq48(invoices.status, "paid")
+    const [paid] = await db.select({ total: sql19`COALESCE(SUM(${invoices.paidAmount}), 0)` }).from(invoices).where(
+      and36(
+        eq45(invoices.customerId, cid),
+        eq45(invoices.status, "paid")
       )
     );
-    const [credits] = await db.select({ total: sql21`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
-      and39(
-        eq48(invoices.customerId, cid),
-        eq48(invoices.invoiceType, "credit_note"),
+    const [credits] = await db.select({ total: sql19`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+      and36(
+        eq45(invoices.customerId, cid),
+        eq45(invoices.invoiceType, "credit_note"),
         ACTIVE_FILTER
       )
     );
-    const [creditApplied] = await db.select({ total: sql21`COALESCE(SUM(cna.appliedAmount), 0)` }).from(sql21`credit_note_applications cna`).where(
-      sql21`cna.creditNoteId IN (SELECT id FROM invoices WHERE customerId = ${cid} AND invoiceType = 'credit_note')`
-    );
-    const [depositsGross] = await db.select({ total: sql21`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and39(
-        eq48(invoices.customerId, cid),
-        eq48(invoices.invoiceType, "deposit"),
+    const [depositsGross] = await db.select({ total: sql19`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and36(
+        eq45(invoices.customerId, cid),
+        eq45(invoices.invoiceType, "deposit"),
         ACTIVE_FILTER
       )
     );
-    const [depositCreditNotes] = await db.select({ total: sql21`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
-      and39(
-        eq48(invoices.customerId, cid),
-        eq48(invoices.invoiceType, "credit_note"),
+    const [depositCreditNotes] = await db.select({ total: sql19`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+      and36(
+        eq45(invoices.customerId, cid),
+        eq45(invoices.invoiceType, "credit_note"),
         ACTIVE_FILTER,
-        sql21`${invoices.relatedInvoiceId} IN (SELECT id FROM invoices WHERE customerId = ${cid} AND invoiceType = 'deposit')`
+        sql19`${invoices.relatedInvoiceId} IN (SELECT id FROM invoices WHERE customerId = ${cid} AND invoiceType = 'deposit')`
       )
     );
-    const [depositRefunds] = await db.select({ total: sql21`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
-      and39(
-        eq48(invoices.customerId, cid),
-        eq48(invoices.invoiceType, "deposit_refund"),
+    const [depositRefunds] = await db.select({ total: sql19`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+      and36(
+        eq45(invoices.customerId, cid),
+        eq45(invoices.invoiceType, "deposit_refund"),
         ACTIVE_FILTER
       )
     );
@@ -21239,21 +20608,19 @@ var portalInvoicesRouter = portalRouter({
       0,
       Number(depositsGross?.total || 0) - Number(depositCreditNotes?.total || 0) - Number(depositRefunds?.total || 0)
     );
-    const [outstanding] = await db.select({ total: sql21`COALESCE(SUM(COALESCE(${invoices.amountDue}, ${invoices.total})), 0)` }).from(invoices).where(
-      and39(
-        eq48(invoices.customerId, cid),
-        sql21`${invoices.status} IN ('sent', 'overdue')`,
-        sql21`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`
+    const [outstanding] = await db.select({ total: sql19`COALESCE(SUM(COALESCE(${invoices.amountDue}, ${invoices.total})), 0)` }).from(invoices).where(
+      and36(
+        eq45(invoices.customerId, cid),
+        sql19`${invoices.status} IN ('sent', 'overdue')`,
+        sql19`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`
       )
     );
     const totalCreditIssued = Number(credits?.total || 0);
-    const totalCreditUsed = Number(creditApplied?.total || 0);
-    const creditBalance = Math.max(0, totalCreditIssued - totalCreditUsed);
     return {
       totalInvoiced: Number(invoiced?.total || 0),
       totalPaid: Number(paid?.total || 0),
       totalCreditNotes: totalCreditIssued,
-      creditBalance,
+      // Credit balance is now tracked via Wallet, not via credit note applications
       totalDeposits: netDeposits,
       outstandingBalance: Number(outstanding?.total || 0)
     };
@@ -21261,9 +20628,9 @@ var portalInvoicesRouter = portalRouter({
 });
 
 // server/portal/routers/portalSettingsRouter.ts
-import { z as z38 } from "zod";
-import { TRPCError as TRPCError35 } from "@trpc/server";
-import { eq as eq49, and as and40 } from "drizzle-orm";
+import { z as z37 } from "zod";
+import { TRPCError as TRPCError34 } from "@trpc/server";
+import { eq as eq46, and as and37 } from "drizzle-orm";
 init_db2();
 init_schema();
 init_portalAuth();
@@ -21292,7 +20659,7 @@ var portalSettingsRouter = portalRouter({
       settlementCurrency: customers.settlementCurrency,
       language: customers.language
       // Exclude: internalNotes, pricing info, markup data, depositMultiplier
-    }).from(customers).where(eq49(customers.id, cid));
+    }).from(customers).where(eq46(customers.id, cid));
     return company || null;
   }),
   /**
@@ -21300,23 +20667,23 @@ var portalSettingsRouter = portalRouter({
    * Legal entity name and settlement currency are NOT editable by client
    */
   updateCompanyProfile: portalAdminProcedure.input(
-    z38.object({
-      companyName: z38.string().min(1).optional(),
-      registrationNumber: z38.string().optional().nullable(),
-      industry: z38.string().optional().nullable(),
-      address: z38.string().optional().nullable(),
-      city: z38.string().optional().nullable(),
-      state: z38.string().optional().nullable(),
-      country: z38.string().optional(),
-      postalCode: z38.string().optional().nullable(),
-      primaryContactName: z38.string().optional().nullable(),
-      primaryContactEmail: z38.string().email().optional().nullable(),
-      primaryContactPhone: z38.string().optional().nullable(),
-      language: z38.enum(["en", "zh"]).optional()
+    z37.object({
+      companyName: z37.string().min(1).optional(),
+      registrationNumber: z37.string().optional().nullable(),
+      industry: z37.string().optional().nullable(),
+      address: z37.string().optional().nullable(),
+      city: z37.string().optional().nullable(),
+      state: z37.string().optional().nullable(),
+      country: z37.string().optional(),
+      postalCode: z37.string().optional().nullable(),
+      primaryContactName: z37.string().optional().nullable(),
+      primaryContactEmail: z37.string().email().optional().nullable(),
+      primaryContactPhone: z37.string().optional().nullable(),
+      language: z37.enum(["en", "zh"]).optional()
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError35({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     const updateData = {};
     if (input.companyName !== void 0) updateData.companyName = input.companyName;
@@ -21334,7 +20701,7 @@ var portalSettingsRouter = portalRouter({
     if (Object.keys(updateData).length === 0) {
       return { success: true };
     }
-    await db.update(customers).set(updateData).where(eq49(customers.id, cid));
+    await db.update(customers).set(updateData).where(eq46(customers.id, cid));
     return { success: true };
   }),
   /**
@@ -21354,30 +20721,30 @@ var portalSettingsRouter = portalRouter({
       leaveTypeName: leaveTypes.leaveTypeName,
       countryName: countriesConfig.countryName,
       statutoryMinimum: leaveTypes.annualEntitlement
-    }).from(customerLeavePolicies).leftJoin(leaveTypes, eq49(customerLeavePolicies.leaveTypeId, leaveTypes.id)).leftJoin(countriesConfig, eq49(customerLeavePolicies.countryCode, countriesConfig.countryCode)).where(eq49(customerLeavePolicies.customerId, cid));
+    }).from(customerLeavePolicies).leftJoin(leaveTypes, eq46(customerLeavePolicies.leaveTypeId, leaveTypes.id)).leftJoin(countriesConfig, eq46(customerLeavePolicies.countryCode, countriesConfig.countryCode)).where(eq46(customerLeavePolicies.customerId, cid));
     return policies;
   }),
   /**
    * Update leave policy — admin only
    */
   updateLeavePolicy: portalAdminProcedure.input(
-    z38.object({
-      id: z38.number(),
-      annualEntitlement: z38.number().min(0),
-      expiryRule: z38.enum(["year_end", "anniversary", "no_expiry"]),
-      carryOverDays: z38.number().min(0)
+    z37.object({
+      id: z37.number(),
+      annualEntitlement: z37.number().min(0),
+      expiryRule: z37.enum(["year_end", "anniversary", "no_expiry"]),
+      carryOverDays: z37.number().min(0)
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError35({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [policy] = await db.select({ id: customerLeavePolicies.id, leaveTypeId: customerLeavePolicies.leaveTypeId }).from(customerLeavePolicies).where(and40(eq49(customerLeavePolicies.id, input.id), eq49(customerLeavePolicies.customerId, cid)));
+    const [policy] = await db.select({ id: customerLeavePolicies.id, leaveTypeId: customerLeavePolicies.leaveTypeId }).from(customerLeavePolicies).where(and37(eq46(customerLeavePolicies.id, input.id), eq46(customerLeavePolicies.customerId, cid)));
     if (!policy) {
-      throw new TRPCError35({ code: "NOT_FOUND", message: "Leave policy not found" });
+      throw new TRPCError34({ code: "NOT_FOUND", message: "Leave policy not found" });
     }
-    const [leaveType] = await db.select({ annualEntitlement: leaveTypes.annualEntitlement }).from(leaveTypes).where(eq49(leaveTypes.id, policy.leaveTypeId));
+    const [leaveType] = await db.select({ annualEntitlement: leaveTypes.annualEntitlement }).from(leaveTypes).where(eq46(leaveTypes.id, policy.leaveTypeId));
     if (leaveType && leaveType.annualEntitlement && input.annualEntitlement < leaveType.annualEntitlement) {
-      throw new TRPCError35({
+      throw new TRPCError34({
         code: "BAD_REQUEST",
         message: `Annual entitlement cannot be less than statutory minimum (${leaveType.annualEntitlement} days)`
       });
@@ -21386,7 +20753,7 @@ var portalSettingsRouter = portalRouter({
       annualEntitlement: input.annualEntitlement,
       expiryRule: input.expiryRule,
       carryOverDays: input.carryOverDays
-    }).where(eq49(customerLeavePolicies.id, input.id));
+    }).where(eq46(customerLeavePolicies.id, input.id));
     return { success: true };
   }),
   // ============================================================================
@@ -21411,28 +20778,28 @@ var portalSettingsRouter = portalRouter({
       lastLoginAt: customerContacts.lastLoginAt,
       isPrimary: customerContacts.isPrimary
       // passwordHash is NOT included
-    }).from(customerContacts).where(eq49(customerContacts.customerId, cid)).orderBy(customerContacts.contactName);
+    }).from(customerContacts).where(eq46(customerContacts.customerId, cid)).orderBy(customerContacts.contactName);
     return users3;
   }),
   /**
    * Invite a new portal user
    */
   inviteUser: portalAdminProcedure.input(
-    z38.object({
-      contactName: z38.string().min(1),
-      email: z38.string().email(),
-      phone: z38.string().optional(),
-      role: z38.string().optional(),
+    z37.object({
+      contactName: z37.string().min(1),
+      email: z37.string().email(),
+      phone: z37.string().optional(),
+      role: z37.string().optional(),
       // Business role
-      portalRole: z38.enum(["admin", "hr_manager", "finance", "viewer"]).default("viewer")
+      portalRole: z37.enum(["admin", "hr_manager", "finance", "viewer"]).default("viewer")
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError35({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const existing = await db.select({ id: customerContacts.id }).from(customerContacts).where(eq49(customerContacts.email, input.email.toLowerCase().trim()));
+    const existing = await db.select({ id: customerContacts.id }).from(customerContacts).where(eq46(customerContacts.email, input.email.toLowerCase().trim()));
     if (existing.length > 0) {
-      throw new TRPCError35({ code: "CONFLICT", message: "A user with this email already exists" });
+      throw new TRPCError34({ code: "CONFLICT", message: "A user with this email already exists" });
     }
     const inviteToken = generateInviteToken2();
     const inviteExpiresAt = getInviteExpiryDate2();
@@ -21460,58 +20827,58 @@ var portalSettingsRouter = portalRouter({
    * Update a portal user's role
    */
   updateUserRole: portalAdminProcedure.input(
-    z38.object({
-      contactId: z38.number(),
-      portalRole: z38.enum(["admin", "hr_manager", "finance", "viewer"])
+    z37.object({
+      contactId: z37.number(),
+      portalRole: z37.enum(["admin", "hr_manager", "finance", "viewer"])
     })
   ).mutation(async ({ input, ctx }) => {
     if (input.contactId === ctx.portalUser.contactId) {
-      throw new TRPCError35({ code: "BAD_REQUEST", message: "Cannot change your own role" });
+      throw new TRPCError34({ code: "BAD_REQUEST", message: "Cannot change your own role" });
     }
     const db = await getDb();
-    if (!db) throw new TRPCError35({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and40(eq49(customerContacts.id, input.contactId), eq49(customerContacts.customerId, cid)));
+    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and37(eq46(customerContacts.id, input.contactId), eq46(customerContacts.customerId, cid)));
     if (!contact) {
-      throw new TRPCError35({ code: "NOT_FOUND", message: "User not found" });
+      throw new TRPCError34({ code: "NOT_FOUND", message: "User not found" });
     }
-    await db.update(customerContacts).set({ portalRole: input.portalRole }).where(eq49(customerContacts.id, input.contactId));
+    await db.update(customerContacts).set({ portalRole: input.portalRole }).where(eq46(customerContacts.id, input.contactId));
     return { success: true };
   }),
   /**
    * Deactivate a portal user
    */
-  deactivateUser: portalAdminProcedure.input(z38.object({ contactId: z38.number() })).mutation(async ({ input, ctx }) => {
+  deactivateUser: portalAdminProcedure.input(z37.object({ contactId: z37.number() })).mutation(async ({ input, ctx }) => {
     if (input.contactId === ctx.portalUser.contactId) {
-      throw new TRPCError35({ code: "BAD_REQUEST", message: "Cannot deactivate your own account" });
+      throw new TRPCError34({ code: "BAD_REQUEST", message: "Cannot deactivate your own account" });
     }
     const db = await getDb();
-    if (!db) throw new TRPCError35({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and40(eq49(customerContacts.id, input.contactId), eq49(customerContacts.customerId, cid)));
+    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and37(eq46(customerContacts.id, input.contactId), eq46(customerContacts.customerId, cid)));
     if (!contact) {
-      throw new TRPCError35({ code: "NOT_FOUND", message: "User not found" });
+      throw new TRPCError34({ code: "NOT_FOUND", message: "User not found" });
     }
-    await db.update(customerContacts).set({ hasPortalAccess: false, isPortalActive: false }).where(eq49(customerContacts.id, input.contactId));
+    await db.update(customerContacts).set({ hasPortalAccess: false, isPortalActive: false }).where(eq46(customerContacts.id, input.contactId));
     return { success: true };
   }),
   /**
    * Resend invite to a user who hasn't activated yet
    */
-  resendInvite: portalAdminProcedure.input(z38.object({ contactId: z38.number() })).mutation(async ({ input, ctx }) => {
+  resendInvite: portalAdminProcedure.input(z37.object({ contactId: z37.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError35({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [contact] = await db.select({ id: customerContacts.id, isPortalActive: customerContacts.isPortalActive }).from(customerContacts).where(and40(eq49(customerContacts.id, input.contactId), eq49(customerContacts.customerId, cid)));
+    const [contact] = await db.select({ id: customerContacts.id, isPortalActive: customerContacts.isPortalActive }).from(customerContacts).where(and37(eq46(customerContacts.id, input.contactId), eq46(customerContacts.customerId, cid)));
     if (!contact) {
-      throw new TRPCError35({ code: "NOT_FOUND", message: "User not found" });
+      throw new TRPCError34({ code: "NOT_FOUND", message: "User not found" });
     }
     if (contact.isPortalActive) {
-      throw new TRPCError35({ code: "BAD_REQUEST", message: "User is already activated" });
+      throw new TRPCError34({ code: "BAD_REQUEST", message: "User is already activated" });
     }
     const inviteToken = generateInviteToken2();
     const inviteExpiresAt = getInviteExpiryDate2();
-    await db.update(customerContacts).set({ inviteToken, inviteExpiresAt }).where(eq49(customerContacts.id, input.contactId));
+    await db.update(customerContacts).set({ inviteToken, inviteExpiresAt }).where(eq46(customerContacts.id, input.contactId));
     return {
       success: true,
       inviteToken,
@@ -21528,15 +20895,15 @@ var portalSettingsRouter = portalRouter({
     const countries = await db.select({
       country: employees.country,
       countryName: countriesConfig.countryName
-    }).from(employees).leftJoin(countriesConfig, eq49(employees.country, countriesConfig.countryCode)).where(eq49(employees.customerId, cid)).groupBy(employees.country, countriesConfig.countryName);
+    }).from(employees).leftJoin(countriesConfig, eq46(employees.country, countriesConfig.countryCode)).where(eq46(employees.customerId, cid)).groupBy(employees.country, countriesConfig.countryName);
     return countries;
   })
 });
 
 // server/portal/routers/portalPayrollRouter.ts
-import { z as z39 } from "zod";
-import { TRPCError as TRPCError36 } from "@trpc/server";
-import { sql as sql23, eq as eq50, and as and41, count as count17, inArray as inArray11 } from "drizzle-orm";
+import { z as z38 } from "zod";
+import { TRPCError as TRPCError35 } from "@trpc/server";
+import { sql as sql21, eq as eq47, and as and38, count as count15, inArray as inArray12 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalPayrollRouter = portalRouter({
@@ -21545,29 +20912,29 @@ var portalPayrollRouter = portalRouter({
    * Only shows approved payroll runs
    */
   list: protectedPortalProcedure.input(
-    z39.object({
-      page: z39.number().min(1).default(1),
-      pageSize: z39.number().min(1).max(100).default(20),
-      year: z39.number().optional()
+    z38.object({
+      page: z38.number().min(1).default(1),
+      pageSize: z38.number().min(1).max(100).default(20),
+      year: z38.number().optional()
     })
   ).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const subquery = db.select({ payrollRunId: payrollItems.payrollRunId }).from(payrollItems).innerJoin(employees, eq50(payrollItems.employeeId, employees.id)).where(eq50(employees.customerId, cid)).groupBy(payrollItems.payrollRunId);
+    const subquery = db.select({ payrollRunId: payrollItems.payrollRunId }).from(payrollItems).innerJoin(employees, eq47(payrollItems.employeeId, employees.id)).where(eq47(employees.customerId, cid)).groupBy(payrollItems.payrollRunId);
     const runIds = (await subquery).map((r) => r.payrollRunId);
     if (runIds.length === 0) return { items: [], total: 0 };
     const conditions = [
-      inArray11(payrollRuns.id, runIds),
-      eq50(payrollRuns.status, "approved")
+      inArray12(payrollRuns.id, runIds),
+      eq47(payrollRuns.status, "approved")
     ];
     if (input.year) {
       conditions.push(
-        sql23`YEAR(${payrollRuns.payrollMonth}) = ${input.year}`
+        sql21`YEAR(${payrollRuns.payrollMonth}) = ${input.year}`
       );
     }
-    const where = and41(...conditions);
-    const [totalResult] = await db.select({ count: count17() }).from(payrollRuns).where(where);
+    const where = and38(...conditions);
+    const [totalResult] = await db.select({ count: count15() }).from(payrollRuns).where(where);
     const runs = await db.select({
       id: payrollRuns.id,
       countryCode: payrollRuns.countryCode,
@@ -21579,24 +20946,24 @@ var portalPayrollRouter = portalRouter({
       totalNet: payrollRuns.totalNet,
       approvedAt: payrollRuns.approvedAt,
       notes: payrollRuns.notes
-    }).from(payrollRuns).where(where).orderBy(sql23`${payrollRuns.payrollMonth} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(payrollRuns).where(where).orderBy(sql21`${payrollRuns.payrollMonth} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     const enrichedRuns = await Promise.all(
       runs.map(async (run) => {
-        const [empCount] = await db.select({ count: count17() }).from(payrollItems).innerJoin(employees, eq50(payrollItems.employeeId, employees.id)).where(
-          and41(
-            eq50(payrollItems.payrollRunId, run.id),
-            eq50(employees.customerId, cid)
+        const [empCount] = await db.select({ count: count15() }).from(payrollItems).innerJoin(employees, eq47(payrollItems.employeeId, employees.id)).where(
+          and38(
+            eq47(payrollItems.payrollRunId, run.id),
+            eq47(employees.customerId, cid)
           )
         );
         const [customerTotals] = await db.select({
-          totalGross: sql23`COALESCE(SUM(${payrollItems.gross}), 0)`,
-          totalNet: sql23`COALESCE(SUM(${payrollItems.net}), 0)`,
-          totalDeductions: sql23`COALESCE(SUM(${payrollItems.deductions} + ${payrollItems.taxDeduction} + ${payrollItems.socialSecurityDeduction} + ${payrollItems.unpaidLeaveDeduction}), 0)`,
-          totalEmployerCost: sql23`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`
-        }).from(payrollItems).innerJoin(employees, eq50(payrollItems.employeeId, employees.id)).where(
-          and41(
-            eq50(payrollItems.payrollRunId, run.id),
-            eq50(employees.customerId, cid)
+          totalGross: sql21`COALESCE(SUM(${payrollItems.gross}), 0)`,
+          totalNet: sql21`COALESCE(SUM(${payrollItems.net}), 0)`,
+          totalDeductions: sql21`COALESCE(SUM(${payrollItems.deductions} + ${payrollItems.taxDeduction} + ${payrollItems.socialSecurityDeduction} + ${payrollItems.unpaidLeaveDeduction}), 0)`,
+          totalEmployerCost: sql21`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`
+        }).from(payrollItems).innerJoin(employees, eq47(payrollItems.employeeId, employees.id)).where(
+          and38(
+            eq47(payrollItems.payrollRunId, run.id),
+            eq47(employees.customerId, cid)
           )
         );
         return {
@@ -21618,9 +20985,9 @@ var portalPayrollRouter = portalRouter({
    * Get payroll run detail with employee-level breakdown
    * Only shows this customer's employees
    */
-  detail: protectedPortalProcedure.input(z39.object({ id: z39.number() })).query(async ({ input, ctx }) => {
+  detail: protectedPortalProcedure.input(z38.object({ id: z38.number() })).query(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError35({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     const [run] = await db.select({
       id: payrollRuns.id,
@@ -21631,18 +20998,18 @@ var portalPayrollRouter = portalRouter({
       approvedAt: payrollRuns.approvedAt,
       notes: payrollRuns.notes
     }).from(payrollRuns).where(
-      and41(
-        eq50(payrollRuns.id, input.id),
-        eq50(payrollRuns.status, "approved")
+      and38(
+        eq47(payrollRuns.id, input.id),
+        eq47(payrollRuns.status, "approved")
       )
     );
     if (!run) {
-      throw new TRPCError36({ code: "NOT_FOUND", message: "Payroll run not found" });
+      throw new TRPCError35({ code: "NOT_FOUND", message: "Payroll run not found" });
     }
     const items = await db.select({
       id: payrollItems.id,
       employeeId: payrollItems.employeeId,
-      employeeName: sql23`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
+      employeeName: sql21`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
       employeeCode: employees.employeeCode,
       jobTitle: employees.jobTitle,
       baseSalary: payrollItems.baseSalary,
@@ -21660,14 +21027,14 @@ var portalPayrollRouter = portalRouter({
       totalEmploymentCost: payrollItems.totalEmploymentCost,
       currency: payrollItems.currency,
       notes: payrollItems.notes
-    }).from(payrollItems).innerJoin(employees, eq50(payrollItems.employeeId, employees.id)).where(
-      and41(
-        eq50(payrollItems.payrollRunId, input.id),
-        eq50(employees.customerId, cid)
+    }).from(payrollItems).innerJoin(employees, eq47(payrollItems.employeeId, employees.id)).where(
+      and38(
+        eq47(payrollItems.payrollRunId, input.id),
+        eq47(employees.customerId, cid)
       )
     );
     if (items.length === 0) {
-      throw new TRPCError36({ code: "NOT_FOUND", message: "No payroll data found for your employees" });
+      throw new TRPCError35({ code: "NOT_FOUND", message: "No payroll data found for your employees" });
     }
     return {
       ...run,
@@ -21677,9 +21044,9 @@ var portalPayrollRouter = portalRouter({
 });
 
 // server/portal/routers/portalReimbursementsRouter.ts
-import { z as z40 } from "zod";
-import { TRPCError as TRPCError37 } from "@trpc/server";
-import { sql as sql24, eq as eq51, and as and42, count as count18 } from "drizzle-orm";
+import { z as z39 } from "zod";
+import { TRPCError as TRPCError36 } from "@trpc/server";
+import { sql as sql22, eq as eq48, and as and39, count as count16 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalReimbursementsRouter = portalRouter({
@@ -21687,29 +21054,29 @@ var portalReimbursementsRouter = portalRouter({
    * List reimbursements — scoped to customerId
    */
   list: protectedPortalProcedure.input(
-    z40.object({
-      page: z40.number().min(1).default(1),
-      pageSize: z40.number().min(1).max(100).default(20),
-      status: z40.string().optional(),
-      effectiveMonth: z40.string().optional(),
-      employeeId: z40.number().optional()
+    z39.object({
+      page: z39.number().min(1).default(1),
+      pageSize: z39.number().min(1).max(100).default(20),
+      status: z39.string().optional(),
+      effectiveMonth: z39.string().optional(),
+      employeeId: z39.number().optional()
     })
   ).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const conditions = [eq51(reimbursements.customerId, cid)];
+    const conditions = [eq48(reimbursements.customerId, cid)];
     if (input.status) {
-      conditions.push(eq51(reimbursements.status, input.status));
+      conditions.push(eq48(reimbursements.status, input.status));
     }
     if (input.effectiveMonth) {
-      conditions.push(eq51(reimbursements.effectiveMonth, input.effectiveMonth));
+      conditions.push(eq48(reimbursements.effectiveMonth, input.effectiveMonth));
     }
     if (input.employeeId) {
-      conditions.push(eq51(reimbursements.employeeId, input.employeeId));
+      conditions.push(eq48(reimbursements.employeeId, input.employeeId));
     }
-    const where = and42(...conditions);
-    const [totalResult] = await db.select({ count: count18() }).from(reimbursements).where(where);
+    const where = and39(...conditions);
+    const [totalResult] = await db.select({ count: count16() }).from(reimbursements).where(where);
     const items = await db.select({
       id: reimbursements.id,
       employeeId: reimbursements.employeeId,
@@ -21731,7 +21098,7 @@ var portalReimbursementsRouter = portalRouter({
       // Join employee name
       employeeFirstName: employees.firstName,
       employeeLastName: employees.lastName
-    }).from(reimbursements).innerJoin(employees, eq51(reimbursements.employeeId, employees.id)).where(where).orderBy(sql24`${reimbursements.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(reimbursements).innerJoin(employees, eq48(reimbursements.employeeId, employees.id)).where(where).orderBy(sql22`${reimbursements.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return {
       items,
       total: totalResult?.count ?? 0
@@ -21741,9 +21108,9 @@ var portalReimbursementsRouter = portalRouter({
    * Create reimbursement — only HR managers and admins
    */
   create: portalHrProcedure.input(
-    z40.object({
-      employeeId: z40.number(),
-      category: z40.enum([
+    z39.object({
+      employeeId: z39.number(),
+      category: z39.enum([
         "travel",
         "equipment",
         "meals",
@@ -21754,23 +21121,23 @@ var portalReimbursementsRouter = portalRouter({
         "communication",
         "other"
       ]),
-      amount: z40.string(),
-      currency: z40.string().default("USD"),
-      effectiveMonth: z40.string(),
-      description: z40.string().optional(),
-      receiptFileUrl: z40.string().optional(),
-      receiptFileKey: z40.string().optional()
+      amount: z39.string(),
+      currency: z39.string().default("USD"),
+      effectiveMonth: z39.string(),
+      description: z39.string().optional(),
+      receiptFileUrl: z39.string().optional(),
+      receiptFileKey: z39.string().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError37({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and42(eq51(employees.id, input.employeeId), eq51(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id }).from(employees).where(and39(eq48(employees.id, input.employeeId), eq48(employees.customerId, cid)));
     if (!emp) {
-      throw new TRPCError37({ code: "NOT_FOUND", message: "Employee not found" });
+      throw new TRPCError36({ code: "NOT_FOUND", message: "Employee not found" });
     }
     if (!input.receiptFileUrl) {
-      throw new TRPCError37({ code: "BAD_REQUEST", message: "Receipt is required for reimbursement claims" });
+      throw new TRPCError36({ code: "BAD_REQUEST", message: "Receipt is required for reimbursement claims" });
     }
     const result = await db.insert(reimbursements).values({
       employeeId: input.employeeId,
@@ -21791,23 +21158,23 @@ var portalReimbursementsRouter = portalRouter({
    * Update reimbursement — only if status is 'submitted' (not yet approved)
    */
   update: portalHrProcedure.input(
-    z40.object({
-      id: z40.number(),
-      amount: z40.string().optional(),
-      description: z40.string().optional(),
-      receiptFileUrl: z40.string().optional(),
-      receiptFileKey: z40.string().optional()
+    z39.object({
+      id: z39.number(),
+      amount: z39.string().optional(),
+      description: z39.string().optional(),
+      receiptFileUrl: z39.string().optional(),
+      receiptFileKey: z39.string().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError37({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and42(eq51(reimbursements.id, input.id), eq51(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and39(eq48(reimbursements.id, input.id), eq48(reimbursements.customerId, cid)));
     if (!reimb) {
-      throw new TRPCError37({ code: "NOT_FOUND", message: "Reimbursement not found" });
+      throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
     if (reimb.status !== "submitted") {
-      throw new TRPCError37({ code: "FORBIDDEN", message: "Reimbursement cannot be edited after approval" });
+      throw new TRPCError36({ code: "FORBIDDEN", message: "Reimbursement cannot be edited after approval" });
     }
     const updates = {};
     if (input.amount !== void 0) updates.amount = input.amount;
@@ -21815,86 +21182,86 @@ var portalReimbursementsRouter = portalRouter({
     if (input.receiptFileUrl !== void 0) updates.receiptFileUrl = input.receiptFileUrl;
     if (input.receiptFileKey !== void 0) updates.receiptFileKey = input.receiptFileKey;
     if (Object.keys(updates).length > 0) {
-      await db.update(reimbursements).set(updates).where(eq51(reimbursements.id, input.id));
+      await db.update(reimbursements).set(updates).where(eq48(reimbursements.id, input.id));
     }
     return { success: true };
   }),
   /**
    * Delete reimbursement — only if status is 'submitted'
    */
-  delete: portalHrProcedure.input(z40.object({ id: z40.number() })).mutation(async ({ input, ctx }) => {
+  delete: portalHrProcedure.input(z39.object({ id: z39.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError37({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and42(eq51(reimbursements.id, input.id), eq51(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and39(eq48(reimbursements.id, input.id), eq48(reimbursements.customerId, cid)));
     if (!reimb) {
-      throw new TRPCError37({ code: "NOT_FOUND", message: "Reimbursement not found" });
+      throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
     if (reimb.status !== "submitted") {
-      throw new TRPCError37({ code: "FORBIDDEN", message: "Reimbursement cannot be deleted after approval" });
+      throw new TRPCError36({ code: "FORBIDDEN", message: "Reimbursement cannot be deleted after approval" });
     }
-    await db.delete(reimbursements).where(eq51(reimbursements.id, input.id));
+    await db.delete(reimbursements).where(eq48(reimbursements.id, input.id));
     return { success: true };
   }),
   /**
    * Client approve reimbursement — HR manager / admin approves a submitted reimbursement
    */
-  approve: portalHrProcedure.input(z40.object({ id: z40.number() })).mutation(async ({ input, ctx }) => {
+  approve: portalHrProcedure.input(z39.object({ id: z39.number() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError37({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and42(eq51(reimbursements.id, input.id), eq51(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and39(eq48(reimbursements.id, input.id), eq48(reimbursements.customerId, cid)));
     if (!reimb) {
-      throw new TRPCError37({ code: "NOT_FOUND", message: "Reimbursement not found" });
+      throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
     if (reimb.status !== "submitted") {
-      throw new TRPCError37({ code: "FORBIDDEN", message: "Only submitted reimbursements can be approved" });
+      throw new TRPCError36({ code: "FORBIDDEN", message: "Only submitted reimbursements can be approved" });
     }
     await db.update(reimbursements).set({
       status: "client_approved",
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date()
-    }).where(eq51(reimbursements.id, input.id));
+    }).where(eq48(reimbursements.id, input.id));
     return { success: true };
   }),
   /**
    * Client reject reimbursement
    */
-  reject: portalHrProcedure.input(z40.object({
-    id: z40.number(),
-    reason: z40.string().optional()
+  reject: portalHrProcedure.input(z39.object({
+    id: z39.number(),
+    reason: z39.string().optional()
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError37({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and42(eq51(reimbursements.id, input.id), eq51(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and39(eq48(reimbursements.id, input.id), eq48(reimbursements.customerId, cid)));
     if (!reimb) {
-      throw new TRPCError37({ code: "NOT_FOUND", message: "Reimbursement not found" });
+      throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
     if (reimb.status !== "submitted") {
-      throw new TRPCError37({ code: "FORBIDDEN", message: "Only submitted reimbursements can be rejected" });
+      throw new TRPCError36({ code: "FORBIDDEN", message: "Only submitted reimbursements can be rejected" });
     }
     await db.update(reimbursements).set({
       status: "client_rejected",
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date(),
       clientRejectionReason: input.reason || null
-    }).where(eq51(reimbursements.id, input.id));
+    }).where(eq48(reimbursements.id, input.id));
     return { success: true };
   }),
   /**
    * Upload receipt file
    */
   uploadReceipt: portalHrProcedure.input(
-    z40.object({
-      fileBase64: z40.string(),
-      fileName: z40.string(),
-      mimeType: z40.string().default("application/pdf")
+    z39.object({
+      fileBase64: z39.string(),
+      fileName: z39.string(),
+      mimeType: z39.string().default("application/pdf")
     })
   ).mutation(async ({ input }) => {
     const fileBuffer = Buffer.from(input.fileBase64, "base64");
     if (fileBuffer.length > 20 * 1024 * 1024) {
-      throw new TRPCError37({ code: "BAD_REQUEST", message: "File size must be under 20MB" });
+      throw new TRPCError36({ code: "BAD_REQUEST", message: "File size must be under 20MB" });
     }
     const randomSuffix = Math.random().toString(36).substring(2, 10);
     const fileKey = `reimbursement-receipts/${Date.now()}-${randomSuffix}-${input.fileName}`;
@@ -21904,33 +21271,33 @@ var portalReimbursementsRouter = portalRouter({
 });
 
 // server/portal/routers/portalKnowledgeBaseRouter.ts
-import { z as z41 } from "zod";
-import { and as and43, desc as desc20, eq as eq52, inArray as inArray12, isNull as isNull3, or as or8 } from "drizzle-orm";
-import { TRPCError as TRPCError38 } from "@trpc/server";
+import { z as z40 } from "zod";
+import { and as and40, desc as desc18, eq as eq49, inArray as inArray13, isNull as isNull4, or as or8 } from "drizzle-orm";
+import { TRPCError as TRPCError37 } from "@trpc/server";
 init_db2();
 init_schema();
 var topicEnum = ["payroll", "compliance", "leave", "invoice", "onboarding", "general"];
 var portalKnowledgeBaseRouter = portalRouter({
   dashboard: protectedPortalProcedure.input(
-    z41.object({
-      locale: z41.enum(["en", "zh"]).default("en"),
-      topics: z41.array(z41.enum(topicEnum)).optional()
+    z40.object({
+      locale: z40.enum(["en", "zh"]).default("en"),
+      topics: z40.array(z40.enum(topicEnum)).optional()
     }).optional()
   ).query(async ({ ctx, input }) => {
     const db = await getDb();
     if (!db) {
-      throw new TRPCError38({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      throw new TRPCError37({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
     }
     const customerId = ctx.portalUser.customerId;
     const topics = input?.topics?.length ? input.topics : [...topicEnum];
     const items = await db.select().from(knowledgeItems).where(
-      and43(
-        inArray12(knowledgeItems.topic, topics),
-        eq52(knowledgeItems.language, input?.locale ?? "en"),
-        eq52(knowledgeItems.status, "published"),
-        or8(eq52(knowledgeItems.customerId, customerId), isNull3(knowledgeItems.customerId))
+      and40(
+        inArray13(knowledgeItems.topic, topics),
+        eq49(knowledgeItems.language, input?.locale ?? "en"),
+        eq49(knowledgeItems.status, "published"),
+        or8(eq49(knowledgeItems.customerId, customerId), isNull4(knowledgeItems.customerId))
       )
-    ).orderBy(desc20(knowledgeItems.publishedAt), desc20(knowledgeItems.createdAt)).limit(100);
+    ).orderBy(desc18(knowledgeItems.publishedAt), desc18(knowledgeItems.createdAt)).limit(100);
     const topicCounts = topics.reduce((acc, topic) => {
       acc[topic] = items.filter((item) => item.topic === topic).length;
       return acc;
@@ -21943,16 +21310,16 @@ var portalKnowledgeBaseRouter = portalRouter({
     };
   }),
   marketingPreview: protectedPortalProcedure.input(
-    z41.object({
-      locale: z41.enum(["en", "zh"]).default("en"),
-      cadence: z41.enum(["daily", "weekly", "monthly"]).default("weekly"),
-      topics: z41.array(z41.enum(topicEnum)).min(1),
-      channel: z41.enum(["email"]).default("email")
+    z40.object({
+      locale: z40.enum(["en", "zh"]).default("en"),
+      cadence: z40.enum(["daily", "weekly", "monthly"]).default("weekly"),
+      topics: z40.array(z40.enum(topicEnum)).min(1),
+      channel: z40.enum(["email"]).default("email")
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
     if (!db) {
-      throw new TRPCError38({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      throw new TRPCError37({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
     }
     const payload = {
       audienceKey: `customer-${ctx.portalUser.customerId}`,
@@ -21978,18 +21345,18 @@ var portalKnowledgeBaseRouter = portalRouter({
     };
   }),
   submitSearchFeedback: protectedPortalProcedure.input(
-    z41.object({
-      locale: z41.enum(["en", "zh"]).default("en"),
-      query: z41.string().max(500).optional(),
-      topics: z41.array(z41.enum(topicEnum)).default([]),
-      feedbackType: z41.enum(["no_results", "not_helpful"]).default("not_helpful"),
-      note: z41.string().max(2e3).optional(),
-      metadata: z41.record(z41.string(), z41.any()).optional()
+    z40.object({
+      locale: z40.enum(["en", "zh"]).default("en"),
+      query: z40.string().max(500).optional(),
+      topics: z40.array(z40.enum(topicEnum)).default([]),
+      feedbackType: z40.enum(["no_results", "not_helpful"]).default("not_helpful"),
+      note: z40.string().max(2e3).optional(),
+      metadata: z40.record(z40.string(), z40.any()).optional()
     })
   ).mutation(async ({ ctx, input }) => {
     const db = await getDb();
     if (!db) {
-      throw new TRPCError38({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      throw new TRPCError37({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
     }
     await db.insert(knowledgeFeedbackEvents).values({
       customerId: ctx.portalUser.customerId,
@@ -22012,10 +21379,10 @@ var portalKnowledgeBaseRouter = portalRouter({
 });
 
 // server/portal/routers/portalToolkitRouter.ts
-import { z as z42 } from "zod";
+import { z as z41 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq53, and as and44, asc as asc3 } from "drizzle-orm";
+import { eq as eq50, and as and41, asc as asc3 } from "drizzle-orm";
 var portalToolkitRouter = portalRouter({
   // Countries list for dropdowns
   listCountries: protectedPortalProcedure.query(async () => {
@@ -22025,13 +21392,13 @@ var portalToolkitRouter = portalRouter({
       countryCode: countriesConfig.countryCode,
       countryName: countriesConfig.countryName,
       localCurrency: countriesConfig.localCurrency
-    }).from(countriesConfig).where(eq53(countriesConfig.isActive, true));
+    }).from(countriesConfig).where(eq50(countriesConfig.isActive, true));
   }),
   // Cost Calculation
-  calculateCost: protectedPortalProcedure.input(z42.object({
-    countryCode: z42.string(),
-    salary: z42.number(),
-    regionCode: z42.string().optional()
+  calculateCost: protectedPortalProcedure.input(z41.object({
+    countryCode: z41.string(),
+    salary: z41.number(),
+    regionCode: z41.string().optional()
   })).mutation(async ({ input }) => {
     return await calculationService.calculateSocialInsurance({
       countryCode: input.countryCode,
@@ -22041,60 +21408,360 @@ var portalToolkitRouter = portalRouter({
     });
   }),
   // Country Guide
-  listGuideChapters: protectedPortalProcedure.input(z42.object({ countryCode: z42.string() })).query(async ({ input }) => {
+  listGuideChapters: protectedPortalProcedure.input(z41.object({ countryCode: z41.string() })).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new Error("DB error");
     return await db.select().from(countryGuideChapters).where(
-      and44(
-        eq53(countryGuideChapters.countryCode, input.countryCode),
-        eq53(countryGuideChapters.status, "published")
+      and41(
+        eq50(countryGuideChapters.countryCode, input.countryCode),
+        eq50(countryGuideChapters.status, "published")
       )
     ).orderBy(asc3(countryGuideChapters.sortOrder));
   }),
   // Benchmarks
-  getBenchmark: protectedPortalProcedure.input(z42.object({
-    countryCode: z42.string(),
-    jobCategory: z42.string(),
-    seniorityLevel: z42.enum(["junior", "mid", "senior", "lead", "director"])
+  getBenchmark: protectedPortalProcedure.input(z41.object({
+    countryCode: z41.string(),
+    jobCategory: z41.string(),
+    seniorityLevel: z41.enum(["junior", "mid", "senior", "lead", "director"])
   })).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new Error("DB error");
     return await db.query.salaryBenchmarks.findFirst({
-      where: and44(
-        eq53(salaryBenchmarks.countryCode, input.countryCode),
-        eq53(salaryBenchmarks.jobCategory, input.jobCategory),
-        eq53(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
+      where: and41(
+        eq50(salaryBenchmarks.countryCode, input.countryCode),
+        eq50(salaryBenchmarks.jobCategory, input.jobCategory),
+        eq50(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
       )
     });
   })
 });
 
 // server/portal/routers/portalWalletRouter.ts
-import { z as z43 } from "zod";
+import { z as z42 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq54, desc as desc21 } from "drizzle-orm";
-import { TRPCError as TRPCError39 } from "@trpc/server";
+import { eq as eq51, desc as desc19 } from "drizzle-orm";
+import { TRPCError as TRPCError38 } from "@trpc/server";
 var portalWalletRouter = portalRouter({
-  get: protectedPortalProcedure.input(z43.object({
-    currency: z43.string()
+  get: protectedPortalProcedure.input(z42.object({
+    currency: z42.string()
   })).query(async ({ input, ctx }) => {
     return await walletService.getWallet(ctx.portalUser.customerId, input.currency);
   }),
-  listTransactions: protectedPortalProcedure.input(z43.object({
-    currency: z43.string(),
-    limit: z43.number().default(20),
-    offset: z43.number().default(0)
+  listTransactions: protectedPortalProcedure.input(z42.object({
+    currency: z42.string(),
+    limit: z42.number().default(20),
+    offset: z42.number().default(0)
   })).query(async ({ input, ctx }) => {
     const db = getDb();
-    if (!db) throw new TRPCError39({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
+    if (!db) throw new TRPCError38({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     const wallet = await walletService.getWallet(ctx.portalUser.customerId, input.currency);
     return await db.query.walletTransactions.findMany({
-      where: eq54(walletTransactions.walletId, wallet.id),
-      orderBy: [desc21(walletTransactions.createdAt)],
+      where: eq51(walletTransactions.walletId, wallet.id),
+      orderBy: [desc19(walletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
     });
+  })
+});
+
+// server/portal/routers/portalContractorsRouter.ts
+import { z as z43 } from "zod";
+import { TRPCError as TRPCError39 } from "@trpc/server";
+import { eq as eq52, and as and42, like as like12, count as count17, desc as desc20, or as or9 } from "drizzle-orm";
+init_db2();
+init_schema();
+var PORTAL_CONTRACTOR_LIST_FIELDS = {
+  id: contractors.id,
+  contractorCode: contractors.contractorCode,
+  firstName: contractors.firstName,
+  lastName: contractors.lastName,
+  email: contractors.email,
+  phone: contractors.phone,
+  country: contractors.country,
+  jobTitle: contractors.jobTitle,
+  department: contractors.department,
+  startDate: contractors.startDate,
+  endDate: contractors.endDate,
+  status: contractors.status,
+  currency: contractors.currency,
+  paymentFrequency: contractors.paymentFrequency,
+  rateAmount: contractors.rateAmount,
+  createdAt: contractors.createdAt
+};
+var portalContractorsRouter = portalRouter({
+  list: protectedPortalProcedure.input(
+    z43.object({
+      status: z43.string().optional(),
+      search: z43.string().optional(),
+      page: z43.number().default(1),
+      pageSize: z43.number().default(20)
+    })
+  ).query(async ({ ctx, input }) => {
+    const db = getDb();
+    if (!db) return { items: [], total: 0 };
+    const customerId = ctx.portalUser.customerId;
+    const conditions = [eq52(contractors.customerId, customerId)];
+    if (input.status) {
+      conditions.push(eq52(contractors.status, input.status));
+    }
+    if (input.search) {
+      conditions.push(
+        or9(
+          like12(contractors.firstName, `%${input.search}%`),
+          like12(contractors.lastName, `%${input.search}%`),
+          like12(contractors.email, `%${input.search}%`),
+          like12(contractors.contractorCode, `%${input.search}%`)
+        )
+      );
+    }
+    const where = and42(...conditions);
+    const offset = (input.page - 1) * input.pageSize;
+    const [items, totalResult] = await Promise.all([
+      db.select(PORTAL_CONTRACTOR_LIST_FIELDS).from(contractors).where(where).limit(input.pageSize).offset(offset).orderBy(desc20(contractors.createdAt)),
+      db.select({ count: count17() }).from(contractors).where(where)
+    ]);
+    return {
+      items,
+      total: totalResult[0]?.count || 0
+    };
+  }),
+  getById: protectedPortalProcedure.input(z43.object({ id: z43.number() })).query(async ({ ctx, input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError39({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
+    const customerId = ctx.portalUser.customerId;
+    const result = await db.select({
+      id: contractors.id,
+      contractorCode: contractors.contractorCode,
+      firstName: contractors.firstName,
+      lastName: contractors.lastName,
+      email: contractors.email,
+      phone: contractors.phone,
+      dateOfBirth: contractors.dateOfBirth,
+      nationality: contractors.nationality,
+      idNumber: contractors.idNumber,
+      idType: contractors.idType,
+      address: contractors.address,
+      city: contractors.city,
+      state: contractors.state,
+      country: contractors.country,
+      postalCode: contractors.postalCode,
+      jobTitle: contractors.jobTitle,
+      department: contractors.department,
+      startDate: contractors.startDate,
+      endDate: contractors.endDate,
+      status: contractors.status,
+      currency: contractors.currency,
+      paymentFrequency: contractors.paymentFrequency,
+      rateAmount: contractors.rateAmount,
+      notes: contractors.notes,
+      createdAt: contractors.createdAt,
+      updatedAt: contractors.updatedAt
+    }).from(contractors).where(and42(eq52(contractors.id, input.id), eq52(contractors.customerId, customerId))).limit(1);
+    if (result.length === 0) {
+      throw new TRPCError39({ code: "NOT_FOUND", message: "Contractor not found" });
+    }
+    return result[0];
+  }),
+  // Submit AOR onboarding request (creates a new contractor with pending_review status)
+  submitOnboarding: protectedPortalProcedure.input(
+    z43.object({
+      firstName: z43.string().min(1),
+      lastName: z43.string().min(1),
+      email: z43.string().email(),
+      phone: z43.string().optional(),
+      dateOfBirth: z43.string().optional(),
+      nationality: z43.string().optional(),
+      idType: z43.string().optional(),
+      idNumber: z43.string().optional(),
+      address: z43.string().optional(),
+      country: z43.string().min(1),
+      city: z43.string().optional(),
+      state: z43.string().optional(),
+      postalCode: z43.string().optional(),
+      department: z43.string().optional(),
+      jobTitle: z43.string().min(1),
+      startDate: z43.string().min(1),
+      endDate: z43.string().optional(),
+      paymentFrequency: z43.enum(["monthly", "semi_monthly", "milestone"]).default("monthly"),
+      rateAmount: z43.string().optional(),
+      currency: z43.string().default("USD")
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError39({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
+    const customerId = ctx.portalUser.customerId;
+    const existing = await db.select({ count: count17() }).from(contractors);
+    const nextNum = (existing[0]?.count || 0) + 1;
+    const contractorCode = `CTR-${String(nextNum).padStart(4, "0")}`;
+    const result = await db.insert(contractors).values({
+      contractorCode,
+      customerId,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email,
+      phone: input.phone || null,
+      dateOfBirth: input.dateOfBirth || null,
+      nationality: input.nationality || null,
+      idType: input.idType || null,
+      idNumber: input.idNumber || null,
+      address: input.address || null,
+      city: input.city || null,
+      state: input.state || null,
+      country: input.country,
+      postalCode: input.postalCode || null,
+      department: input.department || null,
+      jobTitle: input.jobTitle,
+      startDate: input.startDate,
+      endDate: input.endDate || null,
+      status: "pending_review",
+      paymentFrequency: input.paymentFrequency,
+      rateAmount: input.rateAmount || null,
+      currency: input.currency
+    }).returning();
+    return { contractorId: result[0]?.id };
+  })
+});
+
+// server/portal/routers/portalMilestonesRouter.ts
+import { z as z44 } from "zod";
+import { TRPCError as TRPCError40 } from "@trpc/server";
+import { eq as eq53, and as and43, desc as desc21, inArray as inArray14 } from "drizzle-orm";
+init_db2();
+init_schema();
+var portalMilestonesRouter = portalRouter({
+  /**
+   * List all milestones for the customer's contractors
+   */
+  list: protectedPortalProcedure.input(
+    z44.object({
+      contractorId: z44.number().optional(),
+      status: z44.string().optional()
+    })
+  ).query(async ({ ctx, input }) => {
+    const db = getDb();
+    if (!db) return [];
+    const customerId = ctx.portalUser.customerId;
+    const customerContractors = await db.select({ id: contractors.id }).from(contractors).where(eq53(contractors.customerId, customerId));
+    const contractorIds = customerContractors.map((c) => c.id);
+    if (contractorIds.length === 0) return [];
+    const conditions = [inArray14(contractorMilestones.contractorId, contractorIds)];
+    if (input.contractorId) {
+      if (!contractorIds.includes(input.contractorId)) {
+        throw new TRPCError40({ code: "FORBIDDEN", message: "Contractor not found" });
+      }
+      conditions.push(eq53(contractorMilestones.contractorId, input.contractorId));
+    }
+    if (input.status) {
+      conditions.push(eq53(contractorMilestones.status, input.status));
+    }
+    const milestones = await db.select({
+      id: contractorMilestones.id,
+      contractorId: contractorMilestones.contractorId,
+      title: contractorMilestones.title,
+      description: contractorMilestones.description,
+      amount: contractorMilestones.amount,
+      currency: contractorMilestones.currency,
+      status: contractorMilestones.status,
+      dueDate: contractorMilestones.dueDate,
+      completedAt: contractorMilestones.completedAt,
+      approvedAt: contractorMilestones.approvedAt,
+      createdAt: contractorMilestones.createdAt
+    }).from(contractorMilestones).where(and43(...conditions)).orderBy(desc21(contractorMilestones.createdAt));
+    const contractorMap = /* @__PURE__ */ new Map();
+    if (milestones.length > 0) {
+      const uniqueIds = [...new Set(milestones.map((m) => m.contractorId))];
+      const contractorDetails = await db.select({ id: contractors.id, firstName: contractors.firstName, lastName: contractors.lastName }).from(contractors).where(inArray14(contractors.id, uniqueIds));
+      contractorDetails.forEach((c) => contractorMap.set(c.id, c));
+    }
+    return milestones.map((m) => ({
+      ...m,
+      contractorName: contractorMap.has(m.contractorId) ? `${contractorMap.get(m.contractorId).firstName} ${contractorMap.get(m.contractorId).lastName}` : "Unknown"
+    }));
+  }),
+  /**
+   * Create a new milestone for a contractor
+   */
+  create: protectedPortalProcedure.input(
+    z44.object({
+      contractorId: z44.number(),
+      title: z44.string().min(1),
+      description: z44.string().optional(),
+      amount: z44.string().min(1),
+      currency: z44.string().default("USD"),
+      dueDate: z44.string().optional()
+    })
+  ).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError40({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
+    const customerId = ctx.portalUser.customerId;
+    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and43(eq53(contractors.id, input.contractorId), eq53(contractors.customerId, customerId))).limit(1);
+    if (contractor.length === 0) {
+      throw new TRPCError40({ code: "FORBIDDEN", message: "Contractor not found" });
+    }
+    const result = await db.insert(contractorMilestones).values({
+      contractorId: input.contractorId,
+      title: input.title,
+      description: input.description || null,
+      amount: input.amount,
+      currency: input.currency,
+      dueDate: input.dueDate || null,
+      status: "pending"
+    }).returning();
+    return { id: result[0]?.id };
+  }),
+  /**
+   * Approve a submitted milestone
+   */
+  approve: protectedPortalProcedure.input(z44.object({ id: z44.number() })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError40({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
+    const customerId = ctx.portalUser.customerId;
+    const milestone = await db.select({
+      id: contractorMilestones.id,
+      contractorId: contractorMilestones.contractorId,
+      status: contractorMilestones.status
+    }).from(contractorMilestones).where(eq53(contractorMilestones.id, input.id)).limit(1);
+    if (milestone.length === 0) {
+      throw new TRPCError40({ code: "NOT_FOUND", message: "Milestone not found" });
+    }
+    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and43(eq53(contractors.id, milestone[0].contractorId), eq53(contractors.customerId, customerId))).limit(1);
+    if (contractor.length === 0) {
+      throw new TRPCError40({ code: "FORBIDDEN", message: "Access denied" });
+    }
+    if (milestone[0].status !== "submitted") {
+      throw new TRPCError40({ code: "BAD_REQUEST", message: "Only submitted milestones can be approved" });
+    }
+    await db.update(contractorMilestones).set({
+      status: "approved",
+      approvedAt: /* @__PURE__ */ new Date()
+    }).where(eq53(contractorMilestones.id, input.id));
+    return { success: true };
+  }),
+  /**
+   * Reject a submitted milestone
+   */
+  reject: protectedPortalProcedure.input(z44.object({ id: z44.number() })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError40({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
+    const customerId = ctx.portalUser.customerId;
+    const milestone = await db.select({
+      id: contractorMilestones.id,
+      contractorId: contractorMilestones.contractorId,
+      status: contractorMilestones.status
+    }).from(contractorMilestones).where(eq53(contractorMilestones.id, input.id)).limit(1);
+    if (milestone.length === 0) {
+      throw new TRPCError40({ code: "NOT_FOUND", message: "Milestone not found" });
+    }
+    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and43(eq53(contractors.id, milestone[0].contractorId), eq53(contractors.customerId, customerId))).limit(1);
+    if (contractor.length === 0) {
+      throw new TRPCError40({ code: "FORBIDDEN", message: "Access denied" });
+    }
+    if (milestone[0].status !== "submitted") {
+      throw new TRPCError40({ code: "BAD_REQUEST", message: "Only submitted milestones can be rejected" });
+    }
+    await db.update(contractorMilestones).set({ status: "cancelled" }).where(eq53(contractorMilestones.id, input.id));
+    return { success: true };
   })
 });
 
@@ -22111,11 +21778,13 @@ var portalAppRouter = portalRouter({
   settings: portalSettingsRouter,
   knowledgeBase: portalKnowledgeBaseRouter,
   toolkit: portalToolkitRouter,
-  wallet: portalWalletRouter
+  wallet: portalWalletRouter,
+  contractors: portalContractorsRouter,
+  milestones: portalMilestonesRouter
 });
 
 // server/worker/workerTrpc.ts
-import { initTRPC as initTRPC3, TRPCError as TRPCError40 } from "@trpc/server";
+import { initTRPC as initTRPC3, TRPCError as TRPCError41 } from "@trpc/server";
 import superjson3 from "superjson";
 
 // server/worker/workerAuth.ts
@@ -22124,7 +21793,7 @@ init_connection();
 init_schema();
 import bcrypt3 from "bcryptjs";
 import * as jose3 from "jose";
-import { eq as eq55, and as and45 } from "drizzle-orm";
+import { eq as eq54, and as and44 } from "drizzle-orm";
 var WORKER_COOKIE_NAME = "gea_worker_auth";
 var WORKER_JWT_EXPIRY = "7d";
 var JWT_ISSUER3 = "gea-worker";
@@ -22204,7 +21873,7 @@ async function authenticateWorkerRequest(req) {
     email: workerUsers.email,
     contractorId: workerUsers.contractorId,
     isActive: workerUsers.isActive
-  }).from(workerUsers).where(and45(eq55(workerUsers.id, parseInt(payload.sub)), eq55(workerUsers.isActive, true)));
+  }).from(workerUsers).where(and44(eq54(workerUsers.id, parseInt(payload.sub)), eq54(workerUsers.isActive, true)));
   if (!user) return null;
   return {
     id: user.id,
@@ -22234,7 +21903,7 @@ var workerRouter = t3.router;
 var workerPublicProcedure = t3.procedure;
 var requireWorkerUser = t3.middleware(async ({ ctx, next }) => {
   if (!ctx.workerUser) {
-    throw new TRPCError40({
+    throw new TRPCError41({
       code: "UNAUTHORIZED",
       message: "You must be logged in to access this resource"
     });
@@ -22250,45 +21919,45 @@ var requireWorkerUser = t3.middleware(async ({ ctx, next }) => {
 var protectedWorkerProcedure = t3.procedure.use(requireWorkerUser);
 
 // server/worker/routers/workerAuthRouter.ts
-import { z as z44 } from "zod";
-import { TRPCError as TRPCError41 } from "@trpc/server";
+import { z as z45 } from "zod";
+import { TRPCError as TRPCError42 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq56 } from "drizzle-orm";
+import { eq as eq55 } from "drizzle-orm";
 var workerAuthRouter = workerRouter({
   /**
    * Login with email and password
    */
   login: workerPublicProcedure.input(
-    z44.object({
-      email: z44.string().email(),
-      password: z44.string().min(8)
+    z45.object({
+      email: z45.string().email(),
+      password: z45.string().min(8)
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError41({ code: "INTERNAL_SERVER_ERROR" });
-    const [user] = await db.select().from(workerUsers).where(eq56(workerUsers.email, input.email.toLowerCase().trim()));
+    if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR" });
+    const [user] = await db.select().from(workerUsers).where(eq55(workerUsers.email, input.email.toLowerCase().trim()));
     if (!user) {
-      throw new TRPCError41({
+      throw new TRPCError42({
         code: "UNAUTHORIZED",
         message: "Invalid email or password"
       });
     }
     if (!user.isActive) {
-      throw new TRPCError41({
+      throw new TRPCError42({
         code: "FORBIDDEN",
         message: "Account is inactive"
       });
     }
     if (!user.passwordHash) {
-      throw new TRPCError41({
+      throw new TRPCError42({
         code: "BAD_REQUEST",
         message: "Please complete registration first"
       });
     }
     const isValid = await verifyPassword3(input.password, user.passwordHash);
     if (!isValid) {
-      throw new TRPCError41({
+      throw new TRPCError42({
         code: "UNAUTHORIZED",
         message: "Invalid email or password"
       });
@@ -22300,7 +21969,7 @@ var workerAuthRouter = workerRouter({
       iss: "gea-worker"
     });
     setWorkerCookie(ctx.res, token);
-    await db.update(workerUsers).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq56(workerUsers.id, user.id));
+    await db.update(workerUsers).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq55(workerUsers.id, user.id));
     return {
       success: true,
       user: {
@@ -22327,22 +21996,22 @@ var workerAuthRouter = workerRouter({
    * Register with invite token
    */
   register: workerPublicProcedure.input(
-    z44.object({
-      token: z44.string(),
-      password: z44.string().min(8)
+    z45.object({
+      token: z45.string(),
+      password: z45.string().min(8)
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError41({ code: "INTERNAL_SERVER_ERROR" });
-    const [user] = await db.select().from(workerUsers).where(eq56(workerUsers.inviteToken, input.token));
+    if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR" });
+    const [user] = await db.select().from(workerUsers).where(eq55(workerUsers.inviteToken, input.token));
     if (!user) {
-      throw new TRPCError41({
+      throw new TRPCError42({
         code: "NOT_FOUND",
         message: "Invalid or expired invite token"
       });
     }
     if (user.inviteExpiresAt && new Date(user.inviteExpiresAt) < /* @__PURE__ */ new Date()) {
-      throw new TRPCError41({
+      throw new TRPCError42({
         code: "BAD_REQUEST",
         message: "Invite token has expired"
       });
@@ -22355,7 +22024,7 @@ var workerAuthRouter = workerRouter({
       isEmailVerified: true,
       isActive: true,
       lastLoginAt: /* @__PURE__ */ new Date()
-    }).where(eq56(workerUsers.id, user.id));
+    }).where(eq55(workerUsers.id, user.id));
     const token = await signWorkerToken({
       sub: user.id.toString(),
       email: user.email,
@@ -22368,27 +22037,27 @@ var workerAuthRouter = workerRouter({
 });
 
 // server/worker/routers/workerProfileRouter.ts
-import { z as z45 } from "zod";
-import { TRPCError as TRPCError42 } from "@trpc/server";
+import { z as z46 } from "zod";
+import { TRPCError as TRPCError43 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq57 } from "drizzle-orm";
+import { eq as eq56 } from "drizzle-orm";
 var workerProfileRouter = workerRouter({
   /**
    * Get my profile
    */
   me: protectedWorkerProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError43({ code: "INTERNAL_SERVER_ERROR" });
     if (!ctx.workerUser.contractorId) {
-      throw new TRPCError42({
+      throw new TRPCError43({
         code: "BAD_REQUEST",
         message: "No contractor profile linked to this user"
       });
     }
-    const [contractor] = await db.select().from(contractors).where(eq57(contractors.id, ctx.workerUser.contractorId));
+    const [contractor] = await db.select().from(contractors).where(eq56(contractors.id, ctx.workerUser.contractorId));
     if (!contractor) {
-      throw new TRPCError42({
+      throw new TRPCError43({
         code: "NOT_FOUND",
         message: "Contractor profile not found"
       });
@@ -22399,63 +22068,63 @@ var workerProfileRouter = workerRouter({
    * Update my profile (limited fields)
    */
   update: protectedWorkerProcedure.input(
-    z45.object({
-      firstName: z45.string().min(1).optional(),
-      lastName: z45.string().min(1).optional(),
-      phone: z45.string().optional(),
-      address: z45.string().optional(),
-      city: z45.string().optional(),
-      state: z45.string().optional(),
-      postalCode: z45.string().optional(),
-      bankDetails: z45.any().optional()
+    z46.object({
+      firstName: z46.string().min(1).optional(),
+      lastName: z46.string().min(1).optional(),
+      phone: z46.string().optional(),
+      address: z46.string().optional(),
+      city: z46.string().optional(),
+      state: z46.string().optional(),
+      postalCode: z46.string().optional(),
+      bankDetails: z46.any().optional()
       // TODO: Validate JSON structure
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError43({ code: "INTERNAL_SERVER_ERROR" });
     if (!ctx.workerUser.contractorId) {
-      throw new TRPCError42({
+      throw new TRPCError43({
         code: "BAD_REQUEST",
         message: "No contractor profile linked to this user"
       });
     }
-    await db.update(contractors).set(input).where(eq57(contractors.id, ctx.workerUser.contractorId));
+    await db.update(contractors).set(input).where(eq56(contractors.id, ctx.workerUser.contractorId));
     return { success: true };
   })
 });
 
 // server/worker/routers/workerOnboardingRouter.ts
-import { z as z46 } from "zod";
-import { TRPCError as TRPCError43 } from "@trpc/server";
+import { z as z47 } from "zod";
+import { TRPCError as TRPCError44 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq58 } from "drizzle-orm";
+import { eq as eq57 } from "drizzle-orm";
 var workerOnboardingRouter = workerRouter({
   /**
    * Validate invite token and get basic info
    */
-  validateInvite: workerPublicProcedure.input(z46.object({ token: z46.string() })).query(async ({ input }) => {
+  validateInvite: workerPublicProcedure.input(z47.object({ token: z47.string() })).query(async ({ input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError43({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError44({ code: "INTERNAL_SERVER_ERROR" });
     const [user] = await db.select({
       email: workerUsers.email,
       inviteExpiresAt: workerUsers.inviteExpiresAt,
       isActive: workerUsers.isActive
-    }).from(workerUsers).where(eq58(workerUsers.inviteToken, input.token));
+    }).from(workerUsers).where(eq57(workerUsers.inviteToken, input.token));
     if (!user) {
-      throw new TRPCError43({
+      throw new TRPCError44({
         code: "NOT_FOUND",
         message: "Invalid invite link"
       });
     }
     if (user.isActive) {
-      throw new TRPCError43({
+      throw new TRPCError44({
         code: "BAD_REQUEST",
         message: "Account already active. Please login instead."
       });
     }
     if (user.inviteExpiresAt && new Date(user.inviteExpiresAt) < /* @__PURE__ */ new Date()) {
-      throw new TRPCError43({
+      throw new TRPCError44({
         code: "BAD_REQUEST",
         message: "Invite link has expired"
       });
@@ -22468,53 +22137,14 @@ var workerOnboardingRouter = workerRouter({
 });
 
 // server/worker/routers/workerInvoicesRouter.ts
-import { z as z47 } from "zod";
-import { TRPCError as TRPCError44 } from "@trpc/server";
-init_connection();
-init_schema();
-import { eq as eq59, desc as desc22 } from "drizzle-orm";
-var workerInvoicesRouter = workerRouter({
-  /**
-   * List my invoices
-   */
-  list: protectedWorkerProcedure.input(
-    z47.object({
-      page: z47.number().min(1).default(1),
-      pageSize: z47.number().min(1).max(100).default(20),
-      status: z47.string().optional()
-    })
-  ).query(async ({ input, ctx }) => {
-    const db = await getDb();
-    if (!db) return { items: [], total: 0 };
-    if (!ctx.workerUser.contractorId) {
-      throw new TRPCError44({
-        code: "BAD_REQUEST",
-        message: "No contractor profile linked to this user"
-      });
-    }
-    const offset = (input.page - 1) * input.pageSize;
-    const conditions = [eq59(contractorInvoices.contractorId, ctx.workerUser.contractorId)];
-    if (input.status) {
-      conditions.push(eq59(contractorInvoices.status, input.status));
-    }
-    const items = await db.select().from(contractorInvoices).where(eq59(contractorInvoices.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc22(contractorInvoices.createdAt));
-    return {
-      items,
-      total: 0
-      // TODO: Implement count query
-    };
-  })
-});
-
-// server/worker/routers/workerMilestonesRouter.ts
 import { z as z48 } from "zod";
 import { TRPCError as TRPCError45 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq60, desc as desc23 } from "drizzle-orm";
-var workerMilestonesRouter = workerRouter({
+import { eq as eq58, desc as desc22 } from "drizzle-orm";
+var workerInvoicesRouter = workerRouter({
   /**
-   * List my milestones
+   * List my invoices
    */
   list: protectedWorkerProcedure.input(
     z48.object({
@@ -22532,7 +22162,46 @@ var workerMilestonesRouter = workerRouter({
       });
     }
     const offset = (input.page - 1) * input.pageSize;
-    const items = await db.select().from(contractorMilestones).where(eq60(contractorMilestones.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc23(contractorMilestones.createdAt));
+    const conditions = [eq58(contractorInvoices.contractorId, ctx.workerUser.contractorId)];
+    if (input.status) {
+      conditions.push(eq58(contractorInvoices.status, input.status));
+    }
+    const items = await db.select().from(contractorInvoices).where(eq58(contractorInvoices.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc22(contractorInvoices.createdAt));
+    return {
+      items,
+      total: 0
+      // TODO: Implement count query
+    };
+  })
+});
+
+// server/worker/routers/workerMilestonesRouter.ts
+import { z as z49 } from "zod";
+import { TRPCError as TRPCError46 } from "@trpc/server";
+init_connection();
+init_schema();
+import { eq as eq59, desc as desc23 } from "drizzle-orm";
+var workerMilestonesRouter = workerRouter({
+  /**
+   * List my milestones
+   */
+  list: protectedWorkerProcedure.input(
+    z49.object({
+      page: z49.number().min(1).default(1),
+      pageSize: z49.number().min(1).max(100).default(20),
+      status: z49.string().optional()
+    })
+  ).query(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) return { items: [], total: 0 };
+    if (!ctx.workerUser.contractorId) {
+      throw new TRPCError46({
+        code: "BAD_REQUEST",
+        message: "No contractor profile linked to this user"
+      });
+    }
+    const offset = (input.page - 1) * input.pageSize;
+    const items = await db.select().from(contractorMilestones).where(eq59(contractorMilestones.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc23(contractorMilestones.createdAt));
     return {
       items,
       total: 0
@@ -22544,7 +22213,7 @@ var workerMilestonesRouter = workerRouter({
 // server/worker/routers/workerDashboardRouter.ts
 init_connection();
 init_schema();
-import { eq as eq61, count as count19, and as and47 } from "drizzle-orm";
+import { eq as eq60, count as count18, and as and46 } from "drizzle-orm";
 var workerDashboardRouter = workerRouter({
   /**
    * Get dashboard stats
@@ -22555,8 +22224,8 @@ var workerDashboardRouter = workerRouter({
     if (!ctx.workerUser.contractorId) {
       return { pendingInvoices: 0, pendingMilestones: 0, totalPaid: 0 };
     }
-    const [pendingInvoices] = await db.select({ count: count19() }).from(contractorInvoices).where(and47(eq61(contractorInvoices.contractorId, ctx.workerUser.contractorId), eq61(contractorInvoices.status, "pending_approval")));
-    const [pendingMilestones] = await db.select({ count: count19() }).from(contractorMilestones).where(and47(eq61(contractorMilestones.contractorId, ctx.workerUser.contractorId), eq61(contractorMilestones.status, "pending")));
+    const [pendingInvoices] = await db.select({ count: count18() }).from(contractorInvoices).where(and46(eq60(contractorInvoices.contractorId, ctx.workerUser.contractorId), eq60(contractorInvoices.status, "pending_approval")));
+    const [pendingMilestones] = await db.select({ count: count18() }).from(contractorMilestones).where(and46(eq60(contractorMilestones.contractorId, ctx.workerUser.contractorId), eq60(contractorMilestones.status, "pending")));
     return {
       pendingInvoices: pendingInvoices?.count || 0,
       pendingMilestones: pendingMilestones?.count || 0,
@@ -22567,37 +22236,37 @@ var workerDashboardRouter = workerRouter({
 });
 
 // server/worker/routers/workerNotificationsRouter.ts
-import { z as z49 } from "zod";
-import { TRPCError as TRPCError46 } from "@trpc/server";
+import { z as z50 } from "zod";
+import { TRPCError as TRPCError47 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq62, and as and48, desc as desc24 } from "drizzle-orm";
+import { eq as eq61, and as and47, desc as desc24 } from "drizzle-orm";
 var workerNotificationsRouter = workerRouter({
   /**
    * Get unread notifications
    */
-  getUnread: protectedWorkerProcedure.input(z49.object({ limit: z49.number().default(20) })).query(async ({ ctx, input }) => {
+  getUnread: protectedWorkerProcedure.input(z50.object({ limit: z50.number().default(20) })).query(async ({ ctx, input }) => {
     const db = await getDb();
     if (!db) return [];
     return await db.select().from(notifications).where(
-      and48(
-        eq62(notifications.targetPortal, "worker"),
-        eq62(notifications.targetUserId, ctx.workerUser.id),
-        eq62(notifications.isRead, false)
+      and47(
+        eq61(notifications.targetPortal, "worker"),
+        eq61(notifications.targetUserId, ctx.workerUser.id),
+        eq61(notifications.isRead, false)
       )
     ).orderBy(desc24(notifications.createdAt)).limit(input.limit);
   }),
   /**
    * Mark as read
    */
-  markAsRead: protectedWorkerProcedure.input(z49.object({ id: z49.number() })).mutation(async ({ ctx, input }) => {
+  markAsRead: protectedWorkerProcedure.input(z50.object({ id: z50.number() })).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError46({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError47({ code: "INTERNAL_SERVER_ERROR" });
     await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(
-      and48(
-        eq62(notifications.id, input.id),
-        eq62(notifications.targetPortal, "worker"),
-        eq62(notifications.targetUserId, ctx.workerUser.id)
+      and47(
+        eq61(notifications.id, input.id),
+        eq61(notifications.targetPortal, "worker"),
+        eq61(notifications.targetUserId, ctx.workerUser.id)
       )
     );
     return { success: true };
@@ -22607,12 +22276,12 @@ var workerNotificationsRouter = workerRouter({
    */
   markAllAsRead: protectedWorkerProcedure.mutation(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError46({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError47({ code: "INTERNAL_SERVER_ERROR" });
     await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(
-      and48(
-        eq62(notifications.targetPortal, "worker"),
-        eq62(notifications.targetUserId, ctx.workerUser.id),
-        eq62(notifications.isRead, false)
+      and47(
+        eq61(notifications.targetPortal, "worker"),
+        eq61(notifications.targetUserId, ctx.workerUser.id),
+        eq61(notifications.isRead, false)
       )
     );
     return { success: true };
@@ -22651,7 +22320,7 @@ function serveStatic(app) {
 init_portalAuth();
 init_db2();
 init_schema();
-import { eq as eq63, and as and49 } from "drizzle-orm";
+import { eq as eq62, and as and48 } from "drizzle-orm";
 async function createApp(options = {}) {
   const app = express2();
   const server = createServer(app);
@@ -22761,7 +22430,7 @@ async function createApp(options = {}) {
         res.status(500).json({ error: "Database unavailable" });
         return;
       }
-      const [invoice] = await db.select({ id: invoices.id }).from(invoices).where(and49(eq63(invoices.id, invoiceId), eq63(invoices.customerId, portalUser.customerId)));
+      const [invoice] = await db.select({ id: invoices.id }).from(invoices).where(and48(eq62(invoices.id, invoiceId), eq62(invoices.customerId, portalUser.customerId)));
       if (!invoice) {
         res.status(404).json({ error: "Invoice not found" });
         return;
@@ -22791,7 +22460,8 @@ async function createApp(options = {}) {
       }
       setPortalCookie2(res, token);
       const portalBase = req.hostname === "app.geahr.com" ? "" : "/portal";
-      res.redirect(`${portalBase}/dashboard`);
+      const redirectTarget = portalBase ? `${portalBase}/dashboard` : "/";
+      res.redirect(redirectTarget);
     } catch (error) {
       console.error("Portal impersonation error:", error);
       res.status(500).json({ error: "Impersonation failed" });
@@ -22836,7 +22506,7 @@ async function createApp(options = {}) {
 // server/seedAdmin.ts
 init_db2();
 init_schema();
-import { eq as eq64 } from "drizzle-orm";
+import { eq as eq63 } from "drizzle-orm";
 import crypto5 from "crypto";
 function resolveBootstrapPassword() {
   const fromEnv = process.env.ADMIN_BOOTSTRAP_PASSWORD?.trim();
@@ -22863,7 +22533,7 @@ async function seedDefaultAdmin() {
       console.warn("[Seed] ADMIN_BOOTSTRAP_EMAIL not set, skipping admin seed");
       return;
     }
-    const existing = await db.select({ id: users.id }).from(users).where(eq64(users.email, adminEmail)).limit(1);
+    const existing = await db.select({ id: users.id }).from(users).where(eq63(users.email, adminEmail)).limit(1);
     if (existing.length > 0) {
       console.log("[Seed] Default admin already exists, skipping");
       return;
@@ -22894,7 +22564,7 @@ async function seedDefaultAdmin() {
 init_db2();
 init_schema();
 import "dotenv/config";
-import { eq as eq65, and as and50 } from "drizzle-orm";
+import { eq as eq64, and as and49 } from "drizzle-orm";
 
 // data/seed-migration-data.json
 var seed_migration_data_default = {
@@ -29947,7 +29617,7 @@ async function seedSystemData(db) {
   console.log("[Seed] Checking system data (Countries, Holidays)...");
   const countries = await readJsonFile("data-exports/baseline/countries_config.json");
   if (countries) {
-    let count20 = 0;
+    let count19 = 0;
     for (const country of countries) {
       const { id, ...data } = country;
       const formatted = parseDates(data, ["createdAt", "updatedAt"]);
@@ -29962,49 +29632,49 @@ async function seedSystemData(db) {
           updatedAt: /* @__PURE__ */ new Date()
         }
       });
-      count20++;
+      count19++;
     }
-    console.log(`[Seed] Processed ${count20} countries`);
+    console.log(`[Seed] Processed ${count19} countries`);
   }
   const ltData = await readJsonFile("data-exports/baseline/leave_types.json");
   if (ltData) {
-    let count20 = 0;
+    let count19 = 0;
     for (const lt3 of ltData) {
       const { id, ...data } = lt3;
       const formatted = parseDates(data, ["createdAt", "updatedAt"]);
       const existing = await db.query.leaveTypes.findFirst({
-        where: and50(
-          eq65(leaveTypes.countryCode, formatted.countryCode),
-          eq65(leaveTypes.leaveTypeName, formatted.leaveTypeName)
+        where: and49(
+          eq64(leaveTypes.countryCode, formatted.countryCode),
+          eq64(leaveTypes.leaveTypeName, formatted.leaveTypeName)
         )
       });
       if (!existing) {
         await db.insert(leaveTypes).values(formatted);
-        count20++;
+        count19++;
       }
     }
-    console.log(`[Seed] Added ${count20} new leave types`);
+    console.log(`[Seed] Added ${count19} new leave types`);
   }
   const holidays = await readJsonFile("data-exports/baseline/public_holidays.json");
   if (holidays) {
-    let count20 = 0;
+    let count19 = 0;
     for (const h of holidays) {
       const { id, ...data } = h;
       const formatted = parseDates(data, ["createdAt", "updatedAt"]);
       const existing = await db.query.publicHolidays.findFirst({
-        where: and50(
-          eq65(publicHolidays.countryCode, formatted.countryCode),
-          eq65(publicHolidays.year, formatted.year),
-          eq65(publicHolidays.holidayDate, formatted.holidayDate),
-          eq65(publicHolidays.holidayName, formatted.holidayName)
+        where: and49(
+          eq64(publicHolidays.countryCode, formatted.countryCode),
+          eq64(publicHolidays.year, formatted.year),
+          eq64(publicHolidays.holidayDate, formatted.holidayDate),
+          eq64(publicHolidays.holidayName, formatted.holidayName)
         )
       });
       if (!existing) {
         await db.insert(publicHolidays).values(formatted);
-        count20++;
+        count19++;
       }
     }
-    console.log(`[Seed] Added ${count20} new holidays`);
+    console.log(`[Seed] Added ${count19} new holidays`);
   }
 }
 async function seedMigration() {
@@ -30028,7 +29698,7 @@ async function seedMigration() {
   for (let i = 0; i < data.customers.length; i++) {
     const c = data.customers[i];
     const index4 = i + 1;
-    const existing = await db.select({ id: customers.id }).from(customers).where(eq65(customers.clientCode, c.clientCode)).limit(1);
+    const existing = await db.select({ id: customers.id }).from(customers).where(eq64(customers.clientCode, c.clientCode)).limit(1);
     let customerId;
     if (existing.length > 0) {
       customerId = existing[0].id;
@@ -30057,7 +29727,7 @@ async function seedMigration() {
     const index4 = i + 1;
     const dbCustomerId = customerMap.get(e.customerIndex);
     if (!dbCustomerId) continue;
-    const existing = await db.select({ id: employees.id }).from(employees).where(eq65(employees.employeeCode, e.employeeCode)).limit(1);
+    const existing = await db.select({ id: employees.id }).from(employees).where(eq64(employees.employeeCode, e.employeeCode)).limit(1);
     let employeeId;
     if (existing.length > 0) {
       employeeId = existing[0].id;
@@ -30100,7 +29770,7 @@ async function seedMigration() {
     const dbCustomerId = customerMap.get(inv.customerIndex);
     const dbEmployeeId = employeeMap.get(inv.employeeIndex);
     if (!dbCustomerId || !dbEmployeeId) continue;
-    const existing = await db.select({ id: invoices.id }).from(invoices).where(eq65(invoices.invoiceNumber, inv.invoiceNumber)).limit(1);
+    const existing = await db.select({ id: invoices.id }).from(invoices).where(eq64(invoices.invoiceNumber, inv.invoiceNumber)).limit(1);
     if (existing.length > 0) continue;
     let dbType = "deposit";
     if (inv.invoiceType === "deposit_refund") dbType = "deposit_refund";
@@ -30138,6 +29808,55 @@ async function seedMigration() {
   console.log("[Seed] Migration seed completed.");
 }
 
+// server/autoMigrate.ts
+import { createClient as createClient2 } from "@libsql/client";
+var REQUIRED_COLUMNS = [
+  {
+    table: "invoices",
+    column: "creditNoteDisposition",
+    type: "TEXT"
+    // No default — nullable column
+  }
+];
+async function runAutoMigrations() {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    console.warn("[AutoMigrate] DATABASE_URL not set, skipping migrations");
+    return;
+  }
+  const url = dbUrl.includes("://") ? dbUrl : `file:${dbUrl}`;
+  let client;
+  try {
+    client = createClient2({ url });
+  } catch (err) {
+    console.warn("[AutoMigrate] Failed to connect to database:", err);
+    return;
+  }
+  for (const migration of REQUIRED_COLUMNS) {
+    try {
+      const tableInfo = await client.execute(`PRAGMA table_info("${migration.table}")`);
+      const columnExists = tableInfo.rows.some(
+        (row) => row.name === migration.column || row[1] === migration.column
+      );
+      if (!columnExists) {
+        const defaultClause = migration.defaultValue != null ? ` DEFAULT ${migration.defaultValue}` : "";
+        const sql23 = `ALTER TABLE "${migration.table}" ADD COLUMN "${migration.column}" ${migration.type}${defaultClause}`;
+        await client.execute(sql23);
+        console.log(`[AutoMigrate] Added column: ${migration.table}.${migration.column}`);
+      }
+    } catch (err) {
+      if (err?.message?.includes("duplicate column")) {
+      } else {
+        console.error(
+          `[AutoMigrate] Failed to add ${migration.table}.${migration.column}:`,
+          err?.message || err
+        );
+      }
+    }
+  }
+  console.log("[AutoMigrate] Schema check complete");
+}
+
 // server/_core/index.ts
 function isPortAvailable(port) {
   return new Promise((resolve) => {
@@ -30165,6 +29884,7 @@ async function startServer() {
   }
   server.listen(port, async () => {
     console.log(`Server running on http://localhost:${port}/`);
+    await runAutoMigrations();
     await seedDefaultAdmin();
     await seedMigration();
     scheduleCronJobs();

@@ -414,13 +414,16 @@ function CustomerDetail({ id }: { id: number }) {
     globalDiscountPercent: "",
     countryCode: "",
     selectedCountries: [] as string[],
-    serviceType: "eor" as "eor" | "visa_eor" | "aor",
+    serviceType: "eor" as "eor" | "visa_eor",
     fixedPrice: "",
     visaOneTimeFee: "",
     currency: "USD",
     effectiveFrom: formatDateISO(new Date()),
     effectiveTo: "",
   });
+  // AOR pricing — separate state for the dedicated AOR card
+  const [aorPricingOpen, setAorPricingOpen] = useState(false);
+  const [aorForm, setAorForm] = useState({ fixedPrice: "", currency: "USD", effectiveFrom: formatDateISO(new Date()) });
   const createPricingMutation = trpc.customers.pricing.create.useMutation({
     onSuccess: () => { toast.success("Pricing added"); setPricingOpen(false); refetchPricing(); },
     onError: (err) => toast.error(err.message),
@@ -433,6 +436,23 @@ function CustomerDetail({ id }: { id: number }) {
     onSuccess: () => { toast.success("Pricing deleted"); refetchPricing(); },
     onError: (err) => toast.error(err.message),
   });
+
+  // Derive AOR pricing from the pricing list
+  const activeAorPricing = pricing?.find((p: any) => p.pricingType === "client_aor_fixed" && p.isActive);
+  // EOR/Visa EOR pricing only (for the table)
+  const eorPricingList = pricing?.filter((p: any) => p.pricingType !== "client_aor_fixed") || [];
+
+  function handleSaveAorPricing() {
+    if (!aorForm.fixedPrice) { toast.error("AOR price is required"); return; }
+    createPricingMutation.mutate({
+      customerId: id,
+      pricingType: "client_aor_fixed",
+      fixedPrice: aorForm.fixedPrice,
+      currency: aorForm.currency,
+      effectiveFrom: aorForm.effectiveFrom,
+    });
+    setAorPricingOpen(false);
+  }
 
   function handleSavePricing() {
     if (pricingForm.pricingType === "global_discount") {
@@ -887,7 +907,78 @@ function CustomerDetail({ id }: { id: number }) {
 
         {/* ── Pricing Tab ── */}
         {activeTab === "pricing" && (
-          <div className="space-y-4">
+          <div className="space-y-6">
+            {/* ── Section 1: AOR Service Fee (dedicated card) ── */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">{t("customers.pricing.aorSectionTitle")}</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">{t("customers.pricing.aorSectionHint")}</p>
+                  </div>
+                  <Dialog open={aorPricingOpen} onOpenChange={(open) => {
+                    setAorPricingOpen(open);
+                    if (open) {
+                      setAorForm({
+                        fixedPrice: activeAorPricing?.fixedPrice || "",
+                        currency: activeAorPricing?.currency || "USD",
+                        effectiveFrom: activeAorPricing?.effectiveFrom || formatDateISO(new Date()),
+                      });
+                    }
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" variant={activeAorPricing ? "outline" : "default"}>
+                        {activeAorPricing ? <><Pencil className="w-3.5 h-3.5 mr-1.5" />{t("customers.pricing.aorEditPrice")}</> : <><Plus className="w-4 h-4 mr-2" />{t("customers.pricing.aorSetPrice")}</>}
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-sm">
+                      <DialogHeader><DialogTitle>{t("customers.pricing.aorSetPrice")}</DialogTitle></DialogHeader>
+                      <div className="space-y-4 mt-4">
+                        <div className="space-y-2">
+                          <Label>{t("customers.pricing.aorPriceLabel")} *</Label>
+                          <Input type="number" step="0.01" value={aorForm.fixedPrice} onChange={(e) => setAorForm({ ...aorForm, fixedPrice: e.target.value })} placeholder="300.00" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>{t("common.currency")}</Label>
+                            <CurrencySelect value={aorForm.currency} onValueChange={(v) => setAorForm({ ...aorForm, currency: v })} />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>{t("common.effectiveFrom")} *</Label>
+                            <Input type="text" placeholder="YYYY-MM-DD" value={aorForm.effectiveFrom} onChange={(e) => setAorForm({ ...aorForm, effectiveFrom: e.target.value })} />
+                          </div>
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                          <Button variant="outline" onClick={() => setAorPricingOpen(false)}>{t("common.cancel")}</Button>
+                          <Button onClick={handleSaveAorPricing} disabled={createPricingMutation.isPending}>
+                            {createPricingMutation.isPending ? "Saving..." : t("common.save")}
+                          </Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                {activeAorPricing ? (
+                  <div className="flex items-center gap-4 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg">
+                    <DollarSign className="w-5 h-5 text-emerald-600" />
+                    <div className="flex-1">
+                      <p className="text-lg font-semibold font-mono">{activeAorPricing.currency} {activeAorPricing.fixedPrice}</p>
+                      <p className="text-xs text-muted-foreground">{t("customers.pricing.aorPerContractorMonth")} · {t("common.effectiveFrom")}: {formatDate(activeAorPricing.effectiveFrom)}</p>
+                    </div>
+                    <Badge variant="default" className="text-xs">Active</Badge>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm("Remove AOR pricing?")) deletePricingMutation.mutate({ id: activeAorPricing.id }); }}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-2">{t("customers.pricing.aorNotSet")}</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* ── Section 2: EOR / Visa EOR Pricing ── */}
             <Card className="bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
               <CardContent className="p-4">
                 <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">{t("customers.pricing.priorityTitle")}</p>
@@ -896,7 +987,8 @@ function CustomerDetail({ id }: { id: number }) {
                 </p>
               </CardContent>
             </Card>
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium">{t("customers.pricing.eorSectionTitle")}</h3>
               <Dialog open={pricingOpen} onOpenChange={(open) => { setPricingOpen(open); if (open) { setPricingMode("single"); setPricingForm({ pricingType: "country_specific", globalDiscountPercent: "", countryCode: "", selectedCountries: [], serviceType: "eor", fixedPrice: "", visaOneTimeFee: "", currency: "USD", effectiveFrom: formatDateISO(new Date()), effectiveTo: "" }); } }}>
                 <DialogTrigger asChild>
                   <Button size="sm"><Plus className="w-4 h-4 mr-2" />{t("customers.pricing.addPricing")}</Button>
@@ -944,7 +1036,6 @@ function CustomerDetail({ id }: { id: number }) {
                                 <SelectContent>
                                   <SelectItem value="eor">{t("employees.create.form.serviceType.eor")}</SelectItem>
                                   <SelectItem value="visa_eor">{t("employees.create.form.serviceType.visaEor")}</SelectItem>
-                                  <SelectItem value="aor">{t("employees.create.form.serviceType.aor")}</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -979,7 +1070,6 @@ function CustomerDetail({ id }: { id: number }) {
                                 <SelectContent>
                                   <SelectItem value="eor">{t("employees.create.form.serviceType.eor")}</SelectItem>
                                   <SelectItem value="visa_eor">{t("employees.create.form.serviceType.visaEor")}</SelectItem>
-                                  <SelectItem value="aor">{t("employees.create.form.serviceType.aor")}</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
@@ -1027,10 +1117,10 @@ function CustomerDetail({ id }: { id: number }) {
               </Dialog>
             </div>
 
-            {/* Pricing Table */}
+            {/* EOR/Visa EOR Pricing Table */}
             <Card>
               <CardContent className="p-0">
-                {pricing && pricing.length > 0 ? (
+                {eorPricingList.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1047,7 +1137,7 @@ function CustomerDetail({ id }: { id: number }) {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {pricing.map((p) => {
+                      {eorPricingList.map((p: any) => {
                         const stdRates = p.countryCode ? standardRatesMap[p.countryCode] : undefined;
                         const stdRate = stdRates && p.serviceType ? stdRates[p.serviceType as keyof typeof stdRates] : undefined;
                         return (

@@ -194,10 +194,10 @@ export const customersRouter = router({
       .input(
         z.object({
           customerId: z.number(),
-          pricingType: z.enum(["global_discount", "country_specific"]),
+          pricingType: z.enum(["global_discount", "country_specific", "client_aor_fixed"]),
           globalDiscountPercent: z.string().optional(),
           countryCode: z.string().optional(),
-          serviceType: z.enum(["eor", "visa_eor"]).optional(),
+          serviceType: z.enum(["eor", "visa_eor", "aor"]).optional(),
           fixedPrice: z.string().optional(),
           visaOneTimeFee: z.string().optional(),
           currency: z.string().default("USD"),
@@ -211,6 +211,9 @@ export const customersRouter = router({
         for (const p of existingPricing) {
           if (!p.isActive) continue;
           if (input.pricingType === "global_discount" && p.pricingType === "global_discount") {
+            await updateCustomerPricing(p.id, { isActive: false });
+          } else if (input.pricingType === "client_aor_fixed" && p.pricingType === "client_aor_fixed") {
+            // Only one active AOR global price per customer
             await updateCustomerPricing(p.id, { isActive: false });
           } else if (input.pricingType === "country_specific" && p.pricingType === "country_specific"
             && p.countryCode === input.countryCode && p.serviceType === input.serviceType) {
@@ -245,7 +248,7 @@ export const customersRouter = router({
         z.object({
           customerId: z.number(),
           countryCodes: z.array(z.string()).min(1),
-          serviceType: z.enum(["eor", "visa_eor"]),
+          serviceType: z.enum(["eor", "visa_eor", "aor"]),
           fixedPrice: z.string(),
           visaOneTimeFee: z.string().optional(),
           currency: z.string().default("USD"),
