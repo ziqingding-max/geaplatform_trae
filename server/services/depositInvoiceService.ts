@@ -194,7 +194,8 @@ export async function generateDepositInvoice(
       employeeId,
       description: `Deposit - ${employee.employeeCode || ''} ${employee.firstName} ${employee.lastName}`,
       quantity: depositMultiplier.toString(),
-      unitPrice: monthlyTotalSettlement.toFixed(2),
+      // Use localCurrency unit price if available (for PDF display), otherwise settlement currency unit price
+      unitPrice: employeeCurrency !== settlementCurrency ? monthlyTotal.toFixed(2) : monthlyTotalSettlement.toFixed(2),
       amount: depositAmount.toFixed(2),
       itemType: "deposit",
       countryCode: employee.country,
