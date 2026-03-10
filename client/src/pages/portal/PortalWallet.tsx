@@ -19,7 +19,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wallet, CreditCard, ArrowDownLeft, ArrowUpRight, History } from "lucide-react";
+import { Wallet, CreditCard, ArrowDownLeft, ArrowUpRight, History, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import {
   Select,
@@ -184,6 +185,7 @@ export default function PortalWallet() {
                     <TableHead>{t("portal_wallet.transactions.table.date")}</TableHead>
                     <TableHead>{t("portal_wallet.transactions.table.type")}</TableHead>
                     <TableHead>{t("portal_wallet.transactions.table.description")}</TableHead>
+                    <TableHead>{t("portal_wallet.transactions.table.actions")}</TableHead>
                     <TableHead className="text-right">{t("portal_wallet.transactions.table.amount")}</TableHead>
                     <TableHead className="text-right">{t("portal_wallet.overview.current_balance")}</TableHead>
                   </TableRow>
@@ -201,8 +203,23 @@ export default function PortalWallet() {
                         <div className="truncate font-medium">{tx.description}</div>
                         {tx.referenceId && (
                           <div className="text-xs text-muted-foreground mt-0.5">
-                            {t("portal_wallet.transactions.table.reference")}: {tx.referenceType} #{tx.referenceId}
+                            {t("portal_wallet.transactions.table.reference")}: {(tx as any).invoiceNumber || `${tx.referenceType} #${tx.referenceId}`}
                           </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {tx.type === "credit_note_in" && tx.referenceId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                            onClick={() => {
+                              window.open(`/api/portal-invoices/${tx.referenceId}/pdf`, "_blank");
+                            }}
+                          >
+                            <Download className="w-4 h-4 mr-1" />
+                            {t("portal_wallet.transactions.download_credit_note")}
+                          </Button>
                         )}
                       </TableCell>
                       <TableCell className={`text-right font-mono font-medium ${

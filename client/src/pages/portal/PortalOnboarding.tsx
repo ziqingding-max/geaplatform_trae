@@ -997,26 +997,30 @@ export default function PortalOnboarding() {
           <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.department")}</Label>
           <Input value={formData.department} onChange={(e) => updateField("department", e.target.value)} placeholder="e.g. Engineering" className="h-10 rounded-xl" />
         </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.employment_type")}</Label>
-          <Select value={formData.employmentType} onValueChange={(v) => updateField("employmentType", v)}>
-            <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="long_term">{t("portal_onboarding.employment.employment_type.permanent")}</SelectItem>
-              <SelectItem value="fixed_term">{t("portal_onboarding.employment.employment_type.fixed_term")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Bug 9: Hide Employment Type for AOR — it's EOR-specific */}
+        {!isAor && (
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.employment_type")}</Label>
+            <Select value={formData.employmentType} onValueChange={(v) => updateField("employmentType", v)}>
+              <SelectTrigger className="h-10 rounded-xl"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="long_term">{t("portal_onboarding.employment.employment_type.permanent")}</SelectItem>
+                <SelectItem value="fixed_term">{t("portal_onboarding.employment.employment_type.fixed_term")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.start_date")} <span className="text-destructive">*</span></Label>
+          <Label className="text-sm font-medium">{isAor ? "Contract Start Date" : t("portal_onboarding.employment.label.start_date")} <span className="text-destructive">*</span></Label>
           <DatePicker value={formData.startDate} onChange={(v: string) => updateField("startDate", v)} placeholder="Select start date" />
           {fieldErrors.startDate && <p className="text-xs text-destructive mt-1">{fieldErrors.startDate}</p>}
         </div>
-        {formData.employmentType === "fixed_term" && (
+        {/* Bug 9: For AOR, always show end date; for EOR, only show for fixed_term */}
+        {(isAor || formData.employmentType === "fixed_term") && (
           <div className="space-y-2">
-            <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.end_date")}</Label>
+            <Label className="text-sm font-medium">{isAor ? "Contract End Date" : t("portal_onboarding.employment.label.end_date")}</Label>
             <DatePicker value={formData.endDate} onChange={(v: string) => updateField("endDate", v)} placeholder="Select end date" />
             {fieldErrors.endDate && <p className="text-xs text-destructive mt-1">{fieldErrors.endDate}</p>}
           </div>

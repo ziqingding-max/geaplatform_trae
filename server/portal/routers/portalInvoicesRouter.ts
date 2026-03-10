@@ -70,7 +70,7 @@ export const portalInvoicesRouter = portalRouter({
         invoiceMonth: z.string().optional(),
         tab: z.enum(["active", "history"]).default("active"),
         typeCategory: z.enum(["all", "receivables", "credits", "deposits"]).default("all"),
-        excludeCreditNotes: z.boolean().optional(),
+        excludeCreditNotes: z.boolean().default(true),
       })
     )
     .query(async ({ input, ctx }) => {
@@ -90,8 +90,8 @@ export const portalInvoicesRouter = portalRouter({
 
       // Tab filter
       if (input.tab === "active") {
-        // Active: sent, paid, overdue, applied (exclude cancelled/void)
-        conditions.push(sql`${invoices.status} NOT IN ('cancelled', 'void')`);
+        // Active: sent, overdue, applied (exclude cancelled/void/paid)
+        conditions.push(sql`${invoices.status} NOT IN ('cancelled', 'void', 'paid')`);
       } else {
         // History: paid, applied, cancelled, void
         conditions.push(sql`${invoices.status} IN ('paid', 'applied', 'cancelled', 'void')`);

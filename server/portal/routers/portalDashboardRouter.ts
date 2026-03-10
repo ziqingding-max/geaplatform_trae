@@ -19,6 +19,7 @@ import {
   countriesConfig,
   payrollRuns,
   payrollItems,
+  contractors,
 } from "../../../drizzle/schema";
 
 export const portalDashboardRouter = portalRouter({
@@ -35,6 +36,12 @@ export const portalDashboardRouter = portalRouter({
       .select({ count: count() })
       .from(employees)
       .where(and(eq(employees.customerId, cid), eq(employees.status, "active")));
+
+    // Bug 3: Active contractors count
+    const [contractorCount] = await db
+      .select({ count: count() })
+      .from(contractors)
+      .where(and(eq(contractors.customerId, cid), eq(contractors.status, "active")));
 
     // Active countries (distinct country codes of active employees)
     const activeCountries = await db
@@ -80,7 +87,9 @@ export const portalDashboardRouter = portalRouter({
       .where(and(eq(invoices.customerId, cid), eq(invoices.status, "sent")));
 
     return {
-      activeEmployees: empCount?.count ?? 0,
+      activeEmployees: (empCount?.count ?? 0) + (contractorCount?.count ?? 0),
+      activeEorEmployees: empCount?.count ?? 0,
+      activeContractors: contractorCount?.count ?? 0,
       activeCountries: activeCountries.length,
       pendingOnboarding: onboardingCount?.count ?? 0,
       pendingAdjustments: adjCount?.count ?? 0,
