@@ -148,9 +148,7 @@ export default function PortalInvoiceDetail() {
   // Credit note active status = green
   if (isCreditNote && data.status !== "applied" && data.status !== "cancelled" && data.status !== "void") {
     statusColor = "bg-emerald-50 text-emerald-700 border-emerald-200";
-    if (data.creditNoteBalance && data.creditNoteBalance.applied > 0 && data.creditNoteBalance.remaining > 0) {
-      statusLabel = t("portal_invoices.status.partially_applied");
-    }
+    // Credit Note Apply removed — credit notes go through Release Tasks → Wallet
   }
 
   // Banner color
@@ -171,13 +169,8 @@ export default function PortalInvoiceDetail() {
   let bannerValue = formatCurrency(data.currency, data.balanceDue);
 
   if (isCreditNote) {
-    if (data.creditNoteBalance && data.creditNoteBalance.remaining > 0) {
-      bannerLabel = t("portal_invoice_detail.banner.available_credit");
-      bannerValue = formatCurrency(data.currency, data.creditNoteBalance.remaining);
-    } else {
-      bannerLabel = t("portal_invoice_detail.banner.credit_amount");
-      bannerValue = formatCurrency(data.currency, Math.abs(Number(data.total)));
-    }
+    bannerLabel = t("portal_invoice_detail.banner.credit_amount");
+    bannerValue = formatCurrency(data.currency, Math.abs(Number(data.total)));
   } else if (isDepositRefund) {
     bannerLabel = t("portal_invoice_detail.banner.refund_amount");
     bannerValue = formatCurrency(data.currency, Math.abs(Number(data.total)));
@@ -311,77 +304,7 @@ export default function PortalInvoiceDetail() {
               </CardContent>
             </Card>
 
-            {/* Applied Credit Notes (which CNs were applied to THIS invoice) */}
-            {data.creditApplications && data.creditApplications.length > 0 && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-emerald-600" />
-                    {t("portal_invoice_detail.credits_applied.title")}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {data.creditApplications.map((ca: any) => (
-                    <div
-                      key={ca.id}
-                      className="flex items-center justify-between p-4 rounded-xl border bg-emerald-50/50 border-emerald-100 hover:bg-emerald-50 transition-colors cursor-pointer"
-                      onClick={() => ca.creditNoteId && navigateToInvoice(ca.creditNoteId)}
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-semibold text-emerald-800">{ca.creditNoteNumber}</p>
-                          <ExternalLink className="w-3 h-3 text-emerald-600/60" />
-                        </div>
-                        {ca.notes && <p className="text-xs text-emerald-600/80">{ca.notes}</p>}
-                        <p className="text-xs text-muted-foreground">{t("portal_invoice_detail.credits_applied.applied_on")} {formatDate(ca.appliedAt)}</p>
-                      </div>
-                      <span className="font-mono text-sm text-emerald-700 font-semibold">
-                        -{formatCurrency(data.currency, ca.appliedAmount)}
-                      </span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Credit Note Application History (if THIS is a credit note, where was it applied) */}
-            {isCreditNote && data.creditApplicationsFrom && data.creditApplicationsFrom.length > 0 && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                    {t("portal_invoice_detail.application_history.title")}
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {t("portal_invoice_detail.application_history.description")}
-                  </p>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {data.creditApplicationsFrom.map((app: any) => (
-                    <div
-                      key={app.id}
-                      className="flex items-center justify-between p-4 rounded-xl border hover:bg-muted/30 transition-colors cursor-pointer"
-                      onClick={() => app.appliedToInvoiceId && navigateToInvoice(app.appliedToInvoiceId)}
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium">{app.invoiceNumber}</p>
-                          <Badge variant="outline" className="text-xs">
-                            {invoiceTypeLabels[app.invoiceType] || app.invoiceType}
-                          </Badge>
-                          <ExternalLink className="w-3 h-3 text-muted-foreground/60" />
-                        </div>
-                        {app.notes && <p className="text-xs text-muted-foreground">{app.notes}</p>}
-                        <p className="text-xs text-muted-foreground">{t("portal_invoice_detail.credits_applied.applied_on")} {formatDate(app.appliedAt)}</p>
-                      </div>
-                      <span className="font-mono text-sm font-medium">
-                        {formatCurrency(data.currency, app.appliedAmount)}
-                      </span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
+            {/* Credit Note Apply sections removed — credit notes now go through Release Tasks → Wallet */}
 
             {/* Related Documents (bidirectional via relatedInvoiceId) */}
             {(data.relatedDocuments?.parent || (data.relatedDocuments?.children && data.relatedDocuments.children.length > 0)) && (
@@ -491,15 +414,7 @@ export default function PortalInvoiceDetail() {
                     </span>
                   </div>
 
-                  {/* Credit Applied */}
-                  {Number(data.creditApplied) > 0 && (
-                    <div className="flex justify-between items-center text-emerald-600">
-                      <span className="text-sm">{t("portal_invoice_detail.summary.credit_applied")}</span>
-                      <span className="text-sm font-mono tabular-nums">-{formatCurrency(data.currency, data.creditApplied)}</span>
-                    </div>
-                  )}
-
-                  {/* Amount Due (after credit) */}
+                  {/* Amount Due (after wallet deduction) */}
                   {data.amountDue != null && Number(data.amountDue) !== Number(data.total) && !isCreditNote && (
                     <>
                       <Separator />
@@ -567,46 +482,7 @@ export default function PortalInvoiceDetail() {
               </CardContent>
             </Card>
 
-            {/* Credit Note Balance Card (only for credit notes) */}
-            {isCreditNote && data.creditNoteBalance && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-                    {t("portal_invoice_detail.credit_balance.title")}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t("portal_invoice_detail.credit_balance.original_amount")}</span>
-                    <span className="text-sm font-mono tabular-nums">{formatCurrency(data.currency, data.creditNoteBalance.original)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">{t("portal_invoice_detail.status.applied")}</span>
-                    <span className="text-sm font-mono tabular-nums">{formatCurrency(data.currency, data.creditNoteBalance.applied)}</span>
-                  </div>
-                  <Separator />
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-semibold">{t("portal_invoice_detail.credit_balance.remaining")}</span>
-                    <span className={cn(
-                      "text-sm font-mono font-semibold tabular-nums",
-                      data.creditNoteBalance.remaining > 0 ? "text-emerald-600" : "text-muted-foreground"
-                    )}>
-                      {formatCurrency(data.currency, data.creditNoteBalance.remaining)}
-                    </span>
-                  </div>
-                  {/* Progress bar */}
-                  <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="bg-emerald-500 h-2 rounded-full transition-all"
-                      style={{ width: `${Math.min(100, (data.creditNoteBalance.applied / data.creditNoteBalance.original) * 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground text-center">
-                    {Math.round((data.creditNoteBalance.applied / data.creditNoteBalance.original) * 100)}% {t("portal_invoice_detail.credit_balance.applied_percent")}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+            {/* Credit Note Balance Card removed — credit notes go through Release Tasks → Wallet */}
 
             {/* Payment Details Card */}
             {data.paidDate && (

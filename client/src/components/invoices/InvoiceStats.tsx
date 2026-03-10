@@ -102,7 +102,7 @@ export function InvoiceStats({
                       </span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
                       <div className="text-xs text-muted-foreground">{t("invoices.monthlyOverview.totalInvoiced")}</div>
                       <div className="text-sm font-bold font-mono">
@@ -121,6 +121,14 @@ export function InvoiceStats({
                         {ccy.currency} {formatAmount(ccy.totalAmount - ccy.paidAmount)}
                       </div>
                     </div>
+                    {ccy.depositAmount > 0 && (
+                      <div>
+                        <div className="text-xs text-muted-foreground">{t("invoices.monthlyOverview.deposits") || "Deposits (Liability)"}</div>
+                        <div className="text-sm font-bold font-mono text-blue-600">
+                          {ccy.currency} {formatAmount(ccy.depositAmount)}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   {/* Collection progress bar */}
                   <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">

@@ -1206,11 +1206,11 @@ function VendorBillDetail({ id }: { id: number }) {
       if (billType === 'deposit') {
         // Deposit vendor bills can only be allocated to deposit invoices
         if (inv.invoiceType !== 'deposit') return false;
-        // Exclude deposits that have been fully consumed by credit notes
-        // (creditApplied >= total means the deposit funds have been redirected)
-        const creditApplied = parseFloat(inv.creditApplied || '0');
+        // Exclude deposits that have been fully refunded via wallet
+        // (walletAppliedAmount >= total means the deposit funds have been redirected)
+        const walletApplied = parseFloat(inv.walletAppliedAmount || '0');
         const total = parseFloat(inv.total || '0');
-        if (total > 0 && creditApplied >= total) return false;
+        if (total > 0 && walletApplied >= total) return false;
       } else {
         // Operational vendor bills should not be allocated to deposits
         if (inv.invoiceType === 'deposit') return false;
