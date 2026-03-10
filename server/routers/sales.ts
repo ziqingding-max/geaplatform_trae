@@ -377,18 +377,34 @@ export const salesRouter = router({
             }
 
             for (const item of pricingMap.values()) {
-              await createCustomerPricing({
-                customerId,
-                pricingType: "country_specific",
-                countryCode: item.countryCode,
-                serviceType: item.serviceType,
-                fixedPrice: String(item.serviceFee),
-                visaOneTimeFee: item.oneTimeFee ? String(item.oneTimeFee) : undefined,
-                currency: item.currency || input.settlementCurrency,
-                effectiveFrom: new Date().toISOString().split("T")[0],
-                sourceQuotationId: latestQuotation.id,
-                isActive: true,
-              });
+              if (item.serviceType === "aor") {
+                // AOR Global Pricing
+                await createCustomerPricing({
+                  customerId,
+                  pricingType: "client_aor_fixed",
+                  countryCode: item.countryCode, // Store 'GLOBAL' or whatever was in quote
+                  serviceType: "aor",
+                  fixedPrice: String(item.serviceFee),
+                  currency: item.currency || input.settlementCurrency,
+                  effectiveFrom: new Date().toISOString().split("T")[0],
+                  sourceQuotationId: latestQuotation.id,
+                  isActive: true,
+                });
+              } else {
+                // EOR / Visa EOR Pricing
+                await createCustomerPricing({
+                  customerId,
+                  pricingType: "country_specific",
+                  countryCode: item.countryCode,
+                  serviceType: item.serviceType,
+                  fixedPrice: String(item.serviceFee),
+                  visaOneTimeFee: item.oneTimeFee ? String(item.oneTimeFee) : undefined,
+                  currency: item.currency || input.settlementCurrency,
+                  effectiveFrom: new Date().toISOString().split("T")[0],
+                  sourceQuotationId: latestQuotation.id,
+                  isActive: true,
+                });
+              }
             }
           } catch (e) {
             console.error("Failed to sync pricing from quotation", e);

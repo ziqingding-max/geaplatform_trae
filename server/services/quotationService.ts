@@ -14,7 +14,7 @@ interface QuotationItemInput {
   headcount: number;
   salary: number;
   currency: string;
-  serviceType: "eor" | "visa_eor";
+  serviceType: "eor" | "visa_eor" | "aor";
   serviceFee: number;
   oneTimeFee?: number;
 }
@@ -48,6 +48,42 @@ export const quotationService = {
     const year = 2025; 
 
     for (const item of input.items) {
+      // 1a. AOR: No social insurance calculation
+      if (item.serviceType === "aor") {
+        // For AOR, "salary" is the Contractor Rate.
+        // There are no employer costs (no social insurance).
+        const employerCost = 0;
+        const totalEmploymentCostLocal = item.salary;
+        
+        let exchangeRate = 1;
+        let usdEmploymentCost = totalEmploymentCostLocal;
+
+        // Convert to USD if needed
+        if (item.currency !== "USD") {
+          const rateData = await getExchangeRate("USD", item.currency);
+          if (rateData) {
+             exchangeRate = rateData.rateWithMarkup;
+             usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
+          }
+        }
+
+        const subtotal = (usdEmploymentCost + item.serviceFee) * item.headcount;
+
+        calculatedItems.push({
+          ...item,
+          employerCost, 
+          totalEmploymentCost: totalEmploymentCostLocal, 
+          exchangeRate,
+          usdEmploymentCost,
+          subtotal, 
+          calcDetails: [] // No social insurance breakdown
+        });
+
+        totalMonthly += subtotal;
+        continue; // Skip to next item
+      }
+
+      // 1b. EOR / Visa EOR: Calculate social insurance
       const calcResult = await calculationService.calculateSocialInsurance({
         countryCode: item.countryCode,
         year,
@@ -135,6 +171,39 @@ export const quotationService = {
     const year = 2025; 
 
     for (const item of input.items) {
+      // 1a. AOR: No social insurance calculation
+      if (item.serviceType === "aor") {
+        const employerCost = 0;
+        const totalEmploymentCostLocal = item.salary;
+        
+        let exchangeRate = 1;
+        let usdEmploymentCost = totalEmploymentCostLocal;
+
+        if (item.currency !== "USD") {
+          const rateData = await getExchangeRate("USD", item.currency);
+          if (rateData) {
+             exchangeRate = rateData.rateWithMarkup;
+             usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
+          }
+        }
+
+        const subtotal = (usdEmploymentCost + item.serviceFee) * item.headcount;
+
+        calculatedItems.push({
+          ...item,
+          employerCost, 
+          totalEmploymentCost: totalEmploymentCostLocal, 
+          exchangeRate,
+          usdEmploymentCost,
+          subtotal, 
+          calcDetails: [] 
+        });
+
+        totalMonthly += subtotal;
+        continue; 
+      }
+
+      // 1b. EOR / Visa EOR: Calculate social insurance
       const calcResult = await calculationService.calculateSocialInsurance({
         countryCode: item.countryCode,
         year,
