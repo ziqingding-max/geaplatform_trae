@@ -8055,7 +8055,6 @@ const adminTranslations = {
     "employees.actions.reactivate": "重新激活",
     "customers.tabs.wallet": "钱包",
     "adjustments.status.pending": "待处理",
-    "employees.documentType.passport": "护照",
 
     // Common (Added)
     "status.locked": "已锁定",

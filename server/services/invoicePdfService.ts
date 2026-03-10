@@ -5,7 +5,7 @@
  * Supports CJK characters via Noto Sans SC font downloaded at runtime.
  */
 import PDFDocument from "pdfkit";
-import { getInvoiceById, listInvoiceItemsByInvoice, getCustomerById, getBillingEntityById, listApplicationsForInvoice } from "../db";
+import { getInvoiceById, listInvoiceItemsByInvoice, getCustomerById, getBillingEntityById } from "../db";
 import path from "path";
 import fs from "fs";
 
@@ -80,23 +80,8 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
   // Pre-download CJK font if needed
   const cjkFontPath = await ensureCJKFont();
 
-  // Pre-fetch credit applications for this invoice (for PDF display)
-  const creditAppliedAmt = parseFloat(invoice.creditApplied?.toString() || "0");
-  let creditApps: { creditNoteId: number; appliedAmount: any; creditNoteNumber?: string }[] = [];
-  if (creditAppliedAmt > 0.01) {
-    const rawApps = await listApplicationsForInvoice(invoice.id);
-    // Pre-fetch credit note numbers
-    creditApps = await Promise.all(
-      rawApps.map(async (app) => {
-        const cn = await getInvoiceById(app.creditNoteId);
-        return {
-          creditNoteId: app.creditNoteId,
-          appliedAmount: app.appliedAmount,
-          creditNoteNumber: cn?.invoiceNumber || `CN-${app.creditNoteId}`,
-        };
-      })
-    );
-  }
+  // Credit applications are no longer supported
+  const creditAppliedAmt = 0;
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
