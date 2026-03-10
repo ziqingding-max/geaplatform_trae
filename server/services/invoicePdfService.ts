@@ -6,6 +6,7 @@
  */
 import PDFDocument from "pdfkit";
 import { getInvoiceById, listInvoiceItemsByInvoice, getCustomerById, getBillingEntityById } from "../db";
+import { storageGet } from "../storage";
 import path from "path";
 import fs from "fs";
 
@@ -65,12 +66,20 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
   const items = await listInvoiceItemsByInvoice(invoice.id);
 
   // Pre-fetch logo buffer before entering the sync Promise callback
+  // Use signed URL from storageGet for private OSS buckets
   let logoBuffer: Buffer | null = null;
-  if (billingEntity && billingEntity.logoUrl) {
+  if (billingEntity && (billingEntity.logoFileKey || billingEntity.logoUrl)) {
     try {
-      const logoResponse = await fetch(billingEntity.logoUrl);
-      if (logoResponse.ok) {
-        logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
+      let logoUrl = billingEntity.logoUrl;
+      if (billingEntity.logoFileKey) {
+        const { url: signedUrl } = await storageGet(billingEntity.logoFileKey);
+        logoUrl = signedUrl;
+      }
+      if (logoUrl) {
+        const logoResponse = await fetch(logoUrl);
+        if (logoResponse.ok) {
+          logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
+        }
       }
     } catch (logoErr) {
       console.warn("[InvoicePDF] Failed to fetch billing entity logo:", logoErr);

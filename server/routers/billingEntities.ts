@@ -9,18 +9,40 @@ import {
   deleteBillingEntity,
   logAuditAction,
 } from "../db";
-import { storagePut } from "../storage";
+import { storagePut, storageGet } from "../storage";
 import { TRPCError } from "@trpc/server";
+
+/**
+ * Helper: resolve logoUrl to a signed URL if logoFileKey exists.
+ * OSS private buckets require signed URLs for access.
+ */
+async function resolveLogoUrl<T extends { logoUrl?: string | null; logoFileKey?: string | null }>(
+  entity: T
+): Promise<T> {
+  if (entity.logoFileKey) {
+    try {
+      const { url } = await storageGet(entity.logoFileKey);
+      return { ...entity, logoUrl: url };
+    } catch (err) {
+      console.warn(`[BillingEntities] Failed to sign logo URL for key ${entity.logoFileKey}:`, err);
+    }
+  }
+  return entity;
+}
 
 export const billingEntitiesRouter = router({
   list: userProcedure.query(async () => {
-    return await listBillingEntities();
+    const entities = await listBillingEntities();
+    // Resolve logo URLs to signed URLs for private OSS buckets
+    return await Promise.all(entities.map((e: any) => resolveLogoUrl(e)));
   }),
 
   get: userProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
-      return await getBillingEntityById(input.id);
+      const entity = await getBillingEntityById(input.id);
+      if (!entity) return entity;
+      return await resolveLogoUrl(entity);
     }),
 
   create: financeManagerProcedure
@@ -144,16 +166,24 @@ export const billingEntitiesRouter = router({
       const fileBuffer = Buffer.from(input.fileBase64, "base64");
       const randomSuffix = Math.random().toString(36).substring(2, 10);
       const fileKey = `billing-entity-logos/${input.id}/${randomSuffix}-${input.fileName}`;
-      const { url } = await storagePut(fileKey, fileBuffer, input.mimeType);
-      await updateBillingEntity(input.id, { logoUrl: url, logoFileKey: fileKey });
+      const { url: rawUrl } = await storagePut(fileKey, fileBuffer, input.mimeType);
+      await updateBillingEntity(input.id, { logoUrl: rawUrl, logoFileKey: fileKey });
+      // Return a signed URL so the frontend can display it immediately
+      let signedUrl = rawUrl;
+      try {
+        const { url } = await storageGet(fileKey);
+        signedUrl = url;
+      } catch (err) {
+        console.warn("[BillingEntities] Failed to sign logo URL after upload:", err);
+      }
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
         action: "update",
         entityType: "billing_entity",
         entityId: input.id,
-        changes: JSON.stringify({ logoUrl: url, logoFileKey: fileKey }),
+        changes: JSON.stringify({ logoUrl: rawUrl, logoFileKey: fileKey }),
       });
-      return { success: true, logoUrl: url };
+      return { success: true, logoUrl: signedUrl };
     }),
 
   delete: adminProcedure
