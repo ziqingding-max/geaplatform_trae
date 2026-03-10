@@ -1,7 +1,0 @@
-# GEA EOR SaaS 自动化测试Cron配置
-# 生成时间: Tue Mar  3 03:58:59 CST 2026
-# 这个文件由调度器自动管理
-
-# 每天 23:30 运行自动化测试
-30 23 * * * cd /Users/simonprivate/Documents/Trae/geaplatform_trae/e2e-tests && ./auto-test-runner.sh >> logs/cron-23:30.log 2>&1
-

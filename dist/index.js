@@ -2870,7 +2870,7 @@ import { eq as eq3, like as like3, count as count3, desc as desc3, and as and2, 
 async function createEmployee(data) {
   const db = await getDb();
   if (!db) return [];
-  return await db.insert(employees).values(data);
+  return await db.insert(employees).values(data).returning();
 }
 async function getEmployeeById(id) {
   const db = await getDb();
@@ -7760,7 +7760,7 @@ var WalletService = class {
         direction: "debit",
         referenceId: invoiceId,
         referenceType: "invoice",
-        description: `Auto-deduction for Invoice #${invoiceId}`
+        description: `Auto-deduction for invoice payment`
       });
     }
     return deductionAmount;
@@ -7778,7 +7778,7 @@ var WalletService = class {
       direction: "credit",
       referenceId: invoiceId,
       referenceType: "invoice",
-      description: `Refund for rejected/voided Invoice #${invoiceId}`
+      description: `Refund for rejected/voided invoice`
     });
   }
   // ── Frozen Wallet Methods ─────────────────────────────────────────────
@@ -17414,14 +17414,46 @@ import { eq as eq34 } from "drizzle-orm";
 // server/services/htmlPdfService.ts
 import puppeteer from "puppeteer-core";
 import { marked } from "marked";
-var CHROMIUM_PATH = "/usr/bin/chromium-browser";
+import { existsSync } from "fs";
+import { execSync } from "child_process";
 var CHROMIUM_ARGS = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
   "--disable-dev-shm-usage",
   "--disable-gpu",
-  "--font-render-hinting=none"
+  "--font-render-hinting=none",
+  "--single-process",
+  "--no-zygote"
 ];
+var CHROMIUM_CANDIDATES = [
+  process.env.CHROMIUM_PATH,
+  // highest priority: set via Dockerfile ENV or .env
+  "/usr/bin/chromium-browser",
+  // Alpine apk install (Dockerfile)
+  "/usr/bin/chromium",
+  // Debian/Ubuntu apt install
+  "/usr/bin/google-chrome",
+  "/usr/bin/google-chrome-stable",
+  "/usr/local/bin/chromium",
+  "/snap/bin/chromium",
+  "/opt/google/chrome/chrome"
+];
+function findChromiumPath() {
+  for (const p of CHROMIUM_CANDIDATES) {
+    if (p && existsSync(p)) return p;
+  }
+  try {
+    const found = execSync(
+      "which chromium chromium-browser google-chrome google-chrome-stable 2>/dev/null | head -1",
+      { encoding: "utf8" }
+    ).trim();
+    if (found) return found;
+  } catch (_) {
+  }
+  throw new Error(
+    "Chromium not found. Install it (e.g. `apk add chromium` on Alpine or `apt-get install chromium-browser` on Debian) or set the CHROMIUM_PATH environment variable."
+  );
+}
 var BRAND = {
   primary: "#005430",
   primaryLight: "#2E6E50",
@@ -17650,8 +17682,10 @@ var BASE_CSS = `
     font-size: 9pt;
   }
   .qt-table thead tr {
-    background: ${BRAND.primary};
-    color: white;
+    background: ${BRAND.primary} !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .qt-table thead th {
     padding: 2.5mm 3mm;
@@ -17660,6 +17694,10 @@ var BASE_CSS = `
     font-size: 8pt;
     border: none;
     white-space: nowrap;
+    background: ${BRAND.primary} !important;
+    color: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
   .qt-table thead th.right { text-align: right; }
   .qt-table tbody tr:nth-child(even) { background: ${BRAND.tableStripe}; }
@@ -17803,11 +17841,33 @@ function fmt(n, currency = "") {
   return currency ? `${currency} ${s}` : s;
 }
 async function launchBrowser() {
+  const executablePath = findChromiumPath();
   return puppeteer.launch({
-    executablePath: CHROMIUM_PATH,
+    executablePath,
     args: CHROMIUM_ARGS,
     headless: true
   });
+}
+async function fetchLogoAsBase64(url) {
+  try {
+    const https = await import("https");
+    const http = await import("http");
+    return await new Promise((resolve) => {
+      const client = url.startsWith("https") ? https : http;
+      client.get(url, (res) => {
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          const buf = Buffer.concat(chunks);
+          const contentType = res.headers["content-type"] || "image/png";
+          resolve(`data:${contentType};base64,${buf.toString("base64")}`);
+        });
+        res.on("error", () => resolve(null));
+      }).on("error", () => resolve(null));
+    });
+  } catch {
+    return null;
+  }
 }
 async function htmlToPdf(html) {
   const browser = await launchBrowser();
@@ -17824,43 +17884,68 @@ async function htmlToPdf(html) {
     await browser.close();
   }
 }
-function coverPage(title, subtitle, date) {
+var DEFAULT_BRANDING = {
+  shortName: "GEA",
+  fullName: "Global Employment Advisors",
+  logoUrl: null,
+  contactEmail: "sales@geahr.com"
+};
+async function resolveBrandingLogo(branding) {
+  if (branding.logoUrl && !branding.logoBase64) {
+    const b64 = await fetchLogoAsBase64(branding.logoUrl);
+    return { ...branding, logoBase64: b64 };
+  }
+  return branding;
+}
+function logoHtml(b, size) {
+  const src = b.logoBase64 || b.logoUrl;
+  if (src) {
+    const h = size === "cover" ? "18mm" : "7mm";
+    return `<img src="${src}" alt="${b.shortName}" style="height:${h};max-width:60mm;object-fit:contain;display:block;" />`;
+  }
+  if (size === "cover") {
+    return `<div class="cover-logo">${b.shortName}</div>`;
+  }
+  return `<span class="page-header-logo">${b.shortName}</span>`;
+}
+function coverPage(title, subtitle, date, branding = DEFAULT_BRANDING) {
   return `
   <div class="page cover">
     <div class="cover-top-bar"></div>
     <div class="cover-body">
       <div>
-        <div class="cover-logo">GEA</div>
-        <div class="cover-tagline">Global Employment Advisors</div>
+        ${logoHtml(branding, "cover")}
+        ${!branding.logoUrl ? `<div class="cover-tagline">${branding.fullName}</div>` : ""}
       </div>
       <div class="cover-divider"></div>
       <div class="cover-title">${title}</div>
       <div class="cover-subtitle">${subtitle}</div>
       <div class="cover-date">${date}</div>
     </div>
-    <div class="cover-bottom-bar">Confidential &amp; Proprietary \u2014 Global Employment Advisors</div>
+    <div class="cover-bottom-bar">Confidential &amp; Proprietary \u2014 ${branding.fullName}</div>
   </div>`;
 }
-function contentPage(headerTitle, pageNum, totalPages, body) {
+function contentPage(headerTitle, pageNum, totalPages, body, branding = DEFAULT_BRANDING) {
   return `
   <div class="page">
     <div class="page-header">
-      <span class="page-header-logo">GEA</span>
+      ${logoHtml(branding, "header")}
       <span class="page-header-title">${headerTitle}</span>
     </div>
     ${body}
     <div class="page-footer">
       <span>Confidential &amp; Proprietary</span>
-      <span>Global Employment Advisors</span>
+      <span>${branding.fullName}</span>
       <span>Page ${pageNum}</span>
     </div>
   </div>`;
 }
-async function generateCountryGuidePdf(country, chapters, locale = "en") {
+async function generateCountryGuidePdf(country, chapters, locale = "en", branding = DEFAULT_BRANDING) {
+  branding = await resolveBrandingLogo(branding);
   const date = (/* @__PURE__ */ new Date()).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const headerTitle = `Country Guide: ${country.countryName}`;
   let pages = "";
-  pages += coverPage("Country Guide", country.countryName, date);
+  pages += coverPage("Country Guide", country.countryName, date, branding);
   let tocRows = chapters.map((ch, i) => `
     <div class="toc-item">
       <span class="toc-num">${i + 1}.</span>
@@ -17869,7 +17954,7 @@ async function generateCountryGuidePdf(country, chapters, locale = "en") {
   pages += contentPage(headerTitle, 2, chapters.length + 2, `
     <h2>Table of Contents</h2>
     <div style="margin-top: 4mm;">${tocRows}</div>
-  `);
+  `, branding);
   chapters.forEach((ch, i) => {
     const title = locale === "zh" && ch.titleZh ? ch.titleZh : ch.titleEn;
     const content = locale === "zh" && ch.contentZh ? ch.contentZh : ch.contentEn;
@@ -17880,7 +17965,7 @@ async function generateCountryGuidePdf(country, chapters, locale = "en") {
         <div class="chapter-title">${title}</div>
       </div>
       <div class="chapter-content">${htmlContent}</div>
-    `);
+    `, branding);
   });
   const html = `<!DOCTYPE html>
 <html lang="${locale}">
@@ -17895,19 +17980,20 @@ async function generateCountryGuidePdf(country, chapters, locale = "en") {
   return htmlToPdf(html);
 }
 async function generateQuotationPdf(data) {
+  const branding = await resolveBrandingLogo(data.branding ?? DEFAULT_BRANDING);
   const date = (/* @__PURE__ */ new Date()).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const headerTitle = `Quotation #${data.quotationNumber}`;
   const validUntil = data.validUntil ? new Date(data.validUntil).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "N/A";
   let pages = "";
-  pages += coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date);
-  const GEA_INTRO = `
-    <p>Global Employment Advisors (GEA) is a leading Employer of Record (EOR) and workforce solutions provider, enabling businesses to hire talent across 50+ countries without the need to establish local legal entities. Our platform combines compliance expertise, payroll management, and HR technology to deliver a seamless employment experience for both clients and their employees.</p>
+  pages += coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date, branding);
+  const companyIntroHtml = data.companyIntro ? `<p>${data.companyIntro}</p>` : `
+    <p>${branding.fullName} is a leading Employer of Record (EOR) and workforce solutions provider, enabling businesses to hire talent across 50+ countries without the need to establish local legal entities. Our platform combines compliance expertise, payroll management, and HR technology to deliver a seamless employment experience for both clients and their employees.</p>
     <p>We handle all aspects of local employment \u2014 including employment contracts, payroll processing, statutory benefits, tax compliance, and HR administration \u2014 so you can focus on growing your business globally.</p>
   `;
   pages += contentPage(headerTitle, 2, 0, `
-    <h2>About Global Employment Advisors</h2>
+    <h2>About ${branding.fullName}</h2>
     <div class="section-card">
-      ${GEA_INTRO}
+      ${companyIntroHtml}
     </div>
 
     <h2>Prepared For</h2>
@@ -17949,7 +18035,7 @@ async function generateQuotationPdf(data) {
       ${data.billingEntity.address ? `<div class="info-item"><label>Address</label><span>${data.billingEntity.address}</span></div>` : ""}
       ${data.billingEntity.contactEmail ? `<div class="info-item"><label>Email</label><span>${data.billingEntity.contactEmail}</span></div>` : ""}
     </div>` : ""}
-  `);
+  `, branding);
   const tableRows = data.items.map((item, idx) => {
     const serviceLabel = item.serviceType === "eor" ? "EOR" : item.serviceType === "visa_eor" ? "Visa EOR" : item.serviceType === "aor" ? "AOR" : item.serviceType.toUpperCase();
     const localCurrency = item.currency !== "USD" ? `<div style="font-size:7.5pt;color:${BRAND.muted};">${item.currency} ${fmt(item.salary)} \xD7 ${item.headcount}</div>` : "";
@@ -18033,7 +18119,8 @@ async function generateQuotationPdf(data) {
     <div class="notes-box">
       <strong>Notes:</strong><br>${data.notes}
     </div>` : ""}
-  `);
+  `, branding);
+  const contactEmail = branding.contactEmail ?? data.billingEntity?.contactEmail ?? "sales@geahr.com";
   pages += contentPage(headerTitle, 4, 0, `
     <h2>Terms &amp; Conditions</h2>
     <div class="section-card">
@@ -18044,22 +18131,22 @@ async function generateQuotationPdf(data) {
       <p>The quoted service fee covers: employment contract administration, monthly payroll processing, statutory benefit contributions, HR compliance management, and dedicated account support.</p>
 
       <h3>Employer of Record (EOR)</h3>
-      <p>Under the EOR model, GEA acts as the legal employer of the worker(s) in the respective country. The client retains full day-to-day management of the worker's tasks and responsibilities.</p>
+      <p>Under the EOR model, ${branding.shortName} acts as the legal employer of the worker(s) in the respective country. The client retains full day-to-day management of the worker's tasks and responsibilities.</p>
 
       <h3>Agent of Record (AOR)</h3>
-      <p>Under the AOR model, GEA engages contractors on behalf of the client. The contractor rate shown is the gross contractor fee; no statutory employer contributions apply.</p>
+      <p>Under the AOR model, ${branding.shortName} engages contractors on behalf of the client. The contractor rate shown is the gross contractor fee; no statutory employer contributions apply.</p>
 
       <h3>Exchange Rates</h3>
       <p>Exchange rates are indicative and based on rates at the time of quotation. Final invoiced amounts may vary based on prevailing rates at the time of payroll processing.</p>
 
       <h3>Confidentiality</h3>
-      <p>This document is confidential and intended solely for the named recipient. It may not be shared with third parties without prior written consent from GEA.</p>
+      <p>This document is confidential and intended solely for the named recipient. It may not be shared with third parties without prior written consent from ${branding.shortName}.</p>
     </div>
 
     <div class="notes-box" style="margin-top:6mm;">
-      For questions about this quotation, please contact your GEA account manager or email <strong>sales@geahr.com</strong>.
+      For questions about this quotation, please contact your ${branding.shortName} account manager or email <strong>${contactEmail}</strong>.
     </div>
-  `);
+  `, branding);
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -18076,6 +18163,30 @@ async function generateQuotationPdf(data) {
 init_db2();
 init_schema();
 import { eq as eq33, and as and27, asc } from "drizzle-orm";
+async function getDefaultBranding(db) {
+  if (!db) return { shortName: "GEA", fullName: "Global Employment Advisors", contactEmail: "sales@geahr.com" };
+  let entity = await db.query.billingEntities.findFirst({
+    where: and27(eq33(billingEntities.isDefault, true), eq33(billingEntities.isActive, true))
+  });
+  if (!entity) {
+    entity = await db.query.billingEntities.findFirst({
+      where: eq33(billingEntities.isActive, true)
+    });
+  }
+  if (!entity) {
+    return { shortName: "GEA", fullName: "Global Employment Advisors", contactEmail: "sales@geahr.com" };
+  }
+  const addressParts = [entity.address, entity.city, entity.country].filter(Boolean);
+  const address = addressParts.length > 0 ? addressParts.join(", ") : void 0;
+  return {
+    shortName: entity.entityName,
+    fullName: entity.legalName,
+    logoUrl: entity.logoUrl ?? null,
+    contactEmail: entity.contactEmail ?? null,
+    address: address ?? null,
+    legalName: entity.legalName
+  };
+}
 var countryGuidePdfService = {
   generatePdf: async (countryCode, locale = "en") => {
     const db = getDb();
@@ -18092,6 +18203,7 @@ var countryGuidePdfService = {
       orderBy: [asc(countryGuideChapters.sortOrder)]
     });
     if (chapters.length === 0) return null;
+    const branding = await getDefaultBranding(db);
     return generateCountryGuidePdf(
       { countryCode: country.countryCode, countryName: country.countryName },
       chapters.map((ch) => ({
@@ -18103,7 +18215,8 @@ var countryGuidePdfService = {
         chapterKey: ch.chapterKey,
         sortOrder: ch.sortOrder ?? 0
       })),
-      locale
+      locale,
+      branding
     );
   }
 };
@@ -18352,17 +18465,37 @@ var quotationService = {
     }
     const items = Array.isArray(quotation.snapshotData) ? quotation.snapshotData : typeof quotation.snapshotData === "string" ? JSON.parse(quotation.snapshotData) : [];
     let billingEntity = void 0;
-    const defaultBilling = await db.query.billingEntities.findFirst({
+    let branding = {
+      shortName: "GEA",
+      fullName: "Global Employment Advisors",
+      contactEmail: "sales@geahr.com"
+    };
+    let defaultBilling = await db.query.billingEntities.findFirst({
       where: eq34(billingEntities.isDefault, true)
     });
+    if (!defaultBilling) {
+      defaultBilling = await db.query.billingEntities.findFirst({
+        where: eq34(billingEntities.isActive, true)
+      }) ?? null;
+    }
     if (defaultBilling) {
+      const addressParts = [defaultBilling.address, defaultBilling.city, defaultBilling.country].filter(Boolean);
+      const address = addressParts.join(", ") || void 0;
       billingEntity = {
         entityName: defaultBilling.entityName,
         legalName: defaultBilling.legalName,
-        address: [defaultBilling.address, defaultBilling.city, defaultBilling.country].filter(Boolean).join(", "),
+        address,
         contactEmail: defaultBilling.contactEmail ?? void 0,
         contactPhone: defaultBilling.contactPhone ?? void 0,
         country: defaultBilling.country
+      };
+      branding = {
+        shortName: defaultBilling.entityName,
+        fullName: defaultBilling.legalName,
+        logoUrl: defaultBilling.logoUrl ?? null,
+        contactEmail: defaultBilling.contactEmail ?? null,
+        address: address ?? null,
+        legalName: defaultBilling.legalName
       };
     }
     const quotationBuffer = await generateQuotationPdf({
@@ -18373,7 +18506,8 @@ var quotationService = {
       totalMonthly: quotation.totalMonthly,
       currency: quotation.currency,
       validUntil: quotation.validUntil ?? void 0,
-      billingEntity
+      billingEntity,
+      branding
     });
     const pdfsToMerge = [quotationBuffer];
     if (includeCountryGuide) {
@@ -18384,7 +18518,7 @@ var quotationService = {
       }
     }
     const finalPdfBuffer = await mergePdfs(pdfsToMerge, {
-      addPageNumbers: true,
+      addPageNumbers: false,
       metadata: {
         title: `Quotation ${quotation.quotationNumber}`,
         subject: `Proposal for ${customerName}`
@@ -19693,6 +19827,7 @@ var portalDashboardRouter = portalRouter({
     if (!db) return null;
     const cid = ctx.portalUser.customerId;
     const [empCount] = await db.select({ count: count9() }).from(employees).where(and32(eq41(employees.customerId, cid), eq41(employees.status, "active")));
+    const [contractorCount] = await db.select({ count: count9() }).from(contractors).where(and32(eq41(contractors.customerId, cid), eq41(contractors.status, "active")));
     const activeCountries = await db.select({ countryCode: employees.country }).from(employees).where(and32(eq41(employees.customerId, cid), eq41(employees.status, "active"))).groupBy(employees.country);
     const [onboardingCount] = await db.select({ count: count9() }).from(employees).where(
       and32(
@@ -19705,7 +19840,9 @@ var portalDashboardRouter = portalRouter({
     const [overdueCount] = await db.select({ count: count9() }).from(invoices).where(and32(eq41(invoices.customerId, cid), eq41(invoices.status, "overdue")));
     const [unpaidCount] = await db.select({ count: count9() }).from(invoices).where(and32(eq41(invoices.customerId, cid), eq41(invoices.status, "sent")));
     return {
-      activeEmployees: empCount?.count ?? 0,
+      activeEmployees: (empCount?.count ?? 0) + (contractorCount?.count ?? 0),
+      activeEorEmployees: empCount?.count ?? 0,
+      activeContractors: contractorCount?.count ?? 0,
       activeCountries: activeCountries.length,
       pendingOnboarding: onboardingCount?.count ?? 0,
       pendingAdjustments: adjCount?.count ?? 0,
@@ -19817,6 +19954,7 @@ import { sql as sql17, eq as eq42, and as and33, count as count10 } from "drizzl
 import crypto4 from "crypto";
 init_db2();
 init_schema();
+init_aor_schema();
 var PORTAL_EMPLOYEE_FIELDS = {
   id: employees.id,
   employeeCode: employees.employeeCode,
@@ -20005,7 +20143,7 @@ var portalEmployeesRouter = portalRouter({
         startDate: input.startDate
       }
     }).catch((err) => console.error("Failed to send new employee notification:", err));
-    return { success: true, employeeId: result[0].insertId };
+    return { success: true, employeeId: result[0]?.id };
   }),
   /**
    * Upload document for an employee
@@ -20285,7 +20423,11 @@ var portalEmployeesRouter = portalRouter({
     const department = invite.department || input.department;
     const startDate = invite.startDate || input.startDate;
     if (serviceType === "aor") {
+      const existingContractors = await db.select({ id: contractors.id }).from(contractors);
+      const nextNum = existingContractors.length + 1;
+      const contractorCode = `CTR-${String(nextNum).padStart(4, "0")}`;
       const result = await createContractor({
+        contractorCode,
         customerId: invite.customerId,
         firstName: input.firstName,
         lastName: input.lastName,
@@ -20344,7 +20486,7 @@ var portalEmployeesRouter = portalRouter({
         salaryCurrency: invite.salaryCurrency || "USD",
         status: "pending_review"
       });
-      const employeeId = result[0]?.insertId;
+      const employeeId = result[0]?.id;
       await db.update(onboardingInvites).set({
         status: "completed",
         employeeId,
@@ -20723,7 +20865,9 @@ var portalLeaveRouter = portalRouter({
       startDate: z35.string(),
       endDate: z35.string(),
       days: z35.string(),
-      reason: z35.string().optional()
+      reason: z35.string().optional(),
+      isHalfDay: z35.boolean().default(false)
+      // Bug 13: Support half-day leave
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
@@ -20733,12 +20877,13 @@ var portalLeaveRouter = portalRouter({
     if (!emp) {
       throw new TRPCError32({ code: "NOT_FOUND", message: "Employee not found" });
     }
+    const actualDays = input.isHalfDay ? (parseFloat(input.days) * 0.5).toFixed(1) : input.days;
     const result = await db.insert(leaveRecords).values({
       employeeId: input.employeeId,
       leaveTypeId: input.leaveTypeId,
       startDate: input.startDate,
       endDate: input.endDate,
-      days: input.days,
+      days: actualDays,
       status: "submitted",
       reason: input.reason || null
     });
@@ -20872,7 +21017,7 @@ var portalInvoicesRouter = portalRouter({
       invoiceMonth: z36.string().optional(),
       tab: z36.enum(["active", "history"]).default("active"),
       typeCategory: z36.enum(["all", "receivables", "credits", "deposits"]).default("all"),
-      excludeCreditNotes: z36.boolean().optional()
+      excludeCreditNotes: z36.boolean().default(true)
     })
   ).query(async ({ input, ctx }) => {
     const db = await getDb();
@@ -20886,7 +21031,7 @@ var portalInvoicesRouter = portalRouter({
       conditions.push(sql20`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`);
     }
     if (input.tab === "active") {
-      conditions.push(sql20`${invoices.status} NOT IN ('cancelled', 'void')`);
+      conditions.push(sql20`${invoices.status} NOT IN ('cancelled', 'void', 'paid')`);
     } else {
       conditions.push(sql20`${invoices.status} IN ('paid', 'applied', 'cancelled', 'void')`);
     }
@@ -21422,6 +21567,42 @@ var portalSettingsRouter = portalRouter({
       inviteToken,
       inviteExpiresAt: inviteExpiresAt.toISOString()
     };
+  }),
+  /**
+   * Bug 12: Initialize leave policies from statutory defaults for a country
+   */
+  initializeFromStatutory: portalAdminProcedure.input(z37.object({ countryCode: z37.string() })).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
+    const cid = ctx.portalUser.customerId;
+    const existing = await db.select({ id: customerLeavePolicies.id }).from(customerLeavePolicies).where(and37(
+      eq46(customerLeavePolicies.customerId, cid),
+      eq46(customerLeavePolicies.countryCode, input.countryCode)
+    ));
+    if (existing.length > 0) {
+      throw new TRPCError34({
+        code: "CONFLICT",
+        message: "Leave policies already exist for this country. Please edit them instead."
+      });
+    }
+    const statutoryTypes = await db.select().from(leaveTypes).where(eq46(leaveTypes.countryCode, input.countryCode));
+    if (statutoryTypes.length === 0) {
+      throw new TRPCError34({
+        code: "NOT_FOUND",
+        message: "No statutory leave types found for this country."
+      });
+    }
+    for (const lt3 of statutoryTypes) {
+      await db.insert(customerLeavePolicies).values({
+        customerId: cid,
+        countryCode: input.countryCode,
+        leaveTypeId: lt3.id,
+        annualEntitlement: lt3.annualEntitlement || 0,
+        expiryRule: "year_end",
+        carryOverDays: 0
+      });
+    }
+    return { success: true, count: statutoryTypes.length };
   }),
   /**
    * Get countries where this customer has employees (for leave policy setup)
@@ -22011,7 +22192,7 @@ var portalToolkitRouter = portalRouter({
 import { z as z42 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq51, desc as desc20 } from "drizzle-orm";
+import { eq as eq51, desc as desc20, sql as sql25 } from "drizzle-orm";
 import { TRPCError as TRPCError38 } from "@trpc/server";
 var portalWalletRouter = portalRouter({
   get: protectedPortalProcedure.input(z42.object({
@@ -22027,12 +22208,25 @@ var portalWalletRouter = portalRouter({
     const db = getDb();
     if (!db) throw new TRPCError38({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     const wallet = await walletService.getWallet(ctx.portalUser.customerId, input.currency);
-    return await db.query.walletTransactions.findMany({
+    const txs = await db.query.walletTransactions.findMany({
       where: eq51(walletTransactions.walletId, wallet.id),
       orderBy: [desc20(walletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
     });
+    const invoiceRefIds = txs.filter((tx) => tx.referenceType === "invoice" && tx.referenceId).map((tx) => tx.referenceId);
+    let invoiceNumberMap = {};
+    if (invoiceRefIds.length > 0) {
+      const invRows = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber }).from(invoices).where(sql25`${invoices.id} IN (${sql25.join(invoiceRefIds.map((id) => sql25`${id}`), sql25`, `)})`);
+      for (const row of invRows) {
+        invoiceNumberMap[row.id] = row.invoiceNumber;
+      }
+    }
+    return txs.map((tx) => ({
+      ...tx,
+      // Replace internal referenceId display with human-readable invoiceNumber
+      invoiceNumber: tx.referenceType === "invoice" && tx.referenceId ? invoiceNumberMap[tx.referenceId] || null : null
+    }));
   })
 });
 
@@ -22253,7 +22447,7 @@ var portalMilestonesRouter = portalRouter({
   /**
    * Create a new milestone for a contractor
    */
-  create: protectedPortalProcedure.input(
+  create: portalHrProcedure.input(
     z44.object({
       contractorId: z44.number(),
       title: z44.string().min(1),
@@ -22284,7 +22478,7 @@ var portalMilestonesRouter = portalRouter({
   /**
    * Approve a submitted milestone
    */
-  approve: protectedPortalProcedure.input(z44.object({ id: z44.number() })).mutation(async ({ ctx, input }) => {
+  approve: portalHrProcedure.input(z44.object({ id: z44.number() })).mutation(async ({ ctx, input }) => {
     const db = getDb();
     if (!db) throw new TRPCError40({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
     const customerId = ctx.portalUser.customerId;
@@ -22312,7 +22506,7 @@ var portalMilestonesRouter = portalRouter({
   /**
    * Reject a submitted milestone
    */
-  reject: protectedPortalProcedure.input(z44.object({ id: z44.number() })).mutation(async ({ ctx, input }) => {
+  reject: portalHrProcedure.input(z44.object({ id: z44.number() })).mutation(async ({ ctx, input }) => {
     const db = getDb();
     if (!db) throw new TRPCError40({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
     const customerId = ctx.portalUser.customerId;
@@ -23028,13 +23222,15 @@ async function createApp(options = {}) {
         res.status(400).json({ error: "Invalid country code" });
         return;
       }
-      const pdfBuffer = await countryGuidePdfService.generatePdf(countryCode.toUpperCase());
+      const locale = req.query.locale === "zh" ? "zh" : "en";
+      const pdfBuffer = await countryGuidePdfService.generatePdf(countryCode.toUpperCase(), locale);
       if (!pdfBuffer) {
         res.status(404).json({ error: "Country guide not found" });
         return;
       }
+      const langSuffix = locale === "zh" ? "-zh" : "";
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="country-guide-${countryCode}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="country-guide-${countryCode}${langSuffix}.pdf"`);
       res.setHeader("Content-Length", pdfBuffer.length.toString());
       res.send(pdfBuffer);
     } catch (error) {
@@ -31663,8 +31859,8 @@ async function runAutoMigrations() {
       );
       if (!columnExists) {
         const defaultClause = migration.defaultValue != null ? ` DEFAULT ${migration.defaultValue}` : "";
-        const sql25 = `ALTER TABLE "${migration.table}" ADD COLUMN "${migration.column}" ${migration.type}${defaultClause}`;
-        await client.execute(sql25);
+        const sql26 = `ALTER TABLE "${migration.table}" ADD COLUMN "${migration.column}" ${migration.type}${defaultClause}`;
+        await client.execute(sql26);
         console.log(`[AutoMigrate] Added column: ${migration.table}.${migration.column}`);
       }
     } catch (err) {
