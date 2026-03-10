@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Layout from "@/components/Layout";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
@@ -15,10 +15,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, AlertCircle, Building2, Wallet, Landmark } from "lucide-react";
+import { CheckCircle, XCircle, AlertCircle, Building2, Wallet, Landmark, Eye, Clock, CheckCircle2 } from "lucide-react";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default function ReleaseTasks() {
   const { t } = useI18n();
@@ -28,22 +29,38 @@ export default function ReleaseTasks() {
   
   const utils = trpc.useUtils();
 
+  const [tab, setTab] = useState<"pending" | "history">("pending");
+
   // Fetch pending credit notes and deposit refunds for approval
+  // Pending includes 'draft' (auto-generated deposit refund) and 'sent' (manually created credit note)
+  const pendingStatuses = tab === "pending" ? undefined : undefined; // We filter client side or fetch all?
+  // Better to fetch specific statuses based on tab to avoid over-fetching
+  
   const { data: creditNoteData, isLoading: isLoadingCN } = trpc.invoices.list.useQuery({
     invoiceType: "credit_note",
-    status: "draft",
-    limit: 50,
+    limit: 100,
   });
   const { data: depositRefundData, isLoading: isLoadingDR } = trpc.invoices.list.useQuery({
     invoiceType: "deposit_refund",
-    status: "draft",
-    limit: 50,
+    limit: 100,
   });
+
   const isLoading = isLoadingCN || isLoadingDR;
-  const allTasks = [
-    ...((creditNoteData as any)?.data || []),
-    ...((depositRefundData as any)?.data || []),
-  ].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  
+  const allTasks = useMemo(() => {
+    const combined = [
+      ...((creditNoteData as any)?.data || []),
+      ...((depositRefundData as any)?.data || []),
+    ];
+    
+    // Filter by tab
+    const pending = ["draft", "sent", "pending_approval"];
+    const history = ["paid", "applied", "cancelled"];
+    
+    return combined.filter(t => 
+      tab === "pending" ? pending.includes(t.status) : history.includes(t.status)
+    ).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [creditNoteData, depositRefundData, tab]);
 
   const approveMut = trpc.invoices.approveCreditNote.useMutation({
     onSuccess: () => {
@@ -57,79 +74,109 @@ export default function ReleaseTasks() {
   return (
     <Layout breadcrumb={["GEA", "Release Tasks"]}>
       <div className="p-6 space-y-6 page-enter">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Release Tasks</h1>
-          <p className="text-sm text-muted-foreground mt-1">Approve deposit releases and credit note dispositions</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Release Tasks</h1>
+            <p className="text-sm text-muted-foreground mt-1">Approve deposit releases and credit note dispositions</p>
+          </div>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base font-medium">Pending Approvals</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Invoice #</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Date Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 3 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 7 }).map((_, j) => (
-                        <TableCell key={j}><Skeleton className="h-4 w-24" /></TableCell>
-                      ))}
+        <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="w-full">
+          <TabsList>
+            <TabsTrigger value="pending" className="gap-2">
+              <Clock className="w-4 h-4" /> Pending Approval
+            </TabsTrigger>
+            <TabsTrigger value="history" className="gap-2">
+              <CheckCircle2 className="w-4 h-4" /> History
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value={tab} className="mt-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-medium">
+                  {tab === "pending" ? "Pending Approvals" : "Processed Tasks"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30">
+                      <TableHead className="pl-6">Invoice #</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Reason</TableHead>
+                      <TableHead>Date Created</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right pr-6">Actions</TableHead>
                     </TableRow>
-                  ))
-                ) : allTasks.length > 0 ? (
-                  allTasks.map((cn: any) => (
-                    <TableRow key={cn.id}>
-                      <TableCell className="font-medium">{cn.invoiceNumber}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn.invoiceType === 'deposit_refund' ? 'text-amber-700 border-amber-200 bg-amber-50' : 'text-purple-700 border-purple-200 bg-purple-50'}>
-                          {cn.invoiceType === 'deposit_refund' ? 'Deposit Refund' : 'Credit Note'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{cn.customerName}</TableCell>
-                      <TableCell className="font-mono text-emerald-600">
-                        {formatCurrencyAmount(Math.abs(parseFloat(cn.total)), cn.currency)}
-                      </TableCell>
-                      <TableCell className="max-w-xs truncate text-muted-foreground">
-                        {cn.notes || "Deposit Release"}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {new Date(cn.createdAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button size="sm" onClick={() => {
-                          setSelectedTask(cn);
-                          setDisposition("to_wallet"); // Default
-                          setShowApproveDialog(true);
-                        }}>
-                          Review
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                      <CheckCircle className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
-                      No pending release tasks
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      Array.from({ length: 3 }).map((_, i) => (
+                        <TableRow key={i}>
+                          {Array.from({ length: 8 }).map((_, j) => (
+                            <TableCell key={j}><Skeleton className="h-4 w-24" /></TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    ) : allTasks.length > 0 ? (
+                      allTasks.map((cn: any) => (
+                        <TableRow key={cn.id}>
+                          <TableCell className="pl-6 font-medium font-mono">{cn.invoiceNumber}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={cn.invoiceType === 'deposit_refund' ? 'text-amber-700 border-amber-200 bg-amber-50' : 'text-purple-700 border-purple-200 bg-purple-50'}>
+                              {cn.invoiceType === 'deposit_refund' ? 'Deposit Refund' : 'Credit Note'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm font-medium">{cn.customerName}</TableCell>
+                          <TableCell className="font-mono text-emerald-600 font-medium">
+                            {formatCurrencyAmount(Math.abs(parseFloat(cn.total)), cn.currency)}
+                          </TableCell>
+                          <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground" title={cn.notes}>
+                            {cn.notes || "Deposit Release"}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {new Date(cn.createdAt).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="secondary" className="text-xs font-normal">
+                              {cn.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right pr-6">
+                            <div className="flex justify-end gap-2">
+                              {tab === "pending" && (
+                                <Button size="sm" onClick={() => {
+                                  setSelectedTask(cn);
+                                  setDisposition("to_wallet");
+                                  setShowApproveDialog(true);
+                                }}>
+                                  Review
+                                </Button>
+                              )}
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => window.open(`/api/invoices/${cn.id}/pdf`, '_blank')}>
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
+                          <CheckCircle className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
+                          <p>No {tab} release tasks found</p>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         {/* Approval Dialog */}
         <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>

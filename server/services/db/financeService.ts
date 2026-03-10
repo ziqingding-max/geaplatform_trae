@@ -38,7 +38,7 @@ export async function getInvoiceByNumber(invoiceNumber: string) {
 }
 
 export async function listInvoices(
-  filters: { customerId?: number; status?: string; invoiceType?: string; invoiceMonth?: string } = {},
+  filters: { customerId?: number; status?: string; invoiceType?: string; invoiceMonth?: string; excludeCreditNotes?: boolean } = {},
   limit: number = 50,
   offset: number = 0
 ) {
@@ -51,6 +51,17 @@ export async function listInvoices(
   if (filters.status) conditions.push(eq(invoices.status, filters.status as any));
   if (filters.invoiceType) conditions.push(eq(invoices.invoiceType, filters.invoiceType as any));
   if (filters.invoiceMonth) conditions.push(eq(invoices.invoiceMonth, filters.invoiceMonth));
+  
+  // Exclude negative invoice types (Credit Notes & Deposit Refunds) if requested
+  if (filters.excludeCreditNotes) {
+    const { ne, and } = await import("drizzle-orm");
+    // We want to exclude 'credit_note' and 'deposit_refund'
+    // Drizzle ORM doesn't have a simple 'notInArray' helper in all versions, 
+    // so we use multiple NE conditions combined with AND
+    conditions.push(ne(invoices.invoiceType, "credit_note"));
+    conditions.push(ne(invoices.invoiceType, "deposit_refund"));
+  }
+
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const [data, totalResult] = await Promise.all([
@@ -396,28 +407,8 @@ export async function deleteReimbursement(id: number) {
 }
 
 // CREDIT NOTES & APPLICATIONS
-export async function applyCreditNote(data: InsertCreditNoteApplication) {
-  const db = await getDb();
-  if (!db) return;
-  await db.insert(creditNoteApplications).values(data);
-}
-
-export async function listCreditNoteApplications() {
-  const db = await getDb();
-  if (!db) return [];
-  return await db.select().from(creditNoteApplications);
-}
-
-export async function listApplicationsForInvoice(invoiceId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return await db.select().from(creditNoteApplications).where(eq(creditNoteApplications.appliedToInvoiceId, invoiceId));
-}
-
-export async function getCreditNoteRemainingBalance(creditNoteId: number) {
-  // Logic to calculate remaining balance
-  return null;
-}
+// Deprecated: Credit notes are now processed via Wallet transactions only.
+// The concept of "applying" credit to specific invoices is removed.
 
 export async function hasDepositBeenProcessed(depositInvoiceId: number) {
   return { processed: false };

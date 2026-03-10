@@ -172,23 +172,17 @@ export async function generateCreditNote(params: {
     // 1. Get original invoice
     const originalInvoice = await getInvoiceById(params.originalInvoiceId);
     if (!originalInvoice) {
-      return { invoiceId: null, message: "Original invoice not found" };
+      throw new Error("Original invoice not found");
     }
 
     // 2. Validate original invoice status — can only credit paid invoices
     if (originalInvoice.status !== "paid") {
-      return {
-        invoiceId: null,
-        message: `Cannot create credit note for invoice in '${originalInvoice.status}' status. Only paid invoices can be credited.`,
-      };
+      throw new Error(`Cannot create credit note for invoice in '${originalInvoice.status}' status. Only paid invoices can be credited.`);
     }
 
     // 2a. Type restriction: cannot create credit note for credit_note or deposit_refund
     if (["credit_note", "deposit_refund"].includes(originalInvoice.invoiceType || "")) {
-      return {
-        invoiceId: null,
-        message: `Cannot create credit note for a ${originalInvoice.invoiceType} invoice.`,
-      };
+      throw new Error(`Cannot create credit note for a ${originalInvoice.invoiceType} invoice.`);
     }
 
     // 2b. If original invoice is a deposit, verify the employee is terminated
@@ -199,10 +193,7 @@ export async function generateCreditNote(params: {
         const { getEmployeeById: getEmp } = await import("../db");
         const employee = await getEmp(depositItem.employeeId);
         if (employee && employee.status !== "terminated") {
-          return {
-            invoiceId: null,
-            message: "Employee must be in 'terminated' status before creating a credit note for a deposit invoice",
-          };
+          throw new Error("Employee must be in 'terminated' status before creating a credit note for a deposit invoice");
         }
       }
 
@@ -220,18 +211,12 @@ export async function generateCreditNote(params: {
         (r) => r.status !== "cancelled"
       );
       if (hasActiveRefund) {
-        return {
-          invoiceId: null,
-          message: "This deposit has already been refunded. Cannot create a credit note for a refunded deposit (refund and credit note are mutually exclusive).",
-        };
+        throw new Error("This deposit has already been refunded. Cannot create a credit note for a refunded deposit.");
       }
 
       // 2d. Deposit: only full-amount credit note allowed
       if (!params.isFullCredit) {
-        return {
-          invoiceId: null,
-          message: "Deposit invoices only support full-amount credit notes. Partial credit is not allowed for deposits.",
-        };
+        throw new Error("Deposit invoices only support full-amount credit notes. Partial credit is not allowed for deposits.");
       }
 
       // 2e. Deposit: check if a credit note already exists (only one allowed)
@@ -248,10 +233,7 @@ export async function generateCreditNote(params: {
         (cn) => cn.status !== "cancelled"
       );
       if (hasActiveCreditNote) {
-        return {
-          invoiceId: null,
-          message: "This deposit already has a credit note. Only one credit note is allowed per deposit.",
-        };
+        throw new Error("This deposit already has a credit note. Only one credit note is allowed per deposit.");
       }
     }
 
@@ -287,10 +269,7 @@ export async function generateCreditNote(params: {
 
       if (existingCreditTotal + pendingCreditAmount > originalTotal + 0.01) {
         const remaining = (originalTotal - existingCreditTotal).toFixed(2);
-        return {
-          invoiceId: null,
-          message: `Cumulative credit notes (${existingCreditTotal.toFixed(2)} existing + ${pendingCreditAmount.toFixed(2)} new) would exceed the original invoice total (${originalTotal.toFixed(2)}). Maximum remaining credit: ${remaining}.`,
-        };
+        throw new Error(`Cumulative credit notes (${existingCreditTotal.toFixed(2)} existing + ${pendingCreditAmount.toFixed(2)} new) would exceed the original invoice total (${originalTotal.toFixed(2)}). Maximum remaining credit: ${remaining}.`);
       }
     }
 
@@ -341,10 +320,7 @@ export async function generateCreditNote(params: {
         countryCode: item.countryCode,
       }));
     } else {
-      return {
-        invoiceId: null,
-        message: "Either isFullCredit must be true or lineItems must be provided",
-      };
+      throw new Error("Either isFullCredit must be true or lineItems must be provided");
     }
 
     // 5. Generate credit note number with its own CN- sequence
@@ -360,6 +336,7 @@ export async function generateCreditNote(params: {
     const dueDate = null;
 
     // 7. Create credit note invoice (all amounts negative)
+    // Credit Note status should be 'sent' immediately to appear in Release Tasks
     const invoiceData: InsertInvoice = {
       customerId: originalInvoice.customerId,
       billingEntityId,
@@ -373,7 +350,8 @@ export async function generateCreditNote(params: {
       serviceFeeTotal: "0",
       tax: "0",
       total: (-creditTotal).toFixed(2),
-      status: "draft",
+      status: "sent", // CHANGED from 'draft' to 'sent'
+      sentDate: new Date(), // Set sentDate immediately
       dueDate,
       relatedInvoiceId: params.originalInvoiceId,
       notes: `Credit Note for ${originalInvoice.invoiceNumber}. Reason: ${params.reason}`,
@@ -393,18 +371,13 @@ export async function generateCreditNote(params: {
       });
     }
 
-    // 9. Do NOT auto-approve. Leave as draft for Finance approval.
-    // await approveCreditNote(invoiceId);
-
     return {
       invoiceId,
-      message: `Credit note ${creditNoteNumber} created (Draft). Please approve to process.`,
+      message: `Credit note ${creditNoteNumber} created (Sent). Please process in Release Tasks.`,
     };
   } catch (error) {
     console.error("[CreditNote] Error generating credit note:", error);
-    return {
-      invoiceId: null,
-      message: `Failed to generate credit note: ${error instanceof Error ? error.message : "Unknown error"}`,
-    };
+    // Re-throw the error so the caller (TRPC) catches it and sends 500/400 to client
+    throw error;
   }
 }

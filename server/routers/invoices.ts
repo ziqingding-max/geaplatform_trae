@@ -148,6 +148,7 @@ export const invoicesRouter = router({
         status: z.string().optional(),
         invoiceType: z.string().optional(),
         invoiceMonth: z.string().optional(),
+        excludeCreditNotes: z.boolean().optional(),
         limit: z.number().default(50),
         offset: z.number().default(0),
       })
@@ -159,6 +160,7 @@ export const invoicesRouter = router({
           status: input.status,
           invoiceType: input.invoiceType,
           invoiceMonth: input.invoiceMonth,
+          excludeCreditNotes: input.excludeCreditNotes,
         },
         input.limit,
         input.offset
@@ -566,10 +568,9 @@ export const invoicesRouter = router({
         const invoice = await getInvoiceById(input.id);
         if (invoice) {
           const invoiceTotal = parseFloat(invoice.total?.toString() ?? "0");
-          const creditApplied = parseFloat(invoice.creditApplied?.toString() ?? "0");
           const walletApplied = parseFloat(invoice.walletAppliedAmount?.toString() ?? "0");
-          const effectiveAmountDue = creditApplied > 0 || walletApplied > 0
-            ? parseFloat(invoice.amountDue?.toString() ?? (invoiceTotal - creditApplied - walletApplied).toFixed(2))
+          const effectiveAmountDue = walletApplied > 0
+            ? parseFloat(invoice.amountDue?.toString() ?? (invoiceTotal - walletApplied).toFixed(2))
             : invoiceTotal;
           const paidAmt = parseFloat(input.paidAmount);
           const diff = paidAmt - effectiveAmountDue;
@@ -918,13 +919,12 @@ export const invoicesRouter = router({
       // 2. Update Invoice Status & Amounts
       const currentPaid = parseFloat(invoice.paidAmount || "0");
       const currentWalletApplied = parseFloat(invoice.walletAppliedAmount || "0");
-      const currentCreditApplied = parseFloat(invoice.creditApplied || "0");
       
       const newPaid = currentPaid + externalAmt;
       const newWalletApplied = currentWalletApplied + walletAmt;
       
       const total = parseFloat(invoice.total);
-      const totalPaidSoFar = newPaid + newWalletApplied + currentCreditApplied;
+      const totalPaidSoFar = newPaid + newWalletApplied;
       const remainingDue = total - totalPaidSoFar;
       
       // Determine new status
@@ -992,39 +992,19 @@ export const invoicesRouter = router({
         });
       }
 
-      // Safe Delete Check: Ensure no downstream dependencies
-      
-      // 1. Check if this invoice has had credit notes applied TO it
-      if (parseFloat(invoice.creditApplied || '0') > 0) {
-         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice with credit notes applied. Remove applications first." });
-      }
-      
-      // 2. Check if this invoice has wallet funds applied
-      if (parseFloat(invoice.walletAppliedAmount || '0') > 0) {
-         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice with wallet funds applied. Void/Cancel instead." });
-      }
-
-      // 3. Check if linked to another invoice (e.g. it is a follow-up or related)
+      // 1. Check if linked to another invoice (e.g. it is a follow-up or related)
       // Only isolated invoices can be deleted
       if (invoice.relatedInvoiceId) {
          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete linked invoice (has related invoice). Void/Cancel instead." });
       }
 
-      // 4. Check if other invoices link TO this one
+      // 2. Check if other invoices link TO this one
       const db = getDb();
       if (db) {
         // Check downstream invoices
         const children = await db.select().from(invoicesTable).where(eq(invoicesTable.relatedInvoiceId, input.id));
         if (children.length > 0) {
            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice referenced by other invoices. Void/Cancel downstream invoices first." });
-        }
-        
-        // Check if it's a Credit Note that has been applied
-        if (invoice.invoiceType === 'credit_note') {
-           const apps = await db.select().from(creditNoteApplications).where(eq(creditNoteApplications.creditNoteId, input.id));
-           if (apps.length > 0) {
-             throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete Credit Note that has been applied. Void/Cancel instead." });
-           }
         }
       }
 
@@ -1081,8 +1061,9 @@ export const invoicesRouter = router({
       // Group by month
       interface CurrencyBreakdown {
         currency: string;
-        totalAmount: number;
+        totalAmount: number; // Revenue (Monthly, Visa, Manual)
         paidAmount: number;
+        depositAmount: number; // Deposits (Liability)
         invoiceCount: number;
         collectionRate: number;
       }
@@ -1094,7 +1075,7 @@ export const invoicesRouter = router({
         typeBreakdown: Record<string, number>;
         customerCount: number;
         customers: Set<number>;
-        currencyBreakdowns: Map<string, { totalAmount: number; paidAmount: number; invoiceCount: number }>;
+        currencyBreakdowns: Map<string, { totalAmount: number; paidAmount: number; depositAmount: number; invoiceCount: number }>;
       }>();
 
       for (const inv of allInvoices) {
@@ -1125,16 +1106,25 @@ export const invoicesRouter = router({
         // Track per-currency amounts
         const ccy = inv.currency || "USD";
         if (!entry.currencyBreakdowns.has(ccy)) {
-          entry.currencyBreakdowns.set(ccy, { totalAmount: 0, paidAmount: 0, invoiceCount: 0 });
+          entry.currencyBreakdowns.set(ccy, { totalAmount: 0, paidAmount: 0, depositAmount: 0, invoiceCount: 0 });
         }
         const ccyEntry = entry.currencyBreakdowns.get(ccy)!;
         const invTotal = parseFloat(inv.total?.toString() ?? "0");
+        
         // Only count non-cancelled invoices in totals
         if (inv.status !== "cancelled") {
-          ccyEntry.totalAmount += invTotal;
-          ccyEntry.invoiceCount++;
-          if (inv.status === "paid" && inv.paidAmount) {
-            ccyEntry.paidAmount += parseFloat(inv.paidAmount.toString());
+          
+          if (inv.invoiceType === "deposit") {
+            ccyEntry.depositAmount += invTotal;
+          } else if (inv.invoiceType === "credit_note" || inv.invoiceType === "deposit_refund") {
+            // Ignore credit notes and refunds in revenue overview
+          } else {
+            // Revenue invoices
+            ccyEntry.invoiceCount++; // Only count revenue invoices
+            ccyEntry.totalAmount += invTotal;
+            if (inv.status === "paid" && inv.paidAmount) {
+              ccyEntry.paidAmount += parseFloat(inv.paidAmount.toString());
+            }
           }
         }
       }
@@ -1147,6 +1137,7 @@ export const invoicesRouter = router({
               currency,
               totalAmount: data.totalAmount,
               paidAmount: data.paidAmount,
+              depositAmount: data.depositAmount,
               invoiceCount: data.invoiceCount,
               collectionRate: data.totalAmount > 0 ? Math.round((data.paidAmount / data.totalAmount) * 10000) / 100 : 0,
             }))

@@ -384,7 +384,31 @@ export default function Invoices() {
                 />
               </CardContent>
             </Card>
-            {/* Pagination controls would go here - reused from original */}
+            
+            {/* Pagination */}
+            {filtered.length > pagination.pageSize && (
+              <div className="flex items-center justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => pagination.setActivePage(p => Math.max(1, p - 1))}
+                  disabled={pagination.activePage === 1}
+                >
+                  Previous
+                </Button>
+                <div className="text-sm text-muted-foreground">
+                  Page {pagination.activePage} of {Math.ceil(filtered.length / pagination.pageSize)}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => pagination.setActivePage(p => p + 1)}
+                  disabled={pagination.activePage >= Math.ceil(filtered.length / pagination.pageSize)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="history" className="space-y-4 mt-4">

@@ -125,6 +125,7 @@ export async function generateVisaServiceInvoice(
       total: totalAmount.toFixed(2),
       status: "draft",
       dueDate: dueDate.toISOString().slice(0, 10), // text column: use YYYY-MM-DD string
+      invoiceMonth: new Date().toISOString().slice(0, 7) + "-01", // Set current month
       amountDue: totalAmount.toFixed(2),
       notes: `Visa & Immigration Service Fee for ${empCode} ${empName}`,
     };

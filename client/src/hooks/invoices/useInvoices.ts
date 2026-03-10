@@ -44,6 +44,7 @@ export function useInvoices() {
   const { data, isLoading } = trpc.invoices.list.useQuery({
     status: statusFilter !== "all" ? statusFilter : undefined,
     invoiceMonth: monthFilter || undefined,
+    excludeCreditNotes: true,
     limit: 200,
   });
 

@@ -156,6 +156,14 @@ export default function InvoiceDetail() {
     { enabled: !!invoiceId }
   );
 
+  const activeCreditNotes = (relatedInvoices as any[])?.filter(inv => 
+    (inv.invoiceType === 'credit_note' || inv.invoiceType === 'deposit_refund') && 
+    inv.status !== 'cancelled'
+  ) || [];
+  
+  const totalCredited = activeCreditNotes.reduce((sum, inv) => sum + Math.abs(parseFloat(inv.total)), 0);
+  const canCreateCreditNote = isPaid && !isCreditNote && (totalCredited < parseFloat(invoice.total || "0") - 0.01);
+
   // Reference data
   const { data: customers } = trpc.customers.list.useQuery({ limit: 500 });
   const { data: billingEntities } = trpc.billingEntities.list.useQuery();
@@ -400,9 +408,15 @@ export default function InvoiceDetail() {
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf`, "_blank")}>
                   <Download className="w-4 h-4" /> Download PDF
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreditNoteOpen(true)}>
-                  <FileText className="w-4 h-4" /> Create Credit Note
-                </Button>
+                {canCreateCreditNote ? (
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreditNoteOpen(true)}>
+                    <FileText className="w-4 h-4" /> Create Credit Note
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" className="gap-1.5" disabled title="Invoice already fully credited">
+                    <FileText className="w-4 h-4" /> Fully Credited
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -569,8 +583,47 @@ export default function InvoiceDetail() {
               </CardContent>
             </Card>
 
-            {/* Related Invoices */}
-            {relatedInvoices && (relatedInvoices as any[]).length > 0 && (
+            {/* Related Credit Notes (if any) */}
+            {activeCreditNotes.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-muted-foreground" /> Related Credit Notes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/30">
+                        <TableHead className="pl-6">Invoice #</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="pr-6"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {activeCreditNotes.map((cn: any) => (
+                        <TableRow key={cn.id}>
+                          <TableCell className="pl-6 font-mono text-sm">{cn.invoiceNumber}</TableCell>
+                          <TableCell><Badge variant="outline" className="text-xs">{typeLabels[cn.invoiceType] || cn.invoiceType}</Badge></TableCell>
+                          <TableCell><Badge variant="outline" className={cn("text-xs", statusColors[cn.status])}>{statusLabels[cn.status] || cn.status}</Badge></TableCell>
+                          <TableCell className="text-right font-mono text-sm text-red-600">{cn.currency} {fmtAmt(cn.total)}</TableCell>
+                          <TableCell className="pr-6">
+                            <Button variant="ghost" size="sm" className="gap-1" onClick={() => setLocation(`/invoices/${cn.id}`)}>
+                              <Eye className="w-3.5 h-3.5" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Related Invoices (Parents/Children) */}
+            {relatedInvoices && (relatedInvoices as any[]).filter(ri => !['credit_note', 'deposit_refund'].includes(ri.invoiceType)).length > 0 && (
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
