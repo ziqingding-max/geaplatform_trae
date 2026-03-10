@@ -21,7 +21,7 @@ import {
   Clock, Receipt, Info, Eye, Edit, Save, Plus, Trash2,
   Building2, User, DollarSign, TrendingUp, TrendingDown,
   AlertTriangle, CheckCircle2, Send, XCircle, Ban,
-  RefreshCw, ExternalLink, Link2,
+  RefreshCw, ExternalLink, Link2, Wallet, Landmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate, formatAmount, formatMonth } from "@/lib/format";
@@ -388,7 +388,7 @@ export default function InvoiceDetail() {
                 </Button>
               </>
             )}
-            {(isSent || isOverdue) && (
+            {(isSent || isOverdue) && !isCreditNote && invoice.invoiceType !== 'deposit_refund' && (
               <>
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf`, "_blank")}>
                   <Download className="w-4 h-4" /> Download PDF
@@ -401,7 +401,18 @@ export default function InvoiceDetail() {
                 </Button>
               </>
             )}
-            {isPaid && !isCreditNote && (
+            {/* Credit Note / Deposit Refund: only show Download PDF and Cancel (when still in sent status) */}
+            {(isCreditNote || invoice.invoiceType === 'deposit_refund') && (isSent || isOverdue) && (
+              <>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf`, "_blank")}>
+                  <Download className="w-4 h-4" /> Download PDF
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => updateStatusMutation.mutate({ id: invoiceId, status: "cancelled" })}>
+                  <Ban className="w-4 h-4" /> Cancel
+                </Button>
+              </>
+            )}
+            {isPaid && !isCreditNote && invoice.invoiceType !== 'deposit_refund' && (
               <>
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf`, "_blank")}>
                   <Download className="w-4 h-4" /> Download PDF
@@ -414,6 +425,24 @@ export default function InvoiceDetail() {
                   <Button variant="outline" size="sm" className="gap-1.5" disabled title="Invoice already fully credited">
                     <FileText className="w-4 h-4" /> Fully Credited
                   </Button>
+                )}
+              </>
+            )}
+            {/* Credit Note / Deposit Refund: paid state — show Download PDF + disposition badge */}
+            {isPaid && (isCreditNote || invoice.invoiceType === 'deposit_refund') && (
+              <>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf`, "_blank")}>
+                  <Download className="w-4 h-4" /> Download PDF
+                </Button>
+                {invoice.creditNoteDisposition === 'to_wallet' && (
+                  <Badge className="bg-blue-100 text-blue-800 border-blue-200 gap-1">
+                    <Wallet className="w-3.5 h-3.5" /> Credited to Wallet
+                  </Badge>
+                )}
+                {invoice.creditNoteDisposition === 'to_bank' && (
+                  <Badge className="bg-amber-100 text-amber-800 border-amber-200 gap-1">
+                    <Landmark className="w-3.5 h-3.5" /> Refunded to Bank
+                  </Badge>
                 )}
               </>
             )}

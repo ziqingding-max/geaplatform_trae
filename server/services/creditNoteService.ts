@@ -54,7 +54,8 @@ export async function approveCreditNote(creditNoteId: number, approvedBy?: numbe
             releaseAmount,
             creditNote.id,
             "Deposit Release Approved",
-            approvedBy
+            approvedBy,
+            tx  // Pass outer transaction to avoid nested db.transaction() (SQLITE_BUSY)
          );
       }
     }
@@ -64,9 +65,10 @@ export async function approveCreditNote(creditNoteId: number, approvedBy?: numbe
       // Calculate credit amount (absolute value)
       const creditAmount = Math.abs(parseFloat(creditNote.total));
 
-      // Credit to wallet
+      // Credit to wallet — pass tx to avoid nested transaction (SQLITE_BUSY)
+      const wallet = await walletService.getWallet(creditNote.customerId, creditNote.currency, tx);
       await walletService.transact({
-        walletId: (await walletService.getWallet(creditNote.customerId, creditNote.currency)).id,
+        walletId: wallet.id,
         type: "credit_note_in",
         amount: creditAmount.toFixed(2),
         direction: "credit",
@@ -74,7 +76,7 @@ export async function approveCreditNote(creditNoteId: number, approvedBy?: numbe
         referenceType: "credit_note",
         description: `Credit Note #${creditNote.invoiceNumber} approved`,
         createdBy: approvedBy,
-      });
+      }, tx);
     } else {
       // to_bank: Funds leave the system (or rather, are marked for external payment).
       // We don't touch the wallet.

@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { CheckCircle, XCircle, AlertCircle, Building2, Wallet, Landmark, Eye, Clock, CheckCircle2, ExternalLink } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
+import { formatDate } from "@/lib/format";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -140,12 +141,24 @@ export default function ReleaseTasks() {
                             {cn.notes || "Deposit Release"}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {new Date(cn.createdAt).toLocaleDateString()}
+                            {formatDate(cn.createdAt)}
                           </TableCell>
                           <TableCell>
-                            <Badge variant="secondary" className="text-xs font-normal">
-                              {cn.status}
-                            </Badge>
+                            <div className="flex flex-col gap-1">
+                              <Badge variant="secondary" className="text-xs font-normal">
+                                {cn.status}
+                              </Badge>
+                              {cn.status === 'paid' && cn.creditNoteDisposition === 'to_wallet' && (
+                                <Badge className="text-xs font-normal bg-blue-100 text-blue-800 border-blue-200 gap-1">
+                                  <Wallet className="w-3 h-3" /> To Wallet
+                                </Badge>
+                              )}
+                              {cn.status === 'paid' && cn.creditNoteDisposition === 'to_bank' && (
+                                <Badge className="text-xs font-normal bg-amber-100 text-amber-800 border-amber-200 gap-1">
+                                  <Landmark className="w-3 h-3" /> To Bank
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-right pr-6">
                             <div className="flex justify-end gap-2">
