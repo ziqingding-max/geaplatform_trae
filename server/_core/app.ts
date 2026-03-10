@@ -179,13 +179,16 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
         res.status(400).json({ error: "Invalid country code" });
         return;
       }
-      const pdfBuffer = await countryGuidePdfService.generatePdf(countryCode.toUpperCase());
+      // Bug 4 fix: support ?locale=zh for Chinese language PDF
+      const locale = req.query.locale === "zh" ? "zh" : "en";
+      const pdfBuffer = await countryGuidePdfService.generatePdf(countryCode.toUpperCase(), locale);
       if (!pdfBuffer) {
         res.status(404).json({ error: "Country guide not found" });
         return;
       }
+      const langSuffix = locale === "zh" ? "-zh" : "";
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="country-guide-${countryCode}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="country-guide-${countryCode}${langSuffix}.pdf"`);
       res.setHeader("Content-Length", pdfBuffer.length.toString());
       res.send(pdfBuffer);
     } catch (error) {

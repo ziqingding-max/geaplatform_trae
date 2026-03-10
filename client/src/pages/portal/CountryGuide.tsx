@@ -256,8 +256,10 @@ export default function CountryGuide() {
     if (!countryCode || isDownloading) return;
     setIsDownloading(true);
     try {
+      // Bug 4 fix: pass current UI locale so the PDF is generated in the correct language
+      const pdfLocale = locale === "zh" ? "zh" : "en";
       const response = await fetch(
-        `/api/portal-country-guide/${countryCode}/pdf`,
+        `/api/portal-country-guide/${countryCode}/pdf?locale=${pdfLocale}`,
         { credentials: "include" }
       );
       if (!response.ok) throw new Error("Download failed");
@@ -265,7 +267,8 @@ export default function CountryGuide() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `country-guide-${countryCode}.pdf`;
+      const langSuffix = pdfLocale === "zh" ? "-zh" : "";
+      a.download = `country-guide-${countryCode}${langSuffix}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
