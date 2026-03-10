@@ -23,6 +23,21 @@ FROM node:22-alpine
 
 WORKDIR /app
 
+# Install Chromium and required system libraries for Puppeteer PDF generation
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto \
+    font-noto-cjk
+
+# Tell Puppeteer to use the system Chromium installed above
+ENV CHROMIUM_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
 # Enable pnpm
 RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
 
