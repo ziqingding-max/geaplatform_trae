@@ -19,7 +19,7 @@ const CURRENCIES = [
   { code: "CHF", name: "Swiss Franc" },
   { code: "NZD", name: "New Zealand Dollar" },
   { code: "KRW", name: "South Korean Won" },
-  { code: "TWD", name: "Taiwan Dollar" },
+  { code: "TWD", name: "New Taiwan Dollar" },
   { code: "THB", name: "Thai Baht" },
   { code: "VND", name: "Vietnamese Dong" },
   { code: "MYR", name: "Malaysian Ringgit" },

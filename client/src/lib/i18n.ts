@@ -1691,6 +1691,8 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_wallet.transactions.table.description": "Description",
     "portal_wallet.transactions.table.reference": "Reference",
     "portal_wallet.transactions.table.amount": "Amount",
+    "portal_wallet.transactions.table.actions": "Actions",
+    "portal_wallet.transactions.download_credit_note": "Download Credit Note",
 
     "portal_settings.company.title": "Company Information",
     "portal_settings.company.description": "Your company profile information. Contact support to update locked fields.",
@@ -3552,6 +3554,8 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_wallet.transactions.table.description": "描述",
     "portal_wallet.transactions.table.reference": "参考号",
     "portal_wallet.transactions.table.amount": "金额",
+    "portal_wallet.transactions.table.actions": "操作",
+    "portal_wallet.transactions.download_credit_note": "下载贷记通知",
 
     "portal_settings.header.title": "设置",
     "portal_settings.company.title": "公司信息",
