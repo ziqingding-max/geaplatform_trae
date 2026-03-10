@@ -156,14 +156,6 @@ export default function InvoiceDetail() {
     { enabled: !!invoiceId }
   );
 
-  const activeCreditNotes = (relatedInvoices as any[])?.filter(inv => 
-    (inv.invoiceType === 'credit_note' || inv.invoiceType === 'deposit_refund') && 
-    inv.status !== 'cancelled'
-  ) || [];
-  
-  const totalCredited = activeCreditNotes.reduce((sum, inv) => sum + Math.abs(parseFloat(inv.total)), 0);
-  const canCreateCreditNote = isPaid && !isCreditNote && (totalCredited < parseFloat(invoice.total || "0") - 0.01);
-
   // Reference data
   const { data: customers } = trpc.customers.list.useQuery({ limit: 500 });
   const { data: billingEntities } = trpc.billingEntities.list.useQuery();
@@ -293,6 +285,14 @@ export default function InvoiceDetail() {
   const isOverdue = invoice.status === "overdue";
   const isCreditNote = invoice.invoiceType === "credit_note";
   const isEditable = isDraft; // Only draft invoices are fully editable
+
+  // Credit note tracking: calculate how much has already been credited
+  const activeCreditNotes = (Array.isArray(relatedInvoices) ? relatedInvoices : []).filter((inv: any) =>
+    (inv.invoiceType === 'credit_note' || inv.invoiceType === 'deposit_refund') &&
+    inv.status !== 'cancelled'
+  );
+  const totalCredited = activeCreditNotes.reduce((sum: number, inv: any) => sum + Math.abs(parseFloat(inv.total)), 0);
+  const canCreateCreditNote = isPaid && !isCreditNote && (totalCredited < parseFloat(invoice.total || "0") - 0.01);
   const canEditInternalNotes = true; // Internal notes always editable
   const canEditExternalNotes = isDraft || isPendingReview;
 
@@ -603,14 +603,14 @@ export default function InvoiceDetail() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {activeCreditNotes.map((cn: any) => (
-                        <TableRow key={cn.id}>
-                          <TableCell className="pl-6 font-mono text-sm">{cn.invoiceNumber}</TableCell>
-                          <TableCell><Badge variant="outline" className="text-xs">{typeLabels[cn.invoiceType] || cn.invoiceType}</Badge></TableCell>
-                          <TableCell><Badge variant="outline" className={cn("text-xs", statusColors[cn.status])}>{statusLabels[cn.status] || cn.status}</Badge></TableCell>
-                          <TableCell className="text-right font-mono text-sm text-red-600">{cn.currency} {fmtAmt(cn.total)}</TableCell>
+                      {activeCreditNotes.map((creditNote: any) => (
+                        <TableRow key={creditNote.id}>
+                          <TableCell className="pl-6 font-mono text-sm">{creditNote.invoiceNumber}</TableCell>
+                          <TableCell><Badge variant="outline" className="text-xs">{typeLabels[creditNote.invoiceType] || creditNote.invoiceType}</Badge></TableCell>
+                          <TableCell><Badge variant="outline" className={cn("text-xs", statusColors[creditNote.status])}>{statusLabels[creditNote.status] || creditNote.status}</Badge></TableCell>
+                          <TableCell className="text-right font-mono text-sm text-red-600">{creditNote.currency} {fmtAmt(creditNote.total)}</TableCell>
                           <TableCell className="pr-6">
-                            <Button variant="ghost" size="sm" className="gap-1" onClick={() => setLocation(`/invoices/${cn.id}`)}>
+                            <Button variant="ghost" size="sm" className="gap-1" onClick={() => setLocation(`/invoices/${creditNote.id}`)}>
                               <Eye className="w-3.5 h-3.5" />
                             </Button>
                           </TableCell>
