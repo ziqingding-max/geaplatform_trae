@@ -5722,12 +5722,12 @@ const adminTranslations = {
     // "employees.documentType.other": "Other",
 
     // Visa Status (Snake Case)
-    // "employees.visaStatus.not_required": "Not Required",
-    // "employees.visaStatus.pending_application": "Pending Application",
-    // "employees.visaStatus.application_submitted": "Application Submitted",
-    // "employees.visaStatus.approved": "Approved",
-    // "employees.visaStatus.rejected": "Rejected",
-    // "employees.visaStatus.expired": "Expired",
+    "employees.visaStatus.not_required": "Not Required",
+    "employees.visaStatus.pending_application": "Pending Application",
+    "employees.visaStatus.application_submitted": "Application Submitted",
+    "employees.visaStatus.approved": "Approved",
+    "employees.visaStatus.rejected": "Rejected",
+    "employees.visaStatus.expired": "Expired",
 
     // Workflow Actions
     "employees.actions.startOnboarding": "Start Onboarding",

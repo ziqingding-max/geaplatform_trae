@@ -771,6 +771,14 @@ type DetailTab = "info" | "leave" | "payroll" | "adjustments" | "visa" | "docume
 
 function EmployeeDetail({ id }: { id: number }) {
   const { t } = useI18n();
+  const visaStatusLabels: Record<string, string> = {
+    not_required: t("employees.visaStatus.not_required"),
+    pending_application: t("employees.visaStatus.pending_application"),
+    application_submitted: t("employees.visaStatus.application_submitted"),
+    approved: t("employees.visaStatus.approved"),
+    rejected: t("employees.visaStatus.rejected"),
+    expired: t("employees.visaStatus.expired"),
+  };
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const fromPage = new URLSearchParams(searchString).get("from_page") || "1";
