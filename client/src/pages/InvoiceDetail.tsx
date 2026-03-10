@@ -301,14 +301,12 @@ export default function InvoiceDetail() {
   const bankDetails = parseBankDetails(billingEntity?.bankDetails);
 
   const walletApplied = parseFloat(invoice.walletAppliedAmount?.toString() || "0");
-  const creditApplied = parseFloat(invoice.creditApplied?.toString() || "0");
   const totalNum = parseFloat(invoice.total?.toString() || "0");
   const paidNum = parseFloat(invoice.paidAmount?.toString() || "0");
-  // Calculate effectiveAmountDue consistent with backend logic:
-  // When wallet/credit applied, use invoice.amountDue (which reflects deductions);
+  // Calculate effectiveAmountDue: when wallet applied, use invoice.amountDue;
   // Otherwise, use totalNum (the full invoice total) as the baseline.
-  const amountDueNum = (walletApplied > 0 || creditApplied > 0)
-    ? parseFloat(invoice.amountDue?.toString() || (totalNum - creditApplied - walletApplied).toFixed(2))
+  const amountDueNum = walletApplied > 0
+    ? parseFloat(invoice.amountDue?.toString() || (totalNum - walletApplied).toFixed(2))
     : totalNum;
 
   // ── Handlers ──
@@ -433,7 +431,7 @@ export default function InvoiceDetail() {
               value={`${invoice.currency || "USD"} ${fmtAmt(invoice.paidAmount)}`}
               className="border-emerald-200 bg-emerald-50/50"
             />
-          ) : (walletApplied > 0 || creditApplied > 0) ? (
+          ) : walletApplied > 0 ? (
             <SummaryCard
               label="Amount Due"
               value={`${invoice.currency || "USD"} ${fmtAmt(amountDueNum)}`}
@@ -642,7 +640,7 @@ export default function InvoiceDetail() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(relatedInvoices as any[]).map((ri: any) => (
+                      {(relatedInvoices as any[]).filter((ri: any) => !['credit_note', 'deposit_refund'].includes(ri.invoiceType)).map((ri: any) => (
                         <TableRow key={ri.id}>
                           <TableCell className="pl-6 font-mono text-sm">{ri.invoiceNumber}</TableCell>
                           <TableCell><Badge variant="outline" className="text-xs">{typeLabels[ri.invoiceType] || ri.invoiceType}</Badge></TableCell>
@@ -687,20 +685,12 @@ export default function InvoiceDetail() {
                   <span>Total</span>
                   <span className="font-mono">{invoice.currency} {fmtAmt(invoice.total)}</span>
                 </div>
-                {(walletApplied > 0 || creditApplied > 0) && (
+                {walletApplied > 0 && (
                   <>
-                    {walletApplied > 0 && (
-                      <div className="flex justify-between text-sm text-blue-600">
-                        <span>Wallet Applied</span>
-                        <span className="font-mono">- {fmtAmt(walletApplied)}</span>
-                      </div>
-                    )}
-                    {creditApplied > 0 && (
-                      <div className="flex justify-between text-sm text-purple-600">
-                        <span>Credit Applied</span>
-                        <span className="font-mono">- {fmtAmt(creditApplied)}</span>
-                      </div>
-                    )}
+                    <div className="flex justify-between text-sm text-blue-600">
+                      <span>Wallet Applied</span>
+                      <span className="font-mono">- {fmtAmt(walletApplied)}</span>
+                    </div>
                     <Separator />
                     <div className="flex justify-between font-bold">
                       <span>Amount Due</span>
@@ -860,20 +850,12 @@ export default function InvoiceDetail() {
                   <span>Total Due</span>
                   <span className="font-mono">{invoice.currency} {fmtAmt(invoice.total)}</span>
                 </div>
-                {(walletApplied > 0 || creditApplied > 0) && (
+                {walletApplied > 0 && (
                   <>
-                    {walletApplied > 0 && (
-                      <div className="flex justify-between text-sm text-blue-600">
-                        <span>Less: Wallet</span>
-                        <span className="font-mono">- {fmtAmt(walletApplied)}</span>
-                      </div>
-                    )}
-                    {creditApplied > 0 && (
-                      <div className="flex justify-between text-sm text-purple-600">
-                        <span>Less: Credit</span>
-                        <span className="font-mono">- {fmtAmt(creditApplied)}</span>
-                      </div>
-                    )}
+                    <div className="flex justify-between text-sm text-blue-600">
+                      <span>Less: Wallet</span>
+                      <span className="font-mono">- {fmtAmt(walletApplied)}</span>
+                    </div>
                     <Separator />
                     <div className="flex justify-between text-sm font-bold">
                       <span>Amount Due</span>

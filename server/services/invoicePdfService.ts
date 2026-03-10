@@ -5,7 +5,7 @@
  * Supports CJK characters via Noto Sans SC font downloaded at runtime.
  */
 import PDFDocument from "pdfkit";
-import { getInvoiceById, listInvoiceItemsByInvoice, getCustomerById, getBillingEntityById, listApplicationsForInvoice } from "../db";
+import { getInvoiceById, listInvoiceItemsByInvoice, getCustomerById, getBillingEntityById } from "../db";
 import path from "path";
 import fs from "fs";
 
@@ -80,23 +80,8 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
   // Pre-download CJK font if needed
   const cjkFontPath = await ensureCJKFont();
 
-  // Pre-fetch credit applications for this invoice (for PDF display)
-  const creditAppliedAmt = parseFloat(invoice.creditApplied?.toString() || "0");
-  let creditApps: { creditNoteId: number; appliedAmount: any; creditNoteNumber?: string }[] = [];
-  if (creditAppliedAmt > 0.01) {
-    const rawApps = await listApplicationsForInvoice(invoice.id);
-    // Pre-fetch credit note numbers
-    creditApps = await Promise.all(
-      rawApps.map(async (app) => {
-        const cn = await getInvoiceById(app.creditNoteId);
-        return {
-          creditNoteId: app.creditNoteId,
-          appliedAmount: app.appliedAmount,
-          creditNoteNumber: cn?.invoiceNumber || `CN-${app.creditNoteId}`,
-        };
-      })
-    );
-  }
+  // Credit Note Apply mechanism removed — wallet-based flow only.
+  // creditApplied field is no longer used; only walletAppliedAmount remains.
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
@@ -398,9 +383,9 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
     doc.text(`${currency} ${formatNum(invoice.tax)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
     tableY += 14;
 
-    // Credit Applied section (if any credit notes have been applied to this invoice)
+    // Wallet deductions section
     const walletAppliedAmt = parseFloat(invoice.walletAppliedAmount?.toString() || "0");
-    const hasDeductions = creditAppliedAmt > 0.01 || walletAppliedAmt > 0.01;
+    const hasDeductions = walletAppliedAmt > 0.01;
 
     if (hasDeductions) {
       tableY += 4;
@@ -413,20 +398,11 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
       tableY += 14;
 
       doc.fontSize(8).font("Helvetica").fillColor("#2563eb");
-      
-      // Show Credit Note deductions
-      if (creditAppliedAmt > 0.01) {
-        doc.text("Less: Credit Note Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 5 });
-        doc.text(`- ${currency} ${formatNum(creditAppliedAmt)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
-        tableY += 12;
-      }
 
       // Show Wallet Applied deductions
-      if (walletAppliedAmt > 0.01) {
-        doc.text("Less: Wallet Balance Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 5 });
-        doc.text(`- ${currency} ${formatNum(walletAppliedAmt)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
-        tableY += 12;
-      }
+      doc.text("Less: Wallet Balance Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 5 });
+      doc.text(`- ${currency} ${formatNum(walletAppliedAmt)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+      tableY += 12;
       
       tableY += 2;
     }
@@ -436,12 +412,11 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
     doc.moveTo(totalsLabelX, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.5).strokeColor("#333333").stroke();
     tableY += 8;
 
-    // Show adjusted AMOUNT DUE when credit/wallet is applied, otherwise show TOTAL DUE
-    const totalDeductions = creditAppliedAmt + walletAppliedAmt;
-    const finalAmountDue = totalDeductions > 0.01
-      ? parseFloat(invoice.amountDue?.toString() || (parseFloat(invoice.total?.toString() || "0") - totalDeductions).toFixed(2))
+    // Show adjusted AMOUNT DUE when wallet is applied, otherwise show TOTAL DUE
+    const finalAmountDue = walletAppliedAmt > 0.01
+      ? parseFloat(invoice.amountDue?.toString() || (parseFloat(invoice.total?.toString() || "0") - walletAppliedAmt).toFixed(2))
       : parseFloat(invoice.total?.toString() || "0");
-    const totalLabel = totalDeductions > 0.01 ? "AMOUNT DUE" : "TOTAL DUE";
+    const totalLabel = walletAppliedAmt > 0.01 ? "AMOUNT DUE" : "TOTAL DUE";
 
     doc.fontSize(11).font("Helvetica-Bold").fillColor("#1a1a1a");
     doc.text(totalLabel, totalsLabelX, tableY, { width: 110 });

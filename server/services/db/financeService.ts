@@ -7,7 +7,6 @@ import {
   payrollItems, InsertPayrollItem,
   adjustments, InsertAdjustment,
   reimbursements, InsertReimbursement,
-  creditNoteApplications, InsertCreditNoteApplication,
   vendors, InsertVendor,
   vendorBills, InsertVendorBill,
   vendorBillItems, InsertVendorBillItem,
@@ -93,8 +92,49 @@ export async function listInvoices(
 }
 
 export async function getRelatedInvoices(invoiceId: number) {
-  // Placeholder for related invoices logic (e.g. credit notes applied)
-  return [];
+  const db = await getDb();
+  if (!db) return [];
+
+  // 1. Find invoices that reference this invoice (children: credit notes, follow-ups, deposit refunds)
+  const children = await db
+    .select({
+      id: invoices.id,
+      invoiceNumber: invoices.invoiceNumber,
+      invoiceType: invoices.invoiceType,
+      total: invoices.total,
+      status: invoices.status,
+      currency: invoices.currency,
+      createdAt: invoices.createdAt,
+      relatedInvoiceId: invoices.relatedInvoiceId,
+    })
+    .from(invoices)
+    .where(eq(invoices.relatedInvoiceId, invoiceId));
+
+  // 2. Find the parent invoice (if this invoice references another)
+  const currentInvoice = await db
+    .select({ relatedInvoiceId: invoices.relatedInvoiceId })
+    .from(invoices)
+    .where(eq(invoices.id, invoiceId))
+    .limit(1);
+
+  let parent: typeof children = [];
+  if (currentInvoice[0]?.relatedInvoiceId) {
+    parent = await db
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        invoiceType: invoices.invoiceType,
+        total: invoices.total,
+        status: invoices.status,
+        currency: invoices.currency,
+        createdAt: invoices.createdAt,
+        relatedInvoiceId: invoices.relatedInvoiceId,
+      })
+      .from(invoices)
+      .where(eq(invoices.id, currentInvoice[0].relatedInvoiceId));
+  }
+
+  return [...parent, ...children];
 }
 
 export async function updateInvoice(id: number, data: Partial<InsertInvoice>) {
@@ -406,29 +446,8 @@ export async function deleteReimbursement(id: number) {
   await db.delete(reimbursements).where(eq(reimbursements.id, id));
 }
 
-// CREDIT NOTES & APPLICATIONS
-export async function applyCreditNote(data: InsertCreditNoteApplication) {
-  const db = await getDb();
-  if (!db) return;
-  await db.insert(creditNoteApplications).values(data);
-}
-
-export async function listCreditNoteApplications() {
-  const db = await getDb();
-  if (!db) return [];
-  return await db.select().from(creditNoteApplications);
-}
-
-export async function listApplicationsForInvoice(invoiceId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return await db.select().from(creditNoteApplications).where(eq(creditNoteApplications.appliedToInvoiceId, invoiceId));
-}
-
-export async function getCreditNoteRemainingBalance(creditNoteId: number) {
-  // Logic to calculate remaining balance
-  return null;
-}
+// [REMOVED] Credit Note Apply functions — replaced by Wallet-based flow.
+// Credit notes are now approved via Release Tasks → Wallet. No direct CN→Invoice apply.
 
 export async function hasDepositBeenProcessed(depositInvoiceId: number) {
   return { processed: false };

@@ -16,12 +16,8 @@ import {
   logAuditAction,
   getDb,
   listBillingEntities,
-  applyCreditNote,
-  listCreditNoteApplications,
-  listApplicationsForInvoice,
-  getCreditNoteRemainingBalance,
 } from "../db";
-import { invoices as invoicesTable, customers as customersTable, creditNoteApplications } from "../../drizzle/schema";
+import { invoices as invoicesTable, customers as customersTable } from "../../drizzle/schema";
 import { eq, and, sql, between } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { generateInvoiceNumber, generateDepositInvoiceNumber } from "../services/invoiceNumberService";
@@ -564,14 +560,13 @@ export const invoicesRouter = router({
         // If paid, ensure amountDue is 0
         updateData.amountDue = "0";
 
-        // Compare paid amount with effective amount due (total minus credit applied)
+        // Compare paid amount with effective amount due (total minus wallet applied)
         const invoice = await getInvoiceById(input.id);
         if (invoice) {
           const invoiceTotal = parseFloat(invoice.total?.toString() ?? "0");
-          const creditApplied = parseFloat(invoice.creditApplied?.toString() ?? "0");
           const walletApplied = parseFloat(invoice.walletAppliedAmount?.toString() ?? "0");
-          const effectiveAmountDue = creditApplied > 0 || walletApplied > 0
-            ? parseFloat(invoice.amountDue?.toString() ?? (invoiceTotal - creditApplied - walletApplied).toFixed(2))
+          const effectiveAmountDue = walletApplied > 0
+            ? parseFloat(invoice.amountDue?.toString() ?? (invoiceTotal - walletApplied).toFixed(2))
             : invoiceTotal;
           const paidAmt = parseFloat(input.paidAmount);
           const diff = paidAmt - effectiveAmountDue;
@@ -920,13 +915,12 @@ export const invoicesRouter = router({
       // 2. Update Invoice Status & Amounts
       const currentPaid = parseFloat(invoice.paidAmount || "0");
       const currentWalletApplied = parseFloat(invoice.walletAppliedAmount || "0");
-      const currentCreditApplied = parseFloat(invoice.creditApplied || "0");
       
       const newPaid = currentPaid + externalAmt;
       const newWalletApplied = currentWalletApplied + walletAmt;
       
       const total = parseFloat(invoice.total);
-      const totalPaidSoFar = newPaid + newWalletApplied + currentCreditApplied;
+      const totalPaidSoFar = newPaid + newWalletApplied;
       const remainingDue = total - totalPaidSoFar;
       
       // Determine new status
@@ -996,37 +990,23 @@ export const invoicesRouter = router({
 
       // Safe Delete Check: Ensure no downstream dependencies
       
-      // 1. Check if this invoice has had credit notes applied TO it
-      if (parseFloat(invoice.creditApplied || '0') > 0) {
-         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice with credit notes applied. Remove applications first." });
-      }
-      
-      // 2. Check if this invoice has wallet funds applied
+      // 1. Check if this invoice has wallet funds applied
       if (parseFloat(invoice.walletAppliedAmount || '0') > 0) {
          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice with wallet funds applied. Void/Cancel instead." });
       }
 
-      // 3. Check if linked to another invoice (e.g. it is a follow-up or related)
+      // 2. Check if linked to another invoice (e.g. it is a follow-up or related)
       // Only isolated invoices can be deleted
       if (invoice.relatedInvoiceId) {
          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete linked invoice (has related invoice). Void/Cancel instead." });
       }
 
-      // 4. Check if other invoices link TO this one
+      // 3. Check if other invoices link TO this one (credit notes, follow-ups, etc.)
       const db = getDb();
       if (db) {
-        // Check downstream invoices
         const children = await db.select().from(invoicesTable).where(eq(invoicesTable.relatedInvoiceId, input.id));
         if (children.length > 0) {
            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice referenced by other invoices. Void/Cancel downstream invoices first." });
-        }
-        
-        // Check if it's a Credit Note that has been applied
-        if (invoice.invoiceType === 'credit_note') {
-           const apps = await db.select().from(creditNoteApplications).where(eq(creditNoteApplications.creditNoteId, input.id));
-           if (apps.length > 0) {
-             throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Cannot delete Credit Note that has been applied. Void/Cancel instead." });
-           }
         }
       }
 
@@ -1404,249 +1384,8 @@ export const invoicesRouter = router({
       };
     }),
 
-  // ── Credit Note Apply Mechanism ──────────────────────────────────────
-
-  /**
-   * Apply a credit note to an invoice (offset credit against outstanding amount)
-   */
-  applyCreditToInvoice: financeManagerProcedure
-    .input(
-      z.object({
-        creditNoteId: z.number(),
-        appliedToInvoiceId: z.number(),
-        appliedAmount: z.string(), // Decimal as string
-        notes: z.string().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      // 1. Validate credit note
-      const creditNote = await getInvoiceById(input.creditNoteId);
-      if (!creditNote || creditNote.invoiceType !== "credit_note") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid credit note" });
-      }
-      if (creditNote.status !== "sent") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Credit note must be in 'sent' status to be applied. Current status: " + creditNote.status });
-      }
-
-      // 2. Validate target invoice
-      const targetInvoice = await getInvoiceById(input.appliedToInvoiceId);
-      if (!targetInvoice) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Target invoice not found" });
-      }
-      // Only allow applying credit to invoices in pending_review status
-      // Credit must be applied BEFORE the invoice is sent to the customer,
-      // so the customer receives an invoice with the correct adjusted amount
-      if (targetInvoice.status !== "pending_review") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Credit can only be applied to invoices in Pending Review status. Once an invoice is sent to the customer, it cannot be modified with credit." });
-      }
-      // Credit note and target must belong to the same customer
-      if (creditNote.customerId !== targetInvoice.customerId) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Credit note and target invoice must belong to the same customer" });
-      }
-      // Cannot apply to self or other credit notes
-      if (targetInvoice.invoiceType === "credit_note" || targetInvoice.invoiceType === "deposit_refund") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot apply credit to a credit note or deposit refund" });
-      }
-
-      // 3. Check credit note remaining balance
-      const balance = await getCreditNoteRemainingBalance(input.creditNoteId);
-      if (!balance) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not calculate credit note balance" });
-      }
-
-      const applyAmount = parseFloat(input.appliedAmount);
-      if (applyAmount <= 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Applied amount must be positive" });
-      }
-      if (applyAmount > balance.remainingBalance + 0.01) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Applied amount (${applyAmount.toFixed(2)}) exceeds credit note remaining balance (${balance.remainingBalance.toFixed(2)})`,
-        });
-      }
-
-      // 4. Check target invoice remaining unpaid balance
-      // Cannot apply more credit than the invoice still owes
-      const targetInvoiceTotal = Math.abs(parseFloat(targetInvoice.total?.toString() ?? "0"));
-      const existingApplications = await listApplicationsForInvoice(input.appliedToInvoiceId);
-      const alreadyAppliedToTarget = existingApplications.reduce(
-        (sum, app) => sum + parseFloat(app.appliedAmount?.toString() ?? "0"),
-        0
-      );
-      const cashAlreadyPaid = parseFloat(targetInvoice.paidAmount?.toString() ?? "0");
-      const targetRemainingBalance = targetInvoiceTotal - alreadyAppliedToTarget - cashAlreadyPaid;
-
-      if (targetRemainingBalance <= 0.01) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Target invoice is already fully covered (total: ${targetInvoiceTotal.toFixed(2)}, applied: ${alreadyAppliedToTarget.toFixed(2)}, cash paid: ${cashAlreadyPaid.toFixed(2)})`,
-        });
-      }
-      if (applyAmount > targetRemainingBalance + 0.01) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Applied amount (${applyAmount.toFixed(2)}) exceeds target invoice remaining balance (${targetRemainingBalance.toFixed(2)})`,
-        });
-      }
-
-      // 5. Create the application record
-      const applicationId = await applyCreditNote({
-        creditNoteId: input.creditNoteId,
-        appliedToInvoiceId: input.appliedToInvoiceId,
-        appliedAmount: applyAmount.toFixed(2),
-        notes: input.notes || null,
-        appliedBy: ctx.user.id,
-      });
-
-      // 5. Check if credit note is fully applied → update status to 'applied'
-      const newBalance = await getCreditNoteRemainingBalance(input.creditNoteId);
-      if (newBalance && newBalance.remainingBalance <= 0.01) {
-        await updateInvoice(input.creditNoteId, { status: "applied" });
-      }
-
-      // 6. Check if target invoice is fully covered by credit applications → auto-mark as 'paid'
-      // Re-fetch applications after the new one was created
-      const updatedApplications = await listApplicationsForInvoice(input.appliedToInvoiceId);
-      const totalAppliedToTarget = updatedApplications.reduce(
-        (sum, app) => sum + parseFloat(app.appliedAmount?.toString() ?? "0"),
-        0
-      );
-      const totalCoverage = totalAppliedToTarget + cashAlreadyPaid;
-      const adjustedAmountDue = Math.max(0, targetInvoiceTotal - totalAppliedToTarget);
-
-      // Update the invoice's creditApplied field for display on invoice detail & PDF
-      await updateInvoice(input.appliedToInvoiceId, {
-        creditApplied: totalAppliedToTarget.toFixed(2),
-        amountDue: adjustedAmountDue.toFixed(2),
-      });
-
-      let targetInvoiceNewStatus: string = targetInvoice.status;
-      const isFullyCovered = totalCoverage >= targetInvoiceTotal - 0.01;
-      if (isFullyCovered) {
-        // Fully covered by credit + cash → mark as paid
-        await updateInvoice(input.appliedToInvoiceId, {
-          status: "paid",
-          paidDate: new Date(),
-          paidAmount: totalCoverage.toFixed(2),
-        });
-        targetInvoiceNewStatus = "paid";
-      }
-
-      // 7. Audit log
-      await logAuditAction({
-        userId: ctx.user.id,
-        userName: ctx.user.name || null,
-        action: "apply_credit",
-        entityType: "credit_note_application",
-        entityId: applicationId,
-        changes: JSON.stringify({
-          creditNoteId: input.creditNoteId,
-          appliedToInvoiceId: input.appliedToInvoiceId,
-          amount: applyAmount.toFixed(2),
-          creditNoteNumber: creditNote.invoiceNumber,
-          targetInvoiceNumber: targetInvoice.invoiceNumber,
-          targetInvoiceAutoMarkedPaid: isFullyCovered,
-        }),
-      });
-
-      return {
-        applicationId,
-        remainingBalance: newBalance?.remainingBalance ?? 0,
-        creditNoteStatus: (newBalance?.remainingBalance ?? 0) <= 0.01 ? "applied" : creditNote.status,
-        targetInvoiceStatus: targetInvoiceNewStatus,
-        targetInvoiceTotalCoverage: totalCoverage.toFixed(2),
-      };
-    }),
-
-  /**
-   * Get credit note balance and application history
-   */
-  creditNoteBalance: userProcedure
-    .input(z.object({ creditNoteId: z.number() }))
-    .query(async ({ input }) => {
-      const balance = await getCreditNoteRemainingBalance(input.creditNoteId);
-      if (!balance) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Credit note not found" });
-      }
-
-      const applications = await listCreditNoteApplications(input.creditNoteId);
-
-      // Enrich applications with invoice numbers
-      const enrichedApplications = await Promise.all(
-        applications.map(async (app) => {
-          const invoice = await getInvoiceById(app.appliedToInvoiceId);
-          return {
-            ...app,
-            appliedToInvoiceNumber: invoice?.invoiceNumber || "Unknown",
-          };
-        })
-      );
-
-      return {
-        ...balance,
-        applications: enrichedApplications,
-      };
-    }),
-
-  /**
-   * Get credit applications for a specific invoice (credits applied to this invoice)
-   */
-  invoiceCreditApplications: userProcedure
-    .input(z.object({ invoiceId: z.number() }))
-    .query(async ({ input }) => {
-      const applications = await listApplicationsForInvoice(input.invoiceId);
-
-      // Enrich with credit note numbers
-      const enrichedApplications = await Promise.all(
-        applications.map(async (app) => {
-          const creditNote = await getInvoiceById(app.creditNoteId);
-          return {
-            ...app,
-            creditNoteNumber: creditNote?.invoiceNumber || "Unknown",
-          };
-        })
-      );
-
-      return enrichedApplications;
-    }),
-
-  /**
-   * List available credit notes for a customer (sent status with remaining balance > 0)
-   */
-  availableCreditNotes: userProcedure
-    .input(z.object({ customerId: z.number() }))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) return [];
-
-      // Get all credit notes for this customer that are in 'sent' status (not yet fully applied)
-      const creditNotes = await db
-        .select()
-        .from(invoicesTable)
-        .where(
-          and(
-            eq(invoicesTable.customerId, input.customerId),
-            eq(invoicesTable.invoiceType, "credit_note"),
-            eq(invoicesTable.status, "sent")
-          )
-        );
-
-      // Calculate remaining balance for each
-      const result = await Promise.all(
-        creditNotes.map(async (cn) => {
-          const balance = await getCreditNoteRemainingBalance(cn.id);
-          return {
-            id: cn.id,
-            invoiceNumber: cn.invoiceNumber,
-            total: cn.total,
-            currency: cn.currency,
-            remainingBalance: balance?.remainingBalance ?? 0,
-            status: cn.status,
-          };
-        })
-      );
-
-      // Only return credit notes with remaining balance
-      return result.filter((cn) => cn.remainingBalance > 0.01);
-    }),
+  // [REMOVED] Credit Note Apply Mechanism — replaced by Wallet-based flow.
+  // Credit notes are now approved via Release Tasks → credited to customer Wallet.
+  // Customers use Wallet balance to pay invoices. No direct CN→Invoice apply.
 });
+
