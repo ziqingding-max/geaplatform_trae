@@ -1,5 +1,5 @@
 
-import { eq, like, count, desc, and, or, gte, lte, ne } from "drizzle-orm";
+import { eq, like, count, desc, and, or, gte, lte, ne, inArray } from "drizzle-orm";
 import { 
   employees, InsertEmployee,
   employeeDocuments, InsertEmployeeDocument,
@@ -211,7 +211,23 @@ export async function listLeaveBalances(employeeId: number, year?: number) {
   if (!db) return [];
   const conditions = [eq(leaveBalances.employeeId, employeeId)];
   if (year) conditions.push(eq(leaveBalances.year, year));
-  return await db.select().from(leaveBalances).where(and(...conditions));
+  
+  return await db.select({
+    id: leaveBalances.id,
+    employeeId: leaveBalances.employeeId,
+    leaveTypeId: leaveBalances.leaveTypeId,
+    year: leaveBalances.year,
+    totalEntitlement: leaveBalances.totalEntitlement,
+    used: leaveBalances.used,
+    remaining: leaveBalances.remaining,
+    expiryDate: leaveBalances.expiryDate,
+    createdAt: leaveBalances.createdAt,
+    updatedAt: leaveBalances.updatedAt,
+    leaveTypeName: leaveTypes.leaveTypeName,
+  })
+  .from(leaveBalances)
+  .leftJoin(leaveTypes, eq(leaveBalances.leaveTypeId, leaveTypes.id))
+  .where(and(...conditions));
 }
 
 export async function createLeaveBalance(data: InsertLeaveBalance) {
@@ -233,8 +249,78 @@ export async function deleteLeaveBalance(id: number) {
 }
 
 export async function initializeLeaveBalancesForEmployee(employeeId: number) {
-  // Placeholder for complex initialization logic
-  return { added: 0 };
+  const db = await getDb();
+  if (!db) return { added: 0 };
+
+  const employee = await getEmployeeById(employeeId);
+  if (!employee) return { added: 0 };
+
+  const year = new Date().getFullYear();
+  const { leaveTypes, customerLeavePolicies, leaveBalances } = await import("../../../drizzle/schema");
+
+  // 1. Get all leave types for the employee's country
+  const countryLeaveTypes = await db.select()
+    .from(leaveTypes)
+    .where(eq(leaveTypes.countryCode, employee.country));
+
+  if (countryLeaveTypes.length === 0) return { added: 0 };
+
+  // 2. Get customer-specific policies for this country
+  const customerPolicies = await db.select()
+    .from(customerLeavePolicies)
+    .where(and(
+      eq(customerLeavePolicies.customerId, employee.customerId),
+      eq(customerLeavePolicies.countryCode, employee.country)
+    ));
+
+  // Map policies by leaveTypeId for fast lookup
+  const policyMap = new Map<number, typeof customerPolicies[0]>(
+    customerPolicies.map(p => [p.leaveTypeId, p])
+  );
+
+  // 3. Get existing balances to avoid duplicates
+  const existingBalances = await db.select()
+    .from(leaveBalances)
+    .where(and(
+      eq(leaveBalances.employeeId, employeeId),
+      eq(leaveBalances.year, year)
+    ));
+  
+  const existingTypeIds = new Set(existingBalances.map(b => b.leaveTypeId));
+
+  // 4. Create missing balances
+  let addedCount = 0;
+  for (const lt of countryLeaveTypes) {
+    if (existingTypeIds.has(lt.id)) continue;
+
+    const policy = policyMap.get(lt.id);
+    
+    // Determine entitlement: Customer Policy > Statutory Default
+    const totalEntitlement = policy ? policy.annualEntitlement : (lt.annualEntitlement || 0);
+    
+    // Determine expiry date
+    let expiryDate: string | null = null;
+    const rule = policy?.expiryRule || "year_end"; // Default to year_end if no policy
+    
+    if (rule === "year_end") {
+      expiryDate = `${year}-12-31`;
+    }
+    // TODO: Handle 'anniversary' logic if needed, but 'year' column suggests calendar year tracking
+
+    await db.insert(leaveBalances).values({
+      employeeId,
+      leaveTypeId: lt.id,
+      year,
+      totalEntitlement: totalEntitlement ?? 0,
+      used: 0,
+      remaining: totalEntitlement ?? 0,
+      expiryDate,
+    });
+    
+    addedCount++;
+  }
+
+  return { added: addedCount };
 }
 
 // LEAVE RECORDS
