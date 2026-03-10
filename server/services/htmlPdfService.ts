@@ -12,15 +12,47 @@
 
 import puppeteer from "puppeteer-core";
 import { marked } from "marked";
+import { existsSync } from "fs";
+import { execSync } from "child_process";
 
-const CHROMIUM_PATH = "/usr/bin/chromium-browser";
 const CHROMIUM_ARGS = [
   "--no-sandbox",
   "--disable-setuid-sandbox",
   "--disable-dev-shm-usage",
   "--disable-gpu",
   "--font-render-hinting=none",
+  "--single-process",
+  "--no-zygote",
 ];
+
+/** Candidate paths tried in order; first existing file wins. */
+const CHROMIUM_CANDIDATES = [
+  process.env.CHROMIUM_PATH,       // highest priority: set via Dockerfile ENV or .env
+  "/usr/bin/chromium-browser",     // Alpine apk install (Dockerfile)
+  "/usr/bin/chromium",             // Debian/Ubuntu apt install
+  "/usr/bin/google-chrome",
+  "/usr/bin/google-chrome-stable",
+  "/usr/local/bin/chromium",
+  "/snap/bin/chromium",
+  "/opt/google/chrome/chrome",
+];
+
+function findChromiumPath(): string {
+  for (const p of CHROMIUM_CANDIDATES) {
+    if (p && existsSync(p)) return p;
+  }
+  try {
+    const found = execSync(
+      "which chromium chromium-browser google-chrome google-chrome-stable 2>/dev/null | head -1",
+      { encoding: "utf8" }
+    ).trim();
+    if (found) return found;
+  } catch (_) { /* ignore */ }
+  throw new Error(
+    "Chromium not found. Install it (e.g. `apk add chromium` on Alpine or `apt-get install chromium-browser` on Debian) " +
+    "or set the CHROMIUM_PATH environment variable."
+  );
+};
 
 // ─── Brand Design Tokens ─────────────────────────────────────────────────────
 const BRAND = {
@@ -413,8 +445,9 @@ function fmt(n: number, currency = ""): string {
 
 // ─── Helper: launch browser ───────────────────────────────────────────────────
 async function launchBrowser() {
+  const executablePath = findChromiumPath();
   return puppeteer.launch({
-    executablePath: CHROMIUM_PATH,
+    executablePath,
     args: CHROMIUM_ARGS,
     headless: true,
   });
