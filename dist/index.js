@@ -8256,7 +8256,7 @@ async function generateInvoicePdf(options) {
     doc.on("error", reject);
     const pageWidth = doc.page.width - 100;
     const rightCol = 350;
-    function smartText2(text4, x, y, opts, fontStyle) {
+    function smartText(text4, x, y, opts, fontStyle) {
       if (hasCJK(text4) && cjkFontPath) {
         doc.font("NotoSansSC");
       } else {
@@ -8280,38 +8280,38 @@ async function generateInvoicePdf(options) {
     }
     doc.fontSize(16).fillColor("#1a1a1a");
     if (billingEntity) {
-      smartText2(billingEntity.entityName, 50, leftY, { width: 280 }, "bold");
+      smartText(billingEntity.entityName, 50, leftY, { width: 280 }, "bold");
       leftY += textHeight(billingEntity.entityName, 16, 280) + 2;
       doc.fontSize(9).fillColor("#666666");
       if (billingEntity.legalName && billingEntity.legalName !== billingEntity.entityName) {
-        smartText2(billingEntity.legalName, 50, leftY, { width: 280 });
+        smartText(billingEntity.legalName, 50, leftY, { width: 280 });
         leftY += textHeight(billingEntity.legalName, 9, 280);
       }
       if (billingEntity.address) {
-        smartText2(billingEntity.address, 50, leftY, { width: 280 });
+        smartText(billingEntity.address, 50, leftY, { width: 280 });
         leftY += textHeight(billingEntity.address, 9, 280);
       }
       const cityLine = [billingEntity.city, billingEntity.state, billingEntity.postalCode].filter(Boolean).join(", ");
       if (cityLine) {
-        smartText2(cityLine, 50, leftY, { width: 280 });
+        smartText(cityLine, 50, leftY, { width: 280 });
         leftY += textHeight(cityLine, 9, 280);
       }
       if (billingEntity.country) {
-        smartText2(billingEntity.country, 50, leftY, { width: 280 });
+        smartText(billingEntity.country, 50, leftY, { width: 280 });
         leftY += textHeight(billingEntity.country, 9, 280);
       }
       if (billingEntity.registrationNumber) {
         const regText = `Reg: ${billingEntity.registrationNumber}`;
-        smartText2(regText, 50, leftY, { width: 280 });
+        smartText(regText, 50, leftY, { width: 280 });
         leftY += textHeight(regText, 9, 280);
       }
       if (billingEntity.taxId) {
         const taxText = `Tax ID: ${billingEntity.taxId}`;
-        smartText2(taxText, 50, leftY, { width: 280 });
+        smartText(taxText, 50, leftY, { width: 280 });
         leftY += textHeight(taxText, 9, 280);
       }
     } else {
-      smartText2("GEA - Global Employment Advisors", 50, leftY, { width: 280 }, "bold");
+      smartText("GEA - Global Employment Advisors", 50, leftY, { width: 280 }, "bold");
       leftY += 20;
     }
     let ry = rightStartY;
@@ -8363,24 +8363,24 @@ async function generateInvoicePdf(options) {
     doc.text("BILL TO", 50, billToY);
     billToY += 14;
     doc.fontSize(10).fillColor("#1a1a1a");
-    smartText2(customer?.companyName || `Customer #${invoice.customerId}`, 50, billToY, void 0, "bold");
+    smartText(customer?.companyName || `Customer #${invoice.customerId}`, 50, billToY, void 0, "bold");
     billToY += 14;
     doc.fontSize(9).fillColor("#666666");
     if (customer?.legalEntityName) {
-      smartText2(customer.legalEntityName, 50, billToY, { width: 280 });
+      smartText(customer.legalEntityName, 50, billToY, { width: 280 });
       billToY += textHeight(customer.legalEntityName, 9, 280);
     }
     if (customer?.address) {
-      smartText2(customer.address, 50, billToY, { width: 280 });
+      smartText(customer.address, 50, billToY, { width: 280 });
       billToY += textHeight(customer.address, 9, 280);
     }
     const custCityLine = [customer?.city, customer?.state, customer?.postalCode].filter(Boolean).join(", ");
     if (custCityLine) {
-      smartText2(custCityLine, 50, billToY, { width: 280 });
+      smartText(custCityLine, 50, billToY, { width: 280 });
       billToY += textHeight(custCityLine, 9, 280);
     }
     if (customer?.country) {
-      smartText2(customer.country, 50, billToY, { width: 280 });
+      smartText(customer.country, 50, billToY, { width: 280 });
       billToY += textHeight(customer.country, 9, 280);
     }
     if (customer?.primaryContactEmail) {
@@ -8450,7 +8450,7 @@ async function generateInvoicePdf(options) {
       tableY += 11;
       doc.fontSize(7).fillColor("#888888");
       const desc26 = item.description.length > 80 ? item.description.slice(0, 77) + "..." : item.description;
-      smartText2(desc26, cols.item.x + 2, tableY, { width: cols.item.w + cols.curr.w + cols.qty.w - 2 });
+      smartText(desc26, cols.item.x + 2, tableY, { width: cols.item.w + cols.curr.w + cols.qty.w - 2 });
       tableY += 14;
     }
     tableY += 6;
@@ -8524,7 +8524,7 @@ async function generateInvoicePdf(options) {
           doc.addPage();
           tableY = 50;
         }
-        smartText2(line.trim(), 50, tableY, { width: pageWidth });
+        smartText(line.trim(), 50, tableY, { width: pageWidth });
         tableY += 12;
       }
     }
@@ -8538,7 +8538,7 @@ async function generateInvoicePdf(options) {
       doc.text("NOTES", 50, tableY);
       tableY += 12;
       doc.fontSize(8).fillColor("#666666");
-      smartText2(invoice.notes, 50, tableY, { width: pageWidth });
+      smartText(invoice.notes, 50, tableY, { width: pageWidth });
     }
     doc.end();
   });
@@ -17411,154 +17411,710 @@ init_db2();
 init_schema();
 import { eq as eq34 } from "drizzle-orm";
 
-// server/services/pdfBrandTemplateService.ts
-import PDFDocument2 from "pdfkit";
-import path2 from "path";
-import fs2 from "fs";
-import os2 from "os";
-var CJK_FONT_URL2 = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663378930055/BicAsHhoridCdJUF.ttf";
-var CJK_FONT_CACHE_DIR2 = path2.join(os2.tmpdir(), ".font-cache");
-var CJK_FONT_CACHE_PATH2 = path2.join(CJK_FONT_CACHE_DIR2, "NotoSansSC-Regular.ttf");
-var BRAND_COLORS = {
-  primary: "#1B5E20",
-  // Deep Green
-  accent: "#D4A017",
-  // Gold
-  background: "#FFF8E1",
-  // Beige
+// server/services/htmlPdfService.ts
+import puppeteer from "puppeteer-core";
+import { marked } from "marked";
+var CHROMIUM_PATH = "/usr/bin/chromium-browser";
+var CHROMIUM_ARGS = [
+  "--no-sandbox",
+  "--disable-setuid-sandbox",
+  "--disable-dev-shm-usage",
+  "--disable-gpu",
+  "--font-render-hinting=none"
+];
+var BRAND = {
+  primary: "#005430",
+  primaryLight: "#2E6E50",
+  gold: "#E1BA2E",
+  bg: "#F8FBF9",
   text: "#1a1a1a",
-  textMuted: "#666666",
-  border: "#cccccc"
+  muted: "#666666",
+  border: "#d0ddd6",
+  tableHeader: "#e8f0ec",
+  tableStripe: "#f4f8f6"
 };
-function hasCJK2(text4) {
-  return /[^\x00-\x7F]/.test(text4);
-}
-async function ensureCJKFont2() {
-  try {
-    if (fs2.existsSync(CJK_FONT_CACHE_PATH2)) {
-      return CJK_FONT_CACHE_PATH2;
-    }
-    fs2.mkdirSync(CJK_FONT_CACHE_DIR2, { recursive: true });
-    const response = await fetch(CJK_FONT_URL2);
-    if (!response.ok) return null;
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    fs2.writeFileSync(CJK_FONT_CACHE_PATH2, buffer);
-    return CJK_FONT_CACHE_PATH2;
-  } catch (err) {
-    console.warn("[PDFBrand] Failed to ensure CJK font:", err);
-    return null;
+var BASE_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 10pt;
+    line-height: 1.6;
+    color: ${BRAND.text};
+    background: white;
   }
+
+  /* \u2500\u2500 Page Layout \u2500\u2500 */
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 18mm 16mm 22mm 16mm;
+    position: relative;
+    page-break-after: always;
+    background: white;
+  }
+  .page:last-child { page-break-after: avoid; }
+
+  /* \u2500\u2500 Cover Page \u2500\u2500 */
+  .cover {
+    background: ${BRAND.bg};
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 0;
+    overflow: hidden;
+  }
+  .cover-top-bar {
+    background: ${BRAND.primary};
+    height: 8mm;
+    width: 100%;
+  }
+  .cover-body {
+    flex: 1;
+    padding: 18mm 16mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .cover-logo {
+    font-size: 28pt;
+    font-weight: 700;
+    color: ${BRAND.primary};
+    letter-spacing: -0.5px;
+  }
+  .cover-tagline {
+    font-size: 9pt;
+    color: ${BRAND.muted};
+    margin-top: 2mm;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .cover-divider {
+    width: 20mm;
+    height: 1mm;
+    background: ${BRAND.gold};
+    margin: 12mm 0;
+  }
+  .cover-title {
+    font-size: 28pt;
+    font-weight: 700;
+    color: ${BRAND.primary};
+    line-height: 1.2;
+    margin-bottom: 4mm;
+  }
+  .cover-subtitle {
+    font-size: 14pt;
+    color: ${BRAND.primaryLight};
+    margin-bottom: 3mm;
+  }
+  .cover-date {
+    font-size: 9pt;
+    color: ${BRAND.muted};
+  }
+  .cover-bottom-bar {
+    background: ${BRAND.primary};
+    height: 12mm;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 16mm;
+    color: rgba(255,255,255,0.7);
+    font-size: 8pt;
+  }
+
+  /* \u2500\u2500 Page Header \u2500\u2500 */
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 3mm;
+    border-bottom: 0.5pt solid ${BRAND.border};
+    margin-bottom: 6mm;
+  }
+  .page-header-logo {
+    font-size: 11pt;
+    font-weight: 700;
+    color: ${BRAND.primary};
+  }
+  .page-header-title {
+    font-size: 9pt;
+    color: ${BRAND.muted};
+  }
+
+  /* \u2500\u2500 Page Footer \u2500\u2500 */
+  .page-footer {
+    position: absolute;
+    bottom: 8mm;
+    left: 16mm;
+    right: 16mm;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 0.5pt solid ${BRAND.border};
+    padding-top: 2mm;
+    font-size: 7.5pt;
+    color: ${BRAND.muted};
+  }
+
+  /* \u2500\u2500 Typography \u2500\u2500 */
+  h1 { font-size: 18pt; font-weight: 700; color: ${BRAND.primary}; margin: 6mm 0 3mm; }
+  h2 { font-size: 14pt; font-weight: 700; color: ${BRAND.primary}; margin: 5mm 0 2.5mm; border-bottom: 0.5pt solid ${BRAND.border}; padding-bottom: 1.5mm; }
+  h3 { font-size: 11pt; font-weight: 600; color: ${BRAND.primaryLight}; margin: 4mm 0 2mm; }
+  h4 { font-size: 10pt; font-weight: 600; color: ${BRAND.text}; margin: 3mm 0 1.5mm; }
+  p  { margin: 0 0 2.5mm; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  /* \u2500\u2500 Lists \u2500\u2500 */
+  ul, ol { margin: 1.5mm 0 2.5mm 5mm; padding-left: 4mm; }
+  li { margin-bottom: 1mm; }
+  ul li::marker { color: ${BRAND.gold}; }
+
+  /* \u2500\u2500 Tables \u2500\u2500 */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 3mm 0 4mm;
+    font-size: 9pt;
+    page-break-inside: avoid;
+  }
+  thead tr {
+    background: ${BRAND.tableHeader};
+  }
+  thead th {
+    padding: 2.5mm 3mm;
+    text-align: left;
+    font-weight: 600;
+    font-size: 8.5pt;
+    color: ${BRAND.primary};
+    border: 0.5pt solid ${BRAND.border};
+    white-space: nowrap;
+  }
+  tbody tr:nth-child(even) {
+    background: ${BRAND.tableStripe};
+  }
+  tbody td {
+    padding: 2mm 3mm;
+    border: 0.5pt solid ${BRAND.border};
+    vertical-align: top;
+    font-size: 9pt;
+  }
+
+  /* \u2500\u2500 Section Card \u2500\u2500 */
+  .section-card {
+    background: ${BRAND.bg};
+    border: 0.5pt solid ${BRAND.border};
+    border-radius: 2mm;
+    padding: 4mm 5mm;
+    margin-bottom: 4mm;
+    page-break-inside: avoid;
+  }
+  .section-card-title {
+    font-size: 10pt;
+    font-weight: 600;
+    color: ${BRAND.primary};
+    margin-bottom: 2mm;
+    display: flex;
+    align-items: center;
+    gap: 2mm;
+  }
+
+  /* \u2500\u2500 Info Grid \u2500\u2500 */
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2mm 6mm;
+    margin-bottom: 4mm;
+  }
+  .info-item label {
+    font-size: 7.5pt;
+    color: ${BRAND.muted};
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    display: block;
+    margin-bottom: 0.5mm;
+  }
+  .info-item span {
+    font-size: 9.5pt;
+    font-weight: 500;
+    color: ${BRAND.text};
+  }
+
+  /* \u2500\u2500 Quotation Table \u2500\u2500 */
+  .qt-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 3mm 0;
+    font-size: 9pt;
+  }
+  .qt-table thead tr {
+    background: ${BRAND.primary};
+    color: white;
+  }
+  .qt-table thead th {
+    padding: 2.5mm 3mm;
+    text-align: left;
+    font-weight: 600;
+    font-size: 8pt;
+    border: none;
+    white-space: nowrap;
+  }
+  .qt-table thead th.right { text-align: right; }
+  .qt-table tbody tr:nth-child(even) { background: ${BRAND.tableStripe}; }
+  .qt-table tbody td {
+    padding: 2mm 3mm;
+    border-bottom: 0.5pt solid ${BRAND.border};
+    vertical-align: top;
+  }
+  .qt-table tbody td.right { text-align: right; font-variant-numeric: tabular-nums; }
+  .qt-table tbody td.bold { font-weight: 600; }
+  .qt-table tfoot tr { background: ${BRAND.tableHeader}; }
+  .qt-table tfoot td {
+    padding: 2.5mm 3mm;
+    font-weight: 700;
+    border-top: 1pt solid ${BRAND.primary};
+  }
+  .qt-table tfoot td.right { text-align: right; font-size: 11pt; color: ${BRAND.primary}; }
+
+  /* \u2500\u2500 Cost Breakdown \u2500\u2500 */
+  .cost-breakdown {
+    margin: 2mm 0 3mm 0;
+    padding: 2mm 3mm;
+    background: white;
+    border: 0.5pt solid ${BRAND.border};
+    border-radius: 1.5mm;
+    font-size: 8.5pt;
+  }
+  .cost-breakdown-title {
+    font-size: 8pt;
+    font-weight: 600;
+    color: ${BRAND.muted};
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 1.5mm;
+  }
+  .cost-breakdown table {
+    margin: 0;
+    font-size: 8pt;
+  }
+  .cost-breakdown table thead th {
+    background: ${BRAND.tableHeader};
+    font-size: 7.5pt;
+    padding: 1.5mm 2mm;
+  }
+  .cost-breakdown table tbody td {
+    padding: 1.5mm 2mm;
+    font-size: 8pt;
+  }
+  .cost-breakdown-total {
+    margin-top: 1.5mm;
+    text-align: right;
+    font-weight: 600;
+    font-size: 8.5pt;
+    color: ${BRAND.primary};
+  }
+
+  /* \u2500\u2500 Total Box \u2500\u2500 */
+  .total-box {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4mm;
+  }
+  .total-inner {
+    background: ${BRAND.primary};
+    color: white;
+    padding: 3mm 6mm;
+    border-radius: 2mm;
+    text-align: right;
+  }
+  .total-label { font-size: 8pt; opacity: 0.8; }
+  .total-amount { font-size: 16pt; font-weight: 700; }
+
+  /* \u2500\u2500 Notes / Terms \u2500\u2500 */
+  .notes-box {
+    background: ${BRAND.bg};
+    border-left: 2pt solid ${BRAND.gold};
+    padding: 3mm 4mm;
+    margin: 4mm 0;
+    font-size: 9pt;
+    color: ${BRAND.muted};
+  }
+
+  /* \u2500\u2500 Chapter heading \u2500\u2500 */
+  .chapter-heading {
+    display: flex;
+    align-items: center;
+    gap: 3mm;
+    margin-bottom: 4mm;
+    padding-bottom: 2mm;
+    border-bottom: 1pt solid ${BRAND.primary};
+  }
+  .chapter-number {
+    background: ${BRAND.primary};
+    color: white;
+    width: 7mm;
+    height: 7mm;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9pt;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .chapter-title {
+    font-size: 14pt;
+    font-weight: 700;
+    color: ${BRAND.primary};
+  }
+
+  /* \u2500\u2500 TOC \u2500\u2500 */
+  .toc-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 1.5mm 0;
+    border-bottom: 0.3pt dotted ${BRAND.border};
+    font-size: 10pt;
+  }
+  .toc-item:last-child { border-bottom: none; }
+  .toc-num {
+    font-weight: 600;
+    color: ${BRAND.primary};
+    min-width: 8mm;
+  }
+  .toc-title { flex: 1; padding: 0 3mm; }
+  .toc-dots { flex: 1; border-bottom: 0.3pt dotted ${BRAND.muted}; margin: 0 2mm 1.5mm; }
+
+  /* \u2500\u2500 Print \u2500\u2500 */
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+`;
+function mdToHtml(content) {
+  if (!content) return "";
+  marked.setOptions({ gfm: true, breaks: true });
+  return marked.parse(content);
 }
-async function createBrandedPdfDocument(options = {}) {
-  const doc = new PDFDocument2({
-    size: options.size || "A4",
-    margins: options.margins || { top: 50, bottom: 50, left: 50, right: 50 },
-    autoFirstPage: true
+function fmt(n, currency = "") {
+  const s = n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return currency ? `${currency} ${s}` : s;
+}
+async function launchBrowser() {
+  return puppeteer.launch({
+    executablePath: CHROMIUM_PATH,
+    args: CHROMIUM_ARGS,
+    headless: true
   });
-  const cjkFontPath = await ensureCJKFont2();
-  if (cjkFontPath) {
-    doc.registerFont("NotoSansSC", cjkFontPath);
-  }
-  return { doc, cjkFontPath };
 }
-function drawCoverPage(doc, title, subtitle, date, cjkFontPath) {
-  doc.rect(0, 0, doc.page.width, doc.page.height).fill(BRAND_COLORS.background);
-  doc.save();
-  doc.moveTo(0, 0).lineTo(200, 0).lineTo(0, 200).fill(BRAND_COLORS.accent);
-  doc.restore();
-  doc.fontSize(24).fillColor(BRAND_COLORS.primary).font("Helvetica-Bold").text("GEA", 50, 50);
-  doc.fontSize(10).fillColor(BRAND_COLORS.textMuted).font("Helvetica").text("Global Employment Advisors", 50, 75);
-  const centerY = doc.page.height / 2 - 50;
-  doc.fontSize(36).fillColor(BRAND_COLORS.primary);
-  if (hasCJK2(title) && cjkFontPath) doc.font("NotoSansSC");
-  else doc.font("Helvetica-Bold");
-  doc.text(title, 50, centerY, { align: "center", width: doc.page.width - 100 });
-  doc.moveDown();
-  doc.fontSize(18).fillColor(BRAND_COLORS.text);
-  if (hasCJK2(subtitle) && cjkFontPath) doc.font("NotoSansSC");
-  else doc.font("Helvetica");
-  doc.text(subtitle, { align: "center", width: doc.page.width - 100 });
-  doc.moveDown(2);
-  doc.fontSize(12).fillColor(BRAND_COLORS.textMuted);
-  doc.text(date, { align: "center" });
-  doc.rect(0, doc.page.height - 20, doc.page.width, 20).fill(BRAND_COLORS.primary);
-  doc.addPage();
-  doc.rect(0, 0, doc.page.width, doc.page.height).fill("white");
-}
-function drawHeader(doc, title) {
-  const topY = 30;
-  doc.fontSize(10).fillColor(BRAND_COLORS.textMuted).text("GEA - Global Employment Advisors", 50, topY);
-  doc.fontSize(10).text(title, 50, topY, { align: "right", width: doc.page.width - 100 });
-  doc.moveTo(50, topY + 15).lineTo(doc.page.width - 50, topY + 15).lineWidth(0.5).strokeColor(BRAND_COLORS.border).stroke();
-}
-function drawFooter(doc, pageNumber) {
-  const bottomY = doc.page.height - 40;
-  doc.moveTo(50, bottomY - 10).lineTo(doc.page.width - 50, bottomY - 10).lineWidth(0.5).strokeColor(BRAND_COLORS.border).stroke();
-  doc.fontSize(8).fillColor(BRAND_COLORS.textMuted);
-  doc.text("Confidential & Proprietary", 50, bottomY);
-  doc.text(`Page ${pageNumber}`, 50, bottomY, { align: "right", width: doc.page.width - 100 });
-}
-function smartText(doc, text4, x, y, opts, cjkFontPath, bold = false) {
-  if (hasCJK2(text4) && cjkFontPath) {
-    doc.registerFont("NotoSansSC", cjkFontPath);
-    doc.font("NotoSansSC");
-  } else {
-    doc.font(bold ? "Helvetica-Bold" : "Helvetica");
-  }
-  if (x !== null && y !== null) {
-    doc.text(text4, x, y, opts);
-  } else {
-    doc.text(text4, opts);
+async function htmlToPdf(html) {
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "0", right: "0", bottom: "0", left: "0" }
+    });
+    return Buffer.from(pdf);
+  } finally {
+    await browser.close();
   }
 }
-function drawMarkdown(doc, content, cjkFontPath) {
-  const lines = content.split("\n");
-  const margin = 50;
-  const width = doc.page.width - 100;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      doc.moveDown(0.5);
-      continue;
+function coverPage(title, subtitle, date) {
+  return `
+  <div class="page cover">
+    <div class="cover-top-bar"></div>
+    <div class="cover-body">
+      <div>
+        <div class="cover-logo">GEA</div>
+        <div class="cover-tagline">Global Employment Advisors</div>
+      </div>
+      <div class="cover-divider"></div>
+      <div class="cover-title">${title}</div>
+      <div class="cover-subtitle">${subtitle}</div>
+      <div class="cover-date">${date}</div>
+    </div>
+    <div class="cover-bottom-bar">Confidential &amp; Proprietary \u2014 Global Employment Advisors</div>
+  </div>`;
+}
+function contentPage(headerTitle, pageNum, totalPages, body) {
+  return `
+  <div class="page">
+    <div class="page-header">
+      <span class="page-header-logo">GEA</span>
+      <span class="page-header-title">${headerTitle}</span>
+    </div>
+    ${body}
+    <div class="page-footer">
+      <span>Confidential &amp; Proprietary</span>
+      <span>Global Employment Advisors</span>
+      <span>Page ${pageNum}</span>
+    </div>
+  </div>`;
+}
+async function generateCountryGuidePdf(country, chapters, locale = "en") {
+  const date = (/* @__PURE__ */ new Date()).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const headerTitle = `Country Guide: ${country.countryName}`;
+  let pages = "";
+  pages += coverPage("Country Guide", country.countryName, date);
+  let tocRows = chapters.map((ch, i) => `
+    <div class="toc-item">
+      <span class="toc-num">${i + 1}.</span>
+      <span class="toc-title">${locale === "zh" && ch.titleZh ? ch.titleZh : ch.titleEn}</span>
+    </div>`).join("");
+  pages += contentPage(headerTitle, 2, chapters.length + 2, `
+    <h2>Table of Contents</h2>
+    <div style="margin-top: 4mm;">${tocRows}</div>
+  `);
+  chapters.forEach((ch, i) => {
+    const title = locale === "zh" && ch.titleZh ? ch.titleZh : ch.titleEn;
+    const content = locale === "zh" && ch.contentZh ? ch.contentZh : ch.contentEn;
+    const htmlContent = mdToHtml(content);
+    pages += contentPage(headerTitle, i + 3, chapters.length + 2, `
+      <div class="chapter-heading">
+        <div class="chapter-number">${i + 1}</div>
+        <div class="chapter-title">${title}</div>
+      </div>
+      <div class="chapter-content">${htmlContent}</div>
+    `);
+  });
+  const html = `<!DOCTYPE html>
+<html lang="${locale}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${headerTitle}</title>
+  <style>${BASE_CSS}</style>
+</head>
+<body>${pages}</body>
+</html>`;
+  return htmlToPdf(html);
+}
+async function generateQuotationPdf(data) {
+  const date = (/* @__PURE__ */ new Date()).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const headerTitle = `Quotation #${data.quotationNumber}`;
+  const validUntil = data.validUntil ? new Date(data.validUntil).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "N/A";
+  let pages = "";
+  pages += coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date);
+  const GEA_INTRO = `
+    <p>Global Employment Advisors (GEA) is a leading Employer of Record (EOR) and workforce solutions provider, enabling businesses to hire talent across 50+ countries without the need to establish local legal entities. Our platform combines compliance expertise, payroll management, and HR technology to deliver a seamless employment experience for both clients and their employees.</p>
+    <p>We handle all aspects of local employment \u2014 including employment contracts, payroll processing, statutory benefits, tax compliance, and HR administration \u2014 so you can focus on growing your business globally.</p>
+  `;
+  pages += contentPage(headerTitle, 2, 0, `
+    <h2>About Global Employment Advisors</h2>
+    <div class="section-card">
+      ${GEA_INTRO}
+    </div>
+
+    <h2>Prepared For</h2>
+    <div class="info-grid">
+      <div class="info-item">
+        <label>Company</label>
+        <span>${data.customerName}</span>
+      </div>
+      ${data.customerAddress ? `<div class="info-item"><label>Address</label><span>${data.customerAddress}</span></div>` : ""}
+      <div class="info-item">
+        <label>Quotation Reference</label>
+        <span>${data.quotationNumber}</span>
+      </div>
+      <div class="info-item">
+        <label>Date Issued</label>
+        <span>${date}</span>
+      </div>
+      <div class="info-item">
+        <label>Valid Until</label>
+        <span>${validUntil}</span>
+      </div>
+      <div class="info-item">
+        <label>Currency</label>
+        <span>${data.currency}</span>
+      </div>
+    </div>
+
+    ${data.billingEntity ? `
+    <h2>Issued By</h2>
+    <div class="info-grid">
+      <div class="info-item">
+        <label>Entity</label>
+        <span>${data.billingEntity.entityName}</span>
+      </div>
+      <div class="info-item">
+        <label>Legal Name</label>
+        <span>${data.billingEntity.legalName}</span>
+      </div>
+      ${data.billingEntity.address ? `<div class="info-item"><label>Address</label><span>${data.billingEntity.address}</span></div>` : ""}
+      ${data.billingEntity.contactEmail ? `<div class="info-item"><label>Email</label><span>${data.billingEntity.contactEmail}</span></div>` : ""}
+    </div>` : ""}
+  `);
+  const tableRows = data.items.map((item, idx) => {
+    const serviceLabel = item.serviceType === "eor" ? "EOR" : item.serviceType === "visa_eor" ? "Visa EOR" : item.serviceType === "aor" ? "AOR" : item.serviceType.toUpperCase();
+    const localCurrency = item.currency !== "USD" ? `<div style="font-size:7.5pt;color:${BRAND.muted};">${item.currency} ${fmt(item.salary)} \xD7 ${item.headcount}</div>` : "";
+    const exchangeNote = item.currency !== "USD" && item.exchangeRate !== 1 ? `<div style="font-size:7.5pt;color:${BRAND.muted};">Rate: 1 USD = ${item.exchangeRate.toFixed(4)} ${item.currency}</div>` : "";
+    let breakdownHtml = "";
+    if (item.calcDetails && item.calcDetails.length > 0) {
+      const breakdownRows = item.calcDetails.map((d) => `
+        <tr>
+          <td>${d.itemNameEn}</td>
+          <td style="text-align:right">${d.employerRate}</td>
+          <td style="text-align:right">${item.currency} ${fmt(parseFloat(d.employerContribution))}</td>
+        </tr>`).join("");
+      breakdownHtml = `
+        <div class="cost-breakdown">
+          <div class="cost-breakdown-title">Employer Contribution Breakdown</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th style="text-align:right">Rate</th>
+                <th style="text-align:right">Amount (${item.currency})</th>
+              </tr>
+            </thead>
+            <tbody>${breakdownRows}</tbody>
+          </table>
+          <div class="cost-breakdown-total">Total ER Cost: ${item.currency} ${fmt(item.employerCost)}</div>
+        </div>`;
     }
-    if (doc.y > doc.page.height - 50) {
-      doc.addPage();
-    }
-    if (trimmed.startsWith("# ")) {
-      doc.fontSize(16).fillColor(BRAND_COLORS.primary);
-      smartText(doc, trimmed.substring(2), null, null, { width }, cjkFontPath, true);
-      doc.moveDown(0.5);
-    } else if (trimmed.startsWith("## ")) {
-      doc.fontSize(14).fillColor(BRAND_COLORS.primary);
-      smartText(doc, trimmed.substring(3), null, null, { width }, cjkFontPath, true);
-      doc.moveDown(0.5);
-    } else if (trimmed.startsWith("### ")) {
-      doc.fontSize(12).fillColor(BRAND_COLORS.text);
-      smartText(doc, trimmed.substring(4), null, null, { width }, cjkFontPath, true);
-      doc.moveDown(0.3);
-    } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-      doc.fontSize(10).fillColor(BRAND_COLORS.text);
-      const text4 = trimmed.substring(2);
-      const currentY = doc.y;
-      doc.circle(margin + 5, currentY + 4, 2).fill(BRAND_COLORS.accent);
-      smartText(doc, text4, margin + 15, currentY - 2, { width: width - 15 }, cjkFontPath);
-      doc.moveDown(0.2);
-    } else {
-      doc.fontSize(10).fillColor(BRAND_COLORS.text);
-      smartText(doc, trimmed, null, null, { width, align: "justify" }, cjkFontPath);
-      doc.moveDown(0.5);
-    }
-  }
+    return `
+      <tr>
+        <td>${item.countryCode}</td>
+        <td>${serviceLabel}</td>
+        <td class="right">${item.headcount}</td>
+        <td class="right">
+          USD ${fmt(item.salary / (item.exchangeRate || 1))}
+          ${localCurrency}
+          ${exchangeNote}
+        </td>
+        <td class="right">
+          USD ${fmt(item.employerCost / (item.exchangeRate || 1))}
+          ${item.calcDetails && item.calcDetails.length > 0 ? `<div style="font-size:7.5pt;color:${BRAND.primary};cursor:pointer;">\u25BC see breakdown below</div>` : ""}
+        </td>
+        <td class="right">USD ${fmt(item.serviceFee)}${item.oneTimeFee ? `<div style="font-size:7.5pt;color:${BRAND.muted};">+ USD ${fmt(item.oneTimeFee)} (one-time)</div>` : ""}</td>
+        <td class="right bold">USD ${fmt(item.subtotal)}</td>
+      </tr>
+      ${breakdownHtml ? `<tr><td colspan="7" style="padding:0 3mm 3mm;">${breakdownHtml}</td></tr>` : ""}`;
+  }).join("");
+  pages += contentPage(headerTitle, 3, 0, `
+    <h2>Pricing Summary</h2>
+    <p style="color:${BRAND.muted};font-size:9pt;margin-bottom:3mm;">All amounts in USD unless otherwise noted. Monthly recurring costs.</p>
+
+    <table class="qt-table">
+      <thead>
+        <tr>
+          <th>Country</th>
+          <th>Service</th>
+          <th class="right">Headcount</th>
+          <th class="right">Gross Salary</th>
+          <th class="right">Employer Cost</th>
+          <th class="right">Service Fee</th>
+          <th class="right">Monthly Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>${tableRows}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="6" style="font-weight:700;font-size:10pt;">Total Monthly (${data.currency})</td>
+          <td class="right">USD ${fmt(parseFloat(data.totalMonthly))}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="total-box">
+      <div class="total-inner">
+        <div class="total-label">TOTAL MONTHLY INVESTMENT</div>
+        <div class="total-amount">USD ${fmt(parseFloat(data.totalMonthly))}</div>
+      </div>
+    </div>
+
+    ${data.notes ? `
+    <div class="notes-box">
+      <strong>Notes:</strong><br>${data.notes}
+    </div>` : ""}
+  `);
+  pages += contentPage(headerTitle, 4, 0, `
+    <h2>Terms &amp; Conditions</h2>
+    <div class="section-card">
+      <h3>Validity</h3>
+      <p>This quotation is valid until <strong>${validUntil}</strong>. Pricing is subject to change after this date.</p>
+
+      <h3>Service Scope</h3>
+      <p>The quoted service fee covers: employment contract administration, monthly payroll processing, statutory benefit contributions, HR compliance management, and dedicated account support.</p>
+
+      <h3>Employer of Record (EOR)</h3>
+      <p>Under the EOR model, GEA acts as the legal employer of the worker(s) in the respective country. The client retains full day-to-day management of the worker's tasks and responsibilities.</p>
+
+      <h3>Agent of Record (AOR)</h3>
+      <p>Under the AOR model, GEA engages contractors on behalf of the client. The contractor rate shown is the gross contractor fee; no statutory employer contributions apply.</p>
+
+      <h3>Exchange Rates</h3>
+      <p>Exchange rates are indicative and based on rates at the time of quotation. Final invoiced amounts may vary based on prevailing rates at the time of payroll processing.</p>
+
+      <h3>Confidentiality</h3>
+      <p>This document is confidential and intended solely for the named recipient. It may not be shared with third parties without prior written consent from GEA.</p>
+    </div>
+
+    <div class="notes-box" style="margin-top:6mm;">
+      For questions about this quotation, please contact your GEA account manager or email <strong>sales@geahr.com</strong>.
+    </div>
+  `);
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${headerTitle}</title>
+  <style>${BASE_CSS}</style>
+</head>
+<body>${pages}</body>
+</html>`;
+  return htmlToPdf(html);
 }
 
+// server/services/countryGuidePdfService.ts
+init_db2();
+init_schema();
+import { eq as eq33, and as and27, asc } from "drizzle-orm";
+var countryGuidePdfService = {
+  generatePdf: async (countryCode, locale = "en") => {
+    const db = getDb();
+    if (!db) throw new Error("Database connection failed");
+    const country = await db.query.countriesConfig.findFirst({
+      where: eq33(countriesConfig.countryCode, countryCode)
+    });
+    if (!country) return null;
+    const chapters = await db.query.countryGuideChapters.findMany({
+      where: and27(
+        eq33(countryGuideChapters.countryCode, countryCode),
+        eq33(countryGuideChapters.status, "published")
+      ),
+      orderBy: [asc(countryGuideChapters.sortOrder)]
+    });
+    if (chapters.length === 0) return null;
+    return generateCountryGuidePdf(
+      { countryCode: country.countryCode, countryName: country.countryName },
+      chapters.map((ch) => ({
+        id: ch.id,
+        titleEn: ch.titleEn,
+        titleZh: ch.titleZh ?? void 0,
+        contentEn: ch.contentEn ?? "",
+        contentZh: ch.contentZh ?? void 0,
+        chapterKey: ch.chapterKey,
+        sortOrder: ch.sortOrder ?? 0
+      })),
+      locale
+    );
+  }
+};
+
 // server/services/contentMergeService.ts
-import { PDFDocument as PDFDocument3, rgb } from "pdf-lib";
+import { PDFDocument as PDFDocument2, rgb } from "pdf-lib";
 async function mergePdfs(buffers, options = {}) {
   if (buffers.length === 0) {
     throw new Error("No PDF buffers provided to merge");
   }
-  const mergedPdf = await PDFDocument3.create();
+  const mergedPdf = await PDFDocument2.create();
   if (options.metadata) {
     if (options.metadata.title) mergedPdf.setTitle(options.metadata.title);
     if (options.metadata.author) mergedPdf.setAuthor(options.metadata.author);
@@ -17569,7 +18125,7 @@ async function mergePdfs(buffers, options = {}) {
   let totalPageCount = 0;
   for (const buffer of buffers) {
     try {
-      const pdf = await PDFDocument3.load(buffer);
+      const pdf = await PDFDocument2.load(buffer);
       const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
       copiedPages.forEach((page) => {
         mergedPdf.addPage(page);
@@ -17597,65 +18153,6 @@ async function mergePdfs(buffers, options = {}) {
   const mergedPdfBytes = await mergedPdf.save();
   return Buffer.from(mergedPdfBytes);
 }
-
-// server/services/countryGuidePdfService.ts
-init_db2();
-init_schema();
-import { eq as eq33, and as and27, asc } from "drizzle-orm";
-var countryGuidePdfService = {
-  generatePdf: async (countryCode) => {
-    const db = getDb();
-    if (!db) throw new Error("Database connection failed");
-    const country = await db.query.countriesConfig.findFirst({
-      where: eq33(countriesConfig.countryCode, countryCode)
-    });
-    if (!country) return null;
-    const chapters = await db.query.countryGuideChapters.findMany({
-      where: and27(
-        eq33(countryGuideChapters.countryCode, countryCode),
-        eq33(countryGuideChapters.status, "published")
-      ),
-      orderBy: [asc(countryGuideChapters.sortOrder)]
-    });
-    if (chapters.length === 0) return null;
-    const { doc, cjkFontPath } = await createBrandedPdfDocument();
-    return new Promise((resolve, reject) => {
-      const buffers = [];
-      doc.on("data", (chunk) => buffers.push(chunk));
-      doc.on("end", () => resolve(Buffer.concat(buffers)));
-      doc.on("error", reject);
-      drawCoverPage(
-        doc,
-        "Country Guide",
-        country.countryName,
-        (/* @__PURE__ */ new Date()).toLocaleDateString(),
-        cjkFontPath
-      );
-      let pageNum = 1;
-      drawHeader(doc, `Country Guide: ${country.countryName}`);
-      doc.fontSize(16).font("Helvetica-Bold").text("Table of Contents");
-      doc.moveDown();
-      chapters.forEach((chapter, index4) => {
-        doc.fontSize(12).font("Helvetica").text(`${index4 + 1}. ${chapter.titleEn}`);
-        doc.moveDown(0.5);
-      });
-      drawFooter(doc, pageNum++);
-      doc.addPage();
-      chapters.forEach((chapter, index4) => {
-        drawHeader(doc, `Country Guide: ${country.countryName}`);
-        doc.fontSize(18).font("Helvetica-Bold").fillColor("#1B5E20");
-        doc.text(chapter.titleEn);
-        doc.moveDown();
-        drawMarkdown(doc, chapter.contentEn, cjkFontPath);
-        drawFooter(doc, pageNum++);
-        if (index4 < chapters.length - 1) {
-          doc.addPage();
-        }
-      });
-      doc.end();
-    });
-  }
-};
 
 // server/services/quotationService.ts
 var quotationService = {
@@ -17854,72 +18351,29 @@ var quotationService = {
       }
     }
     const items = Array.isArray(quotation.snapshotData) ? quotation.snapshotData : typeof quotation.snapshotData === "string" ? JSON.parse(quotation.snapshotData) : [];
-    const { doc, cjkFontPath } = await createBrandedPdfDocument();
-    const quotationBuffer = await new Promise((resolve, reject) => {
-      const buffers = [];
-      doc.on("data", (chunk) => buffers.push(chunk));
-      doc.on("end", () => resolve(Buffer.concat(buffers)));
-      doc.on("error", reject);
-      drawCoverPage(
-        doc,
-        "Quotation Proposal",
-        `Ref: ${quotation.quotationNumber}`,
-        (/* @__PURE__ */ new Date()).toLocaleDateString(),
-        cjkFontPath
-      );
-      drawHeader(doc, `Quotation #${quotation.quotationNumber}`);
-      doc.moveDown();
-      doc.fontSize(12).font("Helvetica-Bold").text("Prepared For:");
-      doc.fontSize(10).font("Helvetica").text(customerName);
-      if (customerAddress) doc.text(customerAddress);
-      doc.moveDown(2);
-      const tableTop = doc.y;
-      const cols = {
-        country: { x: 50, w: 80 },
-        role: { x: 130, w: 100 },
-        count: { x: 230, w: 40 },
-        salary: { x: 270, w: 70 },
-        employer: { x: 340, w: 70 },
-        fee: { x: 410, w: 60 },
-        subtotal: { x: 470, w: 70 }
+    let billingEntity = void 0;
+    const defaultBilling = await db.query.billingEntities.findFirst({
+      where: eq34(billingEntities.isDefault, true)
+    });
+    if (defaultBilling) {
+      billingEntity = {
+        entityName: defaultBilling.entityName,
+        legalName: defaultBilling.legalName,
+        address: [defaultBilling.address, defaultBilling.city, defaultBilling.country].filter(Boolean).join(", "),
+        contactEmail: defaultBilling.contactEmail ?? void 0,
+        contactPhone: defaultBilling.contactPhone ?? void 0,
+        country: defaultBilling.country
       };
-      doc.fontSize(8).font("Helvetica-Bold");
-      doc.text("COUNTRY", cols.country.x, tableTop);
-      doc.text("SERVICE", cols.role.x, tableTop);
-      doc.text("QTY", cols.count.x, tableTop);
-      doc.text("SALARY", cols.salary.x, tableTop, { align: "right" });
-      doc.text("ER COST", cols.employer.x, tableTop, { align: "right" });
-      doc.text("FEE", cols.fee.x, tableTop, { align: "right" });
-      doc.text("SUBTOTAL", cols.subtotal.x, tableTop, { align: "right" });
-      doc.moveTo(50, tableTop + 15).lineTo(540, tableTop + 15).stroke();
-      let y = tableTop + 25;
-      for (const item of items) {
-        if (y > 700) {
-          drawFooter(doc, 1);
-          doc.addPage();
-          drawHeader(doc, `Quotation #${quotation.quotationNumber}`);
-          y = 50;
-        }
-        doc.fontSize(8).fillColor("black");
-        smartText(doc, item.countryCode, cols.country.x, y, { width: cols.country.w }, cjkFontPath);
-        smartText(doc, (item.serviceType || "").toUpperCase(), cols.role.x, y, { width: cols.role.w }, cjkFontPath);
-        doc.text((item.headcount || 0).toString(), cols.count.x, y);
-        doc.text(formatMoney(item.salary), cols.salary.x, y, { align: "right", width: cols.salary.w });
-        doc.text(formatMoney(item.employerCost), cols.employer.x, y, { align: "right", width: cols.employer.w });
-        doc.text(formatMoney(item.serviceFee), cols.fee.x, y, { align: "right", width: cols.fee.w });
-        if (item.oneTimeFee) {
-          doc.fontSize(6).text(`+ ${formatMoney(item.oneTimeFee)} (one-time)`, cols.fee.x, y + 10, { align: "right", width: cols.fee.w });
-        }
-        doc.font("Helvetica-Bold").text(formatMoney(item.subtotal), cols.subtotal.x, y, { align: "right", width: cols.subtotal.w });
-        y += item.oneTimeFee ? 25 : 15;
-      }
-      doc.moveTo(50, y).lineTo(540, y).stroke();
-      y += 10;
-      doc.fontSize(12).font("Helvetica-Bold");
-      doc.text(`TOTAL MONTHLY (${quotation.currency})`, 300, y, { align: "right", width: 160 });
-      doc.text(formatMoney(parseFloat(quotation.totalMonthly)), 470, y, { align: "right", width: 70 });
-      drawFooter(doc, 1);
-      doc.end();
+    }
+    const quotationBuffer = await generateQuotationPdf({
+      quotationNumber: quotation.quotationNumber,
+      customerName,
+      customerAddress,
+      items,
+      totalMonthly: quotation.totalMonthly,
+      currency: quotation.currency,
+      validUntil: quotation.validUntil ?? void 0,
+      billingEntity
     });
     const pdfsToMerge = [quotationBuffer];
     if (includeCountryGuide) {
@@ -17942,9 +18396,6 @@ var quotationService = {
     return { key, url, buffer: finalPdfBuffer };
   }
 };
-function formatMoney(amount) {
-  return amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 // server/routers/quotationRouter.ts
 init_db2();
@@ -22421,18 +22872,18 @@ var appWorkerRouter = workerRouter({
 
 // server/_core/serve-static.ts
 import express from "express";
-import fs3 from "fs";
-import path3 from "path";
+import fs2 from "fs";
+import path2 from "path";
 function serveStatic(app) {
-  const distPath = process.env.NODE_ENV === "development" ? path3.resolve(import.meta.dirname, "../..", "dist", "public") : path3.resolve(import.meta.dirname, "public");
-  if (!fs3.existsSync(distPath)) {
+  const distPath = process.env.NODE_ENV === "development" ? path2.resolve(import.meta.dirname, "../..", "dist", "public") : path2.resolve(import.meta.dirname, "public");
+  if (!fs2.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
   app.use(express.static(distPath));
   app.use("*", (_req, res) => {
-    res.sendFile(path3.resolve(distPath, "index.html"));
+    res.sendFile(path2.resolve(distPath, "index.html"));
   });
 }
 
@@ -30838,8 +31289,8 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 async function readJsonFile(relativePath) {
   try {
-    const path4 = join(process.cwd(), "data", relativePath);
-    const content = await readFile(path4, "utf-8");
+    const path3 = join(process.cwd(), "data", relativePath);
+    const content = await readFile(path3, "utf-8");
     return JSON.parse(content);
   } catch (e) {
     console.warn(`[Seed] Could not read ${relativePath}. Skipping.`);
