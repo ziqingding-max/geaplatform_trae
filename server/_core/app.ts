@@ -13,6 +13,7 @@ import { appWorkerRouter } from "../worker/workerRouter";
 import { createWorkerContext } from "../worker/workerTrpc";
 import { serveStatic } from "./serve-static";
 import { generateInvoicePdf } from "../services/invoicePdfService";
+import { countryGuidePdfService } from "../services/countryGuidePdfService";
 import { authenticateAdminRequest } from "./adminAuth";
 import { authenticatePortalRequest } from "../portal/portalAuth";
 import { getDb } from "../db";
@@ -161,6 +162,34 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
       res.send(pdfBuffer);
     } catch (error) {
       console.error("Portal PDF generation error:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
+    }
+  });
+
+  // Portal Country Guide PDF download endpoint
+  app.get("/api/portal-country-guide/:countryCode/pdf", async (req, res) => {
+    try {
+      const portalUser = await authenticatePortalRequest(req);
+      if (!portalUser) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const { countryCode } = req.params;
+      if (!countryCode || countryCode.length > 3) {
+        res.status(400).json({ error: "Invalid country code" });
+        return;
+      }
+      const pdfBuffer = await countryGuidePdfService.generatePdf(countryCode.toUpperCase());
+      if (!pdfBuffer) {
+        res.status(404).json({ error: "Country guide not found" });
+        return;
+      }
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="country-guide-${countryCode}.pdf"`);
+      res.setHeader("Content-Length", pdfBuffer.length.toString());
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Country guide PDF error:", error);
       res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
     }
   });

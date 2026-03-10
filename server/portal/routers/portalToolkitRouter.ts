@@ -6,7 +6,7 @@ import { countriesConfig, countryGuideChapters, salaryBenchmarks } from "../../.
 import { eq, and, asc, sql } from "drizzle-orm";
 
 export const portalToolkitRouter = portalRouter({
-  // Countries list for dropdowns
+  // Countries list for dropdowns (with extra fields for At-a-Glance cards)
   listCountries: protectedPortalProcedure.query(async () => {
     const db = getDb();
     if (!db) throw new Error("DB error");
@@ -15,6 +15,11 @@ export const portalToolkitRouter = portalRouter({
         countryCode: countriesConfig.countryCode,
         countryName: countriesConfig.countryName,
         localCurrency: countriesConfig.localCurrency,
+        payrollCycle: countriesConfig.payrollCycle,
+        workingDaysPerWeek: countriesConfig.workingDaysPerWeek,
+        statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
+        noticePeriodDays: countriesConfig.noticePeriodDays,
+        probationPeriodDays: countriesConfig.probationPeriodDays,
       })
       .from(countriesConfig)
       .where(eq(countriesConfig.isActive, true));
@@ -77,6 +82,11 @@ export const portalToolkitRouter = portalRouter({
         countryCode: countriesConfig.countryCode,
         countryName: countriesConfig.countryName,
         localCurrency: countriesConfig.localCurrency,
+        payrollCycle: countriesConfig.payrollCycle,
+        workingDaysPerWeek: countriesConfig.workingDaysPerWeek,
+        statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
+        noticePeriodDays: countriesConfig.noticePeriodDays,
+        probationPeriodDays: countriesConfig.probationPeriodDays,
       })
       .from(countriesConfig)
       .where(eq(countriesConfig.isActive, true));

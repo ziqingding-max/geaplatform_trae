@@ -8449,8 +8449,8 @@ async function generateInvoicePdf(options) {
       doc.text(formatNum(item.localAmount || item.amount), cols.amount.x, tableY, { width: cols.amount.w, align: "right" });
       tableY += 11;
       doc.fontSize(7).fillColor("#888888");
-      const desc25 = item.description.length > 80 ? item.description.slice(0, 77) + "..." : item.description;
-      smartText2(desc25, cols.item.x + 2, tableY, { width: cols.item.w + cols.curr.w + cols.qty.w - 2 });
+      const desc26 = item.description.length > 80 ? item.description.slice(0, 77) + "..." : item.description;
+      smartText2(desc26, cols.item.x + 2, tableY, { width: cols.item.w + cols.curr.w + cols.qty.w - 2 });
       tableY += 14;
     }
     tableY += 6;
@@ -18031,7 +18031,7 @@ var quotationRouter = router({
         }
         return and50(...conditions);
       },
-      orderBy: (quotations2, { desc: desc25 }) => [desc25(quotations2.createdAt)],
+      orderBy: (quotations2, { desc: desc26 }) => [desc26(quotations2.createdAt)],
       limit: input.limit,
       offset: input.offset,
       with: {
@@ -18096,12 +18096,14 @@ var quotationRouter = router({
 init_db2();
 init_schema();
 import { z as z28 } from "zod";
-import { eq as eq36, and as and28, asc as asc2 } from "drizzle-orm";
+import { eq as eq36, and as and28, asc as asc2, sql as sql15 } from "drizzle-orm";
 import { TRPCError as TRPCError24 } from "@trpc/server";
 var countryGuideRouter = router({
+  /** AI-generate content for a chapter */
   generateContent: protectedProcedure.input(z28.object({ countryCode: z28.string(), topic: z28.string() })).mutation(async ({ input }) => {
     return await generateCountryGuideDraft(input);
   }),
+  /** List published chapters for a country (portal-facing) */
   listChapters: protectedProcedure.input(z28.object({ countryCode: z28.string() })).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
@@ -18112,11 +18114,13 @@ var countryGuideRouter = router({
       )
     ).orderBy(asc2(countryGuideChapters.sortOrder));
   }),
+  /** List ALL chapters for a country (admin view, includes drafts) */
   listAllChapters: protectedProcedure.input(z28.object({ countryCode: z28.string() })).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     return await db.select().from(countryGuideChapters).where(eq36(countryGuideChapters.countryCode, input.countryCode)).orderBy(asc2(countryGuideChapters.sortOrder));
   }),
+  /** Get a single chapter by ID */
   getChapter: protectedProcedure.input(z28.number()).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
@@ -18125,20 +18129,22 @@ var countryGuideRouter = router({
     });
     return chapter;
   }),
-  // Admin only
-  upsertChapter: protectedProcedure.input(z28.object({
-    id: z28.number().optional(),
-    countryCode: z28.string(),
-    part: z28.number(),
-    chapterKey: z28.string(),
-    titleEn: z28.string(),
-    titleZh: z28.string(),
-    contentEn: z28.string(),
-    contentZh: z28.string(),
-    sortOrder: z28.number().default(0),
-    version: z28.string().default("2026-Q1"),
-    status: z28.enum(["draft", "review", "published", "archived"]).default("draft")
-  })).mutation(async ({ input }) => {
+  /** Create or update a chapter */
+  upsertChapter: protectedProcedure.input(
+    z28.object({
+      id: z28.number().optional(),
+      countryCode: z28.string(),
+      part: z28.number(),
+      chapterKey: z28.string(),
+      titleEn: z28.string(),
+      titleZh: z28.string(),
+      contentEn: z28.string(),
+      contentZh: z28.string(),
+      sortOrder: z28.number().default(0),
+      version: z28.string().default("2026-Q1"),
+      status: z28.enum(["draft", "review", "published", "archived"]).default("draft")
+    })
+  ).mutation(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     if (input.id) {
@@ -18151,6 +18157,87 @@ var countryGuideRouter = router({
       const [res] = await db.insert(countryGuideChapters).values(input).returning({ id: countryGuideChapters.id });
       return res;
     }
+  }),
+  /** Delete a chapter */
+  deleteChapter: protectedProcedure.input(z28.object({ id: z28.number() })).mutation(async ({ input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    await db.delete(countryGuideChapters).where(eq36(countryGuideChapters.id, input.id));
+    return { success: true };
+  }),
+  /** Update chapter status (publish / archive / draft) */
+  updateChapterStatus: protectedProcedure.input(
+    z28.object({
+      id: z28.number(),
+      status: z28.enum(["draft", "review", "published", "archived"])
+    })
+  ).mutation(async ({ input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    await db.update(countryGuideChapters).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq36(countryGuideChapters.id, input.id));
+    return { success: true };
+  }),
+  /** Bulk update status for all chapters of a country */
+  bulkUpdateStatus: protectedProcedure.input(
+    z28.object({
+      countryCode: z28.string(),
+      status: z28.enum(["draft", "review", "published", "archived"])
+    })
+  ).mutation(async ({ input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    const result = await db.update(countryGuideChapters).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq36(countryGuideChapters.countryCode, input.countryCode));
+    return { success: true };
+  }),
+  /** Get summary stats for the country guide list page */
+  getCountryStats: protectedProcedure.query(async () => {
+    const db = getDb();
+    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    const stats = await db.select({
+      countryCode: countryGuideChapters.countryCode,
+      totalChapters: sql15`count(*)`.as("totalChapters"),
+      publishedChapters: sql15`sum(case when ${countryGuideChapters.status} = 'published' then 1 else 0 end)`.as("publishedChapters"),
+      draftChapters: sql15`sum(case when ${countryGuideChapters.status} = 'draft' then 1 else 0 end)`.as("draftChapters"),
+      lastUpdated: sql15`max(${countryGuideChapters.updatedAt})`.as("lastUpdated")
+    }).from(countryGuideChapters).groupBy(countryGuideChapters.countryCode);
+    return stats;
+  }),
+  /** Bulk import chapters (for seeding from generated data) */
+  bulkImport: protectedProcedure.input(
+    z28.object({
+      chapters: z28.array(
+        z28.object({
+          countryCode: z28.string(),
+          part: z28.number(),
+          chapterKey: z28.string(),
+          titleEn: z28.string(),
+          titleZh: z28.string(),
+          contentEn: z28.string(),
+          contentZh: z28.string(),
+          sortOrder: z28.number().default(0),
+          version: z28.string().default("2026-Q1"),
+          status: z28.enum(["draft", "review", "published", "archived"]).default("published")
+        })
+      ),
+      overwrite: z28.boolean().default(false)
+    })
+  ).mutation(async ({ input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    let imported = 0;
+    for (const chapter of input.chapters) {
+      if (input.overwrite) {
+        await db.delete(countryGuideChapters).where(
+          and28(
+            eq36(countryGuideChapters.countryCode, chapter.countryCode),
+            eq36(countryGuideChapters.chapterKey, chapter.chapterKey)
+          )
+        );
+      }
+      await db.insert(countryGuideChapters).values(chapter);
+      imported++;
+    }
+    return { imported };
   })
 });
 
@@ -18535,7 +18622,7 @@ import { z as z31 } from "zod";
 import { TRPCError as TRPCError27 } from "@trpc/server";
 init_db2();
 init_schema();
-import { eq as eq39, desc as desc17 } from "drizzle-orm";
+import { eq as eq39, desc as desc18 } from "drizzle-orm";
 var walletRouter = router({
   get: userProcedure.input(z31.object({
     customerId: z31.number(),
@@ -18558,7 +18645,7 @@ var walletRouter = router({
     if (!db) throw new TRPCError27({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     return await db.query.walletTransactions.findMany({
       where: eq39(walletTransactions.walletId, input.walletId),
-      orderBy: [desc17(walletTransactions.createdAt)],
+      orderBy: [desc18(walletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
     });
@@ -18572,7 +18659,7 @@ var walletRouter = router({
     if (!db) throw new TRPCError27({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     return await db.query.frozenWalletTransactions.findMany({
       where: eq39(frozenWalletTransactions.walletId, input.walletId),
-      orderBy: [desc17(frozenWalletTransactions.createdAt)],
+      orderBy: [desc18(frozenWalletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
     });
@@ -19143,7 +19230,7 @@ var portalAuthRouter = portalRouter({
 });
 
 // server/portal/routers/portalDashboardRouter.ts
-import { sql as sql15, eq as eq41, and as and32, count as count9, inArray as inArray9 } from "drizzle-orm";
+import { sql as sql16, eq as eq41, and as and32, count as count9, inArray as inArray10 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalDashboardRouter = portalRouter({
@@ -19159,7 +19246,7 @@ var portalDashboardRouter = portalRouter({
     const [onboardingCount] = await db.select({ count: count9() }).from(employees).where(
       and32(
         eq41(employees.customerId, cid),
-        inArray9(employees.status, ["pending_review", "documents_incomplete", "onboarding"])
+        inArray10(employees.status, ["pending_review", "documents_incomplete", "onboarding"])
       )
     );
     const [adjCount] = await db.select({ count: count9() }).from(adjustments).where(and32(eq41(adjustments.customerId, cid), eq41(adjustments.status, "submitted")));
@@ -19203,25 +19290,25 @@ var portalDashboardRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const recentEmployees = await db.select({
       id: employees.id,
-      type: sql15`'employee'`,
-      title: sql15`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
+      type: sql16`'employee'`,
+      title: sql16`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
       status: employees.status,
       date: employees.updatedAt
-    }).from(employees).where(eq41(employees.customerId, cid)).orderBy(sql15`${employees.updatedAt} DESC`).limit(10);
+    }).from(employees).where(eq41(employees.customerId, cid)).orderBy(sql16`${employees.updatedAt} DESC`).limit(10);
     const recentAdj = await db.select({
       id: adjustments.id,
-      type: sql15`'adjustment'`,
+      type: sql16`'adjustment'`,
       title: adjustments.adjustmentType,
       status: adjustments.status,
       date: adjustments.updatedAt
-    }).from(adjustments).where(eq41(adjustments.customerId, cid)).orderBy(sql15`${adjustments.updatedAt} DESC`).limit(10);
+    }).from(adjustments).where(eq41(adjustments.customerId, cid)).orderBy(sql16`${adjustments.updatedAt} DESC`).limit(10);
     const recentLeave = await db.select({
       id: leaveRecords.id,
-      type: sql15`'leave'`,
-      title: sql15`CONCAT('Leave #', ${leaveRecords.id})`,
+      type: sql16`'leave'`,
+      title: sql16`CONCAT('Leave #', ${leaveRecords.id})`,
       status: leaveRecords.status,
       date: leaveRecords.updatedAt
-    }).from(leaveRecords).innerJoin(employees, eq41(leaveRecords.employeeId, employees.id)).where(eq41(employees.customerId, cid)).orderBy(sql15`${leaveRecords.updatedAt} DESC`).limit(10);
+    }).from(leaveRecords).innerJoin(employees, eq41(leaveRecords.employeeId, employees.id)).where(eq41(employees.customerId, cid)).orderBy(sql16`${leaveRecords.updatedAt} DESC`).limit(10);
     const all = [...recentEmployees, ...recentAdj, ...recentLeave].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 20);
     return all;
   }),
@@ -19235,15 +19322,15 @@ var portalDashboardRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const result = await db.select({
       month: payrollRuns.payrollMonth,
-      totalGross: sql15`COALESCE(SUM(${payrollItems.gross}), 0)`,
-      totalNet: sql15`COALESCE(SUM(${payrollItems.net}), 0)`,
-      totalEmployerCost: sql15`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`,
+      totalGross: sql16`COALESCE(SUM(${payrollItems.gross}), 0)`,
+      totalNet: sql16`COALESCE(SUM(${payrollItems.net}), 0)`,
+      totalEmployerCost: sql16`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`,
       currency: payrollRuns.currency
     }).from(payrollItems).innerJoin(payrollRuns, eq41(payrollItems.payrollRunId, payrollRuns.id)).innerJoin(employees, eq41(payrollItems.employeeId, employees.id)).where(
       and32(
         eq41(employees.customerId, cid),
-        sql15`${payrollRuns.status} IN ('approved', 'locked', 'paid')`,
-        sql15`${payrollRuns.payrollMonth} >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)`
+        sql16`${payrollRuns.status} IN ('approved', 'locked', 'paid')`,
+        sql16`${payrollRuns.payrollMonth} >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)`
       )
     ).groupBy(payrollRuns.payrollMonth, payrollRuns.currency).orderBy(payrollRuns.payrollMonth);
     return result.map((r) => ({
@@ -19275,7 +19362,7 @@ var portalDashboardRouter = portalRouter({
 // server/portal/routers/portalEmployeesRouter.ts
 import { z as z33 } from "zod";
 import { TRPCError as TRPCError30 } from "@trpc/server";
-import { sql as sql16, eq as eq42, and as and33, count as count10 } from "drizzle-orm";
+import { sql as sql17, eq as eq42, and as and33, count as count10 } from "drizzle-orm";
 import crypto4 from "crypto";
 init_db2();
 init_schema();
@@ -19341,12 +19428,12 @@ var portalEmployeesRouter = portalRouter({
     }
     if (input.search) {
       conditions.push(
-        sql16`(${employees.firstName} LIKE ${`%${input.search}%`} OR ${employees.lastName} LIKE ${`%${input.search}%`} OR ${employees.email} LIKE ${`%${input.search}%`})`
+        sql17`(${employees.firstName} LIKE ${`%${input.search}%`} OR ${employees.lastName} LIKE ${`%${input.search}%`} OR ${employees.email} LIKE ${`%${input.search}%`})`
       );
     }
     const where = and33(...conditions);
     const [totalResult] = await db.select({ count: count10() }).from(employees).where(where);
-    const items = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(where).orderBy(sql16`${employees.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    const items = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(where).orderBy(sql17`${employees.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return {
       items,
       total: totalResult?.count ?? 0
@@ -19605,7 +19692,7 @@ var portalEmployeesRouter = portalRouter({
       expiresAt: onboardingInvites.expiresAt,
       completedAt: onboardingInvites.completedAt,
       createdAt: onboardingInvites.createdAt
-    }).from(onboardingInvites).where(eq42(onboardingInvites.customerId, cid)).orderBy(sql16`${onboardingInvites.createdAt} DESC`);
+    }).from(onboardingInvites).where(eq42(onboardingInvites.customerId, cid)).orderBy(sql17`${onboardingInvites.createdAt} DESC`);
     return invites;
   }),
   /**
@@ -19885,7 +19972,7 @@ var portalEmployeesRouter = portalRouter({
 // server/portal/routers/portalAdjustmentsRouter.ts
 import { z as z34 } from "zod";
 import { TRPCError as TRPCError31 } from "@trpc/server";
-import { sql as sql17, eq as eq43, and as and34, count as count11 } from "drizzle-orm";
+import { sql as sql18, eq as eq43, and as and34, count as count11 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalAdjustmentsRouter = portalRouter({
@@ -19938,7 +20025,7 @@ var portalAdjustmentsRouter = portalRouter({
       // Join employee name
       employeeFirstName: employees.firstName,
       employeeLastName: employees.lastName
-    }).from(adjustments).innerJoin(employees, eq43(adjustments.employeeId, employees.id)).where(where).orderBy(sql17`${adjustments.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(adjustments).innerJoin(employees, eq43(adjustments.employeeId, employees.id)).where(where).orderBy(sql18`${adjustments.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return {
       items,
       total: totalResult?.count ?? 0
@@ -20104,7 +20191,7 @@ var portalAdjustmentsRouter = portalRouter({
 // server/portal/routers/portalLeaveRouter.ts
 import { z as z35 } from "zod";
 import { TRPCError as TRPCError32 } from "@trpc/server";
-import { sql as sql18, eq as eq44, and as and35, count as count12 } from "drizzle-orm";
+import { sql as sql19, eq as eq44, and as and35, count as count12 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalLeaveRouter = portalRouter({
@@ -20152,7 +20239,7 @@ var portalLeaveRouter = portalRouter({
       employeeLastName: employees.lastName,
       // Leave type info
       leaveTypeName: leaveTypes.leaveTypeName
-    }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).leftJoin(leaveTypes, eq44(leaveRecords.leaveTypeId, leaveTypes.id)).where(where).orderBy(sql18`${leaveRecords.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).leftJoin(leaveTypes, eq44(leaveRecords.leaveTypeId, leaveTypes.id)).where(where).orderBy(sql19`${leaveRecords.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return { items, total: totalResult?.count ?? 0 };
   }),
   /**
@@ -20281,7 +20368,7 @@ var portalLeaveRouter = portalRouter({
     const countryCodes = activeCountries.map((c) => c.country);
     const holidays = await db.select().from(publicHolidays).where(
       and35(
-        sql18`${publicHolidays.countryCode} IN (${sql18.join(countryCodes.map((c) => sql18`${c}`), sql18`, `)})`,
+        sql19`${publicHolidays.countryCode} IN (${sql19.join(countryCodes.map((c) => sql19`${c}`), sql19`, `)})`,
         eq44(publicHolidays.year, input.year)
       )
     ).orderBy(publicHolidays.holidayDate);
@@ -20292,7 +20379,7 @@ var portalLeaveRouter = portalRouter({
 // server/portal/routers/portalInvoicesRouter.ts
 import { z as z36 } from "zod";
 import { TRPCError as TRPCError33 } from "@trpc/server";
-import { sql as sql19, eq as eq45, and as and36, count as count13, inArray as inArray11 } from "drizzle-orm";
+import { sql as sql20, eq as eq45, and as and36, count as count13, inArray as inArray12 } from "drizzle-orm";
 init_db2();
 init_schema();
 var PORTAL_INVOICE_FIELDS = {
@@ -20318,8 +20405,8 @@ var PORTAL_INVOICE_FIELDS = {
   createdAt: invoices.createdAt,
   updatedAt: invoices.updatedAt
 };
-var VISIBLE_FILTER = sql19`${invoices.status} NOT IN ('draft', 'pending_review')`;
-var ACTIVE_FILTER = sql19`${invoices.status} NOT IN ('draft', 'pending_review', 'cancelled', 'void')`;
+var VISIBLE_FILTER = sql20`${invoices.status} NOT IN ('draft', 'pending_review')`;
+var ACTIVE_FILTER = sql20`${invoices.status} NOT IN ('draft', 'pending_review', 'cancelled', 'void')`;
 var portalInvoicesRouter = portalRouter({
   /**
    * List invoices — scoped to customerId
@@ -20345,29 +20432,29 @@ var portalInvoicesRouter = portalRouter({
       VISIBLE_FILTER
     ];
     if (input.excludeCreditNotes) {
-      conditions.push(sql19`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`);
+      conditions.push(sql20`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`);
     }
     if (input.tab === "active") {
-      conditions.push(sql19`${invoices.status} NOT IN ('cancelled', 'void')`);
+      conditions.push(sql20`${invoices.status} NOT IN ('cancelled', 'void')`);
     } else {
-      conditions.push(sql19`${invoices.status} IN ('paid', 'applied', 'cancelled', 'void')`);
+      conditions.push(sql20`${invoices.status} IN ('paid', 'applied', 'cancelled', 'void')`);
     }
     if (input.status) {
       conditions.push(eq45(invoices.status, input.status));
     }
     if (input.typeCategory === "receivables") {
-      conditions.push(sql19`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`);
+      conditions.push(sql20`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`);
     } else if (input.typeCategory === "credits") {
       conditions.push(eq45(invoices.invoiceType, "credit_note"));
     } else if (input.typeCategory === "deposits") {
-      conditions.push(sql19`${invoices.invoiceType} IN ('deposit', 'deposit_refund')`);
+      conditions.push(sql20`${invoices.invoiceType} IN ('deposit', 'deposit_refund')`);
     }
     if (input.invoiceMonth) {
       conditions.push(eq45(invoices.invoiceMonth, input.invoiceMonth));
     }
     const where = and36(...conditions);
     const [totalResult] = await db.select({ count: count13() }).from(invoices).where(where);
-    const items = await db.select(PORTAL_INVOICE_FIELDS).from(invoices).where(where).orderBy(sql19`${invoices.createdAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    const items = await db.select(PORTAL_INVOICE_FIELDS).from(invoices).where(where).orderBy(sql20`${invoices.createdAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     const itemIds = items.map((inv) => inv.id);
     let relatedInvoicesMap = {};
     if (itemIds.length > 0) {
@@ -20382,7 +20469,7 @@ var portalInvoicesRouter = portalRouter({
         and36(
           eq45(invoices.customerId, cid),
           VISIBLE_FILTER,
-          inArray11(invoices.relatedInvoiceId, itemIds)
+          inArray12(invoices.relatedInvoiceId, itemIds)
         )
       );
       for (const rel of relatedInvs) {
@@ -20562,42 +20649,42 @@ var portalInvoicesRouter = portalRouter({
     const db = await getDb();
     if (!db) return { totalInvoiced: 0, totalPaid: 0, totalCreditNotes: 0, totalDeposits: 0, outstandingBalance: 0 };
     const cid = ctx.portalUser.customerId;
-    const [invoiced] = await db.select({ total: sql19`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+    const [invoiced] = await db.select({ total: sql20`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
       and36(
         eq45(invoices.customerId, cid),
-        sql19`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`,
+        sql20`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`,
         ACTIVE_FILTER
       )
     );
-    const [paid] = await db.select({ total: sql19`COALESCE(SUM(${invoices.paidAmount}), 0)` }).from(invoices).where(
+    const [paid] = await db.select({ total: sql20`COALESCE(SUM(${invoices.paidAmount}), 0)` }).from(invoices).where(
       and36(
         eq45(invoices.customerId, cid),
         eq45(invoices.status, "paid")
       )
     );
-    const [credits] = await db.select({ total: sql19`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+    const [credits] = await db.select({ total: sql20`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
       and36(
         eq45(invoices.customerId, cid),
         eq45(invoices.invoiceType, "credit_note"),
         ACTIVE_FILTER
       )
     );
-    const [depositsGross] = await db.select({ total: sql19`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+    const [depositsGross] = await db.select({ total: sql20`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
       and36(
         eq45(invoices.customerId, cid),
         eq45(invoices.invoiceType, "deposit"),
         ACTIVE_FILTER
       )
     );
-    const [depositCreditNotes] = await db.select({ total: sql19`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+    const [depositCreditNotes] = await db.select({ total: sql20`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
       and36(
         eq45(invoices.customerId, cid),
         eq45(invoices.invoiceType, "credit_note"),
         ACTIVE_FILTER,
-        sql19`${invoices.relatedInvoiceId} IN (SELECT id FROM invoices WHERE customerId = ${cid} AND invoiceType = 'deposit')`
+        sql20`${invoices.relatedInvoiceId} IN (SELECT id FROM invoices WHERE customerId = ${cid} AND invoiceType = 'deposit')`
       )
     );
-    const [depositRefunds] = await db.select({ total: sql19`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+    const [depositRefunds] = await db.select({ total: sql20`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
       and36(
         eq45(invoices.customerId, cid),
         eq45(invoices.invoiceType, "deposit_refund"),
@@ -20608,11 +20695,11 @@ var portalInvoicesRouter = portalRouter({
       0,
       Number(depositsGross?.total || 0) - Number(depositCreditNotes?.total || 0) - Number(depositRefunds?.total || 0)
     );
-    const [outstanding] = await db.select({ total: sql19`COALESCE(SUM(COALESCE(${invoices.amountDue}, ${invoices.total})), 0)` }).from(invoices).where(
+    const [outstanding] = await db.select({ total: sql20`COALESCE(SUM(COALESCE(${invoices.amountDue}, ${invoices.total})), 0)` }).from(invoices).where(
       and36(
         eq45(invoices.customerId, cid),
-        sql19`${invoices.status} IN ('sent', 'overdue')`,
-        sql19`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`
+        sql20`${invoices.status} IN ('sent', 'overdue')`,
+        sql20`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`
       )
     );
     const totalCreditIssued = Number(credits?.total || 0);
@@ -20903,7 +20990,7 @@ var portalSettingsRouter = portalRouter({
 // server/portal/routers/portalPayrollRouter.ts
 import { z as z38 } from "zod";
 import { TRPCError as TRPCError35 } from "@trpc/server";
-import { sql as sql21, eq as eq47, and as and38, count as count15, inArray as inArray12 } from "drizzle-orm";
+import { sql as sql22, eq as eq47, and as and38, count as count15, inArray as inArray13 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalPayrollRouter = portalRouter({
@@ -20925,12 +21012,12 @@ var portalPayrollRouter = portalRouter({
     const runIds = (await subquery).map((r) => r.payrollRunId);
     if (runIds.length === 0) return { items: [], total: 0 };
     const conditions = [
-      inArray12(payrollRuns.id, runIds),
+      inArray13(payrollRuns.id, runIds),
       eq47(payrollRuns.status, "approved")
     ];
     if (input.year) {
       conditions.push(
-        sql21`YEAR(${payrollRuns.payrollMonth}) = ${input.year}`
+        sql22`YEAR(${payrollRuns.payrollMonth}) = ${input.year}`
       );
     }
     const where = and38(...conditions);
@@ -20946,7 +21033,7 @@ var portalPayrollRouter = portalRouter({
       totalNet: payrollRuns.totalNet,
       approvedAt: payrollRuns.approvedAt,
       notes: payrollRuns.notes
-    }).from(payrollRuns).where(where).orderBy(sql21`${payrollRuns.payrollMonth} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(payrollRuns).where(where).orderBy(sql22`${payrollRuns.payrollMonth} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     const enrichedRuns = await Promise.all(
       runs.map(async (run) => {
         const [empCount] = await db.select({ count: count15() }).from(payrollItems).innerJoin(employees, eq47(payrollItems.employeeId, employees.id)).where(
@@ -20956,10 +21043,10 @@ var portalPayrollRouter = portalRouter({
           )
         );
         const [customerTotals] = await db.select({
-          totalGross: sql21`COALESCE(SUM(${payrollItems.gross}), 0)`,
-          totalNet: sql21`COALESCE(SUM(${payrollItems.net}), 0)`,
-          totalDeductions: sql21`COALESCE(SUM(${payrollItems.deductions} + ${payrollItems.taxDeduction} + ${payrollItems.socialSecurityDeduction} + ${payrollItems.unpaidLeaveDeduction}), 0)`,
-          totalEmployerCost: sql21`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`
+          totalGross: sql22`COALESCE(SUM(${payrollItems.gross}), 0)`,
+          totalNet: sql22`COALESCE(SUM(${payrollItems.net}), 0)`,
+          totalDeductions: sql22`COALESCE(SUM(${payrollItems.deductions} + ${payrollItems.taxDeduction} + ${payrollItems.socialSecurityDeduction} + ${payrollItems.unpaidLeaveDeduction}), 0)`,
+          totalEmployerCost: sql22`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`
         }).from(payrollItems).innerJoin(employees, eq47(payrollItems.employeeId, employees.id)).where(
           and38(
             eq47(payrollItems.payrollRunId, run.id),
@@ -21009,7 +21096,7 @@ var portalPayrollRouter = portalRouter({
     const items = await db.select({
       id: payrollItems.id,
       employeeId: payrollItems.employeeId,
-      employeeName: sql21`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
+      employeeName: sql22`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
       employeeCode: employees.employeeCode,
       jobTitle: employees.jobTitle,
       baseSalary: payrollItems.baseSalary,
@@ -21046,7 +21133,7 @@ var portalPayrollRouter = portalRouter({
 // server/portal/routers/portalReimbursementsRouter.ts
 import { z as z39 } from "zod";
 import { TRPCError as TRPCError36 } from "@trpc/server";
-import { sql as sql22, eq as eq48, and as and39, count as count16 } from "drizzle-orm";
+import { sql as sql23, eq as eq48, and as and39, count as count16 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalReimbursementsRouter = portalRouter({
@@ -21098,7 +21185,7 @@ var portalReimbursementsRouter = portalRouter({
       // Join employee name
       employeeFirstName: employees.firstName,
       employeeLastName: employees.lastName
-    }).from(reimbursements).innerJoin(employees, eq48(reimbursements.employeeId, employees.id)).where(where).orderBy(sql22`${reimbursements.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(reimbursements).innerJoin(employees, eq48(reimbursements.employeeId, employees.id)).where(where).orderBy(sql23`${reimbursements.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return {
       items,
       total: totalResult?.count ?? 0
@@ -21272,7 +21359,7 @@ var portalReimbursementsRouter = portalRouter({
 
 // server/portal/routers/portalKnowledgeBaseRouter.ts
 import { z as z40 } from "zod";
-import { and as and40, desc as desc18, eq as eq49, inArray as inArray13, isNull as isNull4, or as or8 } from "drizzle-orm";
+import { and as and40, desc as desc19, eq as eq49, inArray as inArray14, isNull as isNull4, or as or8 } from "drizzle-orm";
 import { TRPCError as TRPCError37 } from "@trpc/server";
 init_db2();
 init_schema();
@@ -21292,12 +21379,12 @@ var portalKnowledgeBaseRouter = portalRouter({
     const topics = input?.topics?.length ? input.topics : [...topicEnum];
     const items = await db.select().from(knowledgeItems).where(
       and40(
-        inArray13(knowledgeItems.topic, topics),
+        inArray14(knowledgeItems.topic, topics),
         eq49(knowledgeItems.language, input?.locale ?? "en"),
         eq49(knowledgeItems.status, "published"),
         or8(eq49(knowledgeItems.customerId, customerId), isNull4(knowledgeItems.customerId))
       )
-    ).orderBy(desc18(knowledgeItems.publishedAt), desc18(knowledgeItems.createdAt)).limit(100);
+    ).orderBy(desc19(knowledgeItems.publishedAt), desc19(knowledgeItems.createdAt)).limit(100);
     const topicCounts = topics.reduce((acc, topic) => {
       acc[topic] = items.filter((item) => item.topic === topic).length;
       return acc;
@@ -21382,24 +21469,31 @@ var portalKnowledgeBaseRouter = portalRouter({
 import { z as z41 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq50, and as and41, asc as asc3 } from "drizzle-orm";
+import { eq as eq50, and as and41, asc as asc3, sql as sql24 } from "drizzle-orm";
 var portalToolkitRouter = portalRouter({
-  // Countries list for dropdowns
+  // Countries list for dropdowns (with extra fields for At-a-Glance cards)
   listCountries: protectedPortalProcedure.query(async () => {
     const db = getDb();
     if (!db) throw new Error("DB error");
     return await db.select({
       countryCode: countriesConfig.countryCode,
       countryName: countriesConfig.countryName,
-      localCurrency: countriesConfig.localCurrency
+      localCurrency: countriesConfig.localCurrency,
+      payrollCycle: countriesConfig.payrollCycle,
+      workingDaysPerWeek: countriesConfig.workingDaysPerWeek,
+      statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
+      noticePeriodDays: countriesConfig.noticePeriodDays,
+      probationPeriodDays: countriesConfig.probationPeriodDays
     }).from(countriesConfig).where(eq50(countriesConfig.isActive, true));
   }),
   // Cost Calculation
-  calculateCost: protectedPortalProcedure.input(z41.object({
-    countryCode: z41.string(),
-    salary: z41.number(),
-    regionCode: z41.string().optional()
-  })).mutation(async ({ input }) => {
+  calculateCost: protectedPortalProcedure.input(
+    z41.object({
+      countryCode: z41.string(),
+      salary: z41.number(),
+      regionCode: z41.string().optional()
+    })
+  ).mutation(async ({ input }) => {
     return await calculationService.calculateSocialInsurance({
       countryCode: input.countryCode,
       year: 2025,
@@ -21407,7 +21501,7 @@ var portalToolkitRouter = portalRouter({
       regionCode: input.regionCode
     });
   }),
-  // Country Guide
+  // Country Guide - list chapters for a country (published only)
   listGuideChapters: protectedPortalProcedure.input(z41.object({ countryCode: z41.string() })).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new Error("DB error");
@@ -21418,12 +21512,38 @@ var portalToolkitRouter = portalRouter({
       )
     ).orderBy(asc3(countryGuideChapters.sortOrder));
   }),
+  // Country Guide - list countries that have published guides
+  listCountriesWithGuides: protectedPortalProcedure.query(async () => {
+    const db = getDb();
+    if (!db) throw new Error("DB error");
+    const countriesWithGuides = await db.select({
+      countryCode: countryGuideChapters.countryCode,
+      chapterCount: sql24`count(*)`.as("chapterCount")
+    }).from(countryGuideChapters).where(eq50(countryGuideChapters.status, "published")).groupBy(countryGuideChapters.countryCode);
+    const allCountries = await db.select({
+      countryCode: countriesConfig.countryCode,
+      countryName: countriesConfig.countryName,
+      localCurrency: countriesConfig.localCurrency,
+      payrollCycle: countriesConfig.payrollCycle,
+      workingDaysPerWeek: countriesConfig.workingDaysPerWeek,
+      statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
+      noticePeriodDays: countriesConfig.noticePeriodDays,
+      probationPeriodDays: countriesConfig.probationPeriodDays
+    }).from(countriesConfig).where(eq50(countriesConfig.isActive, true));
+    const guideMap = new Map(countriesWithGuides.map((c) => [c.countryCode, c.chapterCount]));
+    return allCountries.filter((c) => guideMap.has(c.countryCode)).map((c) => ({
+      ...c,
+      chapterCount: guideMap.get(c.countryCode) || 0
+    }));
+  }),
   // Benchmarks
-  getBenchmark: protectedPortalProcedure.input(z41.object({
-    countryCode: z41.string(),
-    jobCategory: z41.string(),
-    seniorityLevel: z41.enum(["junior", "mid", "senior", "lead", "director"])
-  })).query(async ({ input }) => {
+  getBenchmark: protectedPortalProcedure.input(
+    z41.object({
+      countryCode: z41.string(),
+      jobCategory: z41.string(),
+      seniorityLevel: z41.enum(["junior", "mid", "senior", "lead", "director"])
+    })
+  ).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new Error("DB error");
     return await db.query.salaryBenchmarks.findFirst({
@@ -21440,7 +21560,7 @@ var portalToolkitRouter = portalRouter({
 import { z as z42 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq51, desc as desc19 } from "drizzle-orm";
+import { eq as eq51, desc as desc20 } from "drizzle-orm";
 import { TRPCError as TRPCError38 } from "@trpc/server";
 var portalWalletRouter = portalRouter({
   get: protectedPortalProcedure.input(z42.object({
@@ -21458,7 +21578,7 @@ var portalWalletRouter = portalRouter({
     const wallet = await walletService.getWallet(ctx.portalUser.customerId, input.currency);
     return await db.query.walletTransactions.findMany({
       where: eq51(walletTransactions.walletId, wallet.id),
-      orderBy: [desc19(walletTransactions.createdAt)],
+      orderBy: [desc20(walletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
     });
@@ -21468,7 +21588,7 @@ var portalWalletRouter = portalRouter({
 // server/portal/routers/portalContractorsRouter.ts
 import { z as z43 } from "zod";
 import { TRPCError as TRPCError39 } from "@trpc/server";
-import { eq as eq52, and as and42, like as like12, count as count17, desc as desc20, or as or9 } from "drizzle-orm";
+import { eq as eq52, and as and42, like as like12, count as count17, desc as desc21, or as or9 } from "drizzle-orm";
 init_db2();
 init_schema();
 var PORTAL_CONTRACTOR_LIST_FIELDS = {
@@ -21518,7 +21638,7 @@ var portalContractorsRouter = portalRouter({
     const where = and42(...conditions);
     const offset = (input.page - 1) * input.pageSize;
     const [items, totalResult] = await Promise.all([
-      db.select(PORTAL_CONTRACTOR_LIST_FIELDS).from(contractors).where(where).limit(input.pageSize).offset(offset).orderBy(desc20(contractors.createdAt)),
+      db.select(PORTAL_CONTRACTOR_LIST_FIELDS).from(contractors).where(where).limit(input.pageSize).offset(offset).orderBy(desc21(contractors.createdAt)),
       db.select({ count: count17() }).from(contractors).where(where)
     ]);
     return {
@@ -21626,7 +21746,7 @@ var portalContractorsRouter = portalRouter({
 // server/portal/routers/portalMilestonesRouter.ts
 import { z as z44 } from "zod";
 import { TRPCError as TRPCError40 } from "@trpc/server";
-import { eq as eq53, and as and43, desc as desc21, inArray as inArray14 } from "drizzle-orm";
+import { eq as eq53, and as and43, desc as desc22, inArray as inArray15 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalMilestonesRouter = portalRouter({
@@ -21645,7 +21765,7 @@ var portalMilestonesRouter = portalRouter({
     const customerContractors = await db.select({ id: contractors.id }).from(contractors).where(eq53(contractors.customerId, customerId));
     const contractorIds = customerContractors.map((c) => c.id);
     if (contractorIds.length === 0) return [];
-    const conditions = [inArray14(contractorMilestones.contractorId, contractorIds)];
+    const conditions = [inArray15(contractorMilestones.contractorId, contractorIds)];
     if (input.contractorId) {
       if (!contractorIds.includes(input.contractorId)) {
         throw new TRPCError40({ code: "FORBIDDEN", message: "Contractor not found" });
@@ -21667,11 +21787,11 @@ var portalMilestonesRouter = portalRouter({
       completedAt: contractorMilestones.completedAt,
       approvedAt: contractorMilestones.approvedAt,
       createdAt: contractorMilestones.createdAt
-    }).from(contractorMilestones).where(and43(...conditions)).orderBy(desc21(contractorMilestones.createdAt));
+    }).from(contractorMilestones).where(and43(...conditions)).orderBy(desc22(contractorMilestones.createdAt));
     const contractorMap = /* @__PURE__ */ new Map();
     if (milestones.length > 0) {
       const uniqueIds = [...new Set(milestones.map((m) => m.contractorId))];
-      const contractorDetails = await db.select({ id: contractors.id, firstName: contractors.firstName, lastName: contractors.lastName }).from(contractors).where(inArray14(contractors.id, uniqueIds));
+      const contractorDetails = await db.select({ id: contractors.id, firstName: contractors.firstName, lastName: contractors.lastName }).from(contractors).where(inArray15(contractors.id, uniqueIds));
       contractorDetails.forEach((c) => contractorMap.set(c.id, c));
     }
     return milestones.map((m) => ({
@@ -22141,7 +22261,7 @@ import { z as z48 } from "zod";
 import { TRPCError as TRPCError45 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq58, desc as desc22 } from "drizzle-orm";
+import { eq as eq58, desc as desc23 } from "drizzle-orm";
 var workerInvoicesRouter = workerRouter({
   /**
    * List my invoices
@@ -22166,7 +22286,7 @@ var workerInvoicesRouter = workerRouter({
     if (input.status) {
       conditions.push(eq58(contractorInvoices.status, input.status));
     }
-    const items = await db.select().from(contractorInvoices).where(eq58(contractorInvoices.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc22(contractorInvoices.createdAt));
+    const items = await db.select().from(contractorInvoices).where(eq58(contractorInvoices.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc23(contractorInvoices.createdAt));
     return {
       items,
       total: 0
@@ -22180,7 +22300,7 @@ import { z as z49 } from "zod";
 import { TRPCError as TRPCError46 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq59, desc as desc23 } from "drizzle-orm";
+import { eq as eq59, desc as desc24 } from "drizzle-orm";
 var workerMilestonesRouter = workerRouter({
   /**
    * List my milestones
@@ -22201,7 +22321,7 @@ var workerMilestonesRouter = workerRouter({
       });
     }
     const offset = (input.page - 1) * input.pageSize;
-    const items = await db.select().from(contractorMilestones).where(eq59(contractorMilestones.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc23(contractorMilestones.createdAt));
+    const items = await db.select().from(contractorMilestones).where(eq59(contractorMilestones.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc24(contractorMilestones.createdAt));
     return {
       items,
       total: 0
@@ -22240,7 +22360,7 @@ import { z as z50 } from "zod";
 import { TRPCError as TRPCError47 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq61, and as and47, desc as desc24 } from "drizzle-orm";
+import { eq as eq61, and as and47, desc as desc25 } from "drizzle-orm";
 var workerNotificationsRouter = workerRouter({
   /**
    * Get unread notifications
@@ -22254,7 +22374,7 @@ var workerNotificationsRouter = workerRouter({
         eq61(notifications.targetUserId, ctx.workerUser.id),
         eq61(notifications.isRead, false)
       )
-    ).orderBy(desc24(notifications.createdAt)).limit(input.limit);
+    ).orderBy(desc25(notifications.createdAt)).limit(input.limit);
   }),
   /**
    * Mark as read
@@ -22442,6 +22562,32 @@ async function createApp(options = {}) {
       res.send(pdfBuffer);
     } catch (error) {
       console.error("Portal PDF generation error:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
+    }
+  });
+  app.get("/api/portal-country-guide/:countryCode/pdf", async (req, res) => {
+    try {
+      const portalUser = await authenticatePortalRequest(req);
+      if (!portalUser) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const { countryCode } = req.params;
+      if (!countryCode || countryCode.length > 3) {
+        res.status(400).json({ error: "Invalid country code" });
+        return;
+      }
+      const pdfBuffer = await countryGuidePdfService.generatePdf(countryCode.toUpperCase());
+      if (!pdfBuffer) {
+        res.status(404).json({ error: "Country guide not found" });
+        return;
+      }
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="country-guide-${countryCode}.pdf"`);
+      res.setHeader("Content-Length", pdfBuffer.length.toString());
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Country guide PDF error:", error);
       res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
     }
   });
@@ -29806,6 +29952,70 @@ async function seedMigration() {
     });
   }
   console.log("[Seed] Migration seed completed.");
+  await seedCountryGuides(db);
+}
+async function seedCountryGuides(db) {
+  const guideData = await readJsonFile("country_guide_data.json");
+  if (!guideData || !Array.isArray(guideData) || guideData.length === 0) {
+    console.log("[Seed] No country guide data found, skipping.");
+    return;
+  }
+  console.log(`[Seed] Checking ${guideData.length} country guide chapters...`);
+  let created = 0;
+  let updated = 0;
+  let skipped = 0;
+  for (const ch of guideData) {
+    if (!ch.countryCode || !ch.chapterKey || !ch.contentEn) {
+      skipped++;
+      continue;
+    }
+    try {
+      const existing = await db.query.countryGuideChapters.findFirst({
+        where: and49(
+          eq64(countryGuideChapters.countryCode, ch.countryCode),
+          eq64(countryGuideChapters.chapterKey, ch.chapterKey)
+        )
+      });
+      if (existing) {
+        const contentChanged = existing.contentEn !== ch.contentEn || existing.contentZh !== ch.contentZh;
+        const versionNewer = ch.version && ch.version > (existing.version || "");
+        if (contentChanged || versionNewer) {
+          await db.update(countryGuideChapters).set({
+            part: ch.part,
+            titleEn: ch.titleEn,
+            titleZh: ch.titleZh,
+            contentEn: ch.contentEn,
+            contentZh: ch.contentZh,
+            sortOrder: ch.sortOrder,
+            version: ch.version || "2026-Q1",
+            status: ch.status || "published",
+            updatedAt: /* @__PURE__ */ new Date()
+          }).where(eq64(countryGuideChapters.id, existing.id));
+          updated++;
+        } else {
+          skipped++;
+        }
+      } else {
+        await db.insert(countryGuideChapters).values({
+          countryCode: ch.countryCode,
+          part: ch.part,
+          chapterKey: ch.chapterKey,
+          titleEn: ch.titleEn,
+          titleZh: ch.titleZh,
+          contentEn: ch.contentEn,
+          contentZh: ch.contentZh,
+          sortOrder: ch.sortOrder,
+          version: ch.version || "2026-Q1",
+          status: ch.status || "published"
+        });
+        created++;
+      }
+    } catch (err) {
+      console.warn(`[Seed] Failed to seed ${ch.countryCode}/${ch.chapterKey}: ${err.message}`);
+      skipped++;
+    }
+  }
+  console.log(`[Seed] Country guides: ${created} created, ${updated} updated, ${skipped} skipped.`);
 }
 
 // server/autoMigrate.ts
@@ -29840,8 +30050,8 @@ async function runAutoMigrations() {
       );
       if (!columnExists) {
         const defaultClause = migration.defaultValue != null ? ` DEFAULT ${migration.defaultValue}` : "";
-        const sql23 = `ALTER TABLE "${migration.table}" ADD COLUMN "${migration.column}" ${migration.type}${defaultClause}`;
-        await client.execute(sql23);
+        const sql25 = `ALTER TABLE "${migration.table}" ADD COLUMN "${migration.column}" ${migration.type}${defaultClause}`;
+        await client.execute(sql25);
         console.log(`[AutoMigrate] Added column: ${migration.table}.${migration.column}`);
       }
     } catch (err) {

@@ -11,6 +11,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import {
   BookOpen,
   Globe,
@@ -23,10 +30,20 @@ import {
   Shield,
   Gift,
   ArrowUp,
+  Download,
+  Calendar,
+  Users,
+  FileText,
+  ExternalLink,
+  Coins,
+  Timer,
+  UserCheck,
+  AlertCircle,
 } from "lucide-react";
 import PortalLayout from "@/components/PortalLayout";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { portalPath } from "@/lib/portalBasePath";
 
 // Chapter icon mapping
 const chapterIcons: Record<string, any> = {
@@ -37,6 +54,13 @@ const chapterIcons: Record<string, any> = {
   termination: Shield,
   benefits: Gift,
 };
+
+// Chapters that should use accordion (long-form, multi-item content)
+const ACCORDION_CHAPTER_KEYS = new Set([
+  "working-conditions",
+  "termination",
+  "benefits",
+]);
 
 // Part labels
 const partLabelsEn: Record<number, string> = {
@@ -57,12 +81,84 @@ const partLabelsZh: Record<number, string> = {
   6: "福利与附加信息",
 };
 
+// Payroll cycle labels
+const payrollCycleLabels: Record<string, { en: string; zh: string }> = {
+  monthly: { en: "Monthly", zh: "每月" },
+  semi_monthly: { en: "Semi-monthly", zh: "每半月" },
+};
+
+// ─── At-a-Glance Card Component ─────────────────────────────────────────────
+function QuickFactCard({
+  icon: Icon,
+  label,
+  value,
+  highlight = false,
+}: {
+  icon: any;
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-start gap-3 p-4 rounded-xl border bg-background shadow-sm transition-all hover:shadow-md ${
+        highlight ? "border-primary/30 bg-primary/5" : "border-border"
+      }`}
+    >
+      <div
+        className={`mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+          highlight ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+        }`}
+      >
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide leading-tight">
+          {label}
+        </p>
+        <p className="text-sm font-semibold text-foreground mt-0.5 leading-snug">
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Markdown Renderer ───────────────────────────────────────────────────────
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <div className="overflow-x-auto">
+      <div className="prose prose-sm max-w-none dark:prose-invert
+        prose-headings:text-foreground prose-headings:font-semibold
+        prose-p:text-muted-foreground prose-p:leading-relaxed
+        prose-strong:text-foreground
+        prose-li:text-muted-foreground prose-ul:my-2 prose-ol:my-2
+        prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+        prose-h2:text-base prose-h3:text-sm prose-h2:mt-4 prose-h3:mt-3
+        prose-table:text-sm prose-table:w-full
+        prose-th:bg-primary/8 prose-th:text-foreground prose-th:font-semibold
+        prose-th:px-3 prose-th:py-2.5 prose-th:text-left prose-th:border prose-th:border-border
+        prose-td:px-3 prose-td:py-2 prose-td:border prose-td:border-border prose-td:text-muted-foreground
+        prose-table:border prose-table:border-border prose-table:rounded-lg prose-table:overflow-hidden
+        [&_table]:border-collapse [&_table]:w-full
+        [&_tbody_tr:nth-child(even)_td]:bg-muted/30
+        [&_tbody_tr:hover_td]:bg-primary/5 [&_tbody_tr:hover_td]:transition-colors">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {content}
+        </ReactMarkdown>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 export default function CountryGuide() {
   const { t, locale } = useI18n();
   const [countryCode, setCountryCode] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeChapterId, setActiveChapterId] = useState<number | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const { data: countries } = portalTrpc.toolkit.listCountries.useQuery();
@@ -121,10 +217,11 @@ export default function CountryGuide() {
     return map;
   }, [chapters]);
 
-  // Get current country info
+  // Get current country info (from countriesWithGuides for richer data)
   const currentCountry = useMemo(() => {
-    return countries?.find((c) => c.countryCode === countryCode);
-  }, [countries, countryCode]);
+    return countriesWithGuides?.find((c) => c.countryCode === countryCode)
+      ?? countries?.find((c) => c.countryCode === countryCode);
+  }, [countries, countriesWithGuides, countryCode]);
 
   // Filter countries for selector
   const filteredCountries = useMemo(() => {
@@ -154,14 +251,40 @@ export default function CountryGuide() {
     contentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // PDF Download handler
+  const handleDownloadPdf = async () => {
+    if (!countryCode || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const response = await fetch(
+        `/api/portal-country-guide/${countryCode}/pdf`,
+        { credentials: "include" }
+      );
+      if (!response.ok) throw new Error("Download failed");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `country-guide-${countryCode}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("PDF download error:", err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const partLabels = locale === "zh" ? partLabelsZh : partLabelsEn;
 
   return (
     <PortalLayout title={t("nav.countryGuide")}>
       <div className="h-[calc(100vh-3.5rem)] flex flex-col">
-        {/* Hero Header */}
+        {/* ── Hero Header ─────────────────────────────────────────── */}
         <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b px-6 py-5 flex-shrink-0">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
                 <BookOpen className="h-6 w-6 text-primary" />
@@ -173,63 +296,128 @@ export default function CountryGuide() {
                   : "Comprehensive guides for global expansion covering hiring, compensation, compliance and more"}
               </p>
             </div>
-            <div className="w-[240px]">
-              <Select value={countryCode} onValueChange={setCountryCode}>
-                <SelectTrigger className="bg-white/80 backdrop-blur-sm">
-                  <SelectValue
-                    placeholder={
-                      locale === "zh" ? "选择国家" : "Select country"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <div className="px-2 pb-2">
-                    <Input
-                      placeholder={locale === "zh" ? "搜索国家..." : "Search..."}
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="h-8"
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* PDF Download Button */}
+              {countryCode && chapters && chapters.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadPdf}
+                  disabled={isDownloading}
+                  className="gap-1.5 text-xs"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {isDownloading
+                    ? locale === "zh" ? "生成中..." : "Generating..."
+                    : locale === "zh" ? "下载 PDF" : "Download PDF"}
+                </Button>
+              )}
+
+              {/* Hire CTA Button */}
+              {countryCode && (
+                <Button
+                  size="sm"
+                  className="gap-1.5 text-xs font-semibold"
+                  onClick={() => {
+                    window.location.href = portalPath("/onboarding");
+                  }}
+                >
+                  <UserCheck className="h-3.5 w-3.5" />
+                  {locale === "zh"
+                    ? `在${currentCountry?.countryName ?? "此国家"}雇佣`
+                    : `Hire in ${currentCountry?.countryName ?? "this country"}`}
+                  <ExternalLink className="h-3 w-3 opacity-70" />
+                </Button>
+              )}
+
+              {/* Country Selector */}
+              <div className="w-[220px]">
+                <Select value={countryCode} onValueChange={setCountryCode}>
+                  <SelectTrigger className="bg-white/80 backdrop-blur-sm h-8 text-xs">
+                    <SelectValue
+                      placeholder={
+                        locale === "zh" ? "选择国家" : "Select country"
+                      }
                     />
-                  </div>
-                  {filteredCountries?.map((c) => (
-                    <SelectItem key={c.countryCode} value={c.countryCode}>
-                      <span className="flex items-center gap-2">
-                        <span className="font-medium">{c.countryName}</span>
-                        <span className="text-xs text-muted-foreground">
-                          ({c.countryCode})
+                  </SelectTrigger>
+                  <SelectContent>
+                    <div className="px-2 pb-2">
+                      <Input
+                        placeholder={locale === "zh" ? "搜索国家..." : "Search..."}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="h-8"
+                      />
+                    </div>
+                    {filteredCountries?.map((c) => (
+                      <SelectItem key={c.countryCode} value={c.countryCode}>
+                        <span className="flex items-center gap-2">
+                          <span className="font-medium">{c.countryName}</span>
+                          <span className="text-xs text-muted-foreground">
+                            ({c.countryCode})
+                          </span>
                         </span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
-          {/* Country Quick Info */}
+          {/* ── At-a-Glance Quick Facts ──────────────────────────── */}
           {currentCountry && chapters && chapters.length > 0 && (
-            <div className="flex items-center gap-6 mt-4 text-sm">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  {locale === "zh" ? "货币" : "Currency"}:
-                </span>
-                <span className="font-medium">
-                  {currentCountry.localCurrency}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  {locale === "zh" ? "章节" : "Chapters"}:
-                </span>
-                <span className="font-medium">{chapters.length}</span>
-              </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-5">
+              <QuickFactCard
+                icon={Coins}
+                label={locale === "zh" ? "当地货币" : "Local Currency"}
+                value={currentCountry.localCurrency ?? "—"}
+                highlight
+              />
+              <QuickFactCard
+                icon={Timer}
+                label={locale === "zh" ? "发薪周期" : "Payroll Cycle"}
+                value={
+                  currentCountry.payrollCycle
+                    ? (locale === "zh"
+                        ? payrollCycleLabels[currentCountry.payrollCycle]?.zh
+                        : payrollCycleLabels[currentCountry.payrollCycle]?.en) ?? currentCountry.payrollCycle
+                    : "—"
+                }
+              />
+              <QuickFactCard
+                icon={Calendar}
+                label={locale === "zh" ? "法定年假（天）" : "Statutory Annual Leave"}
+                value={
+                  currentCountry.statutoryAnnualLeave != null
+                    ? `${currentCountry.statutoryAnnualLeave} ${locale === "zh" ? "天" : "days"}`
+                    : "—"
+                }
+              />
+              <QuickFactCard
+                icon={AlertCircle}
+                label={locale === "zh" ? "通知期（天）" : "Notice Period"}
+                value={
+                  currentCountry.noticePeriodDays != null
+                    ? `${currentCountry.noticePeriodDays} ${locale === "zh" ? "天" : "days"}`
+                    : "—"
+                }
+              />
+              <QuickFactCard
+                icon={Users}
+                label={locale === "zh" ? "每周工作日" : "Working Days / Week"}
+                value={
+                  currentCountry.workingDaysPerWeek != null
+                    ? `${currentCountry.workingDaysPerWeek} ${locale === "zh" ? "天" : "days"}`
+                    : "—"
+                }
+              />
             </div>
           )}
         </div>
 
-        {/* Main Content Area */}
+        {/* ── Main Content Area ────────────────────────────────────── */}
         {!countryCode ? (
           /* Country Selection Grid */
           <div className="flex-1 overflow-y-auto p-6">
@@ -256,7 +444,7 @@ export default function CountryGuide() {
         ) : (
           /* Guide Content */
           <div className="flex-1 min-h-0 flex">
-            {/* Sidebar Navigation */}
+            {/* ── Sidebar Navigation ─────────────────────────────── */}
             <div className="w-64 border-r bg-muted/30 flex-shrink-0 overflow-y-auto p-4">
               <nav className="space-y-4">
                 {Array.from(chaptersByPart.entries())
@@ -296,7 +484,7 @@ export default function CountryGuide() {
               </nav>
             </div>
 
-            {/* Content Area */}
+            {/* ── Content Area ───────────────────────────────────── */}
             <div
               ref={contentRef}
               className="flex-1 overflow-y-auto relative"
@@ -309,14 +497,21 @@ export default function CountryGuide() {
                 <div className="max-w-4xl mx-auto px-8 py-6">
                   {/* Country Title */}
                   <div className="mb-8 pb-6 border-b">
-                    <h1 className="text-3xl font-bold text-foreground">
-                      {currentCountry?.countryName}
-                    </h1>
-                    <p className="text-muted-foreground mt-2">
-                      {locale === "zh"
-                        ? `${currentCountry?.countryName}的全面雇佣指南`
-                        : `Comprehensive employment guide for ${currentCountry?.countryName}`}
-                    </p>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h1 className="text-3xl font-bold text-foreground">
+                          {currentCountry?.countryName}
+                        </h1>
+                        <p className="text-muted-foreground mt-2">
+                          {locale === "zh"
+                            ? `${currentCountry?.countryName}的全面雇佣指南`
+                            : `Comprehensive employment guide for ${currentCountry?.countryName}`}
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="flex-shrink-0 mt-1">
+                        {chapters.length} {locale === "zh" ? "章节" : "chapters"}
+                      </Badge>
+                    </div>
                   </div>
 
                   {/* Chapters */}
@@ -337,31 +532,112 @@ export default function CountryGuide() {
                           <div className="flex-1 h-px bg-border" />
                         </div>
 
-                        {partChapters.map((chapter: any) => (
-                          <div
-                            key={chapter.id}
-                            data-chapter-id={chapter.id}
-                            className="mb-8 scroll-mt-6"
-                          >
-                            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-                              <ChevronRight className="h-4 w-4 text-primary" />
-                              {locale === "zh"
-                                ? chapter.titleZh
-                                : chapter.titleEn}
-                            </h3>
-                            <div className="overflow-x-auto">
-                              <div className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-headings:font-semibold prose-p:text-muted-foreground prose-p:leading-relaxed prose-strong:text-foreground prose-table:text-sm prose-th:bg-muted/50 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2 prose-th:text-left prose-table:border prose-th:border prose-td:border prose-li:text-muted-foreground prose-ul:my-2 prose-ol:my-2 prose-a:text-primary prose-h2:text-base prose-h3:text-sm prose-h2:mt-4 prose-h3:mt-3">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                  {locale === "zh"
-                                    ? chapter.contentZh
-                                    : chapter.contentEn}
-                                </ReactMarkdown>
-                              </div>
+                        {/* Chapters within this part */}
+                        {partChapters.map((chapter: any) => {
+                          const useAccordion = ACCORDION_CHAPTER_KEYS.has(chapter.chapterKey);
+                          const content = locale === "zh"
+                            ? chapter.contentZh
+                            : chapter.contentEn;
+
+                          return (
+                            <div
+                              key={chapter.id}
+                              data-chapter-id={chapter.id}
+                              className="mb-8 scroll-mt-6"
+                            >
+                              {useAccordion ? (
+                                /* ── Accordion layout for long chapters ── */
+                                <div className="border rounded-xl overflow-hidden bg-card shadow-sm">
+                                  <div className="flex items-center gap-2 px-5 py-4 bg-muted/40 border-b">
+                                    <ChevronRight className="h-4 w-4 text-primary" />
+                                    <h3 className="text-base font-semibold text-foreground">
+                                      {locale === "zh"
+                                        ? chapter.titleZh
+                                        : chapter.titleEn}
+                                    </h3>
+                                  </div>
+                                  <Accordion
+                                    type="multiple"
+                                    className="px-5"
+                                  >
+                                    {/* Parse markdown h3 sections as accordion items */}
+                                    {parseAccordionSections(content).map(
+                                      (section, idx) => (
+                                        <AccordionItem
+                                          key={idx}
+                                          value={`section-${chapter.id}-${idx}`}
+                                        >
+                                          <AccordionTrigger className="text-sm font-medium text-foreground hover:no-underline hover:text-primary">
+                                            {section.title}
+                                          </AccordionTrigger>
+                                          <AccordionContent>
+                                            <MarkdownContent content={section.content} />
+                                          </AccordionContent>
+                                        </AccordionItem>
+                                      )
+                                    )}
+                                  </Accordion>
+                                </div>
+                              ) : (
+                                /* ── Standard layout for regular chapters ── */
+                                <div className="border rounded-xl overflow-hidden bg-card shadow-sm">
+                                  <div className="flex items-center gap-2 px-5 py-4 bg-muted/40 border-b">
+                                    <ChevronRight className="h-4 w-4 text-primary" />
+                                    <h3 className="text-base font-semibold text-foreground">
+                                      {locale === "zh"
+                                        ? chapter.titleZh
+                                        : chapter.titleEn}
+                                    </h3>
+                                  </div>
+                                  <div className="px-5 py-5">
+                                    <MarkdownContent content={content} />
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     ))}
+
+                  {/* ── CTA Banner ──────────────────────────────── */}
+                  <div className="mb-8 rounded-xl border border-primary/20 bg-primary/5 p-6 flex items-center justify-between gap-4">
+                    <div>
+                      <h3 className="font-semibold text-foreground text-base">
+                        {locale === "zh"
+                          ? `准备好在${currentCountry?.countryName}雇佣了吗？`
+                          : `Ready to hire in ${currentCountry?.countryName}?`}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {locale === "zh"
+                          ? "我们的团队将全程协助您完成合规雇佣流程。"
+                          : "Our team will guide you through every step of the compliant hiring process."}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleDownloadPdf}
+                        disabled={isDownloading}
+                        className="gap-1.5"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        {locale === "zh" ? "下载指南" : "Download Guide"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="gap-1.5 font-semibold"
+                        onClick={() => {
+                          window.location.href = portalPath("/onboarding");
+                        }}
+                      >
+                        <UserCheck className="h-3.5 w-3.5" />
+                        {locale === "zh" ? "开始雇佣" : "Start Hiring"}
+                        <ExternalLink className="h-3 w-3 opacity-70" />
+                      </Button>
+                    </div>
+                  </div>
 
                   {/* Footer */}
                   <div className="border-t pt-6 pb-12 text-center text-xs text-muted-foreground">
@@ -403,4 +679,46 @@ export default function CountryGuide() {
       </div>
     </PortalLayout>
   );
+}
+
+// ─── Helper: Parse Markdown into Accordion Sections ─────────────────────────
+/**
+ * Splits a Markdown string into sections based on h3 (###) headings.
+ * If no h3 headings are found, returns the entire content as one section
+ * using the chapter title as the section title.
+ */
+function parseAccordionSections(
+  markdown: string
+): { title: string; content: string }[] {
+  const lines = markdown.split("\n");
+  const sections: { title: string; content: string }[] = [];
+  let currentTitle = "";
+  let currentLines: string[] = [];
+  let foundH3 = false;
+
+  for (const line of lines) {
+    const h3Match = line.match(/^###\s+(.+)/);
+    if (h3Match) {
+      foundH3 = true;
+      if (currentTitle) {
+        sections.push({ title: currentTitle, content: currentLines.join("\n").trim() });
+      }
+      currentTitle = h3Match[1].trim();
+      currentLines = [];
+    } else {
+      currentLines.push(line);
+    }
+  }
+
+  // Push last section
+  if (currentTitle) {
+    sections.push({ title: currentTitle, content: currentLines.join("\n").trim() });
+  }
+
+  // Fallback: no h3 headings — return whole content as one section
+  if (!foundH3) {
+    return [{ title: "Details", content: markdown.trim() }];
+  }
+
+  return sections.filter((s) => s.content.length > 0 || s.title);
 }
