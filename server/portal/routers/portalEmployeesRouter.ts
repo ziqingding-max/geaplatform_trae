@@ -713,7 +713,7 @@ export const portalEmployeesRouter = portalRouter({
           status: "pending_review",
         });
 
-        const employeeId = (result as any)[0]?.insertId;
+        const employeeId = (result as any)[0]?.id;
 
         // Update the invite
         await db
