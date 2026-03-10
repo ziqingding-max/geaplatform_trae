@@ -39,6 +39,17 @@ export function DatePicker({
 }: DatePickerProps) {
   const [open, setOpen] = React.useState(false);
 
+  // Sync internal state when external value changes
+  React.useEffect(() => {
+    if (value) {
+      const d = parse(value, "yyyy-MM-dd", new Date());
+      if (isValid(d)) {
+        // Only update if parsed date is different from current selection to avoid loops?
+        // Actually, just updating state is fine, Calendar handles it.
+      }
+    }
+  }, [value]);
+
   // Parse value to Date for Calendar
   const selectedDate = React.useMemo(() => {
     if (!value) return undefined;
@@ -68,7 +79,15 @@ export function DatePicker({
   };
 
   // Default month to show: selected date, or today
-  const defaultMonth = selectedDate || new Date();
+  // We maintain an internal state for the calendar's current month view
+  // When 'value' changes externally, we update this state to jump the calendar to the new date
+  const [currentMonth, setCurrentMonth] = React.useState<Date>(selectedDate || new Date());
+
+  React.useEffect(() => {
+    if (selectedDate) {
+      setCurrentMonth(selectedDate);
+    }
+  }, [selectedDate]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -91,7 +110,8 @@ export function DatePicker({
           mode="single"
           selected={selectedDate}
           onSelect={handleSelect}
-          defaultMonth={defaultMonth}
+          month={currentMonth}
+          onMonthChange={setCurrentMonth}
           captionLayout="dropdown"
           fromYear={1940}
           toYear={2035}
