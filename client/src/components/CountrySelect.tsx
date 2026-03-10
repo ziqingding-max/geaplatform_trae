@@ -78,6 +78,7 @@ const ALL_COUNTRIES = [
   { code: "LY", name: "Libya" },
   { code: "LT", name: "Lithuania" },
   { code: "LU", name: "Luxembourg" },
+  { code: "MO", name: "Macau, China" },
   { code: "MY", name: "Malaysia" },
   { code: "MV", name: "Maldives" },
   { code: "MT", name: "Malta" },

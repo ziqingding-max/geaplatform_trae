@@ -146,14 +146,15 @@ export function formatCurrencyCompact(value: string | number | null | undefined)
 
 const COUNTRY_NAMES: Record<string, string> = {
   AU: "Australia", BR: "Brazil", CA: "Canada", CN: "China", DE: "Germany",
-  FR: "France", GB: "United Kingdom", HK: "Hong Kong", ID: "Indonesia",
+  FR: "France", GB: "United Kingdom", HK: "Hong Kong, China", ID: "Indonesia",
   IN: "India", JP: "Japan", KR: "South Korea", MY: "Malaysia", NL: "Netherlands",
   PH: "Philippines", SG: "Singapore", TH: "Thailand", US: "United States",
-  VN: "Vietnam", TW: "Taiwan", AE: "UAE", SA: "Saudi Arabia", IT: "Italy",
+  VN: "Vietnam", TW: "Taiwan, China", AE: "UAE", SA: "Saudi Arabia", IT: "Italy",
   ES: "Spain", PT: "Portugal", SE: "Sweden", NO: "Norway", DK: "Denmark",
   FI: "Finland", IE: "Ireland", CH: "Switzerland", AT: "Austria", BE: "Belgium",
   PL: "Poland", CZ: "Czech Republic", NZ: "New Zealand", MX: "Mexico",
   AR: "Argentina", CL: "Chile", CO: "Colombia", PE: "Peru",
+  MO: "Macau, China",
 };
 
 /**
