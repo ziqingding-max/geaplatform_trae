@@ -407,8 +407,28 @@ export async function deleteReimbursement(id: number) {
 }
 
 // CREDIT NOTES & APPLICATIONS
-// Deprecated: Credit notes are now processed via Wallet transactions only.
-// The concept of "applying" credit to specific invoices is removed.
+export async function applyCreditNote(data: InsertCreditNoteApplication) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(creditNoteApplications).values(data);
+}
+
+export async function listCreditNoteApplications() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(creditNoteApplications);
+}
+
+export async function listApplicationsForInvoice(invoiceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(creditNoteApplications).where(eq(creditNoteApplications.appliedToInvoiceId, invoiceId));
+}
+
+export async function getCreditNoteRemainingBalance(creditNoteId: number) {
+  // Logic to calculate remaining balance
+  return null;
+}
 
 export async function hasDepositBeenProcessed(depositInvoiceId: number) {
   return { processed: false };

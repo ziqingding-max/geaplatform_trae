@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-import { useLocation } from "wouter";
 import Layout from "@/components/Layout";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
@@ -16,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, AlertCircle, Building2, Wallet, Landmark, Eye, Clock, CheckCircle2, Download, ExternalLink } from "lucide-react";
+import { CheckCircle, XCircle, AlertCircle, Building2, Wallet, Landmark, Eye, Clock, CheckCircle2 } from "lucide-react";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -24,7 +23,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default function ReleaseTasks() {
   const { t } = useI18n();
-  const [, setLocation] = useLocation();
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [disposition, setDisposition] = useState<"to_wallet" | "to_bank">("to_wallet");
@@ -126,14 +124,7 @@ export default function ReleaseTasks() {
                     ) : allTasks.length > 0 ? (
                       allTasks.map((cn: any) => (
                         <TableRow key={cn.id}>
-                          <TableCell className="pl-6">
-                            <div className="font-medium font-mono">{cn.invoiceNumber}</div>
-                            {cn.relatedInvoiceId && (
-                              <div className="text-xs text-muted-foreground flex items-center gap-1 cursor-pointer hover:text-primary mt-0.5" onClick={() => setLocation(`/invoices/${cn.relatedInvoiceId}`)}>
-                                <ExternalLink className="w-3 h-3" /> Orig. #{cn.relatedInvoiceId}
-                              </div>
-                            )}
-                          </TableCell>
+                          <TableCell className="pl-6 font-medium font-mono">{cn.invoiceNumber}</TableCell>
                           <TableCell>
                             <Badge variant="outline" className={cn.invoiceType === 'deposit_refund' ? 'text-amber-700 border-amber-200 bg-amber-50' : 'text-purple-700 border-purple-200 bg-purple-50'}>
                               {cn.invoiceType === 'deposit_refund' ? 'Deposit Refund' : 'Credit Note'}
@@ -165,11 +156,8 @@ export default function ReleaseTasks() {
                                   Review
                                 </Button>
                               )}
-                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="View Details" onClick={() => setLocation(`/invoices/${cn.id}`)}>
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => window.open(`/api/invoices/${cn.id}/pdf`, '_blank')}>
                                 <Eye className="w-4 h-4" />
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" title="Download PDF" onClick={() => window.open(`/api/invoices/${cn.id}/pdf`, '_blank')}>
-                                <Download className="w-4 h-4" />
                               </Button>
                             </div>
                           </TableCell>

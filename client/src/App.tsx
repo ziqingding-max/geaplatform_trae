@@ -298,7 +298,7 @@ function App() {
         <TooltipProvider>
           <Toaster position="top-right" richColors closeButton expand visibleToasts={8} gap={8} />
           <Router />
-          {/* <CopilotDrawer /> */}
+          <CopilotDrawer />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

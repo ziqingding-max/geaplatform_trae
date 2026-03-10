@@ -21,7 +21,7 @@ import {
   Clock, Receipt, Info, Eye, Edit, Save, Plus, Trash2,
   Building2, User, DollarSign, TrendingUp, TrendingDown,
   AlertTriangle, CheckCircle2, Send, XCircle, Ban,
-  RefreshCw, ExternalLink,
+  RefreshCw, ExternalLink, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatDate, formatAmount, formatMonth } from "@/lib/format";
@@ -156,7 +156,7 @@ export default function InvoiceDetail() {
     { enabled: !!invoiceId }
   );
 
-  const activeCreditNotes = (Array.isArray(relatedInvoices) ? relatedInvoices : [])?.filter((inv: any) => 
+  const activeCreditNotes = (relatedInvoices as any[])?.filter(inv => 
     (inv.invoiceType === 'credit_note' || inv.invoiceType === 'deposit_refund') && 
     inv.status !== 'cancelled'
   ) || [];
@@ -301,15 +301,14 @@ export default function InvoiceDetail() {
   const bankDetails = parseBankDetails(billingEntity?.bankDetails);
 
   const walletApplied = parseFloat(invoice.walletAppliedAmount?.toString() || "0");
-  // creditApplied concept is removed
+  const creditApplied = parseFloat(invoice.creditApplied?.toString() || "0");
   const totalNum = parseFloat(invoice.total?.toString() || "0");
   const paidNum = parseFloat(invoice.paidAmount?.toString() || "0");
-  
-  // Calculate effectiveAmountDue:
-  // When wallet applied, use invoice.amountDue (which reflects deductions);
+  // Calculate effectiveAmountDue consistent with backend logic:
+  // When wallet/credit applied, use invoice.amountDue (which reflects deductions);
   // Otherwise, use totalNum (the full invoice total) as the baseline.
-  const amountDueNum = walletApplied > 0
-    ? parseFloat(invoice.amountDue?.toString() || (totalNum - walletApplied).toFixed(2))
+  const amountDueNum = (walletApplied > 0 || creditApplied > 0)
+    ? parseFloat(invoice.amountDue?.toString() || (totalNum - creditApplied - walletApplied).toFixed(2))
     : totalNum;
 
   // ── Handlers ──
@@ -434,7 +433,7 @@ export default function InvoiceDetail() {
               value={`${invoice.currency || "USD"} ${fmtAmt(invoice.paidAmount)}`}
               className="border-emerald-200 bg-emerald-50/50"
             />
-          ) : (walletApplied > 0) ? (
+          ) : (walletApplied > 0 || creditApplied > 0) ? (
             <SummaryCard
               label="Amount Due"
               value={`${invoice.currency || "USD"} ${fmtAmt(amountDueNum)}`}
@@ -481,7 +480,7 @@ export default function InvoiceDetail() {
                   <InfoRow icon={<CalendarDays className="w-3.5 h-3.5" />} label="Sent Date" value={invoice.sentDate ? formatDate(invoice.sentDate) : "—"} />
                   {isPaid && <InfoRow icon={<CheckCircle2 className="w-3.5 h-3.5" />} label="Paid Date" value={invoice.paidDate ? formatDate(invoice.paidDate) : "—"} />}
                   {invoice.exchangeRate && invoice.exchangeRate !== "1" && (
-                    <InfoRow icon={<TrendingUp className="w-3.5 h-3.5" />} label="Exchange Rate" value={`${parseFloat(invoice.exchangeRateWithMarkup || invoice.exchangeRate || "1").toFixed(6)} (with markup)`} />
+                    <InfoRow icon={<TrendingUp className="w-3.5 h-3.5" />} label="Exchange Rate" value={`${invoice.exchangeRateWithMarkup || invoice.exchangeRate} (with markup)`} />
                   )}
                 </div>
               </CardContent>
@@ -628,7 +627,7 @@ export default function InvoiceDetail() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <ExternalLink className="w-4 h-4 text-muted-foreground" /> Related Invoices
+                    <Link2 className="w-4 h-4 text-muted-foreground" /> Related Invoices
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -688,12 +687,18 @@ export default function InvoiceDetail() {
                   <span>Total</span>
                   <span className="font-mono">{invoice.currency} {fmtAmt(invoice.total)}</span>
                 </div>
-                {(walletApplied > 0) && (
+                {(walletApplied > 0 || creditApplied > 0) && (
                   <>
                     {walletApplied > 0 && (
                       <div className="flex justify-between text-sm text-blue-600">
                         <span>Wallet Applied</span>
                         <span className="font-mono">- {fmtAmt(walletApplied)}</span>
+                      </div>
+                    )}
+                    {creditApplied > 0 && (
+                      <div className="flex justify-between text-sm text-purple-600">
+                        <span>Credit Applied</span>
+                        <span className="font-mono">- {fmtAmt(creditApplied)}</span>
                       </div>
                     )}
                     <Separator />
@@ -855,12 +860,18 @@ export default function InvoiceDetail() {
                   <span>Total Due</span>
                   <span className="font-mono">{invoice.currency} {fmtAmt(invoice.total)}</span>
                 </div>
-                {(walletApplied > 0) && (
+                {(walletApplied > 0 || creditApplied > 0) && (
                   <>
                     {walletApplied > 0 && (
                       <div className="flex justify-between text-sm text-blue-600">
                         <span>Less: Wallet</span>
                         <span className="font-mono">- {fmtAmt(walletApplied)}</span>
+                      </div>
+                    )}
+                    {creditApplied > 0 && (
+                      <div className="flex justify-between text-sm text-purple-600">
+                        <span>Less: Credit</span>
+                        <span className="font-mono">- {fmtAmt(creditApplied)}</span>
                       </div>
                     )}
                     <Separator />

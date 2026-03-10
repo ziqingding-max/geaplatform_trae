@@ -313,6 +313,78 @@ export const portalInvoicesRouter = portalRouter({
         .from(invoiceItems)
         .where(eq(invoiceItems.invoiceId, input.id));
 
+      // ── Credit Applications TO this invoice (which CNs were applied here) ──
+      const creditApplicationsToThis = await db
+        .select({
+          id: creditNoteApplications.id,
+          creditNoteId: creditNoteApplications.creditNoteId,
+          appliedAmount: creditNoteApplications.appliedAmount,
+          notes: creditNoteApplications.notes,
+          appliedAt: creditNoteApplications.appliedAt,
+        })
+        .from(creditNoteApplications)
+        .where(eq(creditNoteApplications.appliedToInvoiceId, input.id));
+
+      // Get credit note invoice numbers for display
+      let creditNoteDetails: any[] = [];
+      if (creditApplicationsToThis.length > 0) {
+        const cnIds = creditApplicationsToThis.map(ca => ca.creditNoteId);
+        creditNoteDetails = await db
+          .select({
+            id: invoices.id,
+            invoiceNumber: invoices.invoiceNumber,
+            total: invoices.total,
+            status: invoices.status,
+          })
+          .from(invoices)
+          .where(
+            and(
+              inArray(invoices.id, cnIds),
+              eq(invoices.customerId, cid)
+            )
+          );
+      }
+
+      // ── Credit Applications FROM this invoice (if this is a credit note, where was it applied) ──
+      let creditApplicationsFromThis: any[] = [];
+      if (invoice.invoiceType === "credit_note") {
+        const apps = await db
+          .select({
+            id: creditNoteApplications.id,
+            appliedToInvoiceId: creditNoteApplications.appliedToInvoiceId,
+            appliedAmount: creditNoteApplications.appliedAmount,
+            notes: creditNoteApplications.notes,
+            appliedAt: creditNoteApplications.appliedAt,
+          })
+          .from(creditNoteApplications)
+          .where(eq(creditNoteApplications.creditNoteId, input.id));
+
+        if (apps.length > 0) {
+          const appliedToIds = apps.map(a => a.appliedToInvoiceId);
+          const appliedToInvoices = await db
+            .select({
+              id: invoices.id,
+              invoiceNumber: invoices.invoiceNumber,
+              invoiceType: invoices.invoiceType,
+              total: invoices.total,
+              status: invoices.status,
+            })
+            .from(invoices)
+            .where(
+              and(
+                inArray(invoices.id, appliedToIds),
+                eq(invoices.customerId, cid)
+              )
+            );
+
+          creditApplicationsFromThis = apps.map(a => ({
+            ...a,
+            invoiceNumber: appliedToInvoices.find(inv => inv.id === a.appliedToInvoiceId)?.invoiceNumber || `INV-${a.appliedToInvoiceId}`,
+            invoiceType: appliedToInvoices.find(inv => inv.id === a.appliedToInvoiceId)?.invoiceType || "unknown",
+          }));
+        }
+      }
+
       // ── Related Documents (bidirectional via relatedInvoiceId) ──
       // 1. Documents that point to this invoice (children)
       const childDocuments = await db
@@ -354,6 +426,25 @@ export const portalInvoicesRouter = portalRouter({
         parentDocument = parent || null;
       }
 
+      // ── Credit Note Balance ──
+      let creditNoteBalance: { original: number; applied: number; remaining: number } | null = null;
+      if (invoice.invoiceType === "credit_note") {
+        const [totalAppliedResult] = await db
+          .select({
+            total: sql<string>`COALESCE(SUM(${creditNoteApplications.appliedAmount}), 0)`,
+          })
+          .from(creditNoteApplications)
+          .where(eq(creditNoteApplications.creditNoteId, input.id));
+
+        const original = Math.abs(Number(invoice.total));
+        const applied = Number(totalAppliedResult?.total || 0);
+        creditNoteBalance = {
+          original,
+          applied,
+          remaining: Math.max(0, original - applied),
+        };
+      }
+
       // ── Payment analysis ──
       const total = Number(invoice.total);
       const paidAmount = invoice.paidAmount != null ? Number(invoice.paidAmount) : 0;
@@ -376,7 +467,7 @@ export const portalInvoicesRouter = portalRouter({
       // Balance due
       let balanceDue = 0;
       if (invoice.invoiceType === "credit_note") {
-        balanceDue = 0; // Credit notes are fully settled via Wallet or Bank
+        balanceDue = creditNoteBalance?.remaining ?? 0;
       } else if (invoice.invoiceType === "deposit_refund") {
         balanceDue = 0;
       } else if (invoice.status === "paid") {
@@ -390,6 +481,16 @@ export const portalInvoicesRouter = portalRouter({
       return {
         ...invoice,
         items,
+        // Credits applied TO this invoice
+        creditApplications: creditApplicationsToThis.map(ca => ({
+          ...ca,
+          creditNoteNumber: creditNoteDetails.find(cn => cn.id === ca.creditNoteId)?.invoiceNumber || `CN-${ca.creditNoteId}`,
+          creditNoteStatus: creditNoteDetails.find(cn => cn.id === ca.creditNoteId)?.status || "unknown",
+        })),
+        // If this is a credit note: where it was applied
+        creditApplicationsFrom: creditApplicationsFromThis,
+        // Credit note balance (only for credit notes)
+        creditNoteBalance,
         // Related documents (bidirectional)
         relatedDocuments: {
           parent: parentDocument,
