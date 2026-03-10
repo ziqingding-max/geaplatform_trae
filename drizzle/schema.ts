@@ -237,10 +237,11 @@ export const customerPricing = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     customerId: integer("customerId").notNull(),
-    pricingType: text("pricingType", { enum: ["global_discount", "country_specific"] }).notNull(),
+    pricingType: text("pricingType", { enum: ["global_discount", "country_specific", "client_aor_fixed"] }).notNull(),
     // For global_discount: discount percentage (e.g. 10 = 10% off standard price)
     globalDiscountPercent: text("globalDiscountPercent"),
     // For country_specific: fixed price per employee per month
+    // For client_aor_fixed: fixed price for AOR globally (ignores countryCode)
     countryCode: text("countryCode", { length: 3 }),
     serviceType: text("serviceType", { enum: ["eor", "visa_eor"] }),
     fixedPrice: text("fixedPrice"),

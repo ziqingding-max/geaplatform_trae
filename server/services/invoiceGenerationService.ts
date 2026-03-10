@@ -409,7 +409,7 @@ async function generateAorInvoices(
         // Actually, schema expects 'amount' to be in invoice currency.
         // Let's store settlement amount in 'amount' and local in 'localAmount'
         amount: amountSettlement.toFixed(2),
-        itemType: "employment_cost", // Using generic type for contractor payment
+        itemType: "consulting_fee", // Changed from "employment_cost" to "consulting_fee" for AOR
         vatRate: "0", // No VAT on international contractor payments usually
         countryCode: contractorResult[0]?.country || undefined,
         localCurrency: currency,
@@ -626,6 +626,29 @@ async function getServiceFeeRate(
   let feeAmount = 0;
   let feeCurrency = "USD";
 
+  // 0. Check for Client Specific AOR Fixed Price (Global, ignores countryCode)
+  if (serviceType === "aor") {
+    const aorFixedPrice = await db
+      .select()
+      .from(customerPricing)
+      .where(
+        and(
+          eq(customerPricing.customerId, customerId),
+          eq(customerPricing.isActive, true),
+          eq(customerPricing.pricingType, "client_aor_fixed"),
+          eq(customerPricing.serviceType, "aor")
+        )
+      )
+      .limit(1);
+
+    if (aorFixedPrice.length > 0 && aorFixedPrice[0].fixedPrice) {
+      feeAmount = parseFloat(aorFixedPrice[0].fixedPrice);
+      feeCurrency = aorFixedPrice[0].currency || "USD";
+      // Skip country-specific and global discount checks
+      return convertFee(feeAmount, feeCurrency, settlementCurrency, warnings, db);
+    }
+  }
+
   // 1. Check for Country Specific Fixed Price
   const countryPrice = await db
     .select()
@@ -679,18 +702,28 @@ async function getServiceFeeRate(
   }
 
   // Convert to Settlement Currency
-  if (feeCurrency !== settlementCurrency && feeAmount > 0) {
-     const rateData = await getExchangeRateWithFallback(feeCurrency, settlementCurrency, new Date());
+  return convertFee(feeAmount, feeCurrency, settlementCurrency, warnings, db);
+}
+
+async function convertFee(
+  amount: number,
+  currency: string,
+  settlementCurrency: string,
+  warnings: string[],
+  db: any
+): Promise<number> {
+  if (currency !== settlementCurrency && amount > 0) {
+     const rateData = await getExchangeRateWithFallback(currency, settlementCurrency, new Date());
      if (rateData) {
        // Service fees are revenue, so we might want to use the raw rate or marked up rate?
        // Usually we use the same marked up rate as costs to ensure margin.
-       feeAmount = feeAmount * rateData.rateWithMarkup;
+       return amount * rateData.rateWithMarkup;
      } else {
-       warnings.push(`Service Fee conversion failed ${feeCurrency} -> ${settlementCurrency}. Using 1:1.`);
+       warnings.push(`Service Fee conversion failed ${currency} -> ${settlementCurrency}. Using 1:1.`);
+       return amount;
      }
   }
-
-  return feeAmount;
+  return amount;
 }
 
 /**
