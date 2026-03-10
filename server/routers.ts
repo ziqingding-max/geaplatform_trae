@@ -25,7 +25,8 @@ import { allocationsRouter } from "./routers/allocations";
 import { pdfParsingRouter } from "./routers/pdfParsing";
 import { salesRouter } from "./routers/sales";
 import { knowledgeBaseAdminRouter } from "./routers/knowledgeBaseAdmin";
-import { copilotRouter } from "./routers/copilot";
+// Copilot disabled — feature not yet ready for production
+// import { copilotRouter } from "./routers/copilot";
 import { notificationsRouter } from "./routers/notifications";
 import { calculationRouter } from "./routers/calculationRouter";
 import { quotationRouter } from "./routers/quotationRouter";
@@ -69,7 +70,7 @@ export const appRouter = router({
   pdfParsing: pdfParsingRouter,
   sales: salesRouter,
   knowledgeBaseAdmin: knowledgeBaseAdminRouter,
-  copilot: copilotRouter,
+  // copilot: copilotRouter, // Copilot disabled
   notifications: notificationsRouter,
   calculation: calculationRouter,
   quotations: quotationRouter,

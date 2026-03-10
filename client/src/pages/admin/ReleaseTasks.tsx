@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { CheckCircle, XCircle, AlertCircle, Building2, Wallet, Landmark, Eye, Clock, CheckCircle2, ExternalLink } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation } from "wouter";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -24,7 +24,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default function ReleaseTasks() {
   const { t } = useI18n();
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [disposition, setDisposition] = useState<"to_wallet" | "to_bank">("to_wallet");
@@ -158,7 +158,7 @@ export default function ReleaseTasks() {
                                   Review
                                 </Button>
                               )}
-                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => navigate(`/invoices/${cn.id}`)} title="View Details">
+                              <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setLocation(`/invoices/${cn.id}`)} title="View Details">
                                 <Eye className="w-4 h-4" />
                               </Button>
                             </div>
