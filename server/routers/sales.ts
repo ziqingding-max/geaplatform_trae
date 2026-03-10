@@ -378,12 +378,10 @@ export const salesRouter = router({
 
             for (const item of pricingMap.values()) {
               if (item.serviceType === "aor") {
-                // AOR Global Pricing
+                // AOR Global Pricing — one price per customer, no country needed
                 await createCustomerPricing({
                   customerId,
                   pricingType: "client_aor_fixed",
-                  countryCode: item.countryCode, // Store 'GLOBAL' or whatever was in quote
-                  serviceType: "aor",
                   fixedPrice: String(item.serviceFee),
                   currency: item.currency || input.settlementCurrency,
                   effectiveFrom: new Date().toISOString().split("T")[0],

@@ -635,8 +635,7 @@ async function getServiceFeeRate(
         and(
           eq(customerPricing.customerId, customerId),
           eq(customerPricing.isActive, true),
-          eq(customerPricing.pricingType, "client_aor_fixed"),
-          eq(customerPricing.serviceType, "aor")
+          eq(customerPricing.pricingType, "client_aor_fixed")
         )
       )
       .limit(1);
