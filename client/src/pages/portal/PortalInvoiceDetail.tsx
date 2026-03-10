@@ -79,6 +79,13 @@ export default function PortalInvoiceDetail() {
     { enabled: !!invoiceId }
   );
 
+  // Bug 2: Fetch wallet balance for "Pay with Wallet" feature
+  const { data: walletData } = portalTrpc.wallet.get.useQuery(
+    { currency: data?.currency || "USD" },
+    { enabled: !!data && data.balanceDue > 0 }
+  );
+  const walletBalance = walletData ? parseFloat(walletData.balance) : 0;
+
   function handleDownload() {
     window.open(`/api/portal-invoices/${invoiceId}/pdf`, "_blank");
   }
@@ -503,6 +510,40 @@ export default function PortalInvoiceDetail() {
                       <span className="text-sm font-mono tabular-nums">{formatCurrency(data.currency, paidAmt)}</span>
                     </div>
                   )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Bug 2: Pay with Wallet */}
+            {!isCreditNote && !isDepositRefund && data.balanceDue > 0 && walletBalance > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                    {t("portal_invoice_detail.wallet_payment.title")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">{t("portal_invoice_detail.wallet_payment.available_balance")}</span>
+                    <span className="text-sm font-mono tabular-nums text-emerald-600">{formatCurrency(data.currency, walletBalance)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">{t("portal_invoice_detail.wallet_payment.will_deduct")}</span>
+                    <span className="text-sm font-mono tabular-nums">
+                      {formatCurrency(data.currency, Math.min(walletBalance, data.balanceDue))}
+                    </span>
+                  </div>
+                  <Button
+                    className="w-full gap-2"
+                    variant="default"
+                    onClick={() => {
+                      // TODO: Call payWithWallet mutation when backend endpoint is ready
+                      alert(t("portal_invoice_detail.wallet_payment.coming_soon"));
+                    }}
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    {t("portal_invoice_detail.wallet_payment.pay_button")}
+                  </Button>
                 </CardContent>
               </Card>
             )}

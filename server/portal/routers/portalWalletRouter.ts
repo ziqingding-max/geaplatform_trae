@@ -2,8 +2,8 @@ import { z } from "zod";
 import { portalRouter, protectedPortalProcedure } from "../portalTrpc";
 import { walletService } from "../../services/walletService";
 import { getDb } from "../../db";
-import { walletTransactions } from "../../../drizzle/schema";
-import { eq, desc } from "drizzle-orm";
+import { walletTransactions, invoices } from "../../../drizzle/schema";
+import { eq, desc, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 export const portalWalletRouter = portalRouter({
@@ -28,11 +28,37 @@ export const portalWalletRouter = portalRouter({
 
       const wallet = await walletService.getWallet(ctx.portalUser.customerId, input.currency);
 
-      return await db.query.walletTransactions.findMany({
+      // Bug 4&5 fix: Join with invoices table to get invoiceNumber for display
+      const txs = await db.query.walletTransactions.findMany({
         where: eq(walletTransactions.walletId, wallet.id),
         orderBy: [desc(walletTransactions.createdAt)],
         limit: input.limit,
         offset: input.offset,
       });
+
+      // Enrich transactions with invoiceNumber when referenceType is "invoice"
+      const invoiceRefIds = txs
+        .filter((tx: any) => tx.referenceType === "invoice" && tx.referenceId)
+        .map((tx: any) => tx.referenceId);
+
+      let invoiceNumberMap: Record<number, string> = {};
+      if (invoiceRefIds.length > 0) {
+        const invRows = await db
+          .select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber })
+          .from(invoices)
+          .where(sql`${invoices.id} IN (${sql.join(invoiceRefIds.map((id: number) => sql`${id}`), sql`, `)})`);
+
+        for (const row of invRows) {
+          invoiceNumberMap[row.id] = row.invoiceNumber;
+        }
+      }
+
+      return txs.map((tx: any) => ({
+        ...tx,
+        // Replace internal referenceId display with human-readable invoiceNumber
+        invoiceNumber: tx.referenceType === "invoice" && tx.referenceId
+          ? invoiceNumberMap[tx.referenceId] || null
+          : null,
+      }));
     }),
 });

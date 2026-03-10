@@ -10,6 +10,7 @@ import { TRPCError } from "@trpc/server";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import {
   protectedPortalProcedure,
+  portalHrProcedure,
   portalRouter,
 } from "../portalTrpc";
 import { getDb } from "../../db";
@@ -99,7 +100,7 @@ export const portalMilestonesRouter = portalRouter({
   /**
    * Create a new milestone for a contractor
    */
-  create: protectedPortalProcedure
+  create: portalHrProcedure
     .input(
       z.object({
         contractorId: z.number(),
@@ -146,7 +147,7 @@ export const portalMilestonesRouter = portalRouter({
   /**
    * Approve a submitted milestone
    */
-  approve: protectedPortalProcedure
+  approve: portalHrProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();
@@ -198,7 +199,7 @@ export const portalMilestonesRouter = portalRouter({
   /**
    * Reject a submitted milestone
    */
-  reject: protectedPortalProcedure
+  reject: portalHrProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = getDb();

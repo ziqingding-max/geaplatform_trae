@@ -59,6 +59,7 @@ interface LeaveForm {
   endDate: string;
   days: string;
   reason: string;
+  isHalfDay: boolean; // Bug 13: half-day leave support
 }
 
 const emptyForm: LeaveForm = {
@@ -68,6 +69,7 @@ const emptyForm: LeaveForm = {
   endDate: "",
   days: "",
   reason: "",
+  isHalfDay: false,
 };
 
 // ── Milestones Sub-Tab Component ──
@@ -429,6 +431,7 @@ export default function PortalLeave() {
       endDate: form.endDate,
       days: form.days,
       reason: form.reason || undefined,
+      isHalfDay: form.isHalfDay, // Bug 13: pass half-day flag
     });
   }
 
@@ -802,6 +805,24 @@ export default function PortalLeave() {
               <Label>{t("portal_leave.table_headers.days")} <span className="text-destructive">*</span></Label>
               <Input type="number" step="0.5" value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} placeholder={t("portal_leave.create_dialog.placeholder_days")} />
               <p className="text-xs text-muted-foreground">{t("portal_leave.create_dialog.days_helper_text")}</p>
+            </div>
+            {/* Bug 13: Half-day leave option */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="isHalfDay"
+                checked={form.isHalfDay}
+                onChange={(e) => setForm((f) => ({ ...f, isHalfDay: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <Label htmlFor="isHalfDay" className="text-sm font-normal cursor-pointer">
+                {t("portal_leave.create_dialog.half_day_label")}
+              </Label>
+              {form.isHalfDay && form.days && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  ({t("portal_leave.create_dialog.actual_days")}: {(parseFloat(form.days) * 0.5).toFixed(1)})
+                </span>
+              )}
             </div>
             <div className="space-y-2">
               <Label>{t("portal_leave.table_headers.reason")}</Label>

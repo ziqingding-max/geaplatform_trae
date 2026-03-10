@@ -28,6 +28,31 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import BillingEntitiesSection from "./BillingEntities";
+
+/**
+ * Bug 15: Clipboard copy with fallback for non-HTTPS environments
+ * navigator.clipboard.writeText only works in secure contexts (HTTPS).
+ * Fallback uses a temporary textarea element.
+ */
+async function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard && window.isSecureContext) {
+    return navigator.clipboard.writeText(text);
+  }
+  // Fallback: create temporary textarea
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    document.execCommand("copy");
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
 import AuditLogsSection from "./AuditLogs";
 import CountriesContent from "@/components/pages/CountriesContent";
 import NotificationSettingsSection from "@/components/pages/NotificationSettingsSection";
@@ -649,8 +674,13 @@ function UserManagementSection() {
   const resendInviteMut = trpc.userManagement.resendInvite.useMutation({
     onSuccess: (data) => {
       refetch();
-      navigator.clipboard.writeText(data.inviteUrl);
-      toast.success("Invite link copied to clipboard");
+      // Bug 15: Use fallback clipboard copy for non-HTTPS environments
+      copyToClipboard(data.inviteUrl)
+        .then(() => toast.success("Invite link copied to clipboard"))
+        .catch(() => {
+          // Show the URL in a prompt as ultimate fallback
+          prompt("Copy this invite link:", data.inviteUrl);
+        });
     },
     onError: (err) => toast.error(err.message),
   });
@@ -918,8 +948,7 @@ function UserManagementSection() {
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        navigator.clipboard.writeText(resetPasswordResult.temporaryPassword);
-                        toast.success("Password copied to clipboard");
+                        copyToClipboard(resetPasswordResult.temporaryPassword).then(() => toast.success("Password copied to clipboard"));
                       }}
                     >
                       <Copy className="w-4 h-4" />
@@ -984,8 +1013,7 @@ function UserManagementSection() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText(inviteResult.inviteUrl);
-                    toast.success("Link copied to clipboard");
+                    copyToClipboard(inviteResult.inviteUrl).then(() => toast.success("Link copied to clipboard"));
                   }}
                 >
                   <Copy className="w-4 h-4" />

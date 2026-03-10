@@ -182,7 +182,7 @@ export class WalletService {
         direction: "debit",
         referenceId: invoiceId,
         referenceType: "invoice",
-        description: `Auto-deduction for Invoice #${invoiceId}`,
+        description: `Auto-deduction for invoice payment`,
       });
     }
 
@@ -204,7 +204,7 @@ export class WalletService {
       direction: "credit",
       referenceId: invoiceId,
       referenceType: "invoice",
-      description: `Refund for rejected/voided Invoice #${invoiceId}`,
+        description: `Refund for rejected/voided invoice`,
     });
   }
 

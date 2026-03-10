@@ -15,7 +15,7 @@ import { getDb } from "./connection";
 export async function createEmployee(data: InsertEmployee) {
   const db = await getDb();
   if (!db) return [];
-  return await db.insert(employees).values(data);
+  return await db.insert(employees).values(data).returning();
 }
 
 export async function getEmployeeById(id: number) {

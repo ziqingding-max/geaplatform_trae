@@ -138,6 +138,7 @@ export const portalLeaveRouter = portalRouter({
         endDate: z.string(),
         days: z.string(),
         reason: z.string().optional(),
+        isHalfDay: z.boolean().default(false), // Bug 13: Support half-day leave
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -155,12 +156,17 @@ export const portalLeaveRouter = portalRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
       }
 
+      // Bug 13: Calculate actual days (half if isHalfDay is true)
+      const actualDays = input.isHalfDay
+        ? (parseFloat(input.days) * 0.5).toFixed(1)
+        : input.days;
+
       const result = await db.insert(leaveRecords).values({
         employeeId: input.employeeId,
         leaveTypeId: input.leaveTypeId,
         startDate: input.startDate as any,
         endDate: input.endDate as any,
-        days: input.days,
+        days: actualDays,
         status: "submitted",
         reason: input.reason || null,
       });

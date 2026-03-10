@@ -29,6 +29,7 @@ import {
   onboardingInvites,
   customers,
 } from "../../../drizzle/schema";
+import { contractors } from "../../../drizzle/aor-schema";
 
 // Fields visible to portal users — explicitly listed to prevent data leaks
 const PORTAL_EMPLOYEE_FIELDS = {
@@ -270,7 +271,7 @@ export const portalEmployeesRouter = portalRouter({
         }
       }).catch(err => console.error("Failed to send new employee notification:", err));
 
-      return { success: true, employeeId: result[0].insertId };
+      return { success: true, employeeId: result[0]?.id };
     }),
 
   /**
@@ -644,8 +645,16 @@ export const portalEmployeesRouter = portalRouter({
       const startDate = invite.startDate || input.startDate;
 
       if (serviceType === "aor") {
+        // Bug 11: Generate contractorCode for AOR self-onboarding
+        const existingContractors = await db
+          .select({ id: contractors.id })
+          .from(contractors);
+        const nextNum = existingContractors.length + 1;
+        const contractorCode = `CTR-${String(nextNum).padStart(4, "0")}`;
+
         // AOR: Create contractor record
         const result = await createContractor({
+          contractorCode,
           customerId: invite.customerId,
           firstName: input.firstName,
           lastName: input.lastName,
@@ -713,7 +722,7 @@ export const portalEmployeesRouter = portalRouter({
           status: "pending_review",
         });
 
-        const employeeId = (result as any)[0]?.insertId;
+        const employeeId = (result as any)[0]?.id;
 
         // Update the invite
         await db

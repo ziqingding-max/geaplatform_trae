@@ -388,6 +388,60 @@ export const portalSettingsRouter = portalRouter({
     }),
 
   /**
+   * Bug 12: Initialize leave policies from statutory defaults for a country
+   */
+  initializeFromStatutory: portalAdminProcedure
+    .input(z.object({ countryCode: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const cid = ctx.portalUser.customerId;
+
+      // Check if policies already exist for this country
+      const existing = await db
+        .select({ id: customerLeavePolicies.id })
+        .from(customerLeavePolicies)
+        .where(and(
+          eq(customerLeavePolicies.customerId, cid),
+          eq(customerLeavePolicies.countryCode, input.countryCode)
+        ));
+
+      if (existing.length > 0) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Leave policies already exist for this country. Please edit them instead.",
+        });
+      }
+
+      // Get statutory leave types for this country
+      const statutoryTypes = await db
+        .select()
+        .from(leaveTypes)
+        .where(eq(leaveTypes.countryCode, input.countryCode));
+
+      if (statutoryTypes.length === 0) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "No statutory leave types found for this country.",
+        });
+      }
+
+      // Create customer leave policies from statutory defaults
+      for (const lt of statutoryTypes) {
+        await db.insert(customerLeavePolicies).values({
+          customerId: cid,
+          countryCode: input.countryCode,
+          leaveTypeId: lt.id,
+          annualEntitlement: lt.annualEntitlement || 0,
+          expiryRule: "year_end",
+          carryOverDays: 0,
+        });
+      }
+
+      return { success: true, count: statutoryTypes.length };
+    }),
+
+  /**
    * Get countries where this customer has employees (for leave policy setup)
    */
   activeCountries: protectedPortalProcedure.query(async ({ ctx }) => {
