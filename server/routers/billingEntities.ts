@@ -9,12 +9,26 @@ import {
   deleteBillingEntity,
   logAuditAction,
 } from "../db";
-import { storagePut } from "../storage";
+import { storagePut, storageGet } from "../storage";
 import { TRPCError } from "@trpc/server";
 
 export const billingEntitiesRouter = router({
   list: userProcedure.query(async () => {
-    return await listBillingEntities();
+    const entities = await listBillingEntities();
+    // Enrich with signed URLs for logos if they exist
+    return await Promise.all(entities.map(async (e: any) => {
+      if (e.logoFileKey) {
+        try {
+          const { url } = await storageGet(e.logoFileKey);
+          return { ...e, logoUrl: url };
+        } catch (err) {
+          console.warn("Failed to sign logo URL for entity", e.id, err);
+          // Fallback to stored logoUrl or null
+          return e;
+        }
+      }
+      return e;
+    }));
   }),
 
   get: userProcedure

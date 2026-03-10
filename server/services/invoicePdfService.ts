@@ -368,7 +368,7 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
       doc.fontSize(9).font("Helvetica").fillColor("#888888");
       doc.text("Exchange Rate", totalsLabelX, tableY, { width: 110 });
       doc.font("Helvetica").fillColor("#333333");
-      doc.text(`1 ${foreignCcy} = ${invoice.exchangeRateWithMarkup} ${currency}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+      doc.text(`1 ${foreignCcy} = ${parseFloat(invoice.exchangeRateWithMarkup).toFixed(6)} ${currency}`, totalsValX, tableY, { width: totalsValW, align: "right" });
       tableY += 16;
     }
 
