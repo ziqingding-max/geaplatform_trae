@@ -87,7 +87,7 @@ export default function PortalContractorDetail() {
   const deleteMutation = portalTrpc.contractors.delete.useMutation({
     onSuccess: () => {
       toast.success("Contractor deleted successfully");
-      setLocation(portalPath("/people"));
+      setLocation(portalPath("/people?tab=contractors"));
     },
     onError: (err) => {
       toast.error(err.message);
@@ -114,7 +114,7 @@ export default function PortalContractorDetail() {
         <div className="p-6 flex flex-col items-center justify-center py-20 text-muted-foreground">
           <FileText className="w-10 h-10 mb-3" />
           <p className="text-lg font-medium">{t("portal_contractor_detail.not_found")}</p>
-          <Button variant="outline" className="mt-4" onClick={() => setLocation(portalPath("/people"))}>
+          <Button variant="outline" className="mt-4" onClick={() => setLocation(portalPath("/people?tab=contractors"))}>
             <ArrowLeft className="w-4 h-4 mr-2" /> {t("portal_contractor_detail.back_to_people")}
           </Button>
         </div>
@@ -137,7 +137,7 @@ export default function PortalContractorDetail() {
       <div className="p-6 space-y-6 max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => setLocation(portalPath("/people"))}>
+          <Button variant="ghost" size="icon" onClick={() => setLocation(portalPath("/people?tab=contractors"))}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="flex-1">

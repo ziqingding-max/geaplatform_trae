@@ -146,7 +146,7 @@ export default function PortalEmployeeDetail() {
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <AlertCircle className="w-12 h-12 mb-4" />
             <p className="text-lg font-medium">{t("portal_employees.detail.notFound")}</p>
-            <Button variant="outline" className="mt-4" onClick={() => setLocation(portalPath("/employees"))}>
+            <Button variant="outline" className="mt-4" onClick={() => setLocation(portalPath("/people?tab=employees"))}>
               <ArrowLeft className="w-4 h-4 mr-2" /> Back to Employees
             </Button>
           </div>
@@ -163,7 +163,7 @@ export default function PortalEmployeeDetail() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => setLocation(portalPath("/employees"))}>
+            <Button variant="ghost" size="sm" onClick={() => setLocation(portalPath("/people?tab=employees"))}>
               <ArrowLeft className="w-4 h-4 mr-2" /> Back
             </Button>
             <div>

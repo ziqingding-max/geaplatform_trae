@@ -83,6 +83,7 @@ export function ContractorInvoicesContent() {
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
   const statusColors: Record<string, string> = {
@@ -180,7 +181,10 @@ export function ContractorInvoicesContent() {
                             </Button>
                           </>
                         )}
-                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                        <Button size="sm" variant="ghost" className="h-8 w-8 p-0"
+                          onClick={() => { setSelectedInvoice(inv); setShowDetailDialog(true); }}
+                          title="View Details"
+                        >
                           <FileText className="w-4 h-4" />
                         </Button>
                       </div>
@@ -249,6 +253,65 @@ export function ContractorInvoicesContent() {
             <Button variant="destructive" onClick={() => rejectMut.mutate({ id: selectedInvoice.id, reason: rejectReason })} disabled={!rejectReason || rejectMut.isPending}>
               {rejectMut.isPending ? "Rejecting..." : "Reject"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invoice Detail Dialog */}
+      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Invoice Details</DialogTitle>
+            <DialogDescription>
+              Details for invoice <b>{selectedInvoice?.invoiceNumber}</b>
+            </DialogDescription>
+          </DialogHeader>
+          {selectedInvoice && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground text-xs">Invoice Number</p>
+                  <p className="font-medium">{selectedInvoice.invoiceNumber}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Status</p>
+                  <Badge variant="outline" className={`text-xs ${statusColors[selectedInvoice.status] || ""}`}>
+                    {selectedInvoice.status?.replace("_", " ")}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Contractor</p>
+                  <p className="font-medium">{selectedInvoice.contractorName}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Customer</p>
+                  <p className="font-medium">{selectedInvoice.customerName}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Period</p>
+                  <p className="font-medium">{selectedInvoice.periodStart} — {selectedInvoice.periodEnd}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Amount</p>
+                  <p className="font-mono font-semibold">{formatCurrencyAmount(selectedInvoice.totalAmount, selectedInvoice.currency)}</p>
+                </div>
+              </div>
+              {selectedInvoice.description && (
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">Description</p>
+                  <p className="text-sm bg-muted/40 p-3 rounded-lg">{selectedInvoice.description}</p>
+                </div>
+              )}
+              {selectedInvoice.rejectedReason && (
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">Rejection Reason</p>
+                  <p className="text-sm bg-red-50 text-red-700 p-3 rounded-lg">{selectedInvoice.rejectedReason}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

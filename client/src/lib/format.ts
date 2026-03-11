@@ -142,54 +142,64 @@ export function formatCurrencyCompact(value: string | number | null | undefined)
 const COUNTRY_NAMES: Record<string, string> = {
   // A
   AE: "United Arab Emirates", AL: "Albania", AM: "Armenia", AR: "Argentina",
-  AT: "Austria", AU: "Australia",
+  AT: "Austria", AU: "Australia", AZ: "Azerbaijan",
   // B
   BA: "Bosnia and Herzegovina", BD: "Bangladesh", BE: "Belgium", BG: "Bulgaria",
-  BH: "Bahrain", BO: "Bolivia", BR: "Brazil", BY: "Belarus",
+  BH: "Bahrain", BN: "Brunei", BO: "Bolivia", BR: "Brazil", BY: "Belarus",
   // C
-  CA: "Canada", CH: "Switzerland", CL: "Chile", CN: "China", CO: "Colombia",
-  CR: "Costa Rica", CY: "Cyprus", CZ: "Czech Republic",
+  CA: "Canada", CH: "Switzerland", CI: "Côte d'Ivoire", CL: "Chile",
+  CM: "Cameroon", CN: "China", CO: "Colombia", CR: "Costa Rica",
+  CY: "Cyprus", CZ: "Czech Republic",
   // D
-  DE: "Germany", DK: "Denmark", DO: "Dominican Republic",
+  DE: "Germany", DK: "Denmark", DO: "Dominican Republic", DZ: "Algeria",
   // E
-  EC: "Ecuador", EE: "Estonia", EG: "Egypt", ES: "Spain",
+  EC: "Ecuador", EE: "Estonia", EG: "Egypt", ES: "Spain", ET: "Ethiopia",
   // F
-  FI: "Finland", FR: "France",
+  FI: "Finland", FJ: "Fiji", FR: "France",
   // G
   GB: "United Kingdom", GE: "Georgia", GH: "Ghana", GR: "Greece",
   GT: "Guatemala",
   // H
-  HK: "Hong Kong", HN: "Honduras", HR: "Croatia", HU: "Hungary",
+  HK: "Hong Kong, China", HN: "Honduras", HR: "Croatia", HU: "Hungary",
   // I
-  ID: "Indonesia", IE: "Ireland", IL: "Israel", IN: "India", IS: "Iceland",
-  IT: "Italy",
+  ID: "Indonesia", IE: "Ireland", IL: "Israel", IN: "India",
+  IQ: "Iraq", IR: "Iran", IS: "Iceland", IT: "Italy",
   // J
-  JM: "Jamaica", JP: "Japan",
+  JM: "Jamaica", JO: "Jordan", JP: "Japan",
   // K
-  KE: "Kenya", KR: "South Korea", KW: "Kuwait", KZ: "Kazakhstan",
+  KE: "Kenya", KH: "Cambodia", KR: "South Korea", KW: "Kuwait", KZ: "Kazakhstan",
   // L
+  LA: "Laos", LB: "Lebanon", LK: "Sri Lanka",
   LT: "Lithuania", LU: "Luxembourg", LV: "Latvia",
   // M
   MA: "Morocco", MD: "Moldova", ME: "Montenegro", MK: "North Macedonia",
-  MN: "Mongolia", MT: "Malta", MX: "Mexico", MY: "Malaysia",
+  MM: "Myanmar", MN: "Mongolia", MO: "Macau, China", MT: "Malta",
+  MU: "Mauritius", MV: "Maldives", MX: "Mexico", MY: "Malaysia",
   // N
-  NG: "Nigeria", NI: "Nicaragua", NL: "Netherlands", NO: "Norway", NZ: "New Zealand",
+  NG: "Nigeria", NI: "Nicaragua", NL: "Netherlands", NO: "Norway",
+  NP: "Nepal", NZ: "New Zealand",
+  // O
+  OM: "Oman",
   // P
   PA: "Panama", PE: "Peru", PG: "Papua New Guinea", PH: "Philippines",
   PK: "Pakistan", PL: "Poland", PR: "Puerto Rico", PT: "Portugal", PY: "Paraguay",
   // Q
   QA: "Qatar",
   // R
-  RO: "Romania", RS: "Serbia", RU: "Russia",
+  RO: "Romania", RS: "Serbia", RU: "Russia", RW: "Rwanda",
   // S
   SA: "Saudi Arabia", SE: "Sweden", SG: "Singapore", SI: "Slovenia",
-  SK: "Slovakia", SV: "El Salvador",
+  SK: "Slovakia", SN: "Senegal", SV: "El Salvador",
   // T
-  TH: "Thailand", TN: "Tunisia", TR: "Turkey", TW: "Taiwan",
+  TH: "Thailand", TL: "Timor-Leste", TN: "Tunisia", TR: "Turkey",
+  TT: "Trinidad and Tobago", TW: "Taiwan, China", TZ: "Tanzania",
   // U
-  UA: "Ukraine", US: "United States", UY: "Uruguay",
+  UA: "Ukraine", UG: "Uganda", US: "United States", UY: "Uruguay",
+  UZ: "Uzbekistan",
   // V
   VE: "Venezuela", VN: "Vietnam",
+  // X
+  XK: "Kosovo",
   // Z
   ZA: "South Africa",
 };

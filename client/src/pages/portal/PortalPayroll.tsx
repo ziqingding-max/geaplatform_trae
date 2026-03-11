@@ -51,6 +51,7 @@ import {
   Briefcase,
   ChevronRight,
   Download,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { exportToCsv } from "@/lib/csvExport";
@@ -420,6 +421,92 @@ function PayrollRunCard({
   );
 }
 
+/** Multi-currency summary card with expandable breakdown */
+function MultiCurrencyCard({
+  icon,
+  iconBg,
+  label,
+  byCurrency,
+  field,
+  isMultiCurrency,
+  singleCurrency,
+  singleValue,
+}: {
+  icon: React.ReactNode;
+  iconBg: string;
+  label: string;
+  byCurrency: Record<string, { gross: number; net: number }>;
+  field: "gross" | "net";
+  isMultiCurrency: boolean;
+  singleCurrency: string;
+  singleValue: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (!isMultiCurrency) {
+    return (
+      <Card>
+        <CardContent className="pt-5 pb-4">
+          <div className="flex items-center gap-3">
+            <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", iconBg)}>
+              {icon}
+            </div>
+            <div className="min-w-0">
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{label}</p>
+              <p className="text-lg font-bold font-mono truncate">
+                {formatCurrency(singleCurrency, singleValue)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Multi-currency: show currency count + expandable breakdown
+  const entries = Object.entries(byCurrency).sort((a, b) => b[1][field] - a[1][field]);
+  const topEntry = entries[0];
+  const currencyCount = entries.length;
+
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="pt-5 pb-4">
+        <div className="flex items-center gap-3">
+          <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center shrink-0", iconBg)}>
+            {icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{label}</p>
+            {/* Show the largest currency prominently */}
+            <p className="text-lg font-bold font-mono truncate">
+              {formatCurrency(topEntry[0], topEntry[1][field])}
+            </p>
+            {/* Toggle to show/hide other currencies */}
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+            >
+              <span>+{currencyCount - 1} more {currencyCount - 1 === 1 ? "currency" : "currencies"}</span>
+              <ChevronDown className={cn("w-3 h-3 transition-transform", expanded && "rotate-180")} />
+            </button>
+          </div>
+        </div>
+        {/* Expandable currency breakdown */}
+        {expanded && (
+          <div className="mt-3 pt-3 border-t space-y-1.5">
+            {entries.slice(1).map(([cur, val]) => (
+              <div key={cur} className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground font-medium">{cur}</span>
+                <span className="font-mono font-semibold">{formatCurrency(cur, val[field])}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /** Export CSV button that fetches employee-level detail data */
 function ExportCsvButton({ year, disabled }: { year: number; disabled: boolean }) {
   const { t, lang } = useI18n();
@@ -585,56 +672,28 @@ export default function PortalPayroll() {
         {/* Summary Cards */}
         {!isLoading && filteredRuns.length > 0 && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="pt-5 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center">
-                    <DollarSign className="w-5 h-5 text-emerald-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{t("portal_payroll.summary.total_gross")}</p>
-                    {stats.isMultiCurrency ? (
-                      <div className="space-y-0.5">
-                        {Object.entries(stats.byCurrency).map(([cur, val]) => (
-                          <p key={cur} className="text-sm font-bold font-mono truncate">
-                            {formatCurrency(cur, val.gross)}
-                          </p>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-lg font-bold font-mono truncate">
-                        {formatCurrency(stats.currency, stats.totalGross)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center">
-                    <TrendingUp className="w-5 h-5 text-blue-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{t("portal_payroll.summary.total_net")}</p>
-                    {stats.isMultiCurrency ? (
-                      <div className="space-y-0.5">
-                        {Object.entries(stats.byCurrency).map(([cur, val]) => (
-                          <p key={cur} className="text-sm font-bold font-mono truncate">
-                            {formatCurrency(cur, val.net)}
-                          </p>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-lg font-bold font-mono truncate">
-                        {formatCurrency(stats.currency, stats.totalNet)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Total Gross Card */}
+            <MultiCurrencyCard
+              icon={<DollarSign className="w-5 h-5 text-emerald-600" />}
+              iconBg="bg-emerald-50 dark:bg-emerald-950/30"
+              label={t("portal_payroll.summary.total_gross")}
+              byCurrency={stats.byCurrency}
+              field="gross"
+              isMultiCurrency={stats.isMultiCurrency}
+              singleCurrency={stats.currency}
+              singleValue={stats.totalGross}
+            />
+            {/* Total Net Card */}
+            <MultiCurrencyCard
+              icon={<TrendingUp className="w-5 h-5 text-blue-600" />}
+              iconBg="bg-blue-50 dark:bg-blue-950/30"
+              label={t("portal_payroll.summary.total_net")}
+              byCurrency={stats.byCurrency}
+              field="net"
+              isMultiCurrency={stats.isMultiCurrency}
+              singleCurrency={stats.currency}
+              singleValue={stats.totalNet}
+            />
             <Card>
               <CardContent className="pt-5 pb-4">
                 <div className="flex items-center gap-3">

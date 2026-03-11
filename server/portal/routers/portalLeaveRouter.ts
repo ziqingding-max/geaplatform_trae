@@ -370,30 +370,71 @@ export const portalLeaveRouter = portalRouter({
       // but publicHolidays.countryCode stores ISO codes (e.g. "AU").
       // We need a reverse mapping from name → code.
       const NAME_TO_CODE: Record<string, string> = {
+        // A
         "United Arab Emirates": "AE", "Albania": "AL", "Armenia": "AM", "Argentina": "AR",
-        "Austria": "AT", "Australia": "AU", "Bosnia and Herzegovina": "BA", "Bangladesh": "BD",
-        "Belgium": "BE", "Bulgaria": "BG", "Bahrain": "BH", "Bolivia": "BO", "Brazil": "BR",
-        "Belarus": "BY", "Canada": "CA", "Switzerland": "CH", "Chile": "CL", "China": "CN",
-        "Colombia": "CO", "Costa Rica": "CR", "Cyprus": "CY", "Czech Republic": "CZ",
-        "Germany": "DE", "Denmark": "DK", "Dominican Republic": "DO", "Ecuador": "EC",
-        "Estonia": "EE", "Egypt": "EG", "Spain": "ES", "Finland": "FI", "France": "FR",
+        "Austria": "AT", "Australia": "AU", "Azerbaijan": "AZ",
+        // B
+        "Bosnia and Herzegovina": "BA", "Bangladesh": "BD", "Belgium": "BE", "Bulgaria": "BG",
+        "Bahrain": "BH", "Brunei": "BN", "Bolivia": "BO", "Brazil": "BR", "Belarus": "BY",
+        // C
+        "Canada": "CA", "Switzerland": "CH", "C\u00f4te d'Ivoire": "CI", "Chile": "CL",
+        "Cameroon": "CM", "China": "CN", "Colombia": "CO", "Costa Rica": "CR",
+        "Cyprus": "CY", "Czech Republic": "CZ",
+        // D
+        "Germany": "DE", "Denmark": "DK", "Dominican Republic": "DO", "Algeria": "DZ",
+        // E
+        "Ecuador": "EC", "Estonia": "EE", "Egypt": "EG", "Spain": "ES", "Ethiopia": "ET",
+        // F
+        "Finland": "FI", "Fiji": "FJ", "France": "FR",
+        // G
         "United Kingdom": "GB", "Georgia": "GE", "Ghana": "GH", "Greece": "GR",
-        "Guatemala": "GT", "Hong Kong": "HK", "Hong Kong S.A.R.": "HK", "Honduras": "HN",
-        "Croatia": "HR", "Hungary": "HU", "Indonesia": "ID", "Ireland": "IE", "Israel": "IL",
-        "India": "IN", "Iceland": "IS", "Italy": "IT", "Jamaica": "JM", "Japan": "JP",
-        "Kenya": "KE", "South Korea": "KR", "Kuwait": "KW", "Kazakhstan": "KZ",
-        "Lithuania": "LT", "Luxembourg": "LU", "Latvia": "LV", "Morocco": "MA",
-        "Moldova": "MD", "Montenegro": "ME", "North Macedonia": "MK", "Mongolia": "MN",
-        "Malta": "MT", "Mexico": "MX", "Malaysia": "MY", "Nigeria": "NG", "Nicaragua": "NI",
-        "Netherlands": "NL", "Norway": "NO", "New Zealand": "NZ", "Panama": "PA",
-        "Peru": "PE", "Papua New Guinea": "PG", "Philippines": "PH", "Pakistan": "PK",
-        "Poland": "PL", "Puerto Rico": "PR", "Portugal": "PT", "Paraguay": "PY",
-        "Qatar": "QA", "Romania": "RO", "Serbia": "RS", "Russia": "RU",
+        "Guatemala": "GT",
+        // H
+        "Hong Kong, China": "HK", "Hong Kong": "HK", "Hong Kong S.A.R.": "HK",
+        "Honduras": "HN", "Croatia": "HR", "Hungary": "HU",
+        // I
+        "Indonesia": "ID", "Ireland": "IE", "Israel": "IL", "India": "IN",
+        "Iraq": "IQ", "Iran": "IR", "Iceland": "IS", "Italy": "IT",
+        // J
+        "Jamaica": "JM", "Jordan": "JO", "Japan": "JP",
+        // K
+        "Kenya": "KE", "Cambodia": "KH", "South Korea": "KR", "Kuwait": "KW", "Kazakhstan": "KZ",
+        // L
+        "Laos": "LA", "Lebanon": "LB", "Sri Lanka": "LK",
+        "Lithuania": "LT", "Luxembourg": "LU", "Latvia": "LV",
+        // M
+        "Morocco": "MA", "Moldova": "MD", "Montenegro": "ME", "North Macedonia": "MK",
+        "Myanmar": "MM", "Mongolia": "MN", "Macau, China": "MO", "Macau": "MO",
+        "Malta": "MT", "Mauritius": "MU", "Maldives": "MV", "Mexico": "MX", "Malaysia": "MY",
+        // N
+        "Nigeria": "NG", "Nicaragua": "NI", "Netherlands": "NL", "Norway": "NO",
+        "Nepal": "NP", "New Zealand": "NZ",
+        // O
+        "Oman": "OM",
+        // P
+        "Panama": "PA", "Peru": "PE", "Papua New Guinea": "PG", "Philippines": "PH",
+        "Pakistan": "PK", "Poland": "PL", "Puerto Rico": "PR", "Portugal": "PT", "Paraguay": "PY",
+        // Q
+        "Qatar": "QA",
+        // R
+        "Romania": "RO", "Serbia": "RS", "Russia": "RU", "Rwanda": "RW",
+        // S
         "Saudi Arabia": "SA", "Sweden": "SE", "Singapore": "SG", "Slovenia": "SI",
-        "Slovakia": "SK", "El Salvador": "SV", "Thailand": "TH", "Tunisia": "TN",
-        "Turkey": "TR", "Taiwan": "TW", "Ukraine": "UA", "United States": "US",
-        "Uruguay": "UY", "Venezuela": "VE", "Vietnam": "VN", "South Africa": "ZA",
-        "Cambodia": "KH", "UAE": "AE",
+        "Slovakia": "SK", "Senegal": "SN", "El Salvador": "SV",
+        // T
+        "Thailand": "TH", "Timor-Leste": "TL", "Tunisia": "TN", "Turkey": "TR",
+        "Trinidad and Tobago": "TT", "Taiwan, China": "TW", "Taiwan": "TW", "Tanzania": "TZ",
+        // U
+        "Ukraine": "UA", "Uganda": "UG", "United States": "US", "Uruguay": "UY",
+        "Uzbekistan": "UZ",
+        // V
+        "Venezuela": "VE", "Vietnam": "VN",
+        // X
+        "Kosovo": "XK",
+        // Z
+        "South Africa": "ZA",
+        // Common aliases
+        "UAE": "AE",
       };
 
       // Convert full names to ISO codes; if already a 2-letter code, keep as-is

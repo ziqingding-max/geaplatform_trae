@@ -6,8 +6,8 @@
  * All data scoped to the logged-in customer.
  */
 
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useState, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { Card, CardContent } from "@/components/ui/card";
@@ -391,6 +391,19 @@ function ContractorsTab() {
 // ── Main Page ──
 export default function PortalPeople() {
   const { t } = useI18n();
+  const searchString = useSearch();
+  const params = new URLSearchParams(searchString);
+  const initialTab = params.get("tab") === "contractors" ? "contractors" : "employees";
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  // Sync tab state when URL params change (e.g. browser back/forward)
+  useEffect(() => {
+    const p = new URLSearchParams(searchString);
+    const tab = p.get("tab");
+    if (tab === "contractors" || tab === "employees") {
+      setActiveTab(tab);
+    }
+  }, [searchString]);
 
   return (
     <PortalLayout title={t("portal_people.title")}>
@@ -402,7 +415,7 @@ export default function PortalPeople() {
           </p>
         </div>
 
-        <Tabs defaultValue="employees" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="employees" className="gap-1.5">
               <Users className="w-4 h-4" />

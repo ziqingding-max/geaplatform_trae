@@ -5308,7 +5308,7 @@
     "annualEntitlement": 5,
     "isPaid": true,
     "requiresApproval": true,
-    "description": "5 days (20 days for Empresa Cidadã companies)",
+    "description": "5 days (20 days for Empresa Cidad\u00e3 companies)",
     "createdAt": "2026-02-25T18:51:38.000Z",
     "updatedAt": "2026-02-25T18:51:38.000Z"
   },
@@ -8380,39 +8380,6 @@
     "description": "Leave for family bereavement",
     "createdAt": "2026-02-25T18:52:43.000Z",
     "updatedAt": "2026-02-25T18:52:43.000Z"
-  },
-  {
-    "id": 720007,
-    "countryCode": "L22",
-    "leaveTypeName": "Annual Leave",
-    "annualEntitlement": 10,
-    "isPaid": true,
-    "requiresApproval": true,
-    "description": null,
-    "createdAt": "2026-02-28T04:37:31.000Z",
-    "updatedAt": "2026-02-28T04:37:31.000Z"
-  },
-  {
-    "id": 720008,
-    "countryCode": "L22",
-    "leaveTypeName": "Sick Leave",
-    "annualEntitlement": 5,
-    "isPaid": true,
-    "requiresApproval": true,
-    "description": null,
-    "createdAt": "2026-02-28T04:37:31.000Z",
-    "updatedAt": "2026-02-28T04:37:31.000Z"
-  },
-  {
-    "id": 720009,
-    "countryCode": "L22",
-    "leaveTypeName": "Unpaid Leave",
-    "annualEntitlement": 0,
-    "isPaid": false,
-    "requiresApproval": true,
-    "description": null,
-    "createdAt": "2026-02-28T04:37:32.000Z",
-    "updatedAt": "2026-02-28T04:37:32.000Z"
   },
   {
     "id": 750001,
