@@ -248,8 +248,8 @@ export default function CountryGuideEditor() {
     <Layout
       breadcrumb={[
         "GEA",
-        t("nav.marketing"),
-        t("nav.countryGuide"),
+        "System",
+        t("nav.countryGuideAdmin"),
         country?.countryName || countryCode,
       ]}
     >

@@ -202,6 +202,36 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
     }
   });
 
+  // Admin Country Guide PDF download endpoint (uses admin session auth)
+  app.get("/api/admin-country-guide/:countryCode/pdf", async (req, res) => {
+    try {
+      const user = await authenticateAdminRequest(req);
+      if (!user) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const { countryCode } = req.params;
+      if (!countryCode || countryCode.length > 3) {
+        res.status(400).json({ error: "Invalid country code" });
+        return;
+      }
+      const locale = req.query.locale === "zh" ? "zh" : "en";
+      const pdfBuffer = await countryGuidePdfService.generatePdf(countryCode.toUpperCase(), locale);
+      if (!pdfBuffer) {
+        res.status(404).json({ error: "Country guide not found" });
+        return;
+      }
+      const langSuffix = locale === "zh" ? "-zh" : "";
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="country-guide-${countryCode}${langSuffix}.pdf"`);
+      res.setHeader("Content-Length", pdfBuffer.length.toString());
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Admin country guide PDF error:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
+    }
+  });
+
   // Portal impersonation endpoint — admin generates token, this sets cookie and redirects
   app.get("/api/portal-impersonate", async (req, res) => {
     try {

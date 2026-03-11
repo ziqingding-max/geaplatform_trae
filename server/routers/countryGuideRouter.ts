@@ -148,6 +148,40 @@ export const countryGuideRouter = router({
       return { success: true };
     }),
 
+  /** List countries that have published guides (for admin browse view) */
+  listCountriesWithGuides: protectedProcedure.query(async () => {
+    const db = getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    const countriesWithGuides = await db
+      .select({
+        countryCode: countryGuideChapters.countryCode,
+        chapterCount: sql<number>`count(*)`.as("chapterCount"),
+      })
+      .from(countryGuideChapters)
+      .where(eq(countryGuideChapters.status, "published"))
+      .groupBy(countryGuideChapters.countryCode);
+    const allCountries = await db
+      .select({
+        countryCode: countriesConfig.countryCode,
+        countryName: countriesConfig.countryName,
+        localCurrency: countriesConfig.localCurrency,
+        payrollCycle: countriesConfig.payrollCycle,
+        workingDaysPerWeek: countriesConfig.workingDaysPerWeek,
+        statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
+        noticePeriodDays: countriesConfig.noticePeriodDays,
+        probationPeriodDays: countriesConfig.probationPeriodDays,
+      })
+      .from(countriesConfig)
+      .where(eq(countriesConfig.isActive, true));
+    const guideMap = new Map(countriesWithGuides.map((c) => [c.countryCode, c.chapterCount]));
+    return allCountries
+      .filter((c) => guideMap.has(c.countryCode))
+      .map((c) => ({
+        ...c,
+        chapterCount: guideMap.get(c.countryCode) || 0,
+      }));
+  }),
+
   /** Get summary stats for the country guide list page */
   getCountryStats: protectedProcedure.query(async () => {
     const db = getDb();

@@ -85,7 +85,7 @@ function useNavGroups(user: any) {
       items: [
         { label: t("nav.crm_pipeline"), icon: Briefcase, href: "/sales-crm" },
         { label: t("nav.quotations"), icon: FileText, href: "/quotations" },
-        { label: t("nav.countryGuide"), icon: Globe, href: "/admin/knowledge/country-guides" },
+        { label: t("nav.countryGuide"), icon: Globe, href: "/admin/country-guide" },
       ].filter(() => hasRole(["admin", "sales", "customer_manager"])),
     },
     {
@@ -129,6 +129,7 @@ function useNavGroups(user: any) {
       items: [
         { label: t("nav.settings"), icon: Settings, href: "/settings", roles: ["admin"] },
         { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin", roles: ["admin"] },
+        { label: t("nav.countryGuideAdmin"), icon: Globe, href: "/admin/knowledge/country-guides", roles: ["admin"] },
       ].filter(item => !item.roles || hasRole(item.roles)),
     },
   ].filter(group => group.items.length > 0), [t, roleStr]);
