@@ -94,69 +94,162 @@ const BASE_CSS = `
 
   /* ── Cover Page ── */
   .cover {
-    background: ${BRAND.bg};
+    background: white;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     padding: 0;
     overflow: hidden;
+    position: relative;
   }
-  .cover-top-bar {
+  /* Decorative sidebar */
+  .cover-sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 18mm;
+    height: 100%;
     background: ${BRAND.primary};
-    height: 8mm;
-    width: 100%;
+    z-index: 1;
+  }
+  .cover-sidebar::after {
+    content: '';
+    position: absolute;
+    bottom: 60mm;
+    left: 0;
+    width: 18mm;
+    height: 3mm;
+    background: ${BRAND.gold};
+  }
+  /* Decorative corner accent */
+  .cover-corner {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 80mm;
+    height: 80mm;
+    z-index: 1;
+    overflow: hidden;
+  }
+  .cover-corner::before {
+    content: '';
+    position: absolute;
+    top: -30mm;
+    right: -30mm;
+    width: 100mm;
+    height: 100mm;
+    border: 6mm solid ${BRAND.bg};
+    border-radius: 50%;
+  }
+  .cover-corner::after {
+    content: '';
+    position: absolute;
+    top: -15mm;
+    right: -15mm;
+    width: 60mm;
+    height: 60mm;
+    border: 2mm solid ${BRAND.gold};
+    border-radius: 50%;
+    opacity: 0.5;
+  }
+  /* Bottom decorative stripe */
+  .cover-bottom-accent {
+    position: absolute;
+    bottom: 0;
+    left: 18mm;
+    right: 0;
+    height: 16mm;
+    background: linear-gradient(135deg, ${BRAND.primary} 0%, ${BRAND.primaryLight} 100%);
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    padding: 0 14mm;
+  }
+  .cover-bottom-accent::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 40mm;
+    height: 100%;
+    background: ${BRAND.gold};
+    opacity: 0.15;
+  }
+  .cover-bottom-text {
+    color: rgba(255,255,255,0.8);
+    font-size: 7.5pt;
+    letter-spacing: 0.5px;
+    z-index: 2;
   }
   .cover-body {
     flex: 1;
-    padding: 18mm 16mm;
+    padding: 30mm 16mm 30mm 34mm;
     display: flex;
     flex-direction: column;
     justify-content: center;
+    z-index: 2;
   }
   .cover-logo {
-    font-size: 28pt;
+    font-size: 32pt;
     font-weight: 700;
     color: ${BRAND.primary};
     letter-spacing: -0.5px;
   }
   .cover-tagline {
-    font-size: 9pt;
+    font-size: 8.5pt;
     color: ${BRAND.muted};
     margin-top: 2mm;
-    letter-spacing: 0.5px;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
   }
   .cover-divider {
-    width: 20mm;
-    height: 1mm;
-    background: ${BRAND.gold};
-    margin: 12mm 0;
+    width: 35mm;
+    height: 1.2mm;
+    background: linear-gradient(90deg, ${BRAND.gold} 0%, transparent 100%);
+    margin: 14mm 0;
+    border-radius: 1mm;
   }
   .cover-title {
-    font-size: 28pt;
+    font-size: 32pt;
     font-weight: 700;
     color: ${BRAND.primary};
-    line-height: 1.2;
-    margin-bottom: 4mm;
+    line-height: 1.15;
+    margin-bottom: 5mm;
+    letter-spacing: -0.3px;
   }
   .cover-subtitle {
     font-size: 14pt;
     color: ${BRAND.primaryLight};
     margin-bottom: 3mm;
+    font-weight: 500;
   }
   .cover-date {
     font-size: 9pt;
     color: ${BRAND.muted};
+    margin-top: 2mm;
   }
-  .cover-bottom-bar {
-    background: ${BRAND.primary};
-    height: 12mm;
-    width: 100%;
+  .cover-meta {
+    margin-top: 12mm;
+    padding-top: 6mm;
+    border-top: 0.5pt solid ${BRAND.border};
     display: flex;
-    align-items: center;
-    padding: 0 16mm;
-    color: rgba(255,255,255,0.7);
-    font-size: 8pt;
+    gap: 12mm;
+  }
+  .cover-meta-item {
+    display: flex;
+    flex-direction: column;
+  }
+  .cover-meta-label {
+    font-size: 6.5pt;
+    color: ${BRAND.muted};
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 1mm;
+  }
+  .cover-meta-value {
+    font-size: 9pt;
+    color: ${BRAND.text};
+    font-weight: 500;
   }
 
   /* ── Page Header ── */
@@ -549,21 +642,39 @@ function logoHtml(b: BrandingInfo, size: "cover" | "header"): string {
   return `<span class="page-header-logo">${b.shortName}</span>`;
 }
 
-function coverPage(title: string, subtitle: string, date: string, branding: BrandingInfo = DEFAULT_BRANDING): string {
+interface CoverMeta {
+  label: string;
+  value: string;
+}
+
+function coverPage(title: string, subtitle: string, date: string, branding: BrandingInfo = DEFAULT_BRANDING, meta?: CoverMeta[]): string {
+  const metaHtml = meta && meta.length > 0
+    ? `<div class="cover-meta">${meta.map(m => `
+        <div class="cover-meta-item">
+          <span class="cover-meta-label">${m.label}</span>
+          <span class="cover-meta-value">${m.value}</span>
+        </div>`).join("")}
+      </div>`
+    : "";
+
   return `
   <div class="page cover">
-    <div class="cover-top-bar"></div>
+    <div class="cover-sidebar"></div>
+    <div class="cover-corner"></div>
     <div class="cover-body">
       <div>
         ${logoHtml(branding, "cover")}
-        ${!branding.logoUrl ? `<div class="cover-tagline">${branding.fullName}</div>` : ""}
+        ${!branding.logoUrl && !branding.logoBase64 ? `<div class="cover-tagline">${branding.fullName}</div>` : ""}
       </div>
       <div class="cover-divider"></div>
       <div class="cover-title">${title}</div>
       <div class="cover-subtitle">${subtitle}</div>
       <div class="cover-date">${date}</div>
+      ${metaHtml}
     </div>
-    <div class="cover-bottom-bar">Confidential &amp; Proprietary — ${branding.fullName}</div>
+    <div class="cover-bottom-accent">
+      <span class="cover-bottom-text">Confidential &amp; Proprietary &mdash; ${branding.fullName}</span>
+    </div>
   </div>`;
 }
 
@@ -612,8 +723,12 @@ export async function generateCountryGuidePdf(
 
   let pages = "";
 
-  // 1. Cover
-  pages += coverPage("Country Guide", country.countryName, date, branding);
+  // 1. Cover — with metadata
+  const guideMeta: CoverMeta[] = [
+    { label: "Country", value: country.countryName },
+    { label: "Chapters", value: `${chapters.length}` },
+  ];
+  pages += coverPage("Country Guide", country.countryName, date, branding, guideMeta);
 
   // 2. Table of Contents
   let tocRows = chapters.map((ch, i) => `
@@ -696,6 +811,10 @@ export interface QuotationData {
     contactPhone?: string;
     country: string;
   };
+  /** Name of the user who created this quotation */
+  createdByName?: string;
+  /** Email of the user who created this quotation */
+  createdByEmail?: string;
 }
 
 export async function generateQuotationPdf(data: QuotationData): Promise<Buffer> {
@@ -709,8 +828,15 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
 
   let pages = "";
 
-  // 1. Cover
-  pages += coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date, branding);
+  // 1. Cover — with metadata
+  const coverMeta: CoverMeta[] = [
+    { label: "Prepared For", value: data.customerName },
+    { label: "Reference", value: data.quotationNumber },
+  ];
+  if (data.createdByName) {
+    coverMeta.push({ label: "Your Contact", value: data.createdByName });
+  }
+  pages += coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date, branding, coverMeta);
 
   // 2. Company Introduction — uses billing entity name dynamically
   const companyIntroHtml = data.companyIntro
@@ -760,15 +886,11 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
     <h2>Issued By</h2>
     <div class="info-grid">
       <div class="info-item">
-        <label>Entity</label>
-        <span>${data.billingEntity.entityName}</span>
-      </div>
-      <div class="info-item">
-        <label>Legal Name</label>
+        <label>Legal Entity</label>
         <span>${data.billingEntity.legalName}</span>
       </div>
-      ${data.billingEntity.address ? `<div class="info-item"><label>Address</label><span>${data.billingEntity.address}</span></div>` : ""}
-      ${data.billingEntity.contactEmail ? `<div class="info-item"><label>Email</label><span>${data.billingEntity.contactEmail}</span></div>` : ""}
+      ${data.createdByName ? `<div class="info-item"><label>Contact Person</label><span>${data.createdByName}</span></div>` : ""}
+      ${data.createdByEmail ? `<div class="info-item"><label>Email</label><span>${data.createdByEmail}</span></div>` : ""}
     </div>` : ""}
   `, branding);
 
@@ -873,7 +995,8 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
   `, branding);
 
   // 4. Terms & Conditions page
-  const contactEmail = branding.contactEmail ?? data.billingEntity?.contactEmail ?? "sales@geahr.com";
+  const contactEmail = data.createdByEmail ?? branding.contactEmail ?? data.billingEntity?.contactEmail ?? "sales@geahr.com";
+  const contactName = data.createdByName ?? branding.shortName + " account manager";
   pages += contentPage(headerTitle, 4, 0, `
     <h2>Terms &amp; Conditions</h2>
     <div class="section-card" style="font-size: 8pt; line-height: 1.5;">
@@ -908,7 +1031,7 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
     </div>
 
     <div class="notes-box" style="margin-top:6mm;">
-      For questions about this quotation, please contact your ${branding.shortName} account manager or email <strong>${contactEmail}</strong>.
+      For questions about this quotation, please contact <strong>${contactName}</strong> at <strong>${contactEmail}</strong>.
     </div>
   `, branding);
 

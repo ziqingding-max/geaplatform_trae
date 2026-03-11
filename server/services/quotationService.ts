@@ -1,5 +1,5 @@
 import { getDb } from "../db";
-import { quotations, customers, salesLeads, billingEntities } from "../../drizzle/schema";
+import { quotations, customers, salesLeads, billingEntities, users } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { calculationService } from "./calculationService";
 import { getExchangeRate } from "./exchangeRateService";
@@ -345,6 +345,19 @@ export const quotationService = {
       };
     }
 
+    // Step 1b: Fetch creator info (name & email for "Issued By" and contact sections)
+    let createdByName: string | undefined;
+    let createdByEmail: string | undefined;
+    if (quotation.createdBy) {
+      const creator = await db.query.users.findFirst({
+        where: eq(users.id, quotation.createdBy)
+      });
+      if (creator) {
+        createdByName = creator.name ?? undefined;
+        createdByEmail = creator.email ?? undefined;
+      }
+    }
+
     // Step 2: Generate the Quotation PDF using HTML engine
     const quotationBuffer = await generateQuotationPdf({
       quotationNumber: quotation.quotationNumber,
@@ -356,6 +369,8 @@ export const quotationService = {
       validUntil: quotation.validUntil ?? undefined,
       billingEntity,
       branding,
+      createdByName,
+      createdByEmail,
     });
 
     // Step 3: Fetch Additional PDFs (Country Guides)
