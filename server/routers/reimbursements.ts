@@ -201,8 +201,8 @@ export const reimbursementsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const existing = await getReimbursementById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Reimbursement not found" });
-      if (existing.status !== "submitted") {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only submitted reimbursements can be admin-approved" });
+      if (existing.status !== "client_approved") {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only client-approved reimbursements can be admin-approved. Current status: " + existing.status });
       }
 
       await updateReimbursement(input.id, {
@@ -223,7 +223,7 @@ export const reimbursementsRouter = router({
     }),
 
   /**
-   * Admin reject — rejects a submitted reimbursement
+   * Admin reject — rejects a client-approved reimbursement
    */
   adminReject: operationsManagerProcedure
     .input(z.object({
@@ -233,8 +233,8 @@ export const reimbursementsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const existing = await getReimbursementById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Reimbursement not found" });
-      if (existing.status !== "submitted") {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only submitted reimbursements can be admin-rejected" });
+      if (existing.status !== "client_approved") {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only client-approved reimbursements can be admin-rejected. Current status: " + existing.status });
       }
 
       await updateReimbursement(input.id, {

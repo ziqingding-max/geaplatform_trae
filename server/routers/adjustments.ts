@@ -239,8 +239,8 @@ export const adjustmentsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const existing = await getAdjustmentById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Adjustment not found" });
-      if (existing.status !== "submitted") {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only submitted adjustments can be admin-approved" });
+      if (existing.status !== "client_approved") {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only client-approved adjustments can be admin-approved. Current status: " + existing.status });
       }
 
       await updateAdjustment(input.id, {
@@ -261,7 +261,7 @@ export const adjustmentsRouter = router({
     }),
 
   /**
-   * Admin reject — rejects a submitted adjustment
+   * Admin reject — rejects a client-approved adjustment
    */
   adminReject: operationsManagerProcedure
     .input(z.object({
@@ -271,8 +271,8 @@ export const adjustmentsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const existing = await getAdjustmentById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Adjustment not found" });
-      if (existing.status !== "submitted") {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only submitted adjustments can be admin-rejected" });
+      if (existing.status !== "client_approved") {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only client-approved adjustments can be admin-rejected. Current status: " + existing.status });
       }
 
       await updateAdjustment(input.id, {

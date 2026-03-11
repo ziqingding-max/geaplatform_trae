@@ -17,6 +17,7 @@ import {
 import { getDb } from "../../db";
 import { adjustments, employees, payrollRuns, payrollItems } from "../../../drizzle/schema";
 import { storagePut } from "../../storage";
+import { enforceCutoff, checkCutoffPassed } from "../../utils/cutoff";
 
 export const portalAdjustmentsRouter = portalRouter({
   /**
@@ -100,7 +101,7 @@ export const portalAdjustmentsRouter = portalRouter({
     .input(
       z.object({
         employeeId: z.number(),
-        adjustmentType: z.enum(["bonus", "allowance", "reimbursement", "deduction", "other"]),
+        adjustmentType: z.enum(["bonus", "allowance", "deduction", "other"]),
         category: z.enum(["housing", "transport", "meals", "performance_bonus", "year_end_bonus", "overtime", "travel_reimbursement", "equipment_reimbursement", "absence_deduction", "other"]).optional(),
         amount: z.string(),
         currency: z.string().default("USD"),
@@ -152,6 +153,9 @@ export const portalAdjustmentsRouter = portalRouter({
           message: `Payroll run for ${normalizedMonth.substring(0, 7)} is already ${existingPayroll.status}. Adjustments cannot be added.`,
         });
       }
+
+      // Enforce cutoff — prevent submissions after cutoff date
+      await enforceCutoff(normalizedMonth, "portal_hr", "create adjustment");
 
       // Use employee's salary currency, not the user-provided one
       const currency = emp.salaryCurrency || input.currency;

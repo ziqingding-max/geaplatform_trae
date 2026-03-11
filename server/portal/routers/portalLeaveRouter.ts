@@ -3,6 +3,10 @@
  *
  * All queries are SCOPED to ctx.portalUser.customerId via employee join.
  * Portal users can view and submit leave records.
+ *
+ * Unified approval flow: submitted → client_approved → admin_approved → locked
+ * Cross-month leave is automatically split into monthly portions (matching Admin behavior).
+ * Cutoff enforcement ensures submissions respect payroll deadlines.
  */
 
 import { z } from "zod";
@@ -23,6 +27,12 @@ import {
   payrollRuns,
   payrollItems,
 } from "../../../drizzle/schema";
+import {
+  enforceCutoff,
+  isLeavesCrossMonth,
+  splitLeaveByMonth,
+  getLeavePayrollMonth,
+} from "../../utils/cutoff";
 
 export const portalLeaveRouter = portalRouter({
   /**
@@ -130,6 +140,11 @@ export const portalLeaveRouter = portalRouter({
 
   /**
    * Submit leave record — only HR managers and admins
+   *
+   * Now includes:
+   * - Cutoff enforcement (matching Admin behavior)
+   * - Cross-month leave auto-splitting (matching Admin behavior)
+   * - Business day calculation for accurate day counts
    */
   create: portalHrProcedure
     .input(
@@ -140,7 +155,7 @@ export const portalLeaveRouter = portalRouter({
         endDate: z.string(),
         days: z.string(),
         reason: z.string().optional(),
-        isHalfDay: z.boolean().default(false), // Bug 13: Support half-day leave
+        isHalfDay: z.boolean().default(false),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -158,14 +173,12 @@ export const portalLeaveRouter = portalRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
       }
 
-      // Determine the payroll month from startDate (YYYY-MM-01)
-      const startParts = input.startDate.split("-");
-      if (startParts.length < 2) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid start date format" });
-      }
-      const payrollMonth = `${startParts[0]}-${startParts[1].padStart(2, "0")}-01`;
+      // Enforce cutoff based on the end date's payroll month (matching Admin behavior)
+      const endPayrollMonth = getLeavePayrollMonth(input.endDate);
+      const endPayrollMonthNormalized = `${endPayrollMonth}-01`;
+      await enforceCutoff(endPayrollMonthNormalized, "portal_hr", "create leave record");
 
-      // Check if payroll run for this month is already approved/locked
+      // Check if payroll run for the end date's month is already approved/locked
       const [existingPayroll] = await db
         .select({ id: payrollRuns.id, status: payrollRuns.status })
         .from(payrollRuns)
@@ -173,7 +186,7 @@ export const portalLeaveRouter = portalRouter({
         .where(
           and(
             eq(payrollRuns.countryCode, emp.country),
-            eq(payrollRuns.payrollMonth, payrollMonth),
+            eq(payrollRuns.payrollMonth, endPayrollMonthNormalized),
             eq(payrollItems.employeeId, input.employeeId)
           )
         )
@@ -182,7 +195,7 @@ export const portalLeaveRouter = portalRouter({
       if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: `Payroll run for ${payrollMonth.substring(0, 7)} is already ${existingPayroll.status}. Leave requests cannot be added.`,
+          message: `Payroll run for ${endPayrollMonth} is already ${existingPayroll.status}. Leave requests cannot be added.`,
         });
       }
 
@@ -191,6 +204,27 @@ export const portalLeaveRouter = portalRouter({
         ? (parseFloat(input.days) - 0.5).toFixed(1)
         : input.days;
 
+      // Cross-month leave splitting (matching Admin behavior)
+      if (isLeavesCrossMonth(input.startDate, input.endDate)) {
+        const splits = splitLeaveByMonth(input.startDate, input.endDate, parseFloat(actualDays));
+
+        // Insert each split as a separate leave record
+        for (const split of splits) {
+          await db.insert(leaveRecords).values({
+            employeeId: input.employeeId,
+            leaveTypeId: input.leaveTypeId,
+            startDate: split.startDate,
+            endDate: split.endDate,
+            days: String(split.days),
+            status: "submitted",
+            reason: input.reason || null,
+          });
+        }
+
+        return { success: true, splits: splits.length };
+      }
+
+      // Single-month leave: insert as-is
       await db.insert(leaveRecords).values({
         employeeId: input.employeeId,
         leaveTypeId: input.leaveTypeId,
@@ -216,7 +250,11 @@ export const portalLeaveRouter = portalRouter({
 
       // Verify leave record belongs to an employee of this customer
       const records = await db
-        .select({ id: leaveRecords.id, status: leaveRecords.status })
+        .select({
+          id: leaveRecords.id,
+          status: leaveRecords.status,
+          endDate: leaveRecords.endDate,
+        })
         .from(leaveRecords)
         .innerJoin(employees, eq(leaveRecords.employeeId, employees.id))
         .where(and(eq(leaveRecords.id, input.id), eq(employees.customerId, cid)));
@@ -227,6 +265,12 @@ export const portalLeaveRouter = portalRouter({
 
       if (records[0].status !== "submitted") {
         throw new TRPCError({ code: "FORBIDDEN", message: "Leave record is locked and cannot be deleted" });
+      }
+
+      // Enforce cutoff before allowing deletion
+      if (records[0].endDate) {
+        const payrollMonth = getLeavePayrollMonth(records[0].endDate);
+        await enforceCutoff(`${payrollMonth}-01`, "portal_hr", "delete leave record");
       }
 
       await db.delete(leaveRecords).where(eq(leaveRecords.id, input.id));
