@@ -11,14 +11,9 @@
 
 // ─── Date Formatting ─────────────────────────────────────────────────────────
 
-// Helper to handle microsecond timestamps (common DB issue)
+// Normalize various date inputs to a Date object
 function normalizeDate(value: string | number | Date): Date {
-  const d = new Date(value);
-  if (!isNaN(d.getTime()) && d.getFullYear() > 3000) {
-    // If the year is huge, it's likely microseconds treated as milliseconds
-    return new Date(d.getTime() / 1000);
-  }
-  return d;
+  return new Date(value);
 }
 
 /**

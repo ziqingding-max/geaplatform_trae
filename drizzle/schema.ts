@@ -26,13 +26,13 @@ export const users = sqliteTable(
     language: text("language", { length: 10 }).default("en").notNull(),
     isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
     inviteToken: text("inviteToken", { length: 255 }),
-    inviteExpiresAt: integer("inviteExpiresAt", { mode: "timestamp" }),
+    inviteExpiresAt: integer("inviteExpiresAt", { mode: "timestamp_ms" }),
     resetToken: text("resetToken", { length: 255 }),
-    resetExpiresAt: integer("resetExpiresAt", { mode: "timestamp" }),
+    resetExpiresAt: integer("resetExpiresAt", { mode: "timestamp_ms" }),
     mustChangePassword: integer("mustChangePassword", { mode: "boolean" }).default(false).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
-    lastSignedIn: integer("lastSignedIn", { mode: "timestamp" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    lastSignedIn: integer("lastSignedIn", { mode: "timestamp_ms" }).defaultNow().notNull(),
   },
   (table) => ({
     emailIdx: index("email_idx").on(table.email),
@@ -76,8 +76,8 @@ export const countriesConfig = sqliteTable(
     // A country with any non-null service rate (EOR/AOR/Visa) is considered active
     isActive: integer("isActive", { mode: "boolean" }).default(false).notNull(),
     notes: text("notes"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     countryCodeIdx: uniqueIndex("country_code_idx").on(table.countryCode),
@@ -98,8 +98,8 @@ export const systemConfig = sqliteTable(
     configKey: text("configKey", { length: 100 }).notNull().unique(),
     configValue: text("configValue").notNull(),
     description: text("description"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     configKeyIdx: uniqueIndex("config_key_idx").on(table.configKey),
@@ -120,8 +120,8 @@ export const leaveTypes = sqliteTable(
     isPaid: integer("isPaid", { mode: "boolean" }).default(true).notNull(),
     requiresApproval: integer("requiresApproval", { mode: "boolean" }).default(true).notNull(),
     description: text("description"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     countryCodeIdx: index("lt_country_code_idx").on(table.countryCode),
@@ -143,8 +143,8 @@ export const publicHolidays = sqliteTable(
     localName: text("localName", { length: 255 }), // Name in local language
     isGlobal: integer("isGlobal", { mode: "boolean" }).default(true).notNull(), // true = nationwide
     source: text("source", { length: 50 }).default("nager_api"), // nager_api | manual
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     phCountryCodeIdx: index("ph_country_code_idx").on(table.countryCode),
@@ -184,8 +184,8 @@ export const customers = sqliteTable(
     depositMultiplier: integer("depositMultiplier").default(2).notNull(), // Deposit = (baseSalary + estEmployerCost) × multiplier
     status: text("status", { enum: ["active", "suspended", "terminated"] }).default("active").notNull(),
     notes: text("notes"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     companyNameIdx: index("company_name_idx").on(table.companyName),
@@ -213,13 +213,13 @@ export const customerContacts = sqliteTable(
     passwordHash: text("passwordHash", { length: 255 }), // bcrypt hash
     portalRole: text("portalRole", { enum: ["admin", "hr_manager", "finance", "viewer"] }).default("viewer"),
     inviteToken: text("inviteToken", { length: 255 }),
-    inviteExpiresAt: integer("inviteExpiresAt", { mode: "timestamp" }),
+    inviteExpiresAt: integer("inviteExpiresAt", { mode: "timestamp_ms" }),
     resetToken: text("resetToken", { length: 255 }),
-    resetExpiresAt: integer("resetExpiresAt", { mode: "timestamp" }),
+    resetExpiresAt: integer("resetExpiresAt", { mode: "timestamp_ms" }),
     isPortalActive: integer("isPortalActive", { mode: "boolean" }).default(false).notNull(), // true after invite accepted
-    lastLoginAt: integer("lastLoginAt", { mode: "timestamp" }),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    lastLoginAt: integer("lastLoginAt", { mode: "timestamp_ms" }),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     customerIdIdx: index("cc_customer_id_idx").on(table.customerId),
@@ -252,8 +252,8 @@ export const customerPricing = sqliteTable(
     // Traceability to source quotation
     sourceQuotationId: integer("sourceQuotationId"), 
     isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     customerIdIdx: index("cp_customer_id_idx").on(table.customerId),
@@ -278,8 +278,8 @@ export const customerContracts = sqliteTable(
     effectiveDate: text("effectiveDate"),
     expiryDate: text("expiryDate"),
     status: text("status", { enum: ["draft", "signed", "expired", "terminated"] }).default("draft").notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     cctrCustomerIdIdx: index("cctr_customer_id_idx").on(table.customerId),
@@ -300,8 +300,8 @@ export const customerLeavePolicies = sqliteTable(
     annualEntitlement: integer("annualEntitlement").notNull(), // Days per year (must be >= statutory minimum)
     expiryRule: text("expiryRule", { enum: ["year_end", "anniversary", "no_expiry"] }).default("year_end").notNull(),
     carryOverDays: integer("carryOverDays").default(0).notNull(), // Max days that can carry over to next year (0 = no carry over)
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     clpCustomerIdIdx: index("clp_customer_id_idx").on(table.customerId),
@@ -376,8 +376,8 @@ export const employees = sqliteTable(
     // Bank Details (Dynamic JSON based on country requirements)
     bankDetails: text("bankDetails", { mode: "json" }),
     // Metadata
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     empCustomerIdIdx: index("emp_customer_id_idx").on(table.customerId),
@@ -404,8 +404,8 @@ export const employeeContracts = sqliteTable(
     effectiveDate: text("effectiveDate"),
     expiryDate: text("expiryDate"),
     status: text("status", { enum: ["draft", "signed", "expired", "terminated"] }).default("draft").notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     ecEmployeeIdIdx: index("ec_employee_id_idx").on(table.employeeId),
@@ -430,8 +430,8 @@ export const leaveBalances = sqliteTable(
     used: integer("used").default(0).notNull(),
     remaining: integer("remaining").notNull(),
     expiryDate: text("expiryDate"), // When this leave balance expires (null = no expiry, carries over)
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     lbEmployeeIdIdx: index("lb_employee_id_idx").on(table.employeeId),
@@ -465,13 +465,13 @@ export const leaveRecords = sqliteTable(
     submittedBy: integer("submittedBy"), // User ID who created this
     // Approval tracking
     clientApprovedBy: integer("clientApprovedBy"), // Portal contact ID who approved/rejected
-    clientApprovedAt: integer("clientApprovedAt", { mode: "timestamp" }),
+    clientApprovedAt: integer("clientApprovedAt", { mode: "timestamp_ms" }),
     clientRejectionReason: text("clientRejectionReason"),
     adminApprovedBy: integer("adminApprovedBy"), // Admin user ID who confirmed
-    adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp" }),
+    adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp_ms" }),
     adminRejectionReason: text("adminRejectionReason"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     lrEmployeeIdIdx: index("lr_employee_id_idx").on(table.employeeId),
@@ -531,15 +531,15 @@ export const adjustments = sqliteTable(
     submittedBy: integer("submittedBy"), // User ID who created this
     // Approval tracking
     clientApprovedBy: integer("clientApprovedBy"),
-    clientApprovedAt: integer("clientApprovedAt", { mode: "timestamp" }),
+    clientApprovedAt: integer("clientApprovedAt", { mode: "timestamp_ms" }),
     clientRejectionReason: text("clientRejectionReason"),
     adminApprovedBy: integer("adminApprovedBy"),
-    adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp" }),
+    adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp_ms" }),
     adminRejectionReason: text("adminRejectionReason"),
     // Target month
     effectiveMonth: text("effectiveMonth").notNull(), // Which payroll month this applies to (YYYY-MM-01)
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     adjEmployeeIdIdx: index("adj_employee_id_idx").on(table.employeeId),
@@ -578,15 +578,15 @@ export const payrollRuns = sqliteTable(
     totalEmployerCost: text("totalEmployerCost").default("0"),
     // Cross-approval: operations manager submits, another ops manager approves
     submittedBy: integer("submittedBy"),
-    submittedAt: integer("submittedAt", { mode: "timestamp" }),
+    submittedAt: integer("submittedAt", { mode: "timestamp_ms" }),
     approvedBy: integer("approvedBy"),
-    approvedAt: integer("approvedAt", { mode: "timestamp" }),
+    approvedAt: integer("approvedAt", { mode: "timestamp_ms" }),
     rejectedBy: integer("rejectedBy"),
-    rejectedAt: integer("rejectedAt", { mode: "timestamp" }),
+    rejectedAt: integer("rejectedAt", { mode: "timestamp_ms" }),
     rejectionReason: text("rejectionReason"),
     notes: text("notes"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     prPayrollMonthIdx: index("pr_payroll_month_idx").on(table.payrollMonth),
@@ -622,8 +622,8 @@ export const payrollItems = sqliteTable(
     notes: text("notes"),
     // JSON breakdown of adjustments included
     adjustmentsBreakdown: text("adjustmentsBreakdown", { mode: "json" }),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     piPayrollRunIdIdx: index("pi_payroll_run_id_idx").on(table.payrollRunId),
@@ -681,8 +681,8 @@ export const invoices = sqliteTable(
       "applied",
     ] }).default("draft").notNull(),
     dueDate: text("dueDate"),
-    sentDate: integer("sentDate", { mode: "timestamp" }),
-    paidDate: integer("paidDate", { mode: "timestamp" }),
+    sentDate: integer("sentDate", { mode: "timestamp_ms" }),
+    paidDate: integer("paidDate", { mode: "timestamp_ms" }),
     paidAmount: text("paidAmount"),
     // Credit note application tracking
     creditApplied: text("creditApplied").default("0"), // Total credit applied to this invoice
@@ -694,8 +694,8 @@ export const invoices = sqliteTable(
     relatedInvoiceId: integer("relatedInvoiceId"),
     notes: text("notes"),
     internalNotes: text("internalNotes"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     invCustomerIdIdx: index("inv_customer_id_idx").on(table.customerId),
@@ -746,8 +746,8 @@ export const invoiceItems = sqliteTable(
     localAmount: text("localAmount"), // Amount in local currency
     exchangeRate: text("exchangeRate"), // Rate used for conversion
     exchangeRateWithMarkup: text("exchangeRateWithMarkup"), // Rate with markup
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     iiInvoiceIdIdx: index("ii_invoice_id_idx").on(table.invoiceId),
@@ -773,8 +773,8 @@ export const exchangeRates = sqliteTable(
     markupPercentage: text("markupPercentage").default("5.00").notNull(), // e.g. 5.00 = 5%
     source: text("source", { length: 100 }),
     effectiveDate: text("effectiveDate").notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     erCurrencyPairIdx: uniqueIndex("er_currency_pair_idx").on(
@@ -800,7 +800,7 @@ export const auditLogs = sqliteTable(
     changes: text("changes", { mode: "json" }),
     ipAddress: text("ipAddress", { length: 50 }),
     userAgent: text("userAgent"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
   },
   (table) => ({
     alUserIdIdx: index("al_user_id_idx").on(table.userId),
@@ -819,8 +819,8 @@ export const systemSettings = sqliteTable(
     key: text("key", { length: 100 }).notNull().unique(),
     value: text("value").notNull(),
     description: text("description"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     ssKeyIdx: uniqueIndex("ss_key_idx").on(table.key),
@@ -852,9 +852,9 @@ export const employeeDocuments = sqliteTable(
     mimeType: text("mimeType", { length: 100 }),
     fileSize: integer("fileSize"),
     notes: text("notes"),
-    uploadedAt: integer("uploadedAt", { mode: "timestamp" }).defaultNow().notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    uploadedAt: integer("uploadedAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     edEmployeeIdIdx: index("ed_employee_id_idx").on(table.employeeId),
@@ -894,8 +894,8 @@ export const billingEntities = sqliteTable(
     paymentTermDays: integer("paymentTermDays").default(30).notNull(), // Payment terms in days
     invoiceSequence: integer("invoiceSequence").default(0).notNull(), // Last used invoice sequence number
     notes: text("notes"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     beCountryIdx: index("be_country_idx").on(table.country),
@@ -923,10 +923,10 @@ export const creditNoteApplications = sqliteTable(
     appliedToInvoiceId: integer("appliedToInvoiceId").notNull(), // The regular invoice receiving the credit
     appliedAmount: text("appliedAmount").notNull(), // Positive value representing the credit applied
     notes: text("notes"),
-    appliedAt: integer("appliedAt", { mode: "timestamp" }).defaultNow().notNull(),
+    appliedAt: integer("appliedAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
     appliedBy: integer("appliedBy"), // User who applied the credit
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     cnaCreditNoteIdx: index("cna_credit_note_idx").on(table.creditNoteId),
@@ -972,11 +972,11 @@ export const onboardingInvites = sqliteTable(
     // Completion links
     employeeId: integer("employeeId"),
     contractorId: integer("contractorId"),
-    expiresAt: integer("expiresAt", { mode: "timestamp" }).notNull(),
-    completedAt: integer("completedAt", { mode: "timestamp" }),
+    expiresAt: integer("expiresAt", { mode: "timestamp_ms" }).notNull(),
+    completedAt: integer("completedAt", { mode: "timestamp_ms" }),
     createdBy: integer("createdBy"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     oiTokenIdx: uniqueIndex("oi_token_idx").on(table.token),
@@ -1028,15 +1028,15 @@ export const reimbursements = sqliteTable(
     submittedBy: integer("submittedBy"), // User/contact ID who created this
     // Approval tracking
     clientApprovedBy: integer("clientApprovedBy"),
-    clientApprovedAt: integer("clientApprovedAt", { mode: "timestamp" }),
+    clientApprovedAt: integer("clientApprovedAt", { mode: "timestamp_ms" }),
     clientRejectionReason: text("clientRejectionReason"),
     adminApprovedBy: integer("adminApprovedBy"),
-    adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp" }),
+    adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp_ms" }),
     adminRejectionReason: text("adminRejectionReason"),
     // Target month
     effectiveMonth: text("effectiveMonth").notNull(), // Which payroll month this applies to (YYYY-MM-01)
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     reimbEmployeeIdIdx: index("reimb_employee_id_idx").on(table.employeeId),
@@ -1080,8 +1080,8 @@ export const vendors = sqliteTable(
     vendorType: text("vendorType", { enum: ["client_related", "operational"] }).default("client_related").notNull(),
     status: text("status", { enum: ["active", "inactive"] }).default("active").notNull(),
     notes: text("notes"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     vdrNameIdx: index("vdr_name_idx").on(table.name),
@@ -1164,11 +1164,11 @@ export const vendorBills = sqliteTable(
     unallocatedAmount: text("unallocatedAmount").default("0"), // totalAmount - allocatedAmount (operational cost)
     // Approval workflow
     submittedBy: integer("submittedBy"),
-    submittedAt: integer("submittedAt", { mode: "timestamp" }),
+    submittedAt: integer("submittedAt", { mode: "timestamp_ms" }),
     approvedBy: integer("approvedBy"),
-    approvedAt: integer("approvedAt", { mode: "timestamp" }),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    approvedAt: integer("approvedAt", { mode: "timestamp_ms" }),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     vbVendorIdIdx: index("vb_vendor_id_idx").on(table.vendorId),
@@ -1204,8 +1204,8 @@ export const vendorBillItems = sqliteTable(
     relatedCustomerId: integer("relatedCustomerId"),
     relatedEmployeeId: integer("relatedEmployeeId"),
     relatedCountryCode: text("relatedCountryCode", { length: 3 }),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     vbiVendorBillIdIdx: index("vbi_vendor_bill_id_idx").on(table.vendorBillId),
@@ -1245,8 +1245,8 @@ export const billInvoiceAllocations = sqliteTable(
     allocatedAmount: text("allocatedAmount").notNull(), // USD amount allocated
     description: text("description"), // Optional note about this allocation
     allocatedBy: integer("allocatedBy"), // User who created this allocation
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     biaVendorBillIdIdx: index("bia_vendor_bill_id_idx").on(table.vendorBillId),
@@ -1296,8 +1296,8 @@ export const salesLeads = sqliteTable(
     convertedCustomerId: integer("convertedCustomerId"), // Link to customers table after MSA signed
     notes: text("notes"), // General notes / follow-up log
     expectedCloseDate: text("expectedCloseDate"), // When the deal is expected to close
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     slStatusIdx: index("sl_status_idx").on(table.status),
@@ -1325,9 +1325,9 @@ export const salesActivities = sqliteTable(
       "other",
     ] }).notNull(),
     description: text("description").notNull(),
-    activityDate: integer("activityDate", { mode: "timestamp" }).defaultNow().notNull(),
+    activityDate: integer("activityDate", { mode: "timestamp_ms" }).defaultNow().notNull(),
     createdBy: integer("createdBy"), // User ID who logged this activity
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
   },
   (table) => ({
     saLeadIdIdx: index("sa_lead_id_idx").on(table.leadId),
@@ -1357,11 +1357,11 @@ export const knowledgeSources = sqliteTable(
     authorityScore: integer("authorityScore").default(0).notNull(),
     authorityLevel: text("authorityLevel", { enum: ["high", "medium", "low"] }).default("low").notNull(),
     authorityReason: text("authorityReason"),
-    aiReviewedAt: integer("aiReviewedAt", { mode: "timestamp" }),
-    lastFetchedAt: integer("lastFetchedAt", { mode: "timestamp" }),
+    aiReviewedAt: integer("aiReviewedAt", { mode: "timestamp_ms" }),
+    lastFetchedAt: integer("lastFetchedAt", { mode: "timestamp_ms" }),
     updatedBy: integer("updatedBy"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     kbSourceActiveIdx: index("kb_source_active_idx").on(table.isActive),
@@ -1390,12 +1390,12 @@ export const knowledgeItems = sqliteTable(
     metadata: text("metadata", { mode: "json" }),
     aiConfidence: integer("aiConfidence").default(0).notNull(),
     aiSummary: text("aiSummary"),
-    publishedAt: integer("publishedAt", { mode: "timestamp" }),
+    publishedAt: integer("publishedAt", { mode: "timestamp_ms" }),
     reviewedBy: integer("reviewedBy"),
-    reviewedAt: integer("reviewedAt", { mode: "timestamp" }),
+    reviewedAt: integer("reviewedAt", { mode: "timestamp_ms" }),
     reviewNote: text("reviewNote"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     kbItemCustomerIdx: index("kb_item_customer_idx").on(table.customerId),
@@ -1418,7 +1418,7 @@ export const knowledgeMarketingEvents = sqliteTable(
     cadence: text("cadence", { enum: ["daily", "weekly", "monthly"] }).default("weekly").notNull(),
     topics: text("topics", { mode: "json" }).notNull(),
     payload: text("payload", { mode: "json" }).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
   },
   (table) => ({
     kbEventCustomerIdx: index("kb_event_customer_idx").on(table.customerId),
@@ -1440,7 +1440,7 @@ export const knowledgeFeedbackEvents = sqliteTable(
     feedbackType: text("feedbackType", { enum: ["no_results", "not_helpful"] }).default("not_helpful").notNull(),
     note: text("note"),
     metadata: text("metadata", { mode: "json" }),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
   },
   (table) => ({
     kbFeedbackCustomerIdx: index("kb_feedback_customer_idx").on(table.customerId),
@@ -1468,8 +1468,8 @@ export const aiProviderConfigs = sqliteTable(
     apiKeyEnv: text("apiKeyEnv", { length: 100 }).notNull(),
     isEnabled: integer("isEnabled", { mode: "boolean" }).default(true).notNull(),
     priority: integer("priority").default(100).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     aiProviderIdx: uniqueIndex("ai_provider_idx").on(table.provider),
@@ -1492,8 +1492,8 @@ export const aiTaskPolicies = sqliteTable(
     temperature: text("temperature").default("0.30"),
     maxTokens: integer("maxTokens").default(4096),
     isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     aiTaskIdx: uniqueIndex("ai_task_idx").on(table.task),
@@ -1518,7 +1518,7 @@ export const aiTaskExecutions = sqliteTable(
     costEstimate: text("costEstimate").default("0.0000").notNull(),
     success: integer("success", { mode: "boolean" }).default(true).notNull(),
     errorClass: text("errorClass", { length: 120 }),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
   },
   (table) => ({
     aiExecTaskIdx: index("ai_exec_task_idx").on(table.taskType),
@@ -1552,9 +1552,9 @@ export const notifications = sqliteTable(
     
     // Status
     isRead: integer("isRead", { mode: "boolean" }).default(false).notNull(),
-    readAt: integer("readAt", { mode: "timestamp" }),
+    readAt: integer("readAt", { mode: "timestamp_ms" }),
     
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
   },
   (table) => ({
     notifTargetIdx: index("notif_target_idx").on(table.targetPortal, table.targetUserId, table.targetRole),
@@ -1627,8 +1627,8 @@ export const countrySocialInsuranceItems = sqliteTable(
     
     sortOrder: integer("sortOrder").default(0).notNull(),
     isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     csiCountryYearIdx: index("csi_country_year_idx").on(table.countryCode, table.effectiveYear),
@@ -1658,8 +1658,8 @@ export const countryGuideChapters = sqliteTable(
     metadata: text("metadata", { mode: "json" }),  // Extra structured data
     effectiveFrom: text("effectiveFrom"),
     effectiveTo: text("effectiveTo"),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     cgcCountryIdx: index("cgc_country_idx").on(table.countryCode),
@@ -1684,7 +1684,7 @@ export const salaryBenchmarks = sqliteTable(
     currency: text("currency", { length: 3 }).notNull(),
     dataYear: integer("dataYear").notNull(),
     source: text("source"),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
   },
   (table) => ({
     sbCountryIdx: index("sb_country_idx").on(table.countryCode),
@@ -1724,13 +1724,13 @@ export const quotations = sqliteTable(
     pdfKey: text("pdfKey"),
     
     // Tracking
-    sentAt: integer("sentAt", { mode: "timestamp" }),
+    sentAt: integer("sentAt", { mode: "timestamp_ms" }),
     sentTo: text("sentTo"),
     sentBy: integer("sentBy"),
     
     createdBy: integer("createdBy").notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     qtNumberIdx: uniqueIndex("qt_number_idx").on(table.quotationNumber),
@@ -1758,7 +1758,7 @@ export const salesDocuments = sqliteTable(
     fileKey: text("fileKey", { length: 500 }).notNull(),
     
     generatedBy: integer("generatedBy").notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
   },
   (table) => ({
     sdLeadIdx: index("sd_lead_idx").on(table.leadId),
@@ -1820,7 +1820,7 @@ export const customerWallets = sqliteTable(
     currency: text("currency", { length: 3 }).notNull(), // USD, EUR, CNY...
     balance: text("balance").default("0").notNull(), // Decimal string
     version: integer("version").default(0).notNull(), // Optimistic lock
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     cwCustomerCurrencyIdx: uniqueIndex("cw_customer_currency_idx").on(table.customerId, table.currency),
@@ -1864,7 +1864,7 @@ export const walletTransactions = sqliteTable(
     description: text("description"),
     internalNote: text("internalNote"),
     createdBy: integer("createdBy"), // User ID
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
   },
   (table) => ({
     wtWalletIdIdx: index("wt_wallet_id_idx").on(table.walletId),
@@ -1888,7 +1888,7 @@ export const customerFrozenWallets = sqliteTable(
     currency: text("currency", { length: 3 }).notNull(), // USD, EUR, CNY...
     balance: text("balance").default("0").notNull(), // Decimal string
     version: integer("version").default(0).notNull(), // Optimistic lock
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     cfwCustomerCurrencyIdx: uniqueIndex("cfw_customer_currency_idx").on(table.customerId, table.currency),
@@ -1928,7 +1928,7 @@ export const frozenWalletTransactions = sqliteTable(
     description: text("description"),
     internalNote: text("internalNote"),
     createdBy: integer("createdBy"), // User ID
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
   },
   (table) => ({
     fwtWalletIdIdx: index("fwt_wallet_id_idx").on(table.walletId),
