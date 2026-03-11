@@ -299,10 +299,10 @@ function AIUploadDialog({
         })));
       }
 
-      // Pre-fill allocation suggestions
+      // Pre-fill allocation suggestions (new schema uses hasAllocation flag instead of null object)
       if (p.lineItems?.length > 0) {
         const allocs = p.lineItems
-          .filter((item: any) => item.allocationSuggestion)
+          .filter((item: any) => item.allocationSuggestion?.hasAllocation)
           .map((item: any) => ({
             ...item.allocationSuggestion,
             allocatedAmount: item.allocationSuggestion.allocatedAmount?.toString() || "0",
@@ -311,8 +311,8 @@ function AIUploadDialog({
         setEditedAllocations(allocs);
       }
 
-      // Pre-fill payment info
-      if (p.payment) {
+      // Pre-fill payment info (new schema uses hasPaymentInfo flag instead of null object)
+      if (p.payment?.hasPaymentInfo) {
         setEditedPayment({
           paidDate: p.payment.paymentDate || "",
           paidAmount: p.payment.localAmount?.toString() || p.bill?.totalAmount?.toString() || "",
