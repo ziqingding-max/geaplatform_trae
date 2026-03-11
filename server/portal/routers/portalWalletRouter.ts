@@ -5,7 +5,7 @@ import { getDb } from "../../db";
 import { walletTransactions, invoices } from "../../../drizzle/schema";
 import { eq, desc, sql, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
-import { getInvoiceById, updateInvoice } from "../../services/db/financeService";
+import { getInvoiceById } from "../../services/db/financeService";
 
 export const portalWalletRouter = portalRouter({
   get: protectedPortalProcedure
@@ -30,6 +30,9 @@ export const portalWalletRouter = portalRouter({
       invoiceId: z.number(),
     }))
     .mutation(async ({ input, ctx }) => {
+      const db = getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
+
       const customerId = ctx.portalUser.customerId;
 
       // 1. Verify invoice belongs to this customer and is payable
@@ -62,33 +65,35 @@ export const portalWalletRouter = portalRouter({
       // Deduct the lesser of wallet balance and remaining due
       const deductAmount = Math.min(walletBal, remainingDue);
 
-      // 4. Deduct from wallet
-      await walletService.transact({
-        walletId: wallet.id,
-        type: "invoice_deduction",
-        amount: deductAmount.toFixed(2),
-        direction: "debit",
-        referenceId: invoice.id,
-        referenceType: "invoice",
-        description: `Wallet payment for Invoice #${invoice.invoiceNumber}`,
-        createdBy: ctx.portalUser.contactId,
-      });
-
-      // 5. Update invoice
+      // 4. Execute wallet deduction AND invoice update in a single transaction
       const newWalletApplied = currentWalletApplied + deductAmount;
       const newRemainingDue = Math.max(0, total - currentPaid - newWalletApplied);
       const newStatus = newRemainingDue <= 0.01 ? "paid" : invoice.status;
 
-      const updateData: any = {
-        walletAppliedAmount: newWalletApplied.toFixed(2),
-        amountDue: newRemainingDue.toFixed(2),
-        status: newStatus,
-      };
-      if (newStatus === "paid") {
-        updateData.paidDate = new Date();
-      }
+      await db.transaction(async (tx: any) => {
+        // 4a. Deduct from wallet (within transaction)
+        await walletService.transact({
+          walletId: wallet.id,
+          type: "invoice_deduction",
+          amount: deductAmount.toFixed(2),
+          direction: "debit",
+          referenceId: invoice.id,
+          referenceType: "invoice",
+          description: `Wallet payment for Invoice #${invoice.invoiceNumber}`,
+          createdBy: ctx.portalUser.contactId,
+        }, tx);
 
-      await updateInvoice(invoice.id, updateData);
+        // 4b. Update invoice (within same transaction)
+        const updateData: any = {
+          walletAppliedAmount: newWalletApplied.toFixed(2),
+          amountDue: newRemainingDue.toFixed(2),
+          status: newStatus,
+        };
+        if (newStatus === "paid") {
+          updateData.paidDate = new Date();
+        }
+        await tx.update(invoices).set(updateData).where(eq(invoices.id, invoice.id));
+      });
 
       return {
         success: true,

@@ -352,6 +352,22 @@ export class WalletService {
    * Deposit funds into frozen wallet (e.g. from paid deposit invoice)
    */
   async depositToFrozen(customerId: number, currency: string, amount: string, invoiceId: number, createdBy?: number) {
+    const db = getDb();
+    if (!db) throw new Error("Database not initialized");
+
+    // Idempotency check: prevent duplicate deposit_in for the same invoice
+    const existingTx = await db.query.frozenWalletTransactions.findFirst({
+      where: (t: any, { and, eq }: any) => and(
+        eq(t.type, "deposit_in"),
+        eq(t.referenceId, invoiceId),
+        eq(t.referenceType, "invoice")
+      ),
+    });
+    if (existingTx) {
+      console.warn(`[WalletService] Skipping duplicate depositToFrozen for invoice #${invoiceId} — transaction #${existingTx.id} already exists.`);
+      return { wallet: null, transaction: existingTx, skipped: true };
+    }
+
     const wallet = await this.getFrozenWallet(customerId, currency);
     return await this.frozenTransact({
       walletId: wallet.id,

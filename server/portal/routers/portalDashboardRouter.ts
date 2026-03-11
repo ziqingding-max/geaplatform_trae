@@ -138,7 +138,7 @@ export const portalDashboardRouter = portalRouter({
       .select({
         id: employees.id,
         type: sql<string>`'employee'`,
-        title: sql<string>`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
+        title: sql<string>`(${employees.firstName} || ' ' || ${employees.lastName})`,
         status: employees.status,
         date: employees.updatedAt,
       })
@@ -166,7 +166,7 @@ export const portalDashboardRouter = portalRouter({
       .select({
         id: leaveRecords.id,
         type: sql<string>`'leave'`,
-        title: sql<string>`CONCAT('Leave #', ${leaveRecords.id})`,
+        title: sql<string>`('Leave #' || ${leaveRecords.id})`,
         status: leaveRecords.status,
         date: leaveRecords.updatedAt,
       })
