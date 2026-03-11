@@ -64,13 +64,7 @@ import { BankDetailsForm, BankDetails } from "@/components/forms/BankDetailsForm
 
 import { useI18n } from "@/lib/i18n";
 // ── Status Configs ──
-const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
-  pending_review: { label: "Pending Review", color: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
-  onboarding: { label: "In Progress", color: "bg-blue-50 text-blue-700 border-blue-200", icon: Loader2 },
-  active: { label: "Completed", color: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
-  rejected: { label: "Rejected", color: "bg-red-50 text-red-700 border-red-200", icon: XCircle },
-  contract_signed: { label: "Contract Signed", color: "bg-indigo-50 text-indigo-700 border-indigo-200", icon: FileCheck },
-};
+// statusConfig removed — employee records no longer shown on Onboarding page
 
 const inviteStatusConfig: Record<string, { label: string; color: string; icon: any }> = {
   pending: { label: "Awaiting Response", color: "bg-amber-50 text-amber-700 border-amber-200", icon: Clock },
@@ -103,17 +97,8 @@ const SERVICE_TYPES = [
     iconColor: "text-blue-600",
     features: ["Regulatory compliance", "Local representation", "Filing management", "Advisory services"],
   },
-  {
-    id: "visa_eor",
-    title: "Visa Sponsorship",
-    shortTitle: "Visa + EOR",
-    description: "Full EOR services plus visa sponsorship and immigration support for international employees.",
-    icon: Sparkles,
-    gradient: "from-violet-500/20 to-purple-500/20",
-    borderColor: "border-violet-200/60",
-    iconColor: "text-violet-600",
-    features: ["Work visa sponsorship", "Immigration support", "Full EOR services", "Relocation assistance"],
-  },
+  // Visa EOR is auto-detected based on nationality vs work country mismatch
+  // No manual selection card needed
 ];
 
 // ── Wizard Steps ──
@@ -240,22 +225,13 @@ export default function PortalOnboarding() {
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
-  const [activeFilter, setActiveFilter] = useState<"all" | "requests" | "invites">("all");
+  // Filter state removed — Onboarding page now only shows invites (pending + expired)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const isAor = formData.serviceType === "aor";
 
   // ── Queries ──
-  const { data: pendingReview, isLoading: loadingPending } = portalTrpc.employees.list.useQuery({
-    status: "pending_review",
-    page: 1,
-    pageSize: 50,
-  });
-  const { data: onboarding } = portalTrpc.employees.list.useQuery({
-    status: "onboarding",
-    page: 1,
-    pageSize: 50,
-  });
+  // Onboarding page only shows pending/expired invites — employees are managed in People page
   const { data: invites, isLoading: loadingInvites } = portalTrpc.employees.listOnboardingInvites.useQuery();
   const { data: countries } = portalTrpc.employees.availableCountries.useQuery();
 
@@ -314,10 +290,13 @@ export default function PortalOnboarding() {
   });
 
   // ── Computed ──
-  const allOnboarding = useMemo(() => [
-    ...(pendingReview?.items ?? []),
-    ...(onboarding?.items ?? []),
-  ], [pendingReview, onboarding]);
+  // Only show pending and expired invites (completed/cancelled are hidden)
+  const activeInvites = useMemo(() => {
+    return (invites || []).filter((i) => {
+      if (i.status === "completed" || i.status === "cancelled") return false;
+      return true; // pending + expired
+    });
+  }, [invites]);
 
   const selectedCountry = useMemo(() => {
     return countries?.find((c) => c.countryCode === formData.country);
@@ -329,13 +308,10 @@ export default function PortalOnboarding() {
   }, [formData.nationality, formData.country]);
 
   const filteredItems = useMemo(() => {
-    const requests = allOnboarding.map((e) => ({ type: "request" as const, data: e, date: new Date(e.createdAt) }));
-    const inviteItems = (invites || []).map((i) => ({ type: "invite" as const, data: i, date: new Date(i.createdAt) }));
-    let items = [...requests, ...inviteItems];
-    if (activeFilter === "requests") items = requests;
-    if (activeFilter === "invites") items = inviteItems;
-    return items.sort((a, b) => b.date.getTime() - a.date.getTime());
-  }, [allOnboarding, invites, activeFilter]);
+    return activeInvites
+      .map((i) => ({ type: "invite" as const, data: i, date: new Date(i.createdAt) }))
+      .sort((a, b) => b.date.getTime() - a.date.getTime());
+  }, [activeInvites]);
 
   // ── Helpers ──
   function resetAll() {
@@ -580,7 +556,7 @@ export default function PortalOnboarding() {
         <h3 className="text-xl font-semibold text-foreground">{t("portal_onboarding.service_selection.title")}</h3>
         <p className="text-sm text-muted-foreground mt-2">{t("portal_onboarding.service_selection.description")}</p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {SERVICE_TYPES.map((service) => {
           const isSelected = formData.serviceType === service.id;
           const Icon = service.icon;
@@ -1516,9 +1492,12 @@ export default function PortalOnboarding() {
   // ═══════════════════════════════════════════════════
   // LIST VIEW — Unified Timeline
   // ═══════════════════════════════════════════════════
-  const isLoading = loadingPending || loadingInvites;
-  const requestCount = allOnboarding.length;
-  const pendingInviteCount = (invites || []).filter((i) => i.status === "pending").length;
+  const isLoading = loadingInvites;
+  const pendingInviteCount = activeInvites.filter((i) => i.status === "pending").length;
+  const expiredInviteCount = activeInvites.filter((i) => {
+    if (i.status === "pending" && new Date(i.expiresAt) < new Date()) return true;
+    return i.status === "expired";
+  }).length;
 
   return (
     <PortalLayout title="Onboarding">
@@ -1536,37 +1515,15 @@ export default function PortalOnboarding() {
           </Button>
         </div>
 
-        {/* Filter Pills */}
-        <div className="flex items-center gap-2">
-          <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-muted/40 backdrop-blur-sm border border-border/40">
-            {[
-              { key: "all", label: t("portal_onboarding.filters.all"), count: requestCount + (invites || []).length },
-              { key: "requests", label: t("portal_onboarding.filters.my_requests"), count: requestCount },
-              { key: "invites", label: t("portal_onboarding.filters.invites_sent"), count: (invites || []).length },
-            ].map((filter) => (
-              <button
-                key={filter.key}
-                onClick={() => setActiveFilter(filter.key as any)}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200",
-                  activeFilter === filter.key
-                    ? "bg-white shadow-sm text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {filter.label}
-                {filter.count > 0 && (
-                  <span className={cn(
-                    "text-xs px-1.5 py-0.5 rounded-full",
-                    activeFilter === filter.key ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                  )}>
-                    {filter.count}
-                  </span>
-                )}
-              </button>
-            ))}
+        {/* Summary Stats */}
+        {activeInvites.length > 0 && (
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <span>{pendingInviteCount} awaiting response</span>
+            {expiredInviteCount > 0 && (
+              <span className="text-amber-600">{expiredInviteCount} expired</span>
+            )}
           </div>
-        </div>
+        )}
 
         {/* Content */}
         {isLoading ? (
@@ -1592,110 +1549,96 @@ export default function PortalOnboarding() {
           </GlassCard>
         ) : (
           <div className="space-y-3">
-            {filteredItems.map((item, idx) => {
-              if (item.type === "request") {
-                const emp = item.data as any;
-                const config = statusConfig[emp.status] || statusConfig.pending_review;
-                const StatusIcon = config.icon;
-                return (
-                  <GlassCard key={`req-${emp.id}`} className="p-4 border-border/40" hover>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center flex-shrink-0">
-                          <User className="w-5 h-5 text-primary" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{emp.firstName} {emp.lastName}</p>
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-border/60 text-muted-foreground">
-                              {t("portal_onboarding.filters.my_requests")}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            {emp.jobTitle || t("portal_onboarding.list.positionTbd")} · {emp.country}
-                          </p>
-                        </div>
+            {filteredItems.map((item) => {
+              const invite = item.data as any;
+              const isExpired = invite.status === "pending" && new Date(invite.expiresAt) < new Date();
+              const displayStatus = isExpired ? "expired" : invite.status;
+              const config = inviteStatusConfig[displayStatus] || inviteStatusConfig.pending;
+              const StatusIcon = config.icon;
+              return (
+                <GlassCard key={`inv-${invite.id}`} className="p-4 border-border/40">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/5 flex items-center justify-center flex-shrink-0">
+                        <Mail className="w-5 h-5 text-blue-600" />
                       </div>
-                      <div className="flex items-center gap-3">
-                        {emp.startDate && (
-                          <span className="text-xs text-muted-foreground hidden sm:inline">
-                            {t("portal_onboarding.list.startDate")} {new Date(emp.startDate).toLocaleDateString()}
-                          </span>
-                        )}
-                        <Badge variant="outline" className={cn("rounded-lg", config.color)}>
-                          <StatusIcon className="w-3 h-3 mr-1" />
-                          {config.label}
-                        </Badge>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{invite.employeeName}</p>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-blue-200/60 text-blue-600 bg-blue-50/50">
+                            {invite.serviceType === "aor" ? "AOR" : "EOR"}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{invite.employeeEmail}</p>
                       </div>
                     </div>
-                  </GlassCard>
-                );
-              } else {
-                const invite = item.data as any;
-                const config = inviteStatusConfig[invite.status] || inviteStatusConfig.pending;
-                const StatusIcon = config.icon;
-                return (
-                  <GlassCard key={`inv-${invite.id}`} className="p-4 border-border/40">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/10 to-indigo-500/5 flex items-center justify-center flex-shrink-0">
-                          <Mail className="w-5 h-5 text-blue-600" />
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground hidden sm:inline">
+                        {new Date(invite.createdAt).toLocaleDateString()}
+                      </span>
+                      <Badge variant="outline" className={cn("rounded-lg", config.color)}>
+                        <StatusIcon className="w-3 h-3 mr-1" />
+                        {config.label}
+                      </Badge>
+                      {invite.status === "pending" && !isExpired && (
+                        <div className="flex gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-lg text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/5"
+                            onClick={() => copyInviteLink(invite.token)}
+                          >
+                            <Link2 className="w-3.5 h-3.5" />
+                            {t("portal_onboarding.list.copy_link")}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-lg text-xs gap-1.5"
+                            onClick={() => resendInviteMutation.mutate({ id: invite.id })}
+                            disabled={resendInviteMutation.isPending}
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            {t("portal_onboarding.list.resend")}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg text-destructive hover:text-destructive"
+                            onClick={() => cancelInviteMutation.mutate({ id: invite.id })}
+                            title="Cancel invite"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
                         </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{invite.employeeName}</p>
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal border-blue-200/60 text-blue-600 bg-blue-50/50">
-                              {t("portal_onboarding.list.invite_badge")}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">{invite.employeeEmail}</p>
+                      )}
+                      {isExpired && (
+                        <div className="flex gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-lg text-xs gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50"
+                            onClick={() => resendInviteMutation.mutate({ id: invite.id })}
+                            disabled={resendInviteMutation.isPending}
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            Re-invite
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg text-destructive hover:text-destructive"
+                            onClick={() => cancelInviteMutation.mutate({ id: invite.id })}
+                            title="Remove"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-muted-foreground hidden sm:inline">
-                          {new Date(invite.createdAt).toLocaleDateString()}
-                        </span>
-                        <Badge variant="outline" className={cn("rounded-lg", config.color)}>
-                          <StatusIcon className="w-3 h-3 mr-1" />
-                          {config.label}
-                        </Badge>
-                        {invite.status === "pending" && (
-                          <div className="flex gap-1.5">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-lg text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/5"
-                              onClick={() => copyInviteLink(invite.token)}
-                            >
-                              <Link2 className="w-3.5 h-3.5" />
-                              {t("portal_onboarding.list.copy_link")}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-lg text-xs gap-1.5"
-                              onClick={() => resendInviteMutation.mutate({ id: invite.id })}
-                              disabled={resendInviteMutation.isPending}
-                            >
-                              <Send className="w-3.5 h-3.5" />
-                              {t("portal_onboarding.list.resend")}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 rounded-lg text-destructive hover:text-destructive"
-                              onClick={() => cancelInviteMutation.mutate({ id: invite.id })}
-                              title="Cancel invite"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
-                  </GlassCard>
-                );
-              }
+                  </div>
+                </GlassCard>
+              );
             })}
           </div>
         )}

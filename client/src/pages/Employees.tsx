@@ -163,7 +163,12 @@ function EmployeeList() {
     onSuccess: () => { refetchInvites(); toast.success("Invite deleted"); },
     onError: (e) => toast.error(e.message),
   });
-  const pendingInvites = invites?.filter((i: any) => i.status === "pending") || [];
+  // Only show pending and expired invites (completed/cancelled are hidden — those employees are in the main list)
+  const activeInvites = invites?.filter((i: any) => {
+    if (i.status === "completed" || i.status === "cancelled") return false;
+    return true; // pending + expired
+  }) || [];
+  const pendingInvites = activeInvites.filter((i: any) => i.status === "pending");
 
   const defaultForm = {
     customerId: 0,
@@ -751,9 +756,9 @@ function EmployeeList() {
           >
             <Mail className="w-4 h-4" />
             Self-Service Onboarding Invites
-            {pendingInvites.length > 0 && (
+            {activeInvites.length > 0 && (
               <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">
-                {pendingInvites.length} pending
+                {pendingInvites.length} pending{activeInvites.length > pendingInvites.length ? ` · ${activeInvites.length - pendingInvites.length} expired` : ""}
               </Badge>
             )}
             <ChevronRight className={`w-4 h-4 transition-transform ${showInvites ? "rotate-90" : ""}`} />
@@ -762,7 +767,7 @@ function EmployeeList() {
           {showInvites && (
             <Card className="mt-3">
               <CardContent className="p-0">
-                {invites && invites.length > 0 ? (
+                {activeInvites.length > 0 ? (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -776,7 +781,7 @@ function EmployeeList() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {invites.map((inv: any) => {
+                      {activeInvites.map((inv: any) => {
                         const isExpired = inv.status === "pending" && new Date(inv.expiresAt) < new Date();
                         const invStatus = isExpired ? "expired" : inv.status;
                         const invStatusColor: Record<string, string> = {
@@ -792,16 +797,8 @@ function EmployeeList() {
                             <TableCell className="text-sm">{inv.customerName || `#${inv.customerId}`}</TableCell>
                             <TableCell>
                               <Badge variant="outline" className={`text-xs ${invStatusColor[invStatus] || ""}`}>
-                                {invStatus === "pending" ? "Pending" : invStatus === "completed" ? "Completed" : invStatus === "expired" ? "Expired" : "Cancelled"}
+                                {invStatus === "pending" ? "Awaiting Response" : "Expired"}
                               </Badge>
-                              {inv.employeeId && invStatus === "completed" && (
-                                <button
-                                  onClick={() => setLocation(`/people/${inv.employeeId}`)}
-                                  className="ml-2 text-xs text-primary underline hover:no-underline"
-                                >
-                                  View Employee
-                                </button>
-                              )}
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
                               {new Date(inv.createdAt).toLocaleDateString()}

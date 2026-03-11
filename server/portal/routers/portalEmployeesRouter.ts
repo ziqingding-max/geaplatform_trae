@@ -231,6 +231,21 @@ export const portalEmployeesRouter = portalRouter({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const cid = ctx.portalUser.customerId;
 
+      // Email uniqueness check: no active employee with same email under this customer
+      const normalizedEmail = input.email.toLowerCase().trim();
+      const [existingEmployee] = await db
+        .select({ id: employees.id, status: employees.status })
+        .from(employees)
+        .where(
+          and(
+            eq(employees.customerId, cid),
+            eq(employees.email, normalizedEmail)
+          )
+        );
+      if (existingEmployee && existingEmployee.status !== "terminated") {
+        throw new TRPCError({ code: "CONFLICT", message: `An active employee with email "${normalizedEmail}" already exists.` });
+      }
+
       const result = await createEmployee({
         customerId: cid,
         firstName: input.firstName,
@@ -396,6 +411,36 @@ export const portalEmployeesRouter = portalRouter({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const cid = ctx.portalUser.customerId;
+
+      // Email uniqueness check: no pending invite with same email under this customer
+      const normalizedEmail = input.employeeEmail.toLowerCase().trim();
+      const [existingPendingInvite] = await db
+        .select({ id: onboardingInvites.id })
+        .from(onboardingInvites)
+        .where(
+          and(
+            eq(onboardingInvites.customerId, cid),
+            eq(onboardingInvites.employeeEmail, normalizedEmail),
+            eq(onboardingInvites.status, "pending")
+          )
+        );
+      if (existingPendingInvite) {
+        throw new TRPCError({ code: "CONFLICT", message: "An invitation is already pending for this email address." });
+      }
+
+      // Email uniqueness check: no active employee with same email under this customer
+      const [existingEmployee] = await db
+        .select({ id: employees.id, status: employees.status })
+        .from(employees)
+        .where(
+          and(
+            eq(employees.customerId, cid),
+            eq(employees.email, normalizedEmail)
+          )
+        );
+      if (existingEmployee && existingEmployee.status !== "terminated") {
+        throw new TRPCError({ code: "CONFLICT", message: "An active employee with this email already exists." });
+      }
 
       // Generate a unique token
       const token = crypto.randomBytes(32).toString("hex");
@@ -638,6 +683,21 @@ export const portalEmployeesRouter = portalRouter({
           .set({ status: "expired" })
           .where(eq(onboardingInvites.id, invite.id));
         throw new TRPCError({ code: "BAD_REQUEST", message: "This invite has expired" });
+      }
+
+      // Email uniqueness check: no active employee/contractor with same email under this customer
+      const normalizedEmail = input.email.toLowerCase().trim();
+      const [existingEmployee] = await db
+        .select({ id: employees.id, status: employees.status })
+        .from(employees)
+        .where(
+          and(
+            eq(employees.customerId, invite.customerId),
+            eq(employees.email, normalizedEmail)
+          )
+        );
+      if (existingEmployee && existingEmployee.status !== "terminated") {
+        throw new TRPCError({ code: "CONFLICT", message: "An employee with this email already exists in the system." });
       }
 
       // Use employer-provided data from invite, with worker input as fallback
