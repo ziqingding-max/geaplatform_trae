@@ -27,7 +27,7 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
 import ContractorMilestones from "@/components/pages/ContractorMilestones";
-import { CalendarDays, Plus, Pencil, Trash2, Lock, AlertCircle, Eye, CheckCircle2, XCircle, Download } from "lucide-react";
+import { CalendarDays, Plus, Pencil, Trash2, Lock, AlertCircle, Eye, CheckCircle2, XCircle, Download, Loader2 } from "lucide-react";
 import { DatePicker } from "@/components/DatePicker";
 import { toast } from "sonner";
 import EmployeeSelector from "@/components/EmployeeSelector";

@@ -578,15 +578,24 @@ export const payrollRouter = router({
       // Count items still in submitted or client_approved (not yet admin_approved)
       const { getDb } = await import("../db");
       const db = getDb();
+      if (!db) throw new Error("Database not initialized");
       const { leaveRecords, adjustments, reimbursements } = await import("../../drizzle/schema");
-      const { and, eq, inArray, sql } = await import("drizzle-orm");
+      const { and, eq, inArray, sql, gte, lt } = await import("drizzle-orm");
 
-      // Count pending leaves (submitted or client_approved) for this country + month
+      // Leave records use endDate (YYYY-MM-DD), filter by month range
+      const monthStart = payrollMonth; // e.g. "2026-03"
+      const monthStartDate = `${monthStart}-01`;
+      // Calculate next month start
+      const [y, m] = monthStart.split("-").map(Number);
+      const nextMonth = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+
+      // Count pending leaves (submitted or client_approved) for this month
       const pendingLeaves = await db.select({ count: sql<number>`count(*)` })
         .from(leaveRecords)
         .where(and(
           inArray(leaveRecords.status, ["submitted", "client_approved"]),
-          eq(leaveRecords.payrollMonth, payrollMonth),
+          gte(leaveRecords.endDate, monthStartDate),
+          lt(leaveRecords.endDate, nextMonth),
         ));
 
       // Count pending adjustments (submitted or client_approved) for this country + month

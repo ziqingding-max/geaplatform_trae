@@ -41,7 +41,7 @@ import {
 import {
   Tabs, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
-import { ArrowUpDown, Plus, Search, Pencil, Trash2, Lock, Upload, FileText, X, Paperclip, Eye, CheckCircle2, XCircle, Download, Briefcase, User } from "lucide-react";
+import { ArrowUpDown, Plus, Search, Pencil, Trash2, Lock, Upload, FileText, X, Paperclip, Eye, CheckCircle2, XCircle, Download, Briefcase, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import WorkerSelector from "@/components/WorkerSelector";
 import PayrollCycleIndicator from "@/components/PayrollCycleIndicator";
