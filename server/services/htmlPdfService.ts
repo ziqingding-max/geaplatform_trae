@@ -716,12 +716,18 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
   const companyIntroHtml = data.companyIntro
     ? `<p>${data.companyIntro}</p>`
     : `
-    <p>${branding.fullName} is a leading Employer of Record (EOR) and workforce solutions provider, enabling businesses to hire talent across 50+ countries without the need to establish local legal entities. Our platform combines compliance expertise, payroll management, and HR technology to deliver a seamless employment experience for both clients and their employees.</p>
-    <p>We handle all aspects of local employment — including employment contracts, payroll processing, statutory benefits, tax compliance, and HR administration — so you can focus on growing your business globally.</p>
+    <h3>About CGL Group</h3>
+    <p>CGL Group's core business is international executive search (CGL), with a focus on serving innovative startups and traditional enterprises undergoing transformation in China's growing economy. We provide strategic talent advisory, talent mapping, and help enterprises recruit core executive teams based on our deep understanding of industry talent markets. We also design competitive compensation packages and deliver CEO and executive leadership coaching and onboarding support.</p>
+    <p>In addition to our core executive search business (CGL), CGL Group has incubated and strategically invested in a portfolio of teams and organizations centered around comprehensive talent solutions for our clients. These include Executive Recruitment (STS), CGL Management Consulting (CMC), Gallup Strengths Assessment &amp; Certification Programs (CGL Strengths+), Global Employment Compliance &amp; Management Services (GEA), Technology Recruitment Services (Deepin), Expert Network (CGL 6-Degree Experts), Mid-level Talent Recruitment (TTC), and Investment &amp; Financing Advisory (Chuangling Capital).</p>
+
+    <h3>About GEA (Global Employment Advisors)</h3>
+    <p>As CGL's overseas business sub-brand, GEA helps Chinese enterprises navigate emerging markets across the full lifecycle — from Access to Implementation, from Development to Reorganization — providing comprehensive, end-to-end human resources services and solutions.</p>
+    <p>We design differentiated solutions tailored not only to different industries — such as new energy, smart manufacturing, food &amp; beverage, healthcare, consumer electronics, and embodied AI — but also to clients within the same industry who have distinct strategic priorities for their overseas expansion.</p>
+    <p>From lightweight market entry targeting a single destination to regional hub models with unified settlement centers, we deliver customized solutions that best fit the flexible and diversified needs of Chinese enterprises going global.</p>
   `;
 
   pages += contentPage(headerTitle, 2, 0, `
-    <h2>About ${branding.fullName}</h2>
+    <h2>About GEA (Global Employment Advisors)</h2>
     <div class="section-card">
       ${companyIntroHtml}
     </div>
@@ -871,24 +877,37 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
   const contactEmail = branding.contactEmail ?? data.billingEntity?.contactEmail ?? "sales@geahr.com";
   pages += contentPage(headerTitle, 4, 0, `
     <h2>Terms &amp; Conditions</h2>
-    <div class="section-card">
-      <h3>Validity</h3>
-      <p>This quotation is valid until <strong>${validUntil}</strong>. Pricing is subject to change after this date.</p>
+    <div class="section-card" style="font-size: 8pt; line-height: 1.5;">
+        <h3>1. Agreement &amp; Validity</h3>
+        <p>This Quotation Proposal ("Quotation") is issued by ${branding.fullName} ("Company") to ${data.customerName} ("Client") and is valid until <strong>${validUntil}</strong>. The terms herein, upon acceptance, shall form a binding part of the Master Services Agreement ("MSA") between the Company and the Client. Prices are subject to change after the validity date.</p>
 
-      <h3>Service Scope</h3>
-      <p>The quoted service fee covers: employment contract administration, monthly payroll processing, statutory benefit contributions, HR compliance management, and dedicated account support.</p>
+        <h3>2. Scope of Services</h3>
+        <p>The services covered by this Quotation ("Services") include:
+          <ul>
+            <li><strong>Employer of Record (EOR):</strong> The Company will act as the legal employer for the Client's personnel. This includes employment contract administration, monthly payroll processing, statutory benefits management, tax compliance, and HR administration. The Client retains full responsibility for the day-to-day management, supervision, and performance of the personnel.</li>
+            <li><strong>Agent of Record (AOR):</strong> The Company will engage independent contractors on behalf of the Client. This includes contract administration, compliance checks, and payment processing. The fees quoted are for the contractor's gross rate plus the Company's management fee; no statutory employer contributions are applicable.</li>
+          </ul>
+        </p>
 
-      <h3>Employer of Record (EOR)</h3>
-      <p>Under the EOR model, ${branding.shortName} acts as the legal employer of the worker(s) in the respective country. The client retains full day-to-day management of the worker's tasks and responsibilities.</p>
+        <h3>3. Fees &amp; Payment</h3>
+        <p><strong>3.1. Service Fees:</strong> The recurring monthly service fees and any one-time fees are as specified in the Pricing Summary. Fees are exclusive of any applicable Value Added Tax (VAT) or similar sales taxes, which will be added to the invoice where required by law.</p>
+        <p><strong>3.2. Employment Costs:</strong> The Client is responsible for the full employment cost, which includes the employee's gross salary and all mandatory employer contributions (e.g., social security, insurance, pension) as required by local law.</p>
+        <p><strong>3.3. Invoicing &amp; Payment:</strong> Invoices will be issued monthly in advance. Payment is due within the terms specified in the MSA (e.g., Net 15 days). A security deposit, typically equivalent to two (2) months of total estimated costs, is required upon commencement of services and will be invoiced separately.</p>
 
-      <h3>Agent of Record (AOR)</h3>
-      <p>Under the AOR model, ${branding.shortName} engages contractors on behalf of the client. The contractor rate shown is the gross contractor fee; no statutory employer contributions apply.</p>
+        <h3>4. Currency &amp; Exchange Rates</h3>
+        <p>This Quotation is presented in USD for comparative purposes. Invoices will be issued in the Client's designated billing currency. Costs incurred in local currencies (e.g., salaries, employer contributions) will be converted using the prevailing exchange rate at the time of payroll processing, plus a standard currency conversion markup as defined in the MSA. The exchange rates shown in this Quotation are indicative and subject to fluctuation.</p>
 
-      <h3>Exchange Rates</h3>
-      <p>Exchange rates are indicative and based on rates at the time of quotation. Final invoiced amounts may vary based on prevailing rates at the time of payroll processing.</p>
+        <h3>5. Client's Responsibilities</h3>
+        <p>The Client agrees to provide accurate and timely information required for the provision of Services, including all necessary details for personnel and contractor onboarding. The Client is solely responsible for the selection of personnel, their work assignments, and compliance with all applicable labor laws pertaining to working conditions and occupational safety.</p>
 
-      <h3>Confidentiality</h3>
-      <p>This document is confidential and intended solely for the named recipient. It may not be shared with third parties without prior written consent from ${branding.shortName}.</p>
+        <h3>6. Confidentiality</h3>
+        <p>This Quotation and its contents are confidential and proprietary to the Company. It is intended solely for the use of the Client and may not be disclosed to any third party without the prior written consent of the Company. Both parties agree to maintain the confidentiality of all proprietary information exchanged during the course of the business relationship.</p>
+
+        <h3>7. Limitation of Liability</h3>
+        <p>The Company's liability in connection with the Services provided shall be limited to the total service fees paid by the Client in the preceding six (6) months. The Company shall not be liable for any indirect, consequential, or special damages, including loss of profits.</p>
+
+        <h3>8. Governing Law</h3>
+        <p>This Quotation and any subsequent agreement shall be governed by and construed in accordance with the laws of the jurisdiction specified in the Master Services Agreement.</p>
     </div>
 
     <div class="notes-box" style="margin-top:6mm;">
