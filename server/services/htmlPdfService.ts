@@ -90,7 +90,7 @@ const BASE_CSS = `
     page-break-after: always;
     background: white;
   }
-  .page:last-child { page-break-after: avoid; }
+  .page:last-child { page-break-after: avoid; min-height: auto; }
 
   /* ── Cover Page ── */
   .cover {
@@ -244,7 +244,7 @@ const BASE_CSS = `
     border-radius: 2mm;
     padding: 4mm 5mm;
     margin-bottom: 4mm;
-    page-break-inside: avoid;
+    page-break-inside: auto;
   }
   .section-card-title {
     font-size: 10pt;
@@ -718,7 +718,6 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
     : `
     <h3>About CGL Group</h3>
     <p>CGL Group's core business is international executive search (CGL), with a focus on serving innovative startups and traditional enterprises undergoing transformation in China's growing economy. We provide strategic talent advisory, talent mapping, and help enterprises recruit core executive teams based on our deep understanding of industry talent markets. We also design competitive compensation packages and deliver CEO and executive leadership coaching and onboarding support.</p>
-    <p>In addition to our core executive search business (CGL), CGL Group has incubated and strategically invested in a portfolio of teams and organizations centered around comprehensive talent solutions for our clients. These include Executive Recruitment (STS), CGL Management Consulting (CMC), Gallup Strengths Assessment &amp; Certification Programs (CGL Strengths+), Global Employment Compliance &amp; Management Services (GEA), Technology Recruitment Services (Deepin), Expert Network (CGL 6-Degree Experts), Mid-level Talent Recruitment (TTC), and Investment &amp; Financing Advisory (Chuangling Capital).</p>
 
     <h3>About GEA (Global Employment Advisors)</h3>
     <p>As CGL's overseas business sub-brand, GEA helps Chinese enterprises navigate emerging markets across the full lifecycle — from Access to Implementation, from Development to Reorganization — providing comprehensive, end-to-end human resources services and solutions.</p>
@@ -896,24 +895,15 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
         <h3>4. Currency &amp; Exchange Rates</h3>
         <p>This Quotation is presented in USD for comparative purposes. Invoices will be issued in the Client's designated billing currency as agreed in the MSA. Costs incurred in local currencies (e.g., salaries, employer contributions) will be converted using the prevailing exchange rate at the time of payroll processing. The exchange rates shown in this Quotation are indicative only and subject to market fluctuation; final invoiced amounts may vary accordingly.</p>
 
-        <h3>5. Client's Rights &amp; Obligations</h3>
-        <p><strong>5.1.</strong> The Client shall provide the Company with all information and documents reasonably required in connection with the provision of Services, including all necessary details for personnel and contractor onboarding, in a timely manner.</p>
-        <p><strong>5.2.</strong> The Client is responsible for sourcing and selecting the employees or contractors to be engaged through the Company. The Client is solely responsible for work assignments, performance management, and compliance with all applicable labor laws pertaining to working conditions and occupational health and safety.</p>
-        <p><strong>5.3.</strong> The Client shall notify the Company as soon as practicable when an employee's or contractor's services will no longer be required. The Client shall be responsible, directly or via the Company, for any costs arising from notice periods and any statutory dues for termination.</p>
-        <p><strong>5.4.</strong> The Company shall not be held liable for any employee's negligence, misconduct, or failure to perform duties. The Client acknowledges that it maintains the direct working relationship with the personnel and accepts full liability for any damages caused to the Company arising from wrongful termination, discrimination, or other employment-related claims directly or indirectly caused by the Client's actions or instructions.</p>
-
-        <h3>6. Confidentiality</h3>
+        <h3>5. Confidentiality</h3>
         <p>This Quotation and its contents are confidential and proprietary to the Company. It is intended solely for the use of the named Client and may not be disclosed, reproduced, or distributed to any third party without the prior written consent of the Company. Both parties agree to maintain the confidentiality of all proprietary and sensitive information exchanged during the course of the business relationship, using at least the same degree of care as each party applies to its own confidential information. These obligations shall survive the termination of the agreement.</p>
 
-        <h3>7. Limitation of Liability</h3>
-        <p><strong>7.1.</strong> The Company's sole liability to the Client in relation to any and all claims arising under or in connection with the Services (whether in contract, tort, negligence, strict liability, or otherwise) shall be for direct damages only, and shall not exceed, in the aggregate, the total service fees paid by the Client to the Company in the six (6) month period immediately preceding the event giving rise to the claim.</p>
-        <p><strong>7.2.</strong> Neither party shall be liable for any loss of profits, income, revenue, anticipated savings, business, contracts, commercial opportunities, or goodwill, nor for any special, indirect, incidental, punitive, or consequential loss or damage, howsoever arising.</p>
-        <p><strong>7.3.</strong> Neither party shall be liable for any losses arising out of a Force Majeure Event, being an event outside the reasonable control of the affected party, including but not limited to natural disasters, wars, epidemics, government actions, internet failures, or power outages.</p>
+        <h3>6. Limitation of Liability</h3>
+        <p><strong>6.1.</strong> The Company's sole liability to the Client in relation to any and all claims arising under or in connection with the Services (whether in contract, tort, negligence, strict liability, or otherwise) shall be for direct damages only, and shall not exceed, in the aggregate, the total service fees paid by the Client to the Company in the six (6) month period immediately preceding the event giving rise to the claim.</p>
+        <p><strong>6.2.</strong> Neither party shall be liable for any loss of profits, income, revenue, anticipated savings, business, contracts, commercial opportunities, or goodwill, nor for any special, indirect, incidental, punitive, or consequential loss or damage, howsoever arising.</p>
+        <p><strong>6.3.</strong> Neither party shall be liable for any losses arising out of a Force Majeure Event, being an event outside the reasonable control of the affected party, including but not limited to natural disasters, wars, epidemics, government actions, internet failures, or power outages.</p>
 
-        <h3>8. Termination</h3>
-        <p>Either party may terminate the MSA by providing at least sixty (60) days' prior written notice to the other party, subject to payment of all accrued but unpaid charges. Upon termination, the Client remains liable for all employment costs, notice period obligations, and statutory termination dues for any personnel engaged under the Services.</p>
-
-        <h3>9. Governing Law &amp; Dispute Resolution</h3>
+        <h3>7. Governing Law &amp; Dispute Resolution</h3>
         <p>This Quotation and any subsequent agreement shall be governed by and construed in accordance with the laws of Hong Kong SAR. All disputes arising out of or in connection with this Quotation or the MSA shall be resolved in accordance with the dispute resolution mechanism specified in the MSA.</p>
     </div>
 
