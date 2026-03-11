@@ -21,6 +21,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter,
+} from "@/components/ui/sheet";
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
@@ -106,8 +109,8 @@ const safeMonth = (d: string | Date | null | undefined): string => {
   }
 };
 
-/* ========== Multi-File AI Upload & Parse Dialog ========== */
-function AIUploadDialog({
+/* ========== Multi-File AI Upload & Parse Drawer ========== */
+function AIUploadDrawer({
   open,
   onOpenChange,
   vendors,
@@ -400,21 +403,23 @@ function AIUploadDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetContent side="right" className="!w-[680px] !max-w-[90vw] sm:!max-w-[680px] flex flex-col p-0">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
+          <SheetTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
             {step === "upload" && t("vendorBills.aiUpload.title")}
             {step === "parsing" && t("vendorBills.aiUpload.parsingTitle")}
             {step === "review" && t("vendorBills.review.title")}
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             {step === "upload" && t("vendorBills.aiUpload.prompt")}
             {step === "parsing" && t("vendorBills.aiUpload.parsingDescription")}
             {step === "review" && t("vendorBills.review.description")}
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4">
 
         {/* ===== Step 1: Upload ===== */}
         {step === "upload" && (
@@ -493,7 +498,7 @@ function AIUploadDialog({
               </div>
             )}
 
-            <DialogFooter>
+            <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={() => handleOpenChange(false)}>{t("common.cancel")}</Button>
               <Button
                 onClick={handleStartAnalysis}
@@ -503,7 +508,7 @@ function AIUploadDialog({
                 <Sparkles className="w-4 h-4" />
                 Analyze {pendingFiles.length} File{pendingFiles.length !== 1 ? "s" : ""} with AI
               </Button>
-            </DialogFooter>
+            </div>
           </div>
         )}
 
@@ -847,7 +852,7 @@ function AIUploadDialog({
                 </div>
               )}
 
-              <DialogFooter className="gap-2">
+              <div className="flex justify-end gap-2 pt-4">
                 <Button variant="outline" onClick={() => { setStep("upload"); setParsedResult(null); setPendingFiles([]); }}>
                   <Upload className="w-4 h-4 mr-2" />{t("vendorBills.actions.backToUpload")}
                 </Button>
@@ -858,12 +863,13 @@ function AIUploadDialog({
                     <><Check className="w-4 h-4" />{t("vendorBills.actions.createBill")}</>
                   )}
                 </Button>
-              </DialogFooter>
+              </div>
             </div>
           );
         })()}
-      </DialogContent>
-    </Dialog>
+        </div>{/* end scrollable area */}
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -1165,7 +1171,7 @@ function VendorBillList() {
         </Card>
 
         {/* AI Upload Dialog */}
-        <AIUploadDialog
+        <AIUploadDrawer
           open={aiUploadOpen}
           onOpenChange={setAiUploadOpen}
           vendors={vendors}
