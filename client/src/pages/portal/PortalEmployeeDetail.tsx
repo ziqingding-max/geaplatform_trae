@@ -219,7 +219,6 @@ export default function PortalEmployeeDetail() {
                 <TabsTrigger value="documents">Documents ({employee.documents?.length || 0})</TabsTrigger>
                 <TabsTrigger value="contracts">Contracts ({employee.contracts?.length || 0})</TabsTrigger>
                 <TabsTrigger value="leave">{t("portal_employees.tabs.leave")}</TabsTrigger>
-                <TabsTrigger value="bank">{t("portal_employees.tabs.bank")}</TabsTrigger>
               </TabsList>
 
               {/* Personal Information Tab */}
@@ -515,38 +514,7 @@ export default function PortalEmployeeDetail() {
                 )}
               </TabsContent>
 
-              {/* Bank Details Tab */}
-              <TabsContent value="bank" className="mt-4">
-                {(() => {
-                  const bd = employee.bankDetails as Record<string, string> | null;
-                  if (!bd || typeof bd !== "object" || Object.keys(bd).length === 0) {
-                    return (
-                      <div className="text-center py-12">
-                        <CreditCard className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
-                        <p className="text-sm text-muted-foreground">{t("portal_employees.bank.empty")}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{t("portal_employees.bank.emptyHint")}</p>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {Object.entries(bd).map(([key, value]) => (
-                        value ? (
-                          <div key={key} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
-                            <CreditCard className="w-4 h-4 mt-0.5 text-muted-foreground" />
-                            <div>
-                              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                                {key.replace(/([A-Z])/g, " $1").replace(/^./, (s: string) => s.toUpperCase()).trim()}
-                              </p>
-                              <p className="text-sm font-medium mt-0.5">{String(value)}</p>
-                            </div>
-                          </div>
-                        ) : null
-                      ))}
-                    </div>
-                  );
-                })()}
-              </TabsContent>
+
             </Tabs>
           </div>
         </div>

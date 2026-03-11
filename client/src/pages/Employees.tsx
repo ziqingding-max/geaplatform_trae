@@ -846,7 +846,7 @@ function EmployeeList() {
 }
 
 /* ========== Employee Detail ========== */
-type DetailTab = "info" | "leave" | "payroll" | "adjustments" | "visa" | "documents" | "bank";
+type DetailTab = "info" | "leave" | "payroll" | "adjustments" | "visa" | "documents";
 
 function EmployeeDetail({ id }: { id: number }) {
   const { t } = useI18n();
@@ -1106,7 +1106,6 @@ function EmployeeDetail({ id }: { id: number }) {
     { key: "adjustments", label: `${t("employees.detail.tabs.adjustments")}${adjustmentHistory?.data?.length ? ` (${adjustmentHistory.data.length})` : ""}` },
     { key: "visa", label: t("employees.detail.tabs.visa"), show: employee.requiresVisa || employee.serviceType === "visa_eor" },
     { key: "documents", label: `${t("employees.detail.tabs.documents")} (${allDocuments.length})` },
-    { key: "bank", label: t("employees.detail.tabs.bank") },
   ];
 
   return (
@@ -1595,48 +1594,6 @@ function EmployeeDetail({ id }: { id: number }) {
                     <p className="text-xs text-muted-foreground mt-1">{t("employees.documents.emptyHint")}</p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {activeTab === "bank" && (
-          <div className="space-y-6">
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <CreditCard className="w-5 h-5 text-primary" />
-                  <h3 className="text-lg font-semibold">{t("employees.detail.tabs.bank")}</h3>
-                </div>
-                {(() => {
-                  const bd = employee.bankDetails as Record<string, string> | null;
-                  if (!bd || typeof bd !== "object" || Object.keys(bd).length === 0) {
-                    return (
-                      <div className="text-center py-12">
-                        <CreditCard className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
-                        <p className="text-sm text-muted-foreground">{t("employees.bank.empty")}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{t("employees.bank.emptyHint")}</p>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {Object.entries(bd).map(([key, value]) => (
-                        value ? (
-                          <div key={key} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
-                            <CreditCard className="w-4 h-4 mt-0.5 text-muted-foreground" />
-                            <div>
-                              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
-                                {key.replace(/([A-Z])/g, " $1").replace(/^./, (s: string) => s.toUpperCase()).trim()}
-                              </p>
-                              <p className="text-sm font-medium mt-0.5">{String(value)}</p>
-                            </div>
-                          </div>
-                        ) : null
-                      ))}
-                    </div>
-                  );
-                })()}
               </CardContent>
             </Card>
           </div>

@@ -273,7 +273,7 @@ export const portalEmployeesRouter = portalRouter({
         baseSalary: input.baseSalary,
         salaryCurrency: input.salaryCurrency,
         requiresVisa: input.requiresVisa,
-        bankDetails: input.bankDetails ? JSON.stringify(input.bankDetails) : null,
+        bankDetails: input.bankDetails || null,
         status: "pending_review",
       });
 
@@ -808,7 +808,7 @@ export const portalEmployeesRouter = portalRouter({
           baseSalary: invite.baseSalary || "0",
           salaryCurrency: invite.salaryCurrency || "USD",
           requiresVisa,
-          bankDetails: input.bankDetails ? JSON.stringify(input.bankDetails) : null,
+          bankDetails: input.bankDetails || null,
           status: "pending_review",
         });
 
