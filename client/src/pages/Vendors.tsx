@@ -5,7 +5,7 @@
 import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
 import { BankDetailsForm, BankDetails } from "@/components/forms/BankDetailsForm";
-import { formatDate, formatAmount } from "@/lib/format";
+import { formatDate, formatAmount, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { useRoute, useLocation } from "wouter";
@@ -293,7 +293,7 @@ function VendorList() {
                           {vendor.vendorType === "client_related" ? t("vendors.list.filter.type.client_related") : t("vendors.list.filter.type.operational")}
                         </Badge>
                       </TableCell>
-                      <TableCell>{vendor.country}</TableCell>
+                      <TableCell>{countryName(vendor.country)}</TableCell>
                       <TableCell>{formatServiceType(vendor.serviceType)}</TableCell>
                       <TableCell>
                         <div className="text-sm">
@@ -455,7 +455,7 @@ function VendorDetail({ id }: { id: number }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div><div className="text-xs text-muted-foreground">{t("vendors.table.header.country")}</div><div className="font-medium">{vendor.country}</div></div>
+              <div><div className="text-xs text-muted-foreground">{t("vendors.table.header.country")}</div><div className="font-medium">{countryName(vendor.country)}</div></div>
               {vendor.address && <div><div className="text-xs text-muted-foreground">{t("vendors.form.address.label")}</div><div className="font-medium">{vendor.address}</div></div>}
               {(vendor.city || vendor.state || vendor.postalCode) && (
                 <div><div className="text-xs text-muted-foreground">{t("vendors.form.city.label")} / {t("vendors.form.state_province.label")} / {t("vendors.form.postal_code.label")}</div><div className="font-medium">{[vendor.city, vendor.state, vendor.postalCode].filter(Boolean).join(", ")}</div></div>

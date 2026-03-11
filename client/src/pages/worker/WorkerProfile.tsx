@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { workerTrpc } from "@/lib/workerTrpc";
+import { countryName } from "@/lib/format";
 import WorkerLayout from "./WorkerLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -155,7 +156,7 @@ export default function WorkerProfile() {
                 </div>
                 <div className="space-y-2">
                   <Label>Country/Region</Label>
-                  <Input value={profile?.country} disabled className="bg-muted" />
+                  <Input value={countryName(profile?.country)} disabled className="bg-muted" />
                 </div>
               </div>
             </CardContent>

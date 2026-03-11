@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDate } from "@/lib/format";
+import { formatDate, countryName } from "@/lib/format";
 
 function InvoiceDetailDialog({ invoiceId, open, onOpenChange }: { invoiceId: number | null, open: boolean, onOpenChange: (o: boolean) => void }) {
   const { data: invoice, isLoading } = trpc.contractors.invoices.get.useQuery(
@@ -493,7 +493,7 @@ export default function ContractorDetail() {
                   <InfoRow label="Address" value={contractor.address} />
                   <InfoRow label="City" value={contractor.city} />
                   <InfoRow label="State / Province" value={contractor.state} />
-                  <InfoRow label="Country/Region" value={contractor.country} />
+                  <InfoRow label="Country/Region" value={countryName(contractor.country)} />
                   <InfoRow label="Postal Code" value={contractor.postalCode} />
                 </CardContent>
               </Card>

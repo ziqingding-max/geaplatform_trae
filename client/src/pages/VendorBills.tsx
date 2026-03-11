@@ -5,7 +5,7 @@
  */
 import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
-import { formatDate, formatMonth, formatAmount } from "@/lib/format";
+import { formatDate, formatMonth, formatAmount, countryName } from "@/lib/format";
 import { DatePicker, MonthPicker } from "@/components/DatePicker";
 import { trpc } from "@/lib/trpc";
 import { useState, useMemo, useRef, useCallback } from "react";
@@ -1627,7 +1627,7 @@ function VendorBillDetail({ id }: { id: number }) {
                   <SelectContent>
                     {((employeesQuery.data as any)?.data || []).map((e: any) => (
                       <SelectItem key={e.id} value={String(e.id)}>
-                        {e.firstName} {e.lastName} — {e.country}
+                        {e.firstName} {e.lastName} — {countryName(e.country)}
                       </SelectItem>
                     ))}
                   </SelectContent>

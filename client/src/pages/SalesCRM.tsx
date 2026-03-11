@@ -13,7 +13,7 @@
 import Layout from "@/components/Layout";
 import CountrySelect, { ALL_COUNTRIES } from "@/components/CountrySelect";
 import { DatePicker } from "@/components/DatePicker";
-import { formatDate, formatDateISO, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateISO, formatDateTime, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
 import { useState, useMemo } from "react";
@@ -767,7 +767,7 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                   <InfoRow label={t("sales.contactName")} value={lead.contactName} />
                   <InfoRow label={t("sales.contactEmail")} value={lead.contactEmail} />
                   <InfoRow label={t("sales.contactPhone")} value={lead.contactPhone} />
-                  <InfoRow label={t("common.country")} value={lead.country} />
+                  <InfoRow label={t("common.country")} value={countryName(lead.country)} />
                   <InfoRow label="Industry" value={lead.industry} />
                   <InfoRow label={t("sales.source")} value={lead.source} />
                   <InfoRow label={t("sales.owner")} value={leadOwner?.name} />

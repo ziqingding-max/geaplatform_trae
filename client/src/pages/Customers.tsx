@@ -6,7 +6,7 @@ import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
 import CountrySelect from "@/components/CountrySelect";
 import { DatePicker } from "@/components/DatePicker";
-import { formatDate, formatDateISO } from "@/lib/format";
+import { formatDate, formatDateISO, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useState, useRef, useEffect } from "react";
 import { useRoute, useLocation, useSearch } from "wouter";
@@ -296,7 +296,7 @@ function CustomerList() {
                         <div className="font-medium text-sm">{customer.companyName}</div>
                         <div className="text-xs text-muted-foreground">{(customer as any).clientCode || customer.legalEntityName || ''}</div>
                       </TableCell>
-                      <TableCell className="text-sm">{customer.country}</TableCell>
+                      <TableCell className="text-sm">{countryName(customer.country)}</TableCell>
                       <TableCell>
                         <div className="text-sm">{customer.primaryContactName || "—"}</div>
                         <div className="text-xs text-muted-foreground">{customer.primaryContactEmail || ""}</div>
@@ -878,7 +878,7 @@ function CustomerDetail({ id }: { id: number }) {
                 <InfoRow label="Legal Entity" value={customer.legalEntityName} />
                 <InfoRow label="Registration #" value={customer.registrationNumber} />
                 <InfoRow label={t("customers.form.industry")} value={customer.industry} />
-                <InfoRow label={t("customers.table.header.country")} value={customer.country} />
+                <InfoRow label={t("customers.table.header.country")} value={countryName(customer.country)} />
                 <InfoRow label={t("customers.form.address")} value={[customer.address, customer.city, customer.state, customer.postalCode].filter(Boolean).join(", ")} />
               </CardContent>
             </Card>

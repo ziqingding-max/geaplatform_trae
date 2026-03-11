@@ -4,7 +4,7 @@
  * Manage employee reimbursement claims with approval workflow
  */
 import Layout from "@/components/Layout";
-import { formatMonth, formatAmount } from "@/lib/format";
+import { formatMonth, formatAmount, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useState, useMemo, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -626,7 +626,7 @@ export default function Reimbursements() {
                 <p className="text-xs text-muted-foreground mt-0.5">
                    {(() => {
                     const emp = employeeMap.get(viewItem.employeeId);
-                    return emp ? `${emp.country}` : "";
+                    return emp ? `${countryName(emp.country)}` : "";
                   })()}
                 </p>
               </div>

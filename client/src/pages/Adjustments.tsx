@@ -6,7 +6,7 @@
  */
 
 import Layout from "@/components/Layout";
-import { formatMonth, formatAmount } from "@/lib/format";
+import { formatMonth, formatAmount, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useState, useMemo, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -983,7 +983,7 @@ export default function Adjustments() {
                      {(() => { const w = workerMap.get(viewAdj.workerId); return w ? `${w.firstName} ${w.lastName}` : viewAdj.workerId; })()}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {(() => { const w = workerMap.get(viewAdj.workerId); return w ? `${w.country} · ${w.currency || 'USD'}` : ''; })()}
+                    {(() => { const w = workerMap.get(viewAdj.workerId); return w ? `${countryName(w.country)} · ${w.currency || 'USD'}` : ''; })()}
                   </p>
                 </div>
 

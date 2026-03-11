@@ -4,7 +4,7 @@
  * Manage employee leave requests and contractor milestones
  */
 import Layout from "@/components/Layout";
-import { formatMonth, formatDate, formatDateISO } from "@/lib/format";
+import { formatMonth, formatDate, formatDateISO, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -720,7 +720,7 @@ export default function Leave() {
             <div className="space-y-4 mt-4">
               {editingEmployee && (
                 <p className="text-sm text-muted-foreground">
-                  Employee: <strong>{editingEmployee.firstName} {editingEmployee.lastName}</strong> — {editingEmployee.country}
+                  Employee: <strong>{editingEmployee.firstName} {editingEmployee.lastName}</strong> — {countryName(editingEmployee.country)}
                 </p>
               )}
 

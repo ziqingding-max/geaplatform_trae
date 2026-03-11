@@ -47,7 +47,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Users, Search, ChevronLeft, ChevronRight, Trash2, Loader2 } from "lucide-react";
-import { formatStatusLabel } from "@/lib/format";
+import { formatStatusLabel, countryName, formatDate } from "@/lib/format";
 import { toast } from "sonner";
 
 import { useI18n } from "@/lib/i18n";
@@ -180,10 +180,10 @@ export default function PortalEmployees() {
                         </div>
                       </TableCell>
                       <TableCell>{emp.jobTitle || "-"}</TableCell>
-                      <TableCell>{emp.country}</TableCell>
+                      <TableCell>{countryName(emp.country)}</TableCell>
                       <TableCell>{emp.department || "-"}</TableCell>
                       <TableCell>
-                        {emp.startDate ? new Date(emp.startDate).toLocaleDateString() : "-"}
+                        {emp.startDate ? formatDate(emp.startDate) : "-"}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusColors[emp.status] || ""}>
