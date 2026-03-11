@@ -300,7 +300,7 @@ export default function PortalAdjustments() {
             <SelectContent>
               <SelectItem value="all">{t("portal_adjustments.filter.all_statuses")}</SelectItem>
               <SelectItem value="submitted">{t("portal_adjustments.status.pending_review")}</SelectItem>
-              <SelectItem value="client_approved">{t("portal_adjustments.status.approved")}</SelectItem>
+              <SelectItem value="client_approved">{t("portal_adjustments.status.client_approved")}</SelectItem>
               <SelectItem value="client_rejected">{t("portal_adjustments.status.rejected")}</SelectItem>
               <SelectItem value="admin_approved">{t("portal_adjustments.status.confirmed")}</SelectItem>
               <SelectItem value="admin_rejected">{t("portal_adjustments.status.admin_rejected")}</SelectItem>
