@@ -436,6 +436,14 @@ export default function PortalInvoiceDetail() {
                     </span>
                   </div>
 
+                  {/* Wallet Applied */}
+                  {data.walletAppliedAmount != null && Number(data.walletAppliedAmount) > 0 && (
+                    <div className="flex justify-between items-center text-blue-600">
+                      <span className="text-sm">{t("portal_invoice_detail.summary.wallet_applied")}</span>
+                      <span className="text-sm font-mono tabular-nums">- {formatCurrency(data.currency, data.walletAppliedAmount)}</span>
+                    </div>
+                  )}
+
                   {/* Amount Due (after wallet deduction) */}
                   {data.amountDue != null && Number(data.amountDue) !== Number(data.total) && !isCreditNote && (
                     <>

@@ -117,9 +117,13 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
         res.status(400).json({ error: "Invalid invoice ID" });
         return;
       }
+      // Fetch invoice number for filename
+      const db = getDb();
+      const inv = db ? await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq(invoices.id, invoiceId)).then(r => r[0]) : null;
       const pdfBuffer = await generateInvoicePdf({ invoiceId });
+      const filename = inv?.invoiceNumber ? `${inv.invoiceNumber}.pdf` : `invoice-${invoiceId}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="invoice-${invoiceId}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Length", pdfBuffer.length.toString());
       res.send(pdfBuffer);
     } catch (error) {

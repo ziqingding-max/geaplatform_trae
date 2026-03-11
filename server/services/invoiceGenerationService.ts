@@ -352,7 +352,7 @@ async function generateAorInvoices(
   }
 
   // 3. Process each group -> Create Client Invoice
-  for (const [key, batch] of groups.entries()) {
+  for (const [key, batch] of Array.from(groups.entries())) {
     const [customerIdStr, currency] = key.split("|");
     const customerId = parseInt(customerIdStr);
 
@@ -557,7 +557,7 @@ export async function regenerateInvoices(
 
   // 1. Find only DRAFT monthly invoices for this month (preserve deposit, visa_service, etc.)
   const drafts = await db
-    .select({ id: invoices.id })
+    .select({ id: invoices.id, customerId: invoices.customerId, invoiceType: invoices.invoiceType, notes: invoices.notes })
     .from(invoices)
     .where(
       and(
@@ -566,6 +566,14 @@ export async function regenerateInvoices(
         inArray(invoices.invoiceType, ["monthly_eor", "monthly_visa_eor", "monthly_aor"])
       )
     );
+
+  // Save old notes keyed by customerId + invoiceType so we can restore after regeneration
+  const savedNotes: Record<string, string> = {};
+  for (const d of drafts) {
+    if (d.notes) {
+      savedNotes[`${d.customerId}_${d.invoiceType}`] = d.notes;
+    }
+  }
 
   const draftIds = drafts.map((d) => d.id);
 
@@ -578,7 +586,24 @@ export async function regenerateInvoices(
   }
 
   // 4. Regenerate
-  return await generateInvoicesFromPayroll(payrollMonth, "Regenerated Invoices");
+  const result = await generateInvoicesFromPayroll(payrollMonth);
+
+  // 5. Restore saved external notes on newly generated invoices
+  if (result.success && result.invoiceIds && result.invoiceIds.length > 0) {
+    const newInvoices = await db
+      .select({ id: invoices.id, customerId: invoices.customerId, invoiceType: invoices.invoiceType })
+      .from(invoices)
+      .where(inArray(invoices.id, result.invoiceIds));
+
+    for (const inv of newInvoices) {
+      const key = `${inv.customerId}_${inv.invoiceType}`;
+      if (savedNotes[key]) {
+        await db.update(invoices).set({ notes: savedNotes[key] }).where(eq(invoices.id, inv.id));
+      }
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -603,15 +628,35 @@ export async function regenerateSingleInvoice(
     return { success: false, message: "Invoice does not have a month set" };
   }
 
+  // Save the original external notes before deleting
+  const savedNotes = invoice.notes || null;
+  const savedCustomerId = invoice.customerId;
+  const savedInvoiceType = invoice.invoiceType;
+
   // 2. Delete invoice
   await db.delete(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
   await db.delete(invoices).where(eq(invoices.id, invoiceId));
 
   // 3. Regenerate for that month
-  // Since we deleted the specific invoice, generateInvoicesFromPayroll will recreate it
-  // (and skip other existing ones)
   const payrollMonth = new Date(invoice.invoiceMonth);
-  return await generateInvoicesFromPayroll(payrollMonth, "Regenerated Single Invoice");
+  const result = await generateInvoicesFromPayroll(payrollMonth);
+
+  // 4. Restore saved external notes on the newly generated invoice
+  if (result.success && result.invoiceIds && result.invoiceIds.length > 0 && savedNotes) {
+    const newInvoices = await db
+      .select({ id: invoices.id, customerId: invoices.customerId, invoiceType: invoices.invoiceType })
+      .from(invoices)
+      .where(inArray(invoices.id, result.invoiceIds));
+
+    for (const inv of newInvoices) {
+      if (inv.customerId === savedCustomerId && inv.invoiceType === savedInvoiceType) {
+        await db.update(invoices).set({ notes: savedNotes }).where(eq(invoices.id, inv.id));
+        break;
+      }
+    }
+  }
+
+  return result;
 }
 
 /**

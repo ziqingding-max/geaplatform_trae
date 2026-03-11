@@ -224,16 +224,23 @@ export default function CountryGuide() {
   }, [countries, countriesWithGuides, countryCode]);
 
   // Filter countries for selector
+  // Only show countries that have published guides
+  const publishedCountries = useMemo(() => {
+    if (!countries || !countriesWithGuides) return countries || [];
+    const publishedCodes = new Set(countriesWithGuides.map((c) => c.countryCode));
+    return countries.filter((c) => publishedCodes.has(c.countryCode));
+  }, [countries, countriesWithGuides]);
+
   const filteredCountries = useMemo(() => {
-    if (!countries) return [];
+    if (!publishedCountries) return [];
     const q = searchQuery.toLowerCase();
-    if (!q) return countries;
-    return countries.filter(
+    if (!q) return publishedCountries;
+    return publishedCountries.filter(
       (c) =>
         c.countryName.toLowerCase().includes(q) ||
         c.countryCode.toLowerCase().includes(q)
     );
-  }, [countries, searchQuery]);
+  }, [publishedCountries, searchQuery]);
 
   const scrollToChapter = (chapterId: number) => {
     const el = document.querySelector(`[data-chapter-id="${chapterId}"]`);
@@ -374,9 +381,8 @@ export default function CountryGuide() {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mt-5">
               <QuickFactCard
                 icon={Coins}
-                label={locale === "zh" ? "当地货币" : "Local Currency"}
-                value={currentCountry.localCurrency ?? "—"}
-                highlight
+                label={locale === "zh" ? "\u5f53\u5730\u8d27\u5e01" : "Local Currency"}
+                value={currentCountry.localCurrency ?? "\u2014"}
               />
               <QuickFactCard
                 icon={Timer}

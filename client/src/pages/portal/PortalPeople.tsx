@@ -48,7 +48,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Users, Briefcase, Search, ChevronLeft, ChevronRight, Trash2, Loader2 } from "lucide-react";
-import { formatStatusLabel } from "@/lib/format";
+import { formatStatusLabel, countryName } from "@/lib/format";
 import { toast } from "sonner";
 import { portalPath } from "@/lib/portalBasePath";
 
@@ -176,7 +176,7 @@ function EmployeesTab() {
                       </div>
                     </TableCell>
                     <TableCell>{emp.jobTitle || "-"}</TableCell>
-                    <TableCell>{emp.country}</TableCell>
+                    <TableCell>{countryName(emp.country)}</TableCell>
                     <TableCell>{emp.department || "-"}</TableCell>
                     <TableCell>
                       {emp.startDate ? new Date(emp.startDate).toLocaleDateString() : "-"}
@@ -342,7 +342,7 @@ function ContractorsTab() {
                       </div>
                     </TableCell>
                     <TableCell>{c.jobTitle || "-"}</TableCell>
-                    <TableCell>{c.country}</TableCell>
+                    <TableCell>{countryName(c.country)}</TableCell>
                     <TableCell>
                       <div className="text-sm">
                         {c.rateAmount ? `${c.currency || "USD"} ${Number(c.rateAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "-"}

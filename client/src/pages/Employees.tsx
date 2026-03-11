@@ -9,7 +9,7 @@ import CurrencySelect from "@/components/CurrencySelect";
 import CountrySelect from "@/components/CountrySelect";
 import { DatePicker } from "@/components/DatePicker";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
-import { formatDate, formatMonth, formatDateISO, formatDateTime } from "@/lib/format";
+import { formatDate, formatMonth, formatDateISO, formatDateTime, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useRoute, useLocation, useSearch } from "wouter";
@@ -611,7 +611,7 @@ function EmployeeList() {
                 <div className="flex justify-end gap-3 pt-2 border-t">
                   <Button variant="outline" onClick={() => { setCreateOpen(false); setErrors({}); }}>{t("common.cancel")}</Button>
                   <Button onClick={handleCreate} disabled={createMutation.isPending}>
-                    {createMutation.isPending ? "Creating..." : "Create Employee"}
+                    {createMutation.isPending ? t("employees.create.creating") : t("employees.create.createEmployee")}
                   </Button>
                 </div>
               </div>
@@ -705,7 +705,7 @@ function EmployeeList() {
                         <div>{emp.customerName || `Customer #${emp.customerId}`}</div>
                         {emp.clientCode && <div className="text-xs text-muted-foreground">{emp.clientCode}</div>}
                       </TableCell>
-                      <TableCell className="text-sm">{emp.country}</TableCell>
+                      <TableCell className="text-sm">{countryName(emp.country)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs uppercase">{emp.serviceType?.replace(/_/g, " ")}</Badge>
                       </TableCell>
@@ -797,7 +797,7 @@ function EmployeeList() {
                             <TableCell className="text-sm">{inv.customerName || `#${inv.customerId}`}</TableCell>
                             <TableCell>
                               <Badge variant="outline" className={`text-xs ${invStatusColor[invStatus] || ""}`}>
-                                {invStatus === "pending" ? "Awaiting Response" : "Expired"}
+                                {invStatus === "pending" ? t("employees.invites.awaitingResponse") : t("employees.invites.expired")}
                               </Badge>
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
@@ -846,7 +846,7 @@ function EmployeeList() {
 }
 
 /* ========== Employee Detail ========== */
-type DetailTab = "info" | "leave" | "payroll" | "adjustments" | "visa" | "documents";
+type DetailTab = "info" | "leave" | "payroll" | "adjustments" | "visa" | "documents" | "bank";
 
 function EmployeeDetail({ id }: { id: number }) {
   const { t } = useI18n();
@@ -1106,6 +1106,7 @@ function EmployeeDetail({ id }: { id: number }) {
     { key: "adjustments", label: `${t("employees.detail.tabs.adjustments")}${adjustmentHistory?.data?.length ? ` (${adjustmentHistory.data.length})` : ""}` },
     { key: "visa", label: t("employees.detail.tabs.visa"), show: employee.requiresVisa || employee.serviceType === "visa_eor" },
     { key: "documents", label: `${t("employees.detail.tabs.documents")} (${allDocuments.length})` },
+    { key: "bank", label: t("employees.detail.tabs.bank") },
   ];
 
   return (
@@ -1170,13 +1171,13 @@ function EmployeeDetail({ id }: { id: number }) {
               <CardContent className="space-y-3">
                 <InfoRow icon={<Mail className="w-3.5 h-3.5" />} label={t("employees.create.form.email")} value={employee.email} />
                 <InfoRow icon={<Phone className="w-3.5 h-3.5" />} label={t("employees.create.form.phone")} value={employee.phone} />
-                <InfoRow icon={<Cake className="w-3.5 h-3.5" />} label="Date of Birth" value={formatDate(employee.dateOfBirth)} />
-                <InfoRow icon={<Globe className="w-3.5 h-3.5" />} label={t("employees.create.form.nationality")} value={employee.nationality} />
-                <InfoRow icon={<User className="w-3.5 h-3.5" />} label="Gender" value={employee.gender ? employee.gender.charAt(0).toUpperCase() + employee.gender.slice(1) : undefined} />
+                <InfoRow icon={<Cake className="w-3.5 h-3.5" />} label={t("employees.detail.dateOfBirth")} value={formatDate(employee.dateOfBirth)} />
+                <InfoRow icon={<Globe className="w-3.5 h-3.5" />} label={t("employees.create.form.nationality")} value={countryName(employee.nationality)} />
+                <InfoRow icon={<User className="w-3.5 h-3.5" />} label={t("employees.detail.gender")} value={employee.gender ? employee.gender.charAt(0).toUpperCase() + employee.gender.slice(1) : undefined} />
                 <div className="border-t pt-3 mt-3">
                   <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("employees.detail.identification")}</div>
-                  <InfoRow icon={<CreditCard className="w-3.5 h-3.5" />} label="ID Type" value={employee.idType ? employee.idType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) : undefined} />
-                  <InfoRow icon={<Hash className="w-3.5 h-3.5" />} label="ID Number" value={employee.idNumber} />
+                  <InfoRow icon={<CreditCard className="w-3.5 h-3.5" />} label={t("employees.detail.idType")} value={employee.idType ? employee.idType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) : undefined} />
+                  <InfoRow icon={<Hash className="w-3.5 h-3.5" />} label={t("employees.detail.idNumber")} value={employee.idNumber} />
                 </div>
                 <div className="border-t pt-3 mt-3">
                   <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("employees.detail.info.labels.address")}</div>
@@ -1192,17 +1193,17 @@ function EmployeeDetail({ id }: { id: number }) {
               <CardHeader><CardTitle className="text-base flex items-center gap-2"><Briefcase className="w-4 h-4" />{t("employees.sections.employmentDetails")}</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 <InfoRow icon={<Building2 className="w-3.5 h-3.5" />} label={t("employees.create.form.customer")} value={customerName} />
-                <InfoRow icon={<Briefcase className="w-3.5 h-3.5" />} label="Job Title" value={employee.jobTitle} />
+                <InfoRow icon={<Briefcase className="w-3.5 h-3.5" />} label={t("employees.detail.jobTitle")} value={employee.jobTitle} />
                 <InfoRow icon={<Users className="w-3.5 h-3.5" />} label={t("employees.create.form.department")} value={employee.department} />
-                <InfoRow icon={<MapPin className="w-3.5 h-3.5" />} label={t("employees.list.table.header.country")} value={employee.country} />
-                <InfoRow icon={<Clock className="w-3.5 h-3.5" />} label="Employment Type" value={employee.employmentType?.replace(/_/g, " ")} />
-                <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label="Start Date" value={formatDate(employee.startDate)} />
-                <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label="End Date" value={formatDate(employee.endDate)} />
+                <InfoRow icon={<MapPin className="w-3.5 h-3.5" />} label={t("employees.list.table.header.country")} value={countryName(employee.country)} />
+                <InfoRow icon={<Clock className="w-3.5 h-3.5" />} label={t("employees.detail.employmentType")} value={employee.employmentType?.replace(/_/g, " ")} />
+                <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label={t("employees.detail.startDate")} value={formatDate(employee.startDate)} />
+                <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label={t("employees.detail.endDate")} value={formatDate(employee.endDate)} />
                 <div className="border-t pt-3 mt-3">
                   <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("employees.create.sections.compensation")}</div>
-                  <InfoRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Base Salary" value={formatCurrencyAmount(employee.baseSalary, employee.salaryCurrency, { showCurrency: true })} />
-                  <InfoRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Est. Employer Cost" value={formatCurrencyAmount(employee.estimatedEmployerCost, employee.salaryCurrency, { showCurrency: true })} />
-                  <InfoRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Total Empl. Cost" value={formatCurrencyAmount(parseFloat(employee.baseSalary?.toString() || "0") + parseFloat(employee.estimatedEmployerCost?.toString() || "0"), employee.salaryCurrency, { showCurrency: true })} />
+                  <InfoRow icon={<DollarSign className="w-3.5 h-3.5" />} label={t("employees.detail.baseSalary")} value={formatCurrencyAmount(employee.baseSalary, employee.salaryCurrency, { showCurrency: true })} />
+                  <InfoRow icon={<DollarSign className="w-3.5 h-3.5" />} label={t("employees.detail.estEmployerCost")} value={formatCurrencyAmount(employee.estimatedEmployerCost, employee.salaryCurrency, { showCurrency: true })} />
+                  <InfoRow icon={<DollarSign className="w-3.5 h-3.5" />} label={t("employees.detail.totalEmplCost")} value={formatCurrencyAmount(parseFloat(employee.baseSalary?.toString() || "0") + parseFloat(employee.estimatedEmployerCost?.toString() || "0"), employee.salaryCurrency, { showCurrency: true })} />
                 </div>
                 {(() => {
                   const bd = employee.bankDetails as Record<string, string> | null;
@@ -1502,7 +1503,7 @@ function EmployeeDetail({ id }: { id: number }) {
                       <div className="flex items-center gap-3">
                         <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
                           <Upload className="w-4 h-4 mr-2" />
-                          Choose File
+                          {t("employees.documents.chooseFile")}
                         </Button>
                         {selectedFile && <span className="text-sm text-muted-foreground">{selectedFile.name} ({(selectedFile.size / 1024).toFixed(0)} KB)</span>}
                       </div>
@@ -1511,7 +1512,7 @@ function EmployeeDetail({ id }: { id: number }) {
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>{t("common.cancel")}</Button>
                     <Button onClick={handleConfirmUpload} disabled={!selectedFile || uploadMutation.isPending}>
-                      {uploadMutation.isPending ? "Uploading..." : "Upload"}
+                      {uploadMutation.isPending ? t("employees.documents.uploading") : t("employees.documents.upload")}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -1542,12 +1543,12 @@ function EmployeeDetail({ id }: { id: number }) {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="text-xs">{doc.category}</Badge>
+                            <Badge variant="outline" className="text-xs">{t(`employees.documents.category.${doc.category}`) || doc.category}</Badge>
                           </TableCell>
                           <TableCell>
                             {doc.status ? (
                               <Badge variant="outline" className={`text-xs ${doc.status === "signed" ? "bg-emerald-50 text-emerald-700" : doc.status === "expired" ? "bg-red-50 text-red-700" : "bg-gray-50 text-gray-700"}`}>
-                                {doc.status}
+                                {t(`employees.documents.status.${doc.status}`) || doc.status}
                               </Badge>
                             ) : "—"}
                           </TableCell>
@@ -1564,19 +1565,19 @@ function EmployeeDetail({ id }: { id: number }) {
                               )}
                               {doc.contractId && doc.status === "draft" && (
                                 <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => contractUpdateMut.mutate({ id: doc.contractId, data: { status: "signed", signedDate: formatDateISO(new Date()) } })}>
-                                  <FileCheck className="w-3 h-3 mr-1" /> Sign
+                                  <FileCheck className="w-3 h-3 mr-1" /> {t("employees.documents.sign")}
                                 </Button>
                               )}
                               {doc.docId && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => {
-                                  if (confirm("Delete this document?")) deleteMutation.mutate({ id: doc.docId });
+                                  if (confirm(t("employees.documents.confirmDeleteDoc"))) deleteMutation.mutate({ id: doc.docId });
                                 }} title="Delete">
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
                               )}
                               {doc.contractId && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => {
-                                  if (confirm("Delete this contract?")) contractDeleteMut.mutate({ id: doc.contractId });
+                                  if (confirm(t("employees.documents.confirmDeleteContract"))) contractDeleteMut.mutate({ id: doc.contractId });
                                 }} title="Delete">
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
@@ -1594,6 +1595,48 @@ function EmployeeDetail({ id }: { id: number }) {
                     <p className="text-xs text-muted-foreground mt-1">{t("employees.documents.emptyHint")}</p>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {activeTab === "bank" && (
+          <div className="space-y-6">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <CreditCard className="w-5 h-5 text-primary" />
+                  <h3 className="text-lg font-semibold">{t("employees.detail.tabs.bank")}</h3>
+                </div>
+                {(() => {
+                  const bd = employee.bankDetails as Record<string, string> | null;
+                  if (!bd || typeof bd !== "object" || Object.keys(bd).length === 0) {
+                    return (
+                      <div className="text-center py-12">
+                        <CreditCard className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+                        <p className="text-sm text-muted-foreground">{t("employees.bank.empty")}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{t("employees.bank.emptyHint")}</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {Object.entries(bd).map(([key, value]) => (
+                        value ? (
+                          <div key={key} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
+                            <CreditCard className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                            <div>
+                              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                                {key.replace(/([A-Z])/g, " $1").replace(/^./, (s: string) => s.toUpperCase()).trim()}
+                              </p>
+                              <p className="text-sm font-medium mt-0.5">{String(value)}</p>
+                            </div>
+                          </div>
+                        ) : null
+                      ))}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>

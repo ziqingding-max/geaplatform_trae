@@ -46,7 +46,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { formatDate } from "@/lib/format";
+import { formatDate, countryName } from "@/lib/format";
 
 import { useI18n } from "@/lib/i18n";
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -175,7 +175,7 @@ export default function PortalEmployeeDetail() {
               </div>
               <p className="text-sm text-muted-foreground mt-1">
                 {employee.employeeCode && <span className="mr-3">{employee.employeeCode}</span>}
-                {employee.jobTitle} · {employee.country}
+                {employee.jobTitle} · {countryName(employee.country)}
               </p>
             </div>
           </div>
@@ -200,9 +200,9 @@ export default function PortalEmployeeDetail() {
                 <ContactRow icon={Mail} label="Email" value={employee.email} />
                 <ContactRow icon={Phone} label="Phone" value={employee.phone} />
                 <ContactRow icon={MapPin} label="Location" value={
-                  [employee.city, employee.state, employee.country].filter(Boolean).join(", ") || undefined
+                  [employee.city, employee.state, countryName(employee.country)].filter(Boolean).join(", ") || undefined
                 } />
-                <ContactRow icon={Globe} label={t("portal_employees.personal.nationality")} value={employee.nationality} />
+                <ContactRow icon={Globe} label={t("portal_employees.personal.nationality")} value={countryName(employee.nationality)} />
                 <ContactRow icon={Calendar} label="Date of Birth" value={
                   employee.dateOfBirth ? formatDate(employee.dateOfBirth) : undefined
                 } />
@@ -219,6 +219,7 @@ export default function PortalEmployeeDetail() {
                 <TabsTrigger value="documents">Documents ({employee.documents?.length || 0})</TabsTrigger>
                 <TabsTrigger value="contracts">Contracts ({employee.contracts?.length || 0})</TabsTrigger>
                 <TabsTrigger value="leave">{t("portal_employees.tabs.leave")}</TabsTrigger>
+                <TabsTrigger value="bank">{t("portal_employees.tabs.bank")}</TabsTrigger>
               </TabsList>
 
               {/* Personal Information Tab */}
@@ -236,7 +237,7 @@ export default function PortalEmployeeDetail() {
                         employee.gender === "female" ? "Female" :
                         employee.gender === "other" ? "Other" : undefined
                       } hint="As per official records" />
-                      <InfoField icon={Globe} label="Nationality" value={employee.nationality} hint="Country of citizenship" />
+                      <InfoField icon={Globe} label="Nationality" value={countryName(employee.nationality)} hint="Country of citizenship" />
                     </div>
 
                     <SectionTitle className="mt-8">{t("portal_employees.personal.identification")}</SectionTitle>
@@ -280,7 +281,7 @@ export default function PortalEmployeeDetail() {
                       } hint="Contract duration type" />
                       <InfoField icon={Calendar} label="Start Date" value={employee.startDate ? formatDate(employee.startDate) : undefined} hint="Employment start date" />
                       <InfoField icon={Calendar} label="End Date" value={employee.endDate ? formatDate(employee.endDate) : undefined} hint="Contract end date (if fixed term)" />
-                      <InfoField icon={MapPin} label="Employment Country" value={employee.country} hint="Country of employment" />
+                      <InfoField icon={MapPin} label="Employment Country" value={countryName(employee.country)} hint="Country of employment" />
                       <InfoField icon={Briefcase} label={t("portal_employees.employment.department")} value={employee.department} hint="Organizational department" />
                       <InfoField icon={Briefcase} label="Job Title" value={employee.jobTitle} hint="Current position" />
                       <InfoField icon={Hash} label="Employee Code" value={employee.employeeCode} hint="System-generated ID" />
@@ -513,6 +514,39 @@ export default function PortalEmployeeDetail() {
                   </div>
                 )}
               </TabsContent>
+
+              {/* Bank Details Tab */}
+              <TabsContent value="bank" className="mt-4">
+                {(() => {
+                  const bd = employee.bankDetails as Record<string, string> | null;
+                  if (!bd || typeof bd !== "object" || Object.keys(bd).length === 0) {
+                    return (
+                      <div className="text-center py-12">
+                        <CreditCard className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+                        <p className="text-sm text-muted-foreground">{t("portal_employees.bank.empty")}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{t("portal_employees.bank.emptyHint")}</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {Object.entries(bd).map(([key, value]) => (
+                        value ? (
+                          <div key={key} className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30">
+                            <CreditCard className="w-4 h-4 mt-0.5 text-muted-foreground" />
+                            <div>
+                              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                                {key.replace(/([A-Z])/g, " $1").replace(/^./, (s: string) => s.toUpperCase()).trim()}
+                              </p>
+                              <p className="text-sm font-medium mt-0.5">{String(value)}</p>
+                            </div>
+                          </div>
+                        ) : null
+                      ))}
+                    </div>
+                  );
+                })()}
+              </TabsContent>
             </Tabs>
           </div>
         </div>
@@ -598,9 +632,12 @@ function InfoField({ icon: Icon, label, value, hint }: { icon: LucideIcon; label
 function ContactRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value?: string | null }) {
   if (!value) return null;
   return (
-    <div className="flex items-center gap-3 text-sm">
-      <Icon className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-      <span className="truncate">{value}</span>
+    <div className="flex items-start gap-3 text-sm">
+      <Icon className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground font-medium">{label}</p>
+        <p className="truncate">{value}</p>
+      </div>
     </div>
   );
 }

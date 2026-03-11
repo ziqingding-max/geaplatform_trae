@@ -42,6 +42,7 @@ const PORTAL_INVOICE_FIELDS = {
   paidDate: invoices.paidDate,
   paidAmount: invoices.paidAmount,
   amountDue: invoices.amountDue,
+  walletAppliedAmount: invoices.walletAppliedAmount,
   relatedInvoiceId: invoices.relatedInvoiceId,
   notes: invoices.notes, // Client-facing notes only
   // internalNotes is NOT included — admin-only field

@@ -377,7 +377,8 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
       doc.fontSize(9).font("Helvetica").fillColor("#888888");
       doc.text("Exchange Rate", totalsLabelX, tableY, { width: 110 });
       doc.font("Helvetica").fillColor("#333333");
-      doc.text(`1 ${foreignCcy} = ${invoice.exchangeRateWithMarkup} ${currency}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+      const rateStr = parseFloat(invoice.exchangeRateWithMarkup).toFixed(6);
+      doc.text(`1 ${foreignCcy} = ${rateStr} ${currency}`, totalsValX, tableY, { width: totalsValW, align: "right" });
       tableY += 16;
     }
 
@@ -408,8 +409,8 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
 
       doc.fontSize(8).font("Helvetica").fillColor("#2563eb");
 
-      // Show Wallet Applied deductions
-      doc.text("Less: Wallet Balance Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 5 });
+      // Show Wallet Applied deductions (use single-line layout to prevent wrapping)
+      doc.text("Less: Wallet Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 2, lineBreak: false });
       doc.text(`- ${currency} ${formatNum(walletAppliedAmt)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
       tableY += 12;
       
