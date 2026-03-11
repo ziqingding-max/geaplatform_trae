@@ -241,7 +241,7 @@ export default function PortalReimbursements() {
       category: reimb.category || "",
       amount: reimb.amount,
       currency: reimb.currency,
-      effectiveMonth: reimb.effectiveMonth ? new Date(reimb.effectiveMonth).toISOString().slice(0, 7) : "",
+      effectiveMonth: reimb.effectiveMonth ? reimb.effectiveMonth.slice(0, 7) : "",
       description: reimb.description || "",
       receiptFileUrl: reimb.receiptFileUrl || "",
       receiptFileKey: "",
@@ -344,7 +344,7 @@ export default function PortalReimbursements() {
                       </TableCell>
                       <TableCell>
                         {reimb.effectiveMonth
-                          ? new Date(reimb.effectiveMonth).toLocaleDateString(undefined, { year: "numeric", month: "short" })
+                          ? new Date(reimb.effectiveMonth + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short" })
                           : "-"}
                       </TableCell>
                       <TableCell className="text-right font-mono">
@@ -453,7 +453,11 @@ export default function PortalReimbursements() {
               <>
                 <div className="space-y-2">
                   <Label>{t("portal_reimbursements.table.header.employee")} <span className="text-destructive">*</span></Label>
-                  <Select value={form.employeeId ? String(form.employeeId) : ""} onValueChange={(v) => setForm((f) => ({ ...f, employeeId: Number(v) }))}>
+                  <Select value={form.employeeId ? String(form.employeeId) : ""} onValueChange={(v) => {
+                    const empId = Number(v);
+                    const selectedEmp = employees.find((e: any) => e.id === empId);
+                    setForm((f) => ({ ...f, employeeId: empId, currency: selectedEmp?.salaryCurrency || f.currency }));
+                  }}>
                     <SelectTrigger><SelectValue placeholder={t("portal_reimbursements.placeholder.select_employee")} /></SelectTrigger>
                     <SelectContent>
                       {employees.map((emp: any) => (
@@ -492,12 +496,10 @@ export default function PortalReimbursements() {
                 <Label>{t("portal_reimbursements.table.header.amount")} <span className="text-destructive">*</span></Label>
                 <Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
               </div>
-              {!editingId && (
-                <div className="space-y-2">
-                  <Label>{t("portal_reimbursements.table.header.currency")}</Label>
-                  <CurrencySelect value={form.currency} onValueChange={(v) => setForm((f) => ({ ...f, currency: v }))} />
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label>{t("portal_reimbursements.table.header.currency")}</Label>
+                <Input value={form.currency} readOnly disabled className="bg-muted" />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>{t("portal_reimbursements.table.header.description")}</Label>

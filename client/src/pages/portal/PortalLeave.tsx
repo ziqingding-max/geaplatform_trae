@@ -5,6 +5,7 @@
  * Includes leave balance overview and public holidays.
  */
 import { useState, useMemo } from "react";
+import { formatDate } from "@/lib/format";
 import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -74,6 +75,7 @@ const emptyForm: LeaveForm = {
 
 // ── Milestones Sub-Tab Component ──
 function PortalMilestonesTab() {
+  const { t } = useI18n();
   const [statusFilter, setStatusFilter] = useState("active");
   const [showCreate, setShowCreate] = useState(false);
   const [milestoneForm, setMilestoneForm] = useState({
@@ -98,7 +100,7 @@ function PortalMilestonesTab() {
 
   const createMutation = portalTrpc.milestones.create.useMutation({
     onSuccess: () => {
-      toast.success("Milestone created");
+      toast.success(t("portal_milestones.toast.created"));
       setShowCreate(false);
       setMilestoneForm({ contractorId: "", title: "", description: "", amount: "", currency: "USD", dueDate: "" });
       utils.milestones.list.invalidate();
@@ -108,7 +110,7 @@ function PortalMilestonesTab() {
 
   const approveMutation = portalTrpc.milestones.approve.useMutation({
     onSuccess: () => {
-      toast.success("Milestone approved");
+      toast.success(t("portal_milestones.toast.approved"));
       utils.milestones.list.invalidate();
     },
     onError: (err: any) => toast.error(err.message),
@@ -116,7 +118,7 @@ function PortalMilestonesTab() {
 
   const rejectMutation = portalTrpc.milestones.reject.useMutation({
     onSuccess: () => {
-      toast.success("Milestone rejected");
+      toast.success(t("portal_milestones.toast.rejected"));
       utils.milestones.list.invalidate();
     },
     onError: (err: any) => toast.error(err.message),
@@ -143,7 +145,7 @@ function PortalMilestonesTab() {
 
   function handleCreateMilestone() {
     if (!milestoneForm.contractorId || !milestoneForm.title || !milestoneForm.amount) {
-      toast.error("Please fill in all required fields");
+      toast.error(t("portal_milestones.toast.fill_required"));
       return;
     }
     createMutation.mutate({
@@ -161,12 +163,12 @@ function PortalMilestonesTab() {
       <div className="flex items-center justify-between">
         <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-auto">
           <TabsList>
-            <TabsTrigger value="active">Active</TabsTrigger>
-            <TabsTrigger value="history">History</TabsTrigger>
+            <TabsTrigger value="active">{t("portal_milestones.tabs.active")}</TabsTrigger>
+            <TabsTrigger value="history">{t("portal_milestones.tabs.history")}</TabsTrigger>
           </TabsList>
         </Tabs>
         <Button onClick={() => setShowCreate(true)}>
-          <Plus className="w-4 h-4 mr-2" /> New Milestone
+          <Plus className="w-4 h-4 mr-2" /> {t("portal_milestones.button.new")}
         </Button>
       </div>
 
@@ -181,23 +183,23 @@ function PortalMilestonesTab() {
           ) : filteredMilestones.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Target className="w-10 h-10 mb-3" />
-              <p className="text-lg font-medium">No milestones found</p>
+              <p className="text-lg font-medium">{t("portal_milestones.empty.title")}</p>
               <p className="text-sm mt-1">
                 {contractorsList.length === 0
-                  ? "Onboard a contractor first to create milestones."
-                  : "Create a milestone to track contractor deliverables."}
+                  ? t("portal_milestones.empty.no_contractors")
+                  : t("portal_milestones.empty.hint")}
               </p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Contractor</TableHead>
-                  <TableHead>Milestone</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Due Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("portal_milestones.table.contractor")}</TableHead>
+                  <TableHead>{t("portal_milestones.table.milestone")}</TableHead>
+                  <TableHead>{t("portal_milestones.table.amount")}</TableHead>
+                  <TableHead>{t("portal_milestones.table.due_date")}</TableHead>
+                  <TableHead>{t("portal_milestones.table.status")}</TableHead>
+                  <TableHead className="text-right">{t("portal_milestones.table.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -214,7 +216,7 @@ function PortalMilestonesTab() {
                       {m.currency} {Number(m.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </TableCell>
                     <TableCell>
-                      {m.dueDate ? new Date(m.dueDate).toLocaleDateString() : "-"}
+                      {m.dueDate ? formatDate(m.dueDate + "T00:00:00") : "-"}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={milestoneStatusColors[m.status] || ""}>
@@ -264,13 +266,13 @@ function PortalMilestonesTab() {
       }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>New Milestone</DialogTitle>
+            <DialogTitle>{t("portal_milestones.dialog.title")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label>Contractor <span className="text-destructive">*</span></Label>
+              <Label>{t("portal_milestones.form.contractor")} <span className="text-destructive">*</span></Label>
               <Select value={milestoneForm.contractorId} onValueChange={(v) => setMilestoneForm((f) => ({ ...f, contractorId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select contractor" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t("portal_milestones.form.select_contractor")} /></SelectTrigger>
                 <SelectContent>
                   {contractorsList.map((c: any) => (
                     <SelectItem key={c.id} value={String(c.id)}>
@@ -281,33 +283,33 @@ function PortalMilestonesTab() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Title <span className="text-destructive">*</span></Label>
-              <Input value={milestoneForm.title} onChange={(e) => setMilestoneForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Phase 1 Delivery" />
+              <Label>{t("portal_milestones.form.title")} <span className="text-destructive">*</span></Label>
+              <Input value={milestoneForm.title} onChange={(e) => setMilestoneForm((f) => ({ ...f, title: e.target.value }))} placeholder={t("portal_milestones.form.title_placeholder")} />
             </div>
             <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea value={milestoneForm.description} onChange={(e) => setMilestoneForm((f) => ({ ...f, description: e.target.value }))} placeholder="Describe the deliverable..." rows={2} />
+              <Label>{t("portal_milestones.form.description")}</Label>
+              <Textarea value={milestoneForm.description} onChange={(e) => setMilestoneForm((f) => ({ ...f, description: e.target.value }))} placeholder={t("portal_milestones.form.description_placeholder")} rows={2} />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Amount <span className="text-destructive">*</span></Label>
+                <Label>{t("portal_milestones.form.amount")} <span className="text-destructive">*</span></Label>
                 <Input type="number" step="0.01" value={milestoneForm.amount} onChange={(e) => setMilestoneForm((f) => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
               </div>
               <div className="space-y-2">
-                <Label>Currency</Label>
-                <CurrencySelect value={milestoneForm.currency} onChange={(v) => setMilestoneForm((f) => ({ ...f, currency: v }))} />
+                <Label>{t("portal_milestones.form.currency")}</Label>
+                <CurrencySelect value={milestoneForm.currency} onValueChange={(v: string) => setMilestoneForm((f) => ({ ...f, currency: v }))} />
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Due Date</Label>
-              <DatePicker value={milestoneForm.dueDate} onChange={(v) => setMilestoneForm((f) => ({ ...f, dueDate: v }))} placeholder="Select due date" />
+              <Label>{t("portal_milestones.form.due_date")}</Label>
+              <DatePicker value={milestoneForm.dueDate} onChange={(v) => setMilestoneForm((f) => ({ ...f, dueDate: v }))} placeholder={t("portal_milestones.form.select_due_date")} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>{t("common.cancel")}</Button>
             <Button onClick={handleCreateMilestone} disabled={createMutation.isPending}>
               {createMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Create Milestone
+              {t("portal_milestones.button.create")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -458,8 +460,8 @@ export default function PortalLeave() {
                 exportToCsv(items, [
                   { header: "Employee", accessor: (r: any) => r.employeeName || "" },
                   { header: "Leave Type", accessor: (r: any) => r.leaveType || "" },
-                  { header: "Start Date", accessor: (r: any) => r.startDate ? new Date(r.startDate).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US") : "" },
-                  { header: "End Date", accessor: (r: any) => r.endDate ? new Date(r.endDate).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US") : "" },
+                  { header: "Start Date", accessor: (r: any) => r.startDate ? formatDate(r.startDate + "T00:00:00") : "" },
+                  { header: "End Date", accessor: (r: any) => r.endDate ? formatDate(r.endDate + "T00:00:00") : "" },
                   { header: "Days", accessor: (r: any) => r.totalDays ?? "" },
                   { header: "Status", accessor: (r: any) => t(`portal_leave.status.${r.status}`) || r.status || "" },
                   { header: "Reason", accessor: (r: any) => r.reason || "" },
@@ -543,10 +545,10 @@ export default function PortalLeave() {
                             {leave.leaveTypeName || "-"}
                           </TableCell>
                           <TableCell>
-                            {leave.startDate ? new Date(leave.startDate).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US") : "-"}
+                            {leave.startDate ? formatDate(leave.startDate + "T00:00:00") : "-"}
                           </TableCell>
                           <TableCell>
-                            {leave.endDate ? new Date(leave.endDate).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US") : "-"}
+                            {leave.endDate ? formatDate(leave.endDate + "T00:00:00") : "-"}
                           </TableCell>
                           <TableCell>{leave.days ?? "-"}</TableCell>
                           <TableCell>
@@ -721,7 +723,7 @@ export default function PortalLeave() {
                       {holidays.map((h: any) => (
                         <TableRow key={h.id}>
                           <TableCell className="font-mono text-sm">
-                            {new Date(h.holidayDate).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-US", { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
+                            {formatDate(h.holidayDate + "T00:00:00")}
                           </TableCell>
                           <TableCell className="font-medium">{h.holidayName}</TableCell>
                           <TableCell>
@@ -820,7 +822,7 @@ export default function PortalLeave() {
               </Label>
               {form.isHalfDay && form.days && (
                 <span className="text-xs text-muted-foreground ml-2">
-                  ({t("portal_leave.create_dialog.actual_days")}: {(parseFloat(form.days) * 0.5).toFixed(1)})
+                  ({t("portal_leave.create_dialog.actual_days")}: {(parseFloat(form.days) - 0.5).toFixed(1)})
                 </span>
               )}
             </div>

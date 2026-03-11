@@ -20,6 +20,8 @@ import {
   leaveTypes,
   employees,
   publicHolidays,
+  payrollRuns,
+  payrollItems,
 } from "../../../drizzle/schema";
 
 export const portalLeaveRouter = portalRouter({
@@ -148,7 +150,7 @@ export const portalLeaveRouter = portalRouter({
 
       // CRITICAL: Verify employee belongs to this customer
       const [emp] = await db
-        .select({ id: employees.id })
+        .select({ id: employees.id, country: employees.country })
         .from(employees)
         .where(and(eq(employees.id, input.employeeId), eq(employees.customerId, cid)));
 
@@ -156,22 +158,50 @@ export const portalLeaveRouter = portalRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
       }
 
-      // Bug 13: Calculate actual days (half if isHalfDay is true)
+      // Determine the payroll month from startDate (YYYY-MM-01)
+      const startParts = input.startDate.split("-");
+      if (startParts.length < 2) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid start date format" });
+      }
+      const payrollMonth = `${startParts[0]}-${startParts[1].padStart(2, "0")}-01`;
+
+      // Check if payroll run for this month is already approved/locked
+      const [existingPayroll] = await db
+        .select({ id: payrollRuns.id, status: payrollRuns.status })
+        .from(payrollRuns)
+        .innerJoin(payrollItems, eq(payrollRuns.id, payrollItems.payrollRunId))
+        .where(
+          and(
+            eq(payrollRuns.countryCode, emp.country),
+            eq(payrollRuns.payrollMonth, payrollMonth),
+            eq(payrollItems.employeeId, input.employeeId)
+          )
+        )
+        .limit(1);
+
+      if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Payroll run for ${payrollMonth.substring(0, 7)} is already ${existingPayroll.status}. Leave requests cannot be added.`,
+        });
+      }
+
+      // Half day: subtract 0.5 from total days (last day is half day)
       const actualDays = input.isHalfDay
-        ? (parseFloat(input.days) * 0.5).toFixed(1)
+        ? (parseFloat(input.days) - 0.5).toFixed(1)
         : input.days;
 
-      const result = await db.insert(leaveRecords).values({
+      await db.insert(leaveRecords).values({
         employeeId: input.employeeId,
         leaveTypeId: input.leaveTypeId,
-        startDate: input.startDate as any,
-        endDate: input.endDate as any,
+        startDate: input.startDate,
+        endDate: input.endDate,
         days: actualDays,
         status: "submitted",
         reason: input.reason || null,
       });
 
-      return { success: true, leaveRecordId: result[0].insertId };
+      return { success: true };
     }),
 
   /**
