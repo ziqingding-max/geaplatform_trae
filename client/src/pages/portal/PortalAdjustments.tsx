@@ -37,6 +37,7 @@ import { exportToCsv } from "@/lib/csvExport";
 import { cn } from "@/lib/utils";
 import { MonthPicker } from "@/components/DatePicker";
 import CurrencySelect from "@/components/CurrencySelect";
+import PortalPayrollCycleIndicator from "@/components/PortalPayrollCycleIndicator";
 
 import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
@@ -54,7 +55,6 @@ const statusColors: Record<string, string> = {
 const adjustmentTypes = [
   "bonus",
   "allowance",
-  "reimbursement",
   "deduction",
   "other",
 ];
@@ -455,6 +455,8 @@ export default function PortalAdjustments() {
             <DialogTitle>{editingId ? t("adjustments.dialog.title.edit") : t("portal_adjustments.button.new")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Payroll Cycle Indicator — matches Admin experience */}
+            <PortalPayrollCycleIndicator month={form.effectiveMonth || undefined} />
             {!editingId && (
               <>
                 <div className="space-y-2">

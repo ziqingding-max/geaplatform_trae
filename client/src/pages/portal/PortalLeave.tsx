@@ -39,6 +39,23 @@ import CurrencySelect from "@/components/CurrencySelect";
 import { usePortalAuth } from "@/hooks/usePortalAuth";
 import { toast } from "sonner";
 import { exportToCsv } from "@/lib/csvExport";
+import PortalPayrollCycleIndicator, { PortalCrossMonthLeaveWarning } from "@/components/PortalPayrollCycleIndicator";
+
+// Calculate business days (weekdays only) between two dates — matches Admin logic
+function calcBusinessDays(start: string, end: string): number {
+  if (!start || !end) return 0;
+  const s = new Date(start);
+  const e = new Date(end);
+  if (e < s) return 0;
+  let count = 0;
+  const cur = new Date(s);
+  while (cur <= e) {
+    const day = cur.getDay();
+    if (day !== 0 && day !== 6) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
 
 import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
@@ -406,16 +423,13 @@ export default function PortalLeave() {
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
 
-  // Auto-calculate days when dates change
+  // Auto-calculate days when dates change — uses business days (weekdays only)
   function updateDates(field: "startDate" | "endDate", value: string) {
     const newForm = { ...form, [field]: value };
     if (newForm.startDate && newForm.endDate) {
-      const start = new Date(newForm.startDate);
-      const end = new Date(newForm.endDate);
-      if (end >= start) {
-        const diffTime = end.getTime() - start.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-        newForm.days = String(diffDays);
+      const days = calcBusinessDays(newForm.startDate, newForm.endDate);
+      if (days > 0) {
+        newForm.days = String(days);
       }
     }
     setForm(newForm);
@@ -754,6 +768,8 @@ export default function PortalLeave() {
             <DialogTitle>{t("portal_leave.buttons.new_request")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Payroll Cycle Indicator — matches Admin experience */}
+            <PortalPayrollCycleIndicator />
             <div className="space-y-2">
               <Label>{t("portal_leave.create_dialog.label_employee")} <span className="text-destructive">*</span></Label>
               <Select value={form.employeeId ? String(form.employeeId) : ""} onValueChange={(v) => setForm((f) => ({ ...f, employeeId: Number(v), leaveTypeId: null }))}>
@@ -803,10 +819,18 @@ export default function PortalLeave() {
                 />
               </div>
             </div>
+            {/* Cross-Month Leave Warning — matches Admin experience */}
+            {form.startDate && form.endDate && parseFloat(form.days || "0") > 0 && (
+              <PortalCrossMonthLeaveWarning
+                startDate={form.startDate}
+                endDate={form.endDate}
+                totalDays={parseFloat(form.days || "0")}
+              />
+            )}
             <div className="space-y-2">
               <Label>{t("portal_leave.table_headers.days")} <span className="text-destructive">*</span></Label>
               <Input type="number" step="0.5" value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} placeholder={t("portal_leave.create_dialog.placeholder_days")} />
-              <p className="text-xs text-muted-foreground">{t("portal_leave.create_dialog.days_helper_text")}</p>
+              <p className="text-xs text-muted-foreground">Auto-calculated as business days (weekdays). Adjust manually if needed.</p>
             </div>
             {/* Bug 13: Half-day leave option */}
             <div className="flex items-center space-x-2">

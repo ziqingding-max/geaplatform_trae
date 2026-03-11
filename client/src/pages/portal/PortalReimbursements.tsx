@@ -37,6 +37,7 @@ import { toast } from "sonner";
 import { exportToCsv } from "@/lib/csvExport";
 import { MonthPicker } from "@/components/DatePicker";
 import CurrencySelect from "@/components/CurrencySelect";
+import PortalPayrollCycleIndicator from "@/components/PortalPayrollCycleIndicator";
 
 import { useI18n } from "@/lib/i18n";
 
@@ -449,6 +450,8 @@ export default function PortalReimbursements() {
             <DialogTitle>{editingId ? t("portal_reimbursements.dialog.edit.title") : t("portal_reimbursements.dialog.create.title")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Payroll Cycle Indicator — matches Admin experience */}
+            <PortalPayrollCycleIndicator month={form.effectiveMonth || undefined} />
             {!editingId && (
               <>
                 <div className="space-y-2">
