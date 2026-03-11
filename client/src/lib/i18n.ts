@@ -1246,6 +1246,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_self_onboarding.toasts.upload_failed": "Failed to upload",
     "portal_self_onboarding.welcome": "Welcome, {employeeName}! Please fill in your information below.",
     "portal_self_onboarding.employer_prefilled_notice": "Some fields have been pre-filled by your employer and cannot be changed.",
+    "portal_self_onboarding.visa_eor_auto_detect": "Your nationality differs from the employment country. This will be automatically processed as a Visa EOR service to ensure work authorization compliance.",
 
     // Portal Settings
     "portal_settings.company_profile.address_section_title": "Address",
@@ -3130,6 +3131,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_self_onboarding.toasts.upload_failed": "上传失败",
     "portal_self_onboarding.welcome": "欢迎，{employeeName}！请在下方填写您的信息。",
     "portal_self_onboarding.employer_prefilled_notice": "部分字段已由您的雇主预填，无法修改。",
+    "portal_self_onboarding.visa_eor_auto_detect": "您的国籍与受雇国家/地区不一致，系统将自动按 Visa EOR 服务处理，以确保工作授权合规。",
 
     // Portal Settings
     "portal_settings.company_profile.address_section_title": "地址",

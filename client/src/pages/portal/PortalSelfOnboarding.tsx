@@ -123,6 +123,18 @@ export default function PortalSelfOnboarding() {
       if (invite.country) { updates.country = invite.country; }
       if (invite.jobTitle) { updates.jobTitle = invite.jobTitle; }
       if (invite.department) { updates.department = invite.department; }
+      // Pre-fill email from invite (will be locked)
+      if (invite.employeeEmail) { updates.email = invite.employeeEmail; }
+      // Pre-fill name from invite (employee can override)
+      if (invite.employeeName) {
+        const nameParts = invite.employeeName.trim().split(/\s+/);
+        if (nameParts.length >= 2) {
+          updates.firstName = nameParts[0];
+          updates.lastName = nameParts.slice(1).join(" ");
+        } else {
+          updates.firstName = invite.employeeName;
+        }
+      }
       if (Object.keys(updates).length > 0) {
         setFormData((prev) => ({ ...prev, ...updates }));
         setEmployerFieldsLocked(true);
@@ -359,7 +371,14 @@ export default function PortalSelfOnboarding() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t("portal_self_onboarding.form.personal_info.email")} <span className="text-destructive">*</span></Label>
-                    <Input type="email" value={formData.email} onChange={(e) => updateField("email", e.target.value)} placeholder="john@example.com" />
+                    {employerFieldsLocked && invite?.employeeEmail ? (
+                      <div className="flex items-center h-10 px-3 bg-muted/30 rounded-md border text-sm">
+                        {formData.email}
+                        <span className="ml-2 text-xs text-muted-foreground">(provided by employer)</span>
+                      </div>
+                    ) : (
+                      <Input type="email" value={formData.email} onChange={(e) => updateField("email", e.target.value)} placeholder="john@example.com" />
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>{t("portal_self_onboarding.form.personal_info.phone")}</Label>
@@ -399,6 +418,11 @@ export default function PortalSelfOnboarding() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {formData.nationality && invite?.country && formData.nationality !== invite.country && invite.serviceType === "eor" && (
+                      <div className="rounded-lg border border-amber-200/60 bg-amber-50/30 p-2.5 text-xs text-amber-700 mt-1.5">
+                        {t("portal_self_onboarding.visa_eor_auto_detect") || "Your nationality differs from the employment country. This will be automatically processed as a Visa EOR service to ensure work authorization compliance."}
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label>{t("portal_self_onboarding.form.personal_info.id_type")}</Label>
@@ -422,6 +446,20 @@ export default function PortalSelfOnboarding() {
                 <div className="space-y-2">
                   <Label>{t("portal_self_onboarding.form.address.street")}</Label>
                   <Textarea value={formData.address} onChange={(e) => updateField("address", e.target.value)} placeholder={t("portal_self_onboarding.placeholders.address")} rows={2} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t("portal_self_onboarding.form.address.city")}</Label>
+                    <Input value={formData.city} onChange={(e) => updateField("city", e.target.value)} placeholder={t("portal_self_onboarding.form.address.city")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("portal_self_onboarding.form.address.state")}</Label>
+                    <Input value={formData.state} onChange={(e) => updateField("state", e.target.value)} placeholder={t("portal_self_onboarding.placeholders.state")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("portal_self_onboarding.form.address.postal_code")}</Label>
+                    <Input value={formData.postalCode} onChange={(e) => updateField("postalCode", e.target.value)} placeholder={t("portal_self_onboarding.placeholders.postal_code")} />
+                  </div>
                 </div>
               </div>
             )}
@@ -451,10 +489,6 @@ export default function PortalSelfOnboarding() {
                       </Select>
                     )}
                   </div>
-                  <div className="space-y-2">
-                    <Label>{t("portal_self_onboarding.form.address.city")}</Label>
-                    <Input value={formData.city} onChange={(e) => updateField("city", e.target.value)} placeholder={t("portal_self_onboarding.form.address.city")} />
-                  </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -467,19 +501,14 @@ export default function PortalSelfOnboarding() {
                   </div>
                   <div className="space-y-2">
                     <Label>{t("portal_self_onboarding.form.employment.department")}</Label>
-                    <Input value={formData.department} onChange={(e) => updateField("department", e.target.value)} placeholder={t("portal_self_onboarding.placeholders.department")} />
+                    {employerFieldsLocked && invite?.department ? (
+                      <div className="flex items-center h-10 px-3 bg-muted/30 rounded-md border text-sm">{formData.department}</div>
+                    ) : (
+                      <Input value={formData.department} onChange={(e) => updateField("department", e.target.value)} placeholder={t("portal_self_onboarding.placeholders.department")} />
+                    )}
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>{t("portal_self_onboarding.form.address.state")}</Label>
-                    <Input value={formData.state} onChange={(e) => updateField("state", e.target.value)} placeholder={t("portal_self_onboarding.placeholders.state")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t("portal_self_onboarding.form.address.postal_code")}</Label>
-                    <Input value={formData.postalCode} onChange={(e) => updateField("postalCode", e.target.value)} placeholder={t("portal_self_onboarding.placeholders.postal_code")} />
-                  </div>
-                </div>
+
               </div>
             )}
 

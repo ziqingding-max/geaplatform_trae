@@ -638,11 +638,18 @@ export const portalEmployeesRouter = portalRouter({
       }
 
       // Use employer-provided data from invite, with worker input as fallback
-      const serviceType = invite.serviceType || "eor";
+      let serviceType = invite.serviceType || "eor";
       const country = invite.country || input.country;
       const jobTitle = invite.jobTitle || input.jobTitle;
       const department = invite.department || input.department;
       const startDate = invite.startDate || input.startDate;
+
+      // Auto-detect Visa EOR: if nationality differs from employment country, upgrade to visa_eor
+      let requiresVisa = false;
+      if (input.nationality && country && input.nationality !== country && serviceType === "eor") {
+        serviceType = "visa_eor";
+        requiresVisa = true;
+      }
 
       if (serviceType === "aor") {
         // Bug 11: Generate contractorCode for AOR self-onboarding
@@ -719,6 +726,7 @@ export const portalEmployeesRouter = portalRouter({
           endDate: invite.endDate || null,
           baseSalary: invite.baseSalary || "0",
           salaryCurrency: invite.salaryCurrency || "USD",
+          requiresVisa,
           status: "pending_review",
         });
 
