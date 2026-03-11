@@ -589,6 +589,21 @@ export const invoicesRouter = router({
 
       await updateInvoice(input.id, updateData);
 
+      // Handle Deposit Invoice -> Frozen Wallet when manually marked as paid
+      // If it's a deposit invoice being marked as paid, funds should move to Frozen Wallet.
+      if (input.status === 'paid' && input.paidAmount) {
+        const invoiceForDeposit = await getInvoiceById(input.id);
+        if (invoiceForDeposit && invoiceForDeposit.invoiceType === 'deposit') {
+          await walletService.depositToFrozen(
+            invoiceForDeposit.customerId,
+            invoiceForDeposit.currency,
+            input.paidAmount,
+            invoiceForDeposit.id,
+            ctx.user.id
+          );
+        }
+      }
+
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
         action: "update_status",

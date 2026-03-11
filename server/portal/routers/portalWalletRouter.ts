@@ -14,7 +14,15 @@ export const portalWalletRouter = portalRouter({
     }))
     .query(async ({ input, ctx }) => {
       // Security: Always use ctx.portalUser.customerId
-      return await walletService.getWallet(ctx.portalUser.customerId, input.currency);
+      const customerId = ctx.portalUser.customerId;
+      const [wallet, frozenWallet] = await Promise.all([
+        walletService.getWallet(customerId, input.currency),
+        walletService.getFrozenWallet(customerId, input.currency),
+      ]);
+      return {
+        ...wallet,
+        frozenBalance: frozenWallet?.balance ?? "0",
+      };
     }),
 
   payWithWallet: protectedPortalProcedure

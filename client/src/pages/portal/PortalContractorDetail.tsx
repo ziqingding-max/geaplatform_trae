@@ -29,7 +29,7 @@ import {
   Coins,
   StickyNote,
 } from "lucide-react";
-import { formatStatusLabel } from "@/lib/format";
+import { formatStatusLabel, countryName } from "@/lib/format";
 import { portalPath } from "@/lib/portalBasePath";
 import { useI18n } from "@/lib/i18n";
 
@@ -138,7 +138,7 @@ export default function PortalContractorDetail() {
               <InfoRow label={t("portal_contractor_detail.city")} value={contractor.city} icon={Building2} />
               <InfoRow label={t("portal_contractor_detail.state")} value={contractor.state} icon={MapPin} />
               <InfoRow label={t("portal_contractor_detail.postal_code")} value={contractor.postalCode} icon={Hash} />
-              <InfoRow label={t("portal_contractor_detail.country")} value={contractor.country} icon={Globe} />
+              <InfoRow label={t("portal_contractor_detail.country")} value={countryName(contractor.country)} icon={Globe} />
             </CardContent>
           </Card>
 

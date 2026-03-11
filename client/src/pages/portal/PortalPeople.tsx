@@ -48,7 +48,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Users, Briefcase, Search, ChevronLeft, ChevronRight, Trash2, Loader2 } from "lucide-react";
-import { formatStatusLabel, countryName } from "@/lib/format";
+import { formatStatusLabel, countryName, formatDate } from "@/lib/format";
 import { toast } from "sonner";
 import { portalPath } from "@/lib/portalBasePath";
 
@@ -179,7 +179,7 @@ function EmployeesTab() {
                     <TableCell>{countryName(emp.country)}</TableCell>
                     <TableCell>{emp.department || "-"}</TableCell>
                     <TableCell>
-                      {emp.startDate ? new Date(emp.startDate).toLocaleDateString() : "-"}
+                      {formatDate(emp.startDate)}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={statusColors[emp.status] || ""}>
@@ -352,7 +352,7 @@ function ContractorsTab() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {c.startDate ? new Date(c.startDate).toLocaleDateString() : "-"}
+                      {formatDate(c.startDate)}
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={statusColors[c.status] || ""}>

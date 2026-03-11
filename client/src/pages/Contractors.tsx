@@ -27,6 +27,7 @@ import {
   Users, Plus, Search, ChevronRight, Briefcase
 } from "lucide-react";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
+import { countryName } from "@/lib/format";
 
 export function ContractorListContent() {
   const { t } = useI18n();
@@ -169,7 +170,7 @@ export function ContractorListContent() {
                     <TableCell className="text-sm">
                       <div>{con.customerName || `Customer #${con.customerId}`}</div>
                     </TableCell>
-                    <TableCell className="text-sm">{con.country}</TableCell>
+                    <TableCell className="text-sm">{countryName(con.country)}</TableCell>
                     <TableCell className="text-sm font-mono">
                       {con.currency} {con.rateAmount ? formatCurrencyAmount(con.rateAmount, con.currency || "USD") : "—"}
                       <span className="text-xs text-muted-foreground ml-1">/ {con.paymentFrequency}</span>

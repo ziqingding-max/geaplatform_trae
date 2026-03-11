@@ -70,6 +70,9 @@ export async function listEmployees(params: ListEmployeesParams = {}) {
       customerId: employees.customerId,
       customerName: customers.companyName,
       clientCode: customers.clientCode,
+      serviceType: employees.serviceType,
+      baseSalary: employees.baseSalary,
+      salaryCurrency: employees.salaryCurrency,
     })
     .from(employees)
     .leftJoin(customers, eq(employees.customerId, customers.id))

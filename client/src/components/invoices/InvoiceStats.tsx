@@ -20,7 +20,12 @@ export function InvoiceStats({
 }) {
   const { t } = useI18n();
 
-  if (!months || months.length === 0) {
+  // Check if there is any meaningful data (revenue invoices or deposit invoices)
+  const hasAnyData = months && months.length > 0 && months.some(
+    (m) => m.invoiceCount > 0 || (m.currencies && m.currencies.some((c: any) => c.depositAmount > 0))
+  );
+
+  if (!hasAnyData) {
     return (
       <Card>
         <CardContent className="py-12 text-center text-muted-foreground">
