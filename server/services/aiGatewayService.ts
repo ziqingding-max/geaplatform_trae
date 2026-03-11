@@ -82,8 +82,7 @@ async function invokeOpenAICompatible(
 ): Promise<InvokeResult> {
   // Extract response_format from params (supports both camelCase and snake_case)
   const responseFormat = (params as any).responseFormat || (params as any).response_format;
-  const hasStructuredOutput = responseFormat?.type === "json_schema";
-
+  const hasStructuredOutput = responseFormat?.type === "json_schema" || responseFormat?.type === "json_object";
   // Build request body
   const body: Record<string, unknown> = {
     model,
@@ -96,7 +95,7 @@ async function invokeOpenAICompatible(
   }
 
   // Per DashScope docs: "Do not specify max_tokens when you enable structured output"
-  // Only set max_tokens when NOT using structured output (json_schema)
+  // Also skip max_tokens for json_object mode to avoid truncating JSON output
   if (!hasStructuredOutput) {
     body.max_tokens = (params as any).maxTokens || (params as any).max_tokens || 4096;
   }

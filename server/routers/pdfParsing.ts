@@ -350,124 +350,11 @@ IMPORTANT RULES:
             content: `I'm uploading ${input.files.length} document(s) from a single vendor for service month ${input.serviceMonth}. File types: ${input.files.map((f) => `${f.fileName} (${f.fileType})`).join(", ")}. Please analyze all documents together, cross-validate the information, and provide structured extraction with confidence scores and allocation suggestions.`,
           },
         ],
+        // IMPORTANT: qwen-long-latest only supports json_object mode, NOT json_schema.
+        // Per DashScope docs (2026-02-24), json_schema is only supported by qwen-max/plus/flash series.
+        // The detailed JSON structure is already described in the system prompt above.
         response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "multi_file_vendor_parse",
-            description: "Structured extraction from multiple vendor documents including invoice details, payment info, line items, and cross-validation results.",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                overallConfidence: { type: "number" },
-                vendor: {
-                  type: "object",
-                  properties: {
-                    name: { type: "string" },
-                    legalName: { type: ["string", "null"] },
-                    country: { type: "string" },
-                    address: { type: ["string", "null"] },
-                    city: { type: ["string", "null"] },
-                    contactName: { type: ["string", "null"] },
-                    contactEmail: { type: ["string", "null"] },
-                    contactPhone: { type: ["string", "null"] },
-                    taxId: { type: ["string", "null"] },
-                    serviceType: { type: ["string", "null"] },
-                    vendorType: { type: "string" },
-                    confidence: { type: "number" },
-                  },
-                  required: ["name", "legalName", "country", "address", "city", "contactName", "contactEmail", "contactPhone", "taxId", "serviceType", "vendorType", "confidence"],
-                  additionalProperties: false,
-                },
-                bill: {
-                  type: "object",
-                  properties: {
-                    invoiceNumber: { type: "string" },
-                    invoiceDate: { type: "string" },
-                    dueDate: { type: ["string", "null"] },
-                    serviceMonth: { type: "string" },
-                    currency: { type: "string" },
-                    subtotal: { type: "number" },
-                    tax: { type: "number" },
-                    totalAmount: { type: "number" },
-                    category: { type: "string" },
-                    billType: { type: "string", enum: ["operational", "deposit", "deposit_refund"] },
-                    description: { type: "string" },
-                    confidence: { type: "number" },
-                  },
-                  required: ["invoiceNumber", "invoiceDate", "dueDate", "serviceMonth", "currency", "subtotal", "tax", "totalAmount", "category", "billType", "description", "confidence"],
-                  additionalProperties: false,
-                },
-                payment: {
-                  type: "object",
-                  description: "Payment info from POP/receipt. If no payment document, set hasPaymentInfo to false and all other fields to null.",
-                  properties: {
-                    hasPaymentInfo: { type: "boolean", description: "true if a payment receipt/POP was provided, false otherwise" },
-                    bankName: { type: ["string", "null"] },
-                    transactionReference: { type: ["string", "null"] },
-                    paymentDate: { type: ["string", "null"] },
-                    localCurrency: { type: ["string", "null"] },
-                    localAmount: { type: ["number", "null"] },
-                    usdAmount: { type: ["number", "null"] },
-                    exchangeRate: { type: ["number", "null"] },
-                    bankFee: { type: ["number", "null"] },
-                    confidence: { type: ["number", "null"] },
-                  },
-                  required: ["hasPaymentInfo", "bankName", "transactionReference", "paymentDate", "localCurrency", "localAmount", "usdAmount", "exchangeRate", "bankFee", "confidence"],
-                  additionalProperties: false,
-                },
-                lineItems: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      description: { type: "string" },
-                      employeeName: { type: ["string", "null"] },
-                      matchedEmployeeId: { type: ["number", "null"] },
-                      matchedCustomerId: { type: ["number", "null"] },
-                      matchedInvoiceId: { type: ["number", "null"] },
-                      quantity: { type: "number" },
-                      unitPrice: { type: "number" },
-                      amount: { type: "number" },
-                      countryCode: { type: ["string", "null"] },
-                      confidence: { type: "number" },
-                      allocationSuggestion: {
-                        type: "object",
-                        description: "Allocation suggestion. If no allocation applies, set hasAllocation to false and other fields to null.",
-                        properties: {
-                          hasAllocation: { type: "boolean", description: "true if an allocation suggestion exists, false otherwise" },
-                          invoiceId: { type: ["number", "null"] },
-                          employeeId: { type: ["number", "null"] },
-                          allocatedAmount: { type: ["number", "null"] },
-                          reason: { type: ["string", "null"] },
-                        },
-                        required: ["hasAllocation", "invoiceId", "employeeId", "allocatedAmount", "reason"],
-                        additionalProperties: false,
-                      },
-                    },
-                    required: ["description", "employeeName", "matchedEmployeeId", "matchedCustomerId", "matchedInvoiceId", "quantity", "unitPrice", "amount", "countryCode", "confidence", "allocationSuggestion"],
-                    additionalProperties: false,
-                  },
-                },
-                crossValidation: {
-                  type: "object",
-                  properties: {
-                    invoiceVsPaymentMatch: { type: ["boolean", "null"] },
-                    invoiceVsPaymentDifference: { type: ["number", "null"] },
-                    lineItemsSumMatchesTotal: { type: "boolean" },
-                    lineItemsSumDifference: { type: "number" },
-                    documentsAnalyzed: { type: "number" },
-                    warnings: { type: "array", items: { type: "string" } },
-                    notes: { type: "array", items: { type: "string" } },
-                  },
-                  required: ["invoiceVsPaymentMatch", "invoiceVsPaymentDifference", "lineItemsSumMatchesTotal", "lineItemsSumDifference", "documentsAnalyzed", "warnings", "notes"],
-                  additionalProperties: false,
-                },
-              },
-              required: ["overallConfidence", "vendor", "bill", "payment", "lineItems", "crossValidation"],
-              additionalProperties: false,
-            },
-          },
+          type: "json_object",
         },
       });
 
@@ -477,6 +364,53 @@ IMPORTANT RULES:
       }
 
       const parsed = JSON.parse(content);
+
+      // Validate essential fields since json_object mode doesn't enforce schema
+      if (!parsed.vendor || !parsed.bill || !Array.isArray(parsed.lineItems)) {
+        console.error("[AI Parse] Missing required fields in AI response:", {
+          hasVendor: !!parsed.vendor,
+          hasBill: !!parsed.bill,
+          hasLineItems: Array.isArray(parsed.lineItems),
+        });
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "AI response is missing required fields (vendor, bill, or lineItems). Please try again.",
+        });
+      }
+
+      // Ensure payment object has hasPaymentInfo flag for frontend compatibility
+      if (parsed.payment && typeof parsed.payment === "object" && parsed.payment.hasPaymentInfo === undefined) {
+        // Legacy format: payment was null when no info, or object when present
+        parsed.payment.hasPaymentInfo = true;
+      }
+      if (!parsed.payment || parsed.payment === null) {
+        parsed.payment = { hasPaymentInfo: false };
+      }
+
+      // Ensure lineItems have allocationSuggestion with hasAllocation flag
+      if (parsed.lineItems) {
+        parsed.lineItems = parsed.lineItems.map((item: any) => {
+          if (!item.allocationSuggestion || item.allocationSuggestion === null) {
+            item.allocationSuggestion = { hasAllocation: false, invoiceId: null, employeeId: null, allocatedAmount: null, reason: null };
+          } else if (item.allocationSuggestion.hasAllocation === undefined) {
+            item.allocationSuggestion.hasAllocation = !!(item.allocationSuggestion.invoiceId || item.allocationSuggestion.employeeId);
+          }
+          return item;
+        });
+      }
+
+      // Ensure crossValidation exists with defaults
+      if (!parsed.crossValidation) {
+        parsed.crossValidation = {
+          invoiceVsPaymentMatch: null,
+          invoiceVsPaymentDifference: null,
+          lineItemsSumMatchesTotal: false,
+          lineItemsSumDifference: 0,
+          documentsAnalyzed: input.files.length,
+          warnings: ["Cross-validation data was not provided by AI"],
+          notes: [],
+        };
+      }
 
       // Step 4: Try to match or auto-create vendor
       parsed.vendorMatch = null;
@@ -801,49 +735,9 @@ Be precise with numbers. If a field is not found, use null.`,
             content: "Parse this vendor invoice.",
           },
         ],
+        // IMPORTANT: qwen-long-latest only supports json_object mode, NOT json_schema.
         response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "vendor_invoice_parse",
-            description: "Structured extraction from a single vendor invoice including vendor info, amounts, line items, and categorization.",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                vendorName: { type: "string" },
-                vendorCountry: { type: "string" },
-                invoiceNumber: { type: "string" },
-                invoiceDate: { type: "string" },
-                dueDate: { type: ["string", "null"] },
-                serviceMonth: { type: ["string", "null"] },
-                currency: { type: "string" },
-                subtotal: { type: "number" },
-                tax: { type: "number" },
-                totalAmount: { type: "number" },
-                category: { type: "string" },
-                billType: { type: "string", enum: ["operational", "deposit", "deposit_refund"] },
-                description: { type: "string" },
-                lineItems: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      description: { type: "string" },
-                      employeeName: { type: ["string", "null"] },
-                      quantity: { type: "number" },
-                      unitPrice: { type: "number" },
-                      amount: { type: "number" },
-                      countryCode: { type: ["string", "null"] },
-                    },
-                    required: ["description", "employeeName", "quantity", "unitPrice", "amount", "countryCode"],
-                    additionalProperties: false,
-                  },
-                },
-              },
-              required: ["vendorName", "vendorCountry", "invoiceNumber", "invoiceDate", "dueDate", "serviceMonth", "currency", "subtotal", "tax", "totalAmount", "category", "billType", "description", "lineItems"],
-              additionalProperties: false,
-            },
-          },
+          type: "json_object",
         },
       });
 
