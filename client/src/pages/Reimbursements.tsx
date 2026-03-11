@@ -543,7 +543,7 @@ export default function Reimbursements() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              {item.status === "submitted" && (
+                              {item.status === "client_approved" && (
                                 <>
                                   <Button
                                     variant="ghost" size="icon"
@@ -563,6 +563,9 @@ export default function Reimbursements() {
                                   >
                                     <XCircle className="w-3.5 h-3.5" />
                                   </Button>
+                                </>)}
+                              {(item.status === "submitted" || item.status === "client_approved") && (
+                                <>
                                   <Button
                                     variant="ghost" size="icon"
                                     className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
