@@ -246,7 +246,7 @@ export default function PortalAdjustments() {
       category: adj.category || "",
       amount: adj.amount,
       currency: adj.currency,
-      effectiveMonth: adj.effectiveMonth ? new Date(adj.effectiveMonth).toISOString().slice(0, 7) : "",
+      effectiveMonth: adj.effectiveMonth ? adj.effectiveMonth.slice(0, 7) : "",
       description: adj.description || "",
       receiptFileUrl: adj.receiptFileUrl || "",
       receiptFileKey: "",
@@ -275,7 +275,7 @@ export default function PortalAdjustments() {
                   { header: "Employee", accessor: (r: any) => r.employeeName || "" },
                   { header: "Type", accessor: (r: any) => t(`adjustments.type.${r.adjustmentType}`) || r.adjustmentType || "" },
                   { header: "Category", accessor: (r: any) => t(`adjustments.category.${r.category}`) || r.category || "" },
-                  { header: "Effective Month", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "short" }) : "" },
+                  { header: "Effective Month", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth + "T00:00:00").toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "short" }) : "" },
                   { header: "Amount", accessor: (r: any) => r.amount || 0 },
                   { header: "Currency", accessor: (r: any) => r.currency || "" },
                   { header: "Status", accessor: (r: any) => t(`portal_adjustments.status.${r.status}`) || r.status || "" },
@@ -352,7 +352,7 @@ export default function PortalAdjustments() {
                       </TableCell>
                       <TableCell>
                         {adj.effectiveMonth
-                          ? new Date(adj.effectiveMonth).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "short" })
+                          ? new Date(adj.effectiveMonth + "T00:00:00").toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "short" })
                           : "-"}
                       </TableCell>
                       <TableCell className={cn("text-right font-mono", adj.adjustmentType === "deduction" ? "text-red-600" : "")}>
@@ -459,7 +459,11 @@ export default function PortalAdjustments() {
               <>
                 <div className="space-y-2">
                   <Label>{t("portal_adjustments.table.header.employee")} <span className="text-destructive">*</span></Label>
-                  <Select value={form.employeeId ? String(form.employeeId) : ""} onValueChange={(v) => setForm((f) => ({ ...f, employeeId: Number(v) }))}>
+                  <Select value={form.employeeId ? String(form.employeeId) : ""} onValueChange={(v) => {
+                    const empId = Number(v);
+                    const selectedEmp = employees.find((e: any) => e.id === empId);
+                    setForm((f) => ({ ...f, employeeId: empId, currency: selectedEmp?.salaryCurrency || f.currency }));
+                  }}>
                     <SelectTrigger><SelectValue placeholder={t("leave.form.placeholder.employee")} /></SelectTrigger>
                     <SelectContent>
                       {employees.map((emp: any) => (
@@ -510,12 +514,10 @@ export default function PortalAdjustments() {
                 <Label>{t("portal_adjustments.table.header.amount")} <span className="text-destructive">*</span></Label>
                 <Input type="number" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
               </div>
-              {!editingId && (
-                <div className="space-y-2">
-                  <Label>{t("portal_adjustments.form.currency_label")}</Label>
-                  <CurrencySelect value={form.currency} onValueChange={(v) => setForm((f) => ({ ...f, currency: v }))} />
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label>{t("portal_adjustments.form.currency_label")}</Label>
+                <Input value={form.currency} readOnly disabled className="bg-muted" />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>{t("portal_adjustments.form.description_label")}</Label>

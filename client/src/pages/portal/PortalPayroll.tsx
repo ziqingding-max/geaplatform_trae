@@ -420,6 +420,51 @@ function PayrollRunCard({
   );
 }
 
+/** Export CSV button that fetches employee-level detail data */
+function ExportCsvButton({ year, disabled }: { year: number; disabled: boolean }) {
+  const { t, lang } = useI18n();
+  const [isExporting, setIsExporting] = useState(false);
+  const utils = portalTrpc.useUtils();
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const data = await utils.payroll.exportData.fetch({ year });
+      if (!data || data.length === 0) return;
+      exportToCsv(data, [
+        { header: "Month", accessor: (r: any) => r.payrollMonth ? new Date(r.payrollMonth).toLocaleString(lang === "zh" ? "zh-CN" : "en-US", { month: "long", year: "numeric" }) : "" },
+        { header: "Country/Region", accessor: (r: any) => r.countryCode || "" },
+        { header: "Employee Name", accessor: (r: any) => r.employeeName || "" },
+        { header: "Employee Code", accessor: (r: any) => r.employeeCode || "" },
+        { header: "Job Title", accessor: (r: any) => r.jobTitle || "" },
+        { header: "Currency", accessor: (r: any) => r.currency || "" },
+        { header: "Base Salary", accessor: (r: any) => r.baseSalary || 0 },
+        { header: "Bonus", accessor: (r: any) => r.bonus || 0 },
+        { header: "Allowances", accessor: (r: any) => r.allowances || 0 },
+        { header: "Reimbursements", accessor: (r: any) => r.reimbursements || 0 },
+        { header: "Deductions", accessor: (r: any) => r.deductions || 0 },
+        { header: "Tax Deduction", accessor: (r: any) => r.taxDeduction || 0 },
+        { header: "Social Security", accessor: (r: any) => r.socialSecurityDeduction || 0 },
+        { header: "Unpaid Leave Deduction", accessor: (r: any) => r.unpaidLeaveDeduction || 0 },
+        { header: "Unpaid Leave Days", accessor: (r: any) => r.unpaidLeaveDays || 0 },
+        { header: "Gross", accessor: (r: any) => r.gross || 0 },
+        { header: "Net", accessor: (r: any) => r.net || 0 },
+        { header: "Employer Social Contribution", accessor: (r: any) => r.employerSocialContribution || 0 },
+        { header: "Total Employment Cost", accessor: (r: any) => r.totalEmploymentCost || 0 },
+      ], `payroll-detail-${year}-${new Date().toISOString().slice(0, 10)}.csv`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  return (
+    <Button variant="outline" size="sm" disabled={disabled || isExporting} onClick={handleExport}>
+      {isExporting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />}
+      Export CSV
+    </Button>
+  );
+}
+
 export default function PortalPayroll() {
   const { t, lang } = useI18n();
   const currentYear = new Date().getFullYear();
@@ -533,24 +578,7 @@ export default function PortalPayroll() {
                 ))}
               </SelectContent>
             </Select>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={filteredRuns.length === 0}
-              onClick={() => {
-                exportToCsv(filteredRuns, [
-                  { header: "Month", accessor: (r: any) => r.payrollMonth ? new Date(r.payrollMonth).toLocaleString(lang === "zh" ? "zh-CN" : "en-US", { month: "long", year: "numeric" }) : "" },
-                  { header: "Country/Region", accessor: (r: any) => r.countryCode || "" },
-                  { header: "Employees", accessor: (r: any) => r.employeeCount || 0 },
-                  { header: "Gross Total", accessor: (r: any) => r.customerTotalGross || 0 },
-                  { header: "Net Total", accessor: (r: any) => r.customerTotalNet || 0 },
-                  { header: "Currency", accessor: (r: any) => r.currency || "" },
-                  { header: "Status", accessor: (r: any) => t(`status.${r.status}`) || r.status || "" },
-                ], `payroll-${selectedYear}-${new Date().toISOString().slice(0, 10)}.csv`);
-              }}
-            >
-              <Download className="w-4 h-4 mr-1" /> Export CSV
-            </Button>
+            <ExportCsvButton year={parseInt(selectedYear)} disabled={filteredRuns.length === 0} />
           </div>
         </div>
 

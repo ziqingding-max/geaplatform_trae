@@ -3,7 +3,7 @@ import { quotations, customers, salesLeads, billingEntities } from "../../drizzl
 import { eq } from "drizzle-orm";
 import { calculationService } from "./calculationService";
 import { getExchangeRate } from "./exchangeRateService";
-import { storagePut } from "../storage";
+import { storagePut, storageGet } from "../storage";
 import { generateQuotationPdf, BrandingInfo } from "./htmlPdfService";
 import { countryGuidePdfService } from "./countryGuidePdfService";
 import { mergePdfs } from "./contentMergeService";
@@ -311,7 +311,7 @@ export const quotationService = {
       // Fall back to first active entity
       defaultBilling = await db.query.billingEntities.findFirst({
         where: eq(billingEntities.isActive, true)
-      }) ?? null;
+      }) ?? undefined;
     }
     if (defaultBilling) {
       const addressParts = [defaultBilling.address, defaultBilling.city, defaultBilling.country].filter(Boolean);
@@ -325,10 +325,20 @@ export const quotationService = {
         country: defaultBilling.country,
       };
       // Build BrandingInfo from the same entity
+      // Resolve logo URL: prefer signed S3 URL from logoFileKey, fall back to logoUrl
+      let resolvedLogoUrl = defaultBilling.logoUrl ?? null;
+      if (defaultBilling.logoFileKey) {
+        try {
+          const { url: signedUrl } = await storageGet(defaultBilling.logoFileKey);
+          resolvedLogoUrl = signedUrl;
+        } catch (err) {
+          console.warn("[QuotationService] Failed to sign logo URL:", err);
+        }
+      }
       branding = {
         shortName: defaultBilling.entityName,
         fullName: defaultBilling.legalName,
-        logoUrl: defaultBilling.logoUrl ?? null,
+        logoUrl: resolvedLogoUrl,
         contactEmail: defaultBilling.contactEmail ?? null,
         address: address ?? null,
         legalName: defaultBilling.legalName,

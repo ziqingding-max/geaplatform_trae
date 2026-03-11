@@ -8,14 +8,14 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { sql, eq, and, count } from "drizzle-orm";
+import { sql, eq, and, count, desc } from "drizzle-orm";
 import {
   protectedPortalProcedure,
   portalHrProcedure,
   portalRouter,
 } from "../portalTrpc";
 import { getDb } from "../../db";
-import { adjustments, employees } from "../../../drizzle/schema";
+import { adjustments, employees, payrollRuns, payrollItems } from "../../../drizzle/schema";
 import { storagePut } from "../../storage";
 
 export const portalAdjustmentsRouter = portalRouter({
@@ -117,7 +117,7 @@ export const portalAdjustmentsRouter = portalRouter({
 
       // CRITICAL: Verify employee belongs to this customer
       const [emp] = await db
-        .select({ id: employees.id })
+        .select({ id: employees.id, country: employees.country, salaryCurrency: employees.salaryCurrency })
         .from(employees)
         .where(and(eq(employees.id, input.employeeId), eq(employees.customerId, cid)));
 
@@ -127,23 +127,50 @@ export const portalAdjustmentsRouter = portalRouter({
 
       // Normalize effectiveMonth to YYYY-MM-01 format, consistent with admin endpoint
       const parts = input.effectiveMonth.split("-");
+      if (parts.length < 2) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid effective month format" });
+      }
       const normalizedMonth = `${parts[0]}-${parts[1].padStart(2, "0")}-01`;
 
-      const result = await db.insert(adjustments).values({
+      // Check if payroll run for this month is already approved/locked
+      const [existingPayroll] = await db
+        .select({ id: payrollRuns.id, status: payrollRuns.status })
+        .from(payrollRuns)
+        .innerJoin(payrollItems, eq(payrollRuns.id, payrollItems.payrollRunId))
+        .where(
+          and(
+            eq(payrollRuns.countryCode, emp.country),
+            eq(payrollRuns.payrollMonth, normalizedMonth),
+            eq(payrollItems.employeeId, input.employeeId)
+          )
+        )
+        .limit(1);
+
+      if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Payroll run for ${normalizedMonth.substring(0, 7)} is already ${existingPayroll.status}. Adjustments cannot be added.`,
+        });
+      }
+
+      // Use employee's salary currency, not the user-provided one
+      const currency = emp.salaryCurrency || input.currency;
+
+      await db.insert(adjustments).values({
         employeeId: input.employeeId,
         customerId: cid, // ALWAYS from context
         adjustmentType: input.adjustmentType,
         category: input.category || null,
         amount: input.amount,
-        currency: input.currency,
-        effectiveMonth: new Date(normalizedMonth),
+        currency,
+        effectiveMonth: normalizedMonth, // Store as text string, not Date
         description: input.description || null,
         receiptFileUrl: input.receiptFileUrl || null,
         receiptFileKey: input.receiptFileKey || null,
         status: "submitted",
       });
 
-      return { success: true, adjustmentId: result[0].insertId };
+      return { success: true };
     }),
 
   /**

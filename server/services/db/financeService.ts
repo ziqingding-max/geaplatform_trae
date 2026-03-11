@@ -268,7 +268,23 @@ export async function deletePayrollItem(id: number) {
 export async function listPayrollItemsByEmployee(employeeId: number) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(payrollItems).where(eq(payrollItems.employeeId, employeeId));
+  const items = await db
+    .select({
+      item: payrollItems,
+      run: {
+        id: payrollRuns.id,
+        payrollMonth: payrollRuns.payrollMonth,
+        countryCode: payrollRuns.countryCode,
+        currency: payrollRuns.currency,
+        status: payrollRuns.status,
+        approvedAt: payrollRuns.approvedAt,
+      },
+    })
+    .from(payrollItems)
+    .innerJoin(payrollRuns, eq(payrollItems.payrollRunId, payrollRuns.id))
+    .where(eq(payrollItems.employeeId, employeeId))
+    .orderBy(desc(payrollRuns.payrollMonth));
+  return items;
 }
 
 // ADJUSTMENTS

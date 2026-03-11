@@ -2,6 +2,7 @@ import { getDb } from "../db";
 import { countryGuideChapters, countriesConfig, billingEntities } from "../../drizzle/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { generateCountryGuidePdf, BrandingInfo } from "./htmlPdfService";
+import { storageGet } from "../storage";
 
 /**
  * Fetch the default (or first active) billing entity and convert it to BrandingInfo.
@@ -27,10 +28,21 @@ async function getDefaultBranding(db: ReturnType<typeof getDb>): Promise<Brandin
   const addressParts = [entity.address, entity.city, entity.country].filter(Boolean);
   const address = addressParts.length > 0 ? addressParts.join(", ") : undefined;
 
+  // Resolve logo URL: prefer signed S3 URL from logoFileKey, fall back to logoUrl
+  let resolvedLogoUrl = entity.logoUrl ?? null;
+  if (entity.logoFileKey) {
+    try {
+      const { url: signedUrl } = await storageGet(entity.logoFileKey);
+      resolvedLogoUrl = signedUrl;
+    } catch (err) {
+      console.warn("[CountryGuidePdf] Failed to sign logo URL:", err);
+    }
+  }
+
   return {
     shortName: entity.entityName,
     fullName: entity.legalName,
-    logoUrl: entity.logoUrl ?? null,
+    logoUrl: resolvedLogoUrl,
     contactEmail: entity.contactEmail ?? null,
     address: address ?? null,
     legalName: entity.legalName,

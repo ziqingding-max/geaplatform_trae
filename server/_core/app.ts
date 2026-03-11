@@ -148,7 +148,7 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
         return;
       }
       const [invoice] = await db
-        .select({ id: invoices.id })
+        .select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber })
         .from(invoices)
         .where(and(eq(invoices.id, invoiceId), eq(invoices.customerId, portalUser.customerId)));
       if (!invoice) {
@@ -156,8 +156,9 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
         return;
       }
       const pdfBuffer = await generateInvoicePdf({ invoiceId });
+      const filename = invoice.invoiceNumber ? `${invoice.invoiceNumber}.pdf` : `invoice-${invoiceId}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="invoice-${invoiceId}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Length", pdfBuffer.length.toString());
       res.send(pdfBuffer);
     } catch (error) {
