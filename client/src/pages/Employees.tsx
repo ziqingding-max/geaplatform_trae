@@ -172,7 +172,14 @@ function EmployeeList() {
     email: "",
     phone: "",
     dateOfBirth: "",
+    gender: "" as "male" | "female" | "other" | "prefer_not_to_say" | "",
     nationality: "",
+    idType: "",
+    idNumber: "",
+    address: "",
+    city: "",
+    state: "",
+    postalCode: "",
     country: "",
     department: "",
     jobTitle: "",
@@ -266,6 +273,12 @@ function EmployeeList() {
     if (!formData.firstName.trim()) errs.firstName = true;
     if (!formData.lastName.trim()) errs.lastName = true;
     if (!formData.email.trim()) errs.email = true;
+    if (!formData.dateOfBirth) errs.dateOfBirth = true;
+    if (!formData.gender) errs.gender = true;
+    if (!formData.nationality) errs.nationality = true;
+    if (!formData.idType) errs.idType = true;
+    if (!formData.idNumber?.trim()) errs.idNumber = true;
+    if (!formData.address?.trim()) errs.address = true;
     if (!formData.country) errs.country = true;
     if (!formData.jobTitle.trim()) errs.jobTitle = true;
     if (!formData.startDate) errs.startDate = true;
@@ -284,6 +297,13 @@ function EmployeeList() {
     if (!submitData.endDate) delete submitData.endDate;
     if (!submitData.phone) delete submitData.phone;
     if (!submitData.nationality) delete submitData.nationality;
+    if (!submitData.gender) delete submitData.gender;
+    if (!submitData.idType) delete submitData.idType;
+    if (!submitData.idNumber) delete submitData.idNumber;
+    if (!submitData.address) delete submitData.address;
+    if (!submitData.city) delete submitData.city;
+    if (!submitData.state) delete submitData.state;
+    if (!submitData.postalCode) delete submitData.postalCode;
     if (!submitData.department) delete submitData.department;
     createMutation.mutate(submitData);
   };
@@ -358,8 +378,11 @@ function EmployeeList() {
                       {errors.lastName && <p className="text-xs text-red-500">{t("common.required")}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label>{t("employees.create.form.dateOfBirth")}</Label>
-                      <DatePicker value={formData.dateOfBirth} onChange={(d) => setFormData({ ...formData, dateOfBirth: d })} />
+                      <Label>{t("employees.create.form.dateOfBirth")} <span className="text-red-500">*</span></Label>
+                      <div className={errors.dateOfBirth ? "rounded-md ring-1 ring-red-500" : ""}>
+                        <DatePicker value={formData.dateOfBirth} onChange={(d) => { setFormData({ ...formData, dateOfBirth: d }); setErrors({ ...errors, dateOfBirth: false }); }} />
+                      </div>
+                      {errors.dateOfBirth && <p className="text-xs text-red-500">{t("common.required")}</p>}
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-4">
@@ -373,8 +396,67 @@ function EmployeeList() {
                       <Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="+65 9123 4567" />
                     </div>
                     <div className="space-y-2">
-                      <Label>{t("employees.create.form.nationality")}</Label>
-                      <CountrySelect value={formData.nationality} onValueChange={(v) => setFormData({ ...formData, nationality: v })} showCode={false} scope="all" />
+                      <Label>{t("employees.create.form.gender")} <span className="text-red-500">*</span></Label>
+                      <div className={errors.gender ? "rounded-md ring-1 ring-red-500" : ""}>
+                        <Select value={formData.gender} onValueChange={(v) => { setFormData({ ...formData, gender: v as any }); setErrors({ ...errors, gender: false }); }}>
+                          <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                            <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {errors.gender && <p className="text-xs text-red-500">{t("common.required")}</p>}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>{t("employees.create.form.nationality")} <span className="text-red-500">*</span></Label>
+                      <div className={errors.nationality ? "rounded-md ring-1 ring-red-500" : ""}>
+                        <CountrySelect value={formData.nationality} onValueChange={(v) => { setFormData({ ...formData, nationality: v }); setErrors({ ...errors, nationality: false }); }} showCode={false} scope="all" />
+                      </div>
+                      {errors.nationality && <p className="text-xs text-red-500">{t("common.required")}</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>ID Type <span className="text-red-500">*</span></Label>
+                      <div className={errors.idType ? "rounded-md ring-1 ring-red-500" : ""}>
+                        <Select value={formData.idType} onValueChange={(v) => { setFormData({ ...formData, idType: v }); setErrors({ ...errors, idType: false }); }}>
+                          <SelectTrigger><SelectValue placeholder="Select ID type" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="national_id">National ID</SelectItem>
+                            <SelectItem value="passport">Passport</SelectItem>
+                            <SelectItem value="driver_license">Driver License</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {errors.idType && <p className="text-xs text-red-500">{t("common.required")}</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>ID Number <span className="text-red-500">*</span></Label>
+                      <Input className={errCls("idNumber")} value={formData.idNumber} onChange={(e) => { setFormData({ ...formData, idNumber: e.target.value }); setErrors({ ...errors, idNumber: false }); }} placeholder="ID number" />
+                      {errors.idNumber && <p className="text-xs text-red-500">{t("common.required")}</p>}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Street Address <span className="text-red-500">*</span></Label>
+                    <Textarea className={errCls("address")} value={formData.address} onChange={(e) => { setFormData({ ...formData, address: e.target.value }); setErrors({ ...errors, address: false }); }} placeholder="Full street address" rows={2} />
+                    {errors.address && <p className="text-xs text-red-500">{t("common.required")}</p>}
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label>City</Label>
+                      <Input value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} placeholder="City" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>State / Province</Label>
+                      <Input value={formData.state} onChange={(e) => setFormData({ ...formData, state: e.target.value })} placeholder="State" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Postal Code</Label>
+                      <Input value={formData.postalCode} onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })} placeholder="Postal code" />
                     </div>
                   </div>
                 </fieldset>

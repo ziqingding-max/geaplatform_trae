@@ -223,6 +223,7 @@ export const portalEmployeesRouter = portalRouter({
         baseSalary: z.string().min(1),
         salaryCurrency: z.string().default("USD"),
         requiresVisa: z.boolean().default(false),
+        bankDetails: z.any().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -255,6 +256,7 @@ export const portalEmployeesRouter = portalRouter({
         baseSalary: input.baseSalary,
         salaryCurrency: input.salaryCurrency,
         requiresVisa: input.requiresVisa,
+        bankDetails: input.bankDetails ? JSON.stringify(input.bankDetails) : null,
         status: "pending_review",
       });
 
@@ -608,6 +610,7 @@ export const portalEmployeesRouter = portalRouter({
         jobTitle: z.string().min(1),
         department: z.string().optional(),
         startDate: z.string().min(1),
+        bankDetails: z.any().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -727,6 +730,7 @@ export const portalEmployeesRouter = portalRouter({
           baseSalary: invite.baseSalary || "0",
           salaryCurrency: invite.salaryCurrency || "USD",
           requiresVisa,
+          bankDetails: input.bankDetails ? JSON.stringify(input.bankDetails) : null,
           status: "pending_review",
         });
 

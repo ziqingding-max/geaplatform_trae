@@ -56,9 +56,11 @@ import {
   Link2,
   Trash2,
   Eye,
+  Wallet,
 } from "lucide-react";
 import { getPortalOrigin, portalPath } from "@/lib/portalBasePath";
 import { cn } from "@/lib/utils";
+import { BankDetailsForm, BankDetails } from "@/components/forms/BankDetailsForm";
 
 import { useI18n } from "@/lib/i18n";
 // ── Status Configs ──
@@ -121,6 +123,7 @@ const EMPLOYER_FILL_STEPS_EOR = [
   { id: 3, title: "Employment", icon: Briefcase, description: "Job & contract" },
   { id: 4, title: "Compensation", icon: DollarSign, description: "Salary details" },
   { id: 5, title: "Documents", icon: FileCheck, description: "Upload files" },
+  { id: 6, title: "Bank Details", icon: Wallet, description: "Payment info" },
 ];
 
 const EMPLOYER_FILL_STEPS_AOR = [
@@ -164,6 +167,8 @@ interface OnboardingFormData {
   paymentFrequency: string;
   rateAmount: string;
   contractorCurrency: string;
+  // Bank Details
+  bankDetails: Partial<BankDetails>;
 }
 
 interface DocumentFile {
@@ -201,6 +206,7 @@ const initialFormData: OnboardingFormData = {
   paymentFrequency: "monthly",
   rateAmount: "",
   contractorCurrency: "USD",
+  bankDetails: {},
 };
 
 // ── Glass Card Component ──
@@ -464,13 +470,15 @@ export default function PortalOnboarding() {
       const requiredDocTypes = ["national_id"];
       if (needsVisa || formData.serviceType === "visa_eor") {
         requiredDocTypes.push("passport");
+        requiredDocTypes.push("resume");
+        requiredDocTypes.push("education");
       }
       const missingDocs = requiredDocTypes.filter(
         (docType) => !documents.find((d) => d.type === docType)
       );
       if (missingDocs.length > 0) {
         const labels = missingDocs.map((t) =>
-          t === "national_id" ? "National ID" : t === "passport" ? "Passport" : t
+          t === "national_id" ? "National ID" : t === "passport" ? "Passport" : t === "resume" ? "Resume" : t === "education" ? "Education Certificate" : t
         );
         toast.error(`Please upload required documents: ${labels.join(", ")}`);
         return;
@@ -521,6 +529,7 @@ export default function PortalOnboarding() {
           baseSalary: formData.baseSalary,
           salaryCurrency: formData.salaryCurrency || "USD",
           requiresVisa: needsVisa || formData.requiresVisa,
+          bankDetails: Object.keys(formData.bankDetails).length > 0 ? formData.bankDetails : undefined,
         });
 
         if (documents.length > 0 && result.employeeId) {
@@ -653,11 +662,11 @@ export default function PortalOnboarding() {
       {!isAor && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.dob")}</Label>
+            <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.dob")} <span className="text-destructive">*</span></Label>
             <DatePicker value={formData.dateOfBirth} onChange={(v: string) => updateField("dateOfBirth", v)} placeholder="Select date" />
           </div>
           <div className="space-y-2">
-            <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.gender")}</Label>
+            <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.gender")} <span className="text-destructive">*</span></Label>
             <Select value={formData.gender} onValueChange={(v) => updateField("gender", v)}>
               <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select gender" /></SelectTrigger>
               <SelectContent>
@@ -672,7 +681,7 @@ export default function PortalOnboarding() {
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.nationality")}</Label>
+          <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.nationality")} <span className="text-destructive">*</span></Label>
           <Select value={formData.nationality} onValueChange={(v) => updateField("nationality", v)}>
             <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select nationality" /></SelectTrigger>
             <SelectContent>
@@ -684,7 +693,7 @@ export default function PortalOnboarding() {
         </div>
         {!isAor && (
           <div className="space-y-2">
-            <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.id_type")}</Label>
+            <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.id_type")} <span className="text-destructive">*</span></Label>
             <Select value={formData.idType} onValueChange={(v) => updateField("idType", v)}>
               <SelectTrigger className="h-10 rounded-xl"><SelectValue placeholder="Select ID type" /></SelectTrigger>
               <SelectContent>
@@ -697,15 +706,15 @@ export default function PortalOnboarding() {
           </div>
         )}
       </div>
-      {!isAor && formData.idType && (
+      {!isAor && (
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.id_number")}</Label>
+          <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.id_number")} <span className="text-destructive">*</span></Label>
           <Input value={formData.idNumber} onChange={(e) => updateField("idNumber", e.target.value)} placeholder="Enter ID number" className="h-10 rounded-xl" />
         </div>
       )}
       {!isAor && (
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.address")}</Label>
+          <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.address")} <span className="text-destructive">*</span></Label>
           <Textarea value={formData.address} onChange={(e) => updateField("address", e.target.value)} placeholder="Full residential address" rows={2} className="rounded-xl" />
         </div>
       )}
@@ -901,9 +910,10 @@ export default function PortalOnboarding() {
       requiredDocs.push({ type: "passport", label: t("portal_onboarding.personal_info.id_type.passport"), required: true });
       requiredDocs.push({ type: "visa", label: t("portal_onboarding.documents.type.visa"), required: false });
     }
+    const isVisaEor = needsVisa || formData.serviceType === "visa_eor";
     const optionalDocs = [
-      { type: "resume", label: t("portal_onboarding.documents.type.resume"), required: false },
-      { type: "education", label: t("portal_onboarding.documents.type.education_certificate"), required: false },
+      { type: "resume", label: t("portal_onboarding.documents.type.resume"), required: isVisaEor },
+      { type: "education", label: t("portal_onboarding.documents.type.education_certificate"), required: isVisaEor },
     ];
     const allDocs = [...requiredDocs, ...optionalDocs];
 
@@ -971,6 +981,25 @@ export default function PortalOnboarding() {
       </div>
     );
   };
+
+  // ═══════════════════════════════════════════════════
+  // EMPLOYER FILL: Bank Details (Step 6)
+  // ═══════════════════════════════════════════════════
+  const renderBankDetails = () => (
+    <div className="space-y-6 animate-page-in">
+      <div className="rounded-2xl border border-border/50 bg-muted/20 backdrop-blur-sm p-4">
+        <p className="text-sm text-muted-foreground">
+          Please provide the employee's bank account details for salary payments. Fields marked with * are required.
+        </p>
+      </div>
+      <BankDetailsForm
+        value={formData.bankDetails}
+        onChange={(val) => updateField("bankDetails", val)}
+        countryCode={formData.country}
+        currency={formData.salaryCurrency}
+      />
+    </div>
+  );
 
   // ═══════════════════════════════════════════════════
   // INVITE FLOW: Employer Info (Step 2)
@@ -1237,7 +1266,12 @@ export default function PortalOnboarding() {
     if (mode === "employer-fill") {
       switch (currentStep) {
         case 1: return !!formData.serviceType;
-        case 2: return !!(formData.firstName && formData.lastName && formData.email);
+        case 2: {
+          const baseValid = !!(formData.firstName && formData.lastName && formData.email);
+          if (isAor) return baseValid;
+          // EOR/Visa EOR: require DOB, gender, nationality, idType, idNumber, address
+          return baseValid && !!(formData.dateOfBirth && formData.gender && formData.nationality && formData.idType && formData.idNumber && formData.address);
+        }
         case 3: return !!(formData.country && formData.jobTitle && formData.startDate);
         case 4:
           if (isAor) {
@@ -1247,6 +1281,7 @@ export default function PortalOnboarding() {
           }
           return !!formData.baseSalary;
         case 5: return true; // Documents step (EOR only)
+        case 6: return !!(formData.bankDetails?.accountHolderName && formData.bankDetails?.bankName && (formData.bankDetails?.accountNumber || formData.bankDetails?.iban)); // Bank Details
         default: return false;
       }
     } else {
@@ -1275,6 +1310,7 @@ export default function PortalOnboarding() {
         case 3: return renderEmployment();
         case 4: return renderCompensation();
         case 5: return isAor ? null : renderDocuments(); // AOR has no step 5
+        case 6: return renderBankDetails(); // EOR Bank Details step
       }
     } else {
       switch (currentStep) {
