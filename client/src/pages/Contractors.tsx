@@ -27,7 +27,7 @@ import {
   Users, Plus, Search, ChevronRight, Briefcase
 } from "lucide-react";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
-import { countryName } from "@/lib/format";
+import { countryName, formatStatusLabel } from "@/lib/format";
 
 export function ContractorListContent() {
   const { t } = useI18n();
@@ -88,7 +88,10 @@ export function ContractorListContent() {
   const statusColors: Record<string, string> = {
     active: "bg-emerald-50 text-emerald-700 border-emerald-200",
     draft: "bg-gray-50 text-gray-700 border-gray-200",
+    pending_review: "bg-amber-50 text-amber-700 border-amber-200",
+    onboarding: "bg-blue-50 text-blue-700 border-blue-200",
     terminated: "bg-red-50 text-red-700 border-red-200",
+    offboarding: "bg-orange-50 text-orange-700 border-orange-200",
   };
 
   return (
@@ -138,7 +141,6 @@ export function ContractorListContent() {
                 <TableHead>{t("contractors.list.table.header.contractor")}</TableHead>
                 <TableHead>{t("employees.create.form.customer")}</TableHead>
                 <TableHead className="min-w-[120px]">{t("employees.list.table.header.country")}</TableHead>
-                <TableHead>{t("contractors.list.table.header.rate")}</TableHead>
                 <TableHead>{t("contractors.list.table.header.status")}</TableHead>
                 <TableHead className="w-10"></TableHead>
               </TableRow>
@@ -147,7 +149,7 @@ export function ContractorListContent() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 5 }).map((_, j) => (
+                    {Array.from({ length: 4 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-4 w-24" /></TableCell>
                     ))}
                     <TableCell></TableCell>
@@ -171,13 +173,9 @@ export function ContractorListContent() {
                       <div>{con.customerName || `Customer #${con.customerId}`}</div>
                     </TableCell>
                     <TableCell className="text-sm">{countryName(con.country)}</TableCell>
-                    <TableCell className="text-sm font-mono">
-                      {con.currency} {con.rateAmount ? formatCurrencyAmount(con.rateAmount, con.currency || "USD") : "—"}
-                      <span className="text-xs text-muted-foreground ml-1">/ {con.paymentFrequency}</span>
-                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={`text-xs ${statusColors[con.status] || ""}`}>
-                        {con.status}
+                        {formatStatusLabel(con.status)}
                       </Badge>
                     </TableCell>
                     <TableCell><ChevronRight className="w-4 h-4 text-muted-foreground" /></TableCell>
@@ -185,7 +183,7 @@ export function ContractorListContent() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12">
+                  <TableCell colSpan={5} className="text-center py-12">
                     <Briefcase className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
                     <p className="text-sm text-muted-foreground">{t("contractors.list.empty.message")}</p>
                   </TableCell>

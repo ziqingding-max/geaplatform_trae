@@ -59,6 +59,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     // Common
     "common.loading": "Loading...",
     "common.save": "Save",
+    "common.updated": "Updated",
     "common.cancel": "Cancel",
     "common.delete": "Delete",
     "common.edit": "Edit",
@@ -1982,6 +1983,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     // Common
     "common.loading": "加载中...",
     "common.save": "保存",
+    "common.updated": "已更新",
     "common.cancel": "取消",
     "common.delete": "删除",
     "common.edit": "编辑",
@@ -4839,6 +4841,7 @@ const adminTranslations = {
     "quotations.subtitle": "Create and manage cost simulations for prospects.",
     "quotations.createButton": "New Quotation",
     "quotations.create.title": "Create New Quotation",
+    "quotations.create.basic_info": "Basic Information",
     "quotations.create.customerLabel": "Customer / Lead",
     "quotations.create.validUntil": "Valid Until",
     "quotations.create.notes": "Notes",
@@ -6509,6 +6512,7 @@ const adminTranslations = {
     "quotations.subtitle": "创建和管理潜在客户的成本模拟报价。",
     "quotations.createButton": "新建报价单",
     "quotations.create.title": "创建新报价单",
+    "quotations.create.basic_info": "基本信息",
     "quotations.create.customerLabel": "客户 / 销售线索",
     "quotations.create.validUntil": "有效期至",
     "quotations.create.notes": "备注",

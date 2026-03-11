@@ -520,6 +520,23 @@ export default function ContractorDetail() {
                 </CardContent>
               </Card>
 
+              {(() => {
+                const bd = contractor.bankDetails as Record<string, string> | null;
+                if (!bd || typeof bd !== "object" || Object.keys(bd).length === 0) return null;
+                return (
+                  <Card>
+                    <CardHeader><CardTitle className="text-base flex items-center gap-2"><CreditCard className="w-4 h-4" /> Bank Details</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      {Object.entries(bd).map(([key, value]) => (
+                        value ? (
+                          <InfoRow key={key} label={key.replace(/([A-Z])/g, " $1").replace(/^./, (s: string) => s.toUpperCase()).trim()} value={String(value)} />
+                        ) : null
+                      ))}
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
               {contractor.notes && (
                 <Card className="md:col-span-2">
                   <CardHeader><CardTitle className="text-base flex items-center gap-2"><FileText className="w-4 h-4" /> Notes</CardTitle></CardHeader>

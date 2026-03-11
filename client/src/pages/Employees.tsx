@@ -964,7 +964,7 @@ function EmployeeDetail({ id }: { id: number }) {
       docs.push({
         id: `doc-${d.id}`,
         type: d.documentType,
-        category: t(`employees.documentType.${d.documentType}`) || d.documentType,
+        category: d.documentType,
         name: d.documentName,
         date: d.createdAt,
         fileUrl: d.fileUrl,
@@ -1446,7 +1446,7 @@ function EmployeeDetail({ id }: { id: number }) {
                           <FileText className="w-4 h-4 text-muted-foreground" />
                           <div>
                             <span className="text-sm font-medium max-w-[200px] truncate inline-block align-middle">{doc.name}</span>
-                            <Badge variant="outline" className="text-xs ml-2">{doc.category}</Badge>
+                            <Badge variant="outline" className="text-xs ml-2">{t(`employees.documents.category.${doc.category}`) || t(`employees.documentType.${doc.category}`) || doc.category}</Badge>
                           </div>
                         </div>
                         {doc.fileUrl && (
@@ -1542,7 +1542,7 @@ function EmployeeDetail({ id }: { id: number }) {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="text-xs">{t(`employees.documents.category.${doc.category}`) || doc.category}</Badge>
+                            <Badge variant="outline" className="text-xs">{t(`employees.documents.category.${doc.category}`) || t(`employees.documentType.${doc.category}`) || doc.category}</Badge>
                           </TableCell>
                           <TableCell>
                             {doc.status ? (

@@ -328,7 +328,7 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                   >
                     <SelectTrigger><SelectValue placeholder={t("quotations.create.select_placeholder")} /></SelectTrigger>
                     <SelectContent>
-                        {leads?.data.map((l: any) => (
+                        {leads?.data.filter((l: any) => l.status !== "closed_won" && l.status !== "closed_lost").map((l: any) => (
                             <SelectItem key={`lead-${l.id}`} value={`lead-${l.id}`}>{t("quotations.create.lead_prefix")} {l.companyName}</SelectItem>
                         ))}
                         {customers?.data.map((c: any) => (
