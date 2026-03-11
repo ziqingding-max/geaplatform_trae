@@ -216,4 +216,41 @@ export const portalContractorsRouter = portalRouter({
 
       return { contractorId: result[0]?.id };
     }),
+
+  // Delete a pending_review contractor (only allowed before admin approval)
+  delete: protectedPortalProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
+
+      const customerId = ctx.portalUser.customerId;
+
+      // Verify the contractor exists, belongs to this customer, and is in pending_review status
+      const [existing] = await db
+        .select({ id: contractors.id, status: contractors.status })
+        .from(contractors)
+        .where(and(eq(contractors.id, input.id), eq(contractors.customerId, customerId)))
+        .limit(1);
+
+      if (!existing) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Contractor not found" });
+      }
+
+      if (existing.status !== "pending_review") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only pending_review contractors can be deleted",
+        });
+      }
+
+      // Delete related milestones and adjustments first
+      await db.delete(contractorMilestones).where(eq(contractorMilestones.contractorId, input.id));
+      await db.delete(contractorAdjustments).where(eq(contractorAdjustments.contractorId, input.id));
+
+      // Delete the contractor
+      await db.delete(contractors).where(eq(contractors.id, input.id));
+
+      return { success: true };
+    }),
 });

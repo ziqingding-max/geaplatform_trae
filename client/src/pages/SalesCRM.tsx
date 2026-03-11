@@ -565,7 +565,7 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
                             {lead.contactEmail && <span className="text-xs text-muted-foreground">{lead.contactEmail}</span>}
                           </div>
                         </TableCell>
-                        <TableCell>{lead.country || "—"}</TableCell>
+                        <TableCell>{countryName(lead.country) || "—"}</TableCell>
                         <TableCell>{lead.source || "—"}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className={statusColors[lead.status] || ""}>

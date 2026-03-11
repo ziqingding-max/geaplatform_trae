@@ -7,7 +7,7 @@
 
 import { useMemo } from "react";
 import Layout from "@/components/Layout";
-import { formatDateTime, formatCurrencyCompact, formatMonthShort } from "@/lib/format";
+import { formatDateTime, formatCurrencyCompact, formatMonthShort, countryName } from "@/lib/format";
 import { formatActivitySummary } from "@/lib/auditDescriptions";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -337,7 +337,7 @@ function OverviewTab() {
                 const pct = total > 0 ? ((Number(item.count) / total) * 100) : 0;
                 return (
                   <div key={item.country} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                    <span className="text-sm flex-1 font-medium">{item.country || "Unknown"}</span>
+                    <span className="text-sm flex-1 font-medium">{countryName(item.country) || "Unknown"}</span>
                     <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
                       <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>

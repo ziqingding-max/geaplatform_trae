@@ -419,6 +419,35 @@ export default function ContractorDetail() {
     onError: (err) => toast.error(err.message),
   });
 
+  const statusUpdateMutation = trpc.contractors.update.useMutation({
+    onSuccess: () => {
+      toast.success(t("common.updated"));
+      refetch();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const statusColors: Record<string, string> = {
+    pending_review: "bg-amber-50 text-amber-700 border-amber-200",
+    active: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    onboarding: "bg-blue-50 text-blue-700 border-blue-200",
+    offboarding: "bg-orange-50 text-orange-700 border-orange-200",
+    terminated: "bg-red-50 text-red-700 border-red-200",
+  };
+
+  const contractorTransitions: Record<string, { label: string; value: string; variant?: string }[]> = {
+    pending_review: [
+      { label: t("contractors.actions.activate") || "Activate", value: "active" },
+      { label: t("contractors.actions.terminate") || "Terminate", value: "terminated", variant: "destructive" },
+    ],
+    active: [
+      { label: t("contractors.actions.terminate") || "Terminate", value: "terminated", variant: "destructive" },
+    ],
+    terminated: [
+      { label: t("contractors.actions.reactivate") || "Reactivate", value: "active", variant: "outline" },
+    ],
+  };
+
   const [milestoneOpen, setMilestoneOpen] = useState(false);
   const [milestoneForm, setMilestoneForm] = useState({
     title: "",
@@ -456,11 +485,27 @@ export default function ContractorDetail() {
               <span>{contractor.jobTitle}</span>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-            <Pencil className="w-4 h-4 mr-2" />
-            Edit
-          </Button>
-          <Badge variant="outline" className="capitalize">{contractor.status}</Badge>
+          <div className="flex gap-2 flex-wrap justify-end">
+            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+              <Pencil className="w-4 h-4 mr-2" />
+              Edit
+            </Button>
+            {(contractorTransitions[contractor.status] || []).map((tr) => (
+              <Button key={tr.value}
+                variant={tr.variant === "destructive" ? "destructive" : tr.variant === "outline" ? "outline" : "default"}
+                size="sm"
+                onClick={() => {
+                  if (tr.variant === "destructive" && !confirm(`Are you sure you want to ${tr.label.toLowerCase()} this contractor?`)) return;
+                  statusUpdateMutation.mutate({ id: contractor.id, data: { status: tr.value as any } });
+                }}
+                disabled={statusUpdateMutation.isPending}>
+                {tr.label}
+              </Button>
+            ))}
+          </div>
+          <Badge variant="outline" className={`capitalize ${statusColors[contractor.status] || ""}`}>
+            {t(`status.${contractor.status}`) || contractor.status}
+          </Badge>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -552,10 +597,8 @@ export default function ContractorDetail() {
           <TabsContent value="milestones" className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-lg font-medium">{t("contractors.milestones.title")}</h3>
-              <Dialog open={milestoneOpen} onOpenChange={setMilestoneOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm"><Plus className="w-4 h-4 mr-2" />{t("contractors.milestones.add")}</Button>
-                </DialogTrigger>
+            </div>
+            <Dialog open={milestoneOpen} onOpenChange={setMilestoneOpen}>
                 <DialogContent>
                   <DialogHeader><DialogTitle>{t("contractors.milestones.add")}</DialogTitle></DialogHeader>
                   <div className="space-y-4 py-4">
@@ -586,8 +629,7 @@ export default function ContractorDetail() {
                     </Button>
                   </div>
                 </DialogContent>
-              </Dialog>
-            </div>
+            </Dialog>
 
             <Card>
               <CardContent className="p-0">
@@ -632,13 +674,11 @@ export default function ContractorDetail() {
           {/* Adjustments Tab */}
           <TabsContent value="adjustments" className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-medium">{t("contractors.adjustments.title") || "Adjustments"}</h3>
-              <Dialog open={adjustmentOpen} onOpenChange={setAdjustmentOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm"><Plus className="w-4 h-4 mr-2" />Add Adjustment</Button>
-                </DialogTrigger>
+              <h3 className="text-lg font-medium">{t("contractors.adjustments.title")}</h3>
+            </div>
+            <Dialog open={adjustmentOpen} onOpenChange={setAdjustmentOpen}>
                 <DialogContent>
-                  <DialogHeader><DialogTitle>Add Adjustment</DialogTitle></DialogHeader>
+                  <DialogHeader><DialogTitle>{t("contractors.adjustments.title")}</DialogTitle></DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
                       <Label>Type</Label>
@@ -674,8 +714,7 @@ export default function ContractorDetail() {
                     </Button>
                   </div>
                 </DialogContent>
-              </Dialog>
-            </div>
+            </Dialog>
 
             <Card>
               <CardContent className="p-0">

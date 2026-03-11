@@ -3,8 +3,10 @@
  *
  * Read-only view of contractor profile, service details, and financial configuration.
  * All data scoped to the logged-in customer.
+ * Pending_review contractors can be deleted by the portal user.
  */
 
+import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
@@ -13,6 +15,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   ArrowLeft,
   User,
@@ -28,10 +41,13 @@ import {
   Hash,
   Coins,
   StickyNote,
+  CreditCard,
+  Trash2,
 } from "lucide-react";
-import { formatStatusLabel, countryName } from "@/lib/format";
+import { formatStatusLabel, formatDate, countryName } from "@/lib/format";
 import { portalPath } from "@/lib/portalBasePath";
 import { useI18n } from "@/lib/i18n";
+import { toast } from "sonner";
 
 const statusColors: Record<string, string> = {
   active: "bg-green-100 text-green-800 border-green-200",
@@ -39,13 +55,17 @@ const statusColors: Record<string, string> = {
   terminated: "bg-red-100 text-red-800 border-red-200",
 };
 
-function InfoRow({ label, value, icon: Icon }: { label: string; value: string | null | undefined; icon?: any }) {
+function InfoItem({ label, value, icon: Icon }: { label: string; value: string | null | undefined; icon?: any }) {
   return (
-    <div className="flex items-start gap-3 py-2">
-      {Icon && <Icon className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />}
-      <div className="min-w-0">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm font-medium">{value || "-"}</p>
+    <div className="flex items-start gap-3 py-3 px-1">
+      {Icon && (
+        <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+          <Icon className="w-4 h-4 text-muted-foreground" />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+        <p className="text-sm font-medium mt-0.5">{value || "—"}</p>
       </div>
     </div>
   );
@@ -53,23 +73,35 @@ function InfoRow({ label, value, icon: Icon }: { label: string; value: string | 
 
 export default function PortalContractorDetail() {
   const { t } = useI18n();
+
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const contractorId = Number(params.id);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const { data: contractor, isLoading } = portalTrpc.contractors.getById.useQuery(
     { id: contractorId },
     { enabled: !!contractorId }
   );
 
+  const deleteMutation = portalTrpc.contractors.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Contractor deleted successfully");
+      setLocation(portalPath("/people"));
+    },
+    onError: (err) => {
+      toast.error(err.message);
+    },
+  });
+
   if (isLoading) {
     return (
       <PortalLayout title={t("portal_contractor_detail.title")}>
-        <div className="p-6 space-y-6">
-          <Skeleton className="h-8 w-48" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Skeleton className="h-64" />
-            <Skeleton className="h-64" />
+        <div className="p-6 space-y-6 max-w-5xl mx-auto">
+          <Skeleton className="h-10 w-64" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <Skeleton className="h-80 lg:col-span-1" />
+            <Skeleton className="h-80 lg:col-span-2" />
           </div>
         </div>
       </PortalLayout>
@@ -91,95 +123,176 @@ export default function PortalContractorDetail() {
   }
 
   const paymentLabel = contractor.paymentFrequency
-    ? contractor.paymentFrequency.replace("_", "-")
-    : "N/A";
+    ? contractor.paymentFrequency.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())
+    : null;
+
+  const amountDisplay = contractor.rateAmount
+    ? `${contractor.currency || "USD"} ${Number(contractor.rateAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+    : null;
+
+  const isPendingReview = contractor.status === "pending_review";
 
   return (
     <PortalLayout title={`${contractor.firstName} ${contractor.lastName}`}>
-      <div className="p-6 space-y-6">
+      <div className="p-6 space-y-6 max-w-5xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => setLocation(portalPath("/people"))}>
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div>
-              <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => setLocation(portalPath("/people"))}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="flex-1">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <User className="w-5 h-5 text-primary" />
+              </div>
+              <div>
                 <h2 className="text-2xl font-bold tracking-tight">
                   {contractor.firstName} {contractor.lastName}
                 </h2>
-                <Badge variant="outline" className={statusColors[contractor.status] || ""}>
-                  {formatStatusLabel(contractor.status)}
-                </Badge>
+                <p className="text-sm text-muted-foreground">
+                  {contractor.contractorCode} {contractor.jobTitle ? `· ${contractor.jobTitle}` : ""}
+                </p>
               </div>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {contractor.contractorCode} · {contractor.jobTitle || t("portal_contractor_detail.default_title")}
-              </p>
+              <Badge variant="outline" className={`ml-1 ${statusColors[contractor.status] || ""}`}>
+                {formatStatusLabel(contractor.status)}
+              </Badge>
             </div>
           </div>
+          {/* Delete button for pending_review contractors */}
+          {isPendingReview && (
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" className="gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  {t("portal_contractor_detail.delete") || "Delete"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {t("portal_contractor_detail.delete_confirm_title") || "Delete Contractor Request?"}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t("portal_contractor_detail.delete_confirm_desc") ||
+                      `Are you sure you want to delete the contractor request for ${contractor.firstName} ${contractor.lastName}? This action cannot be undone.`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>{t("common.cancel") || "Cancel"}</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => deleteMutation.mutate({ id: contractorId })}
+                    disabled={deleteMutation.isPending}
+                  >
+                    {deleteMutation.isPending
+                      ? (t("common.deleting") || "Deleting...")
+                      : (t("common.delete") || "Delete")}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Personal Information */}
-          <Card>
-            <CardHeader>
+        {/* Summary Cards Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <Card className="border-l-4 border-l-blue-500">
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("portal_contractor_detail.country")}</p>
+              <p className="text-sm font-semibold mt-1">{countryName(contractor.country) || "—"}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-l-4 border-l-green-500">
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("portal_contractor_detail.payment_frequency")}</p>
+              <p className="text-sm font-semibold mt-1">{paymentLabel || "—"}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-l-4 border-l-amber-500">
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("portal_contractor_detail.start_date")}</p>
+              <p className="text-sm font-semibold mt-1">{contractor.startDate ? formatDate(contractor.startDate) : "—"}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-l-4 border-l-purple-500">
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{t("portal_contractor_detail.amount")}</p>
+              <p className="text-sm font-semibold mt-1">{amountDisplay || "—"}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column: Personal Information */}
+          <Card className="lg:col-span-1">
+            <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <User className="w-4 h-4" /> {t("portal_contractor_detail.personal_info")}
+                <User className="w-4 h-4 text-primary" /> {t("portal_contractor_detail.personal_info")}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-1">
-              <InfoRow label={t("portal_contractor_detail.full_name")} value={`${contractor.firstName} ${contractor.lastName}`} icon={User} />
-              <InfoRow label={t("portal_contractor_detail.email")} value={contractor.email} icon={Mail} />
-              <InfoRow label={t("portal_contractor_detail.phone")} value={contractor.phone} icon={Phone} />
-              <InfoRow label={t("portal_contractor_detail.dob")} value={contractor.dateOfBirth ? new Date(contractor.dateOfBirth).toLocaleDateString() : null} icon={Calendar} />
-              <InfoRow label={t("portal_contractor_detail.nationality")} value={contractor.nationality} icon={Globe} />
-              <Separator className="my-2" />
-              <InfoRow label={t("portal_contractor_detail.address")} value={contractor.address} icon={MapPin} />
-              <InfoRow label={t("portal_contractor_detail.city")} value={contractor.city} icon={Building2} />
-              <InfoRow label={t("portal_contractor_detail.state")} value={contractor.state} icon={MapPin} />
-              <InfoRow label={t("portal_contractor_detail.postal_code")} value={contractor.postalCode} icon={Hash} />
-              <InfoRow label={t("portal_contractor_detail.country")} value={countryName(contractor.country)} icon={Globe} />
+            <CardContent className="space-y-0 pt-0">
+              <InfoItem label={t("portal_contractor_detail.email")} value={contractor.email} icon={Mail} />
+              <Separator />
+              <InfoItem label={t("portal_contractor_detail.phone")} value={contractor.phone} icon={Phone} />
+              <Separator />
+              <InfoItem label={t("portal_contractor_detail.dob")} value={contractor.dateOfBirth ? formatDate(contractor.dateOfBirth) : null} icon={Calendar} />
+              <Separator />
+              <InfoItem label={t("portal_contractor_detail.nationality")} value={contractor.nationality} icon={Globe} />
+              <Separator />
+              <InfoItem label={t("portal_contractor_detail.address")} value={[contractor.address, contractor.city, contractor.state, contractor.postalCode].filter(Boolean).join(", ") || null} icon={MapPin} />
             </CardContent>
           </Card>
 
-          {/* Service & Financial Details */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Briefcase className="w-4 h-4" /> {t("portal_contractor_detail.service_details")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              <InfoRow label={t("portal_contractor_detail.job_title")} value={contractor.jobTitle} icon={Briefcase} />
-              <InfoRow label={t("portal_contractor_detail.department")} value={contractor.department} icon={Building2} />
-              <InfoRow label={t("portal_contractor_detail.start_date")} value={contractor.startDate ? new Date(contractor.startDate).toLocaleDateString() : null} icon={Calendar} />
-              <InfoRow label={t("portal_contractor_detail.end_date")} value={contractor.endDate ? new Date(contractor.endDate).toLocaleDateString() : null} icon={Calendar} />
-              <Separator className="my-2" />
-              <InfoRow label={t("portal_contractor_detail.payment_frequency")} value={paymentLabel} icon={DollarSign} />
-              <InfoRow
-                label={t("portal_contractor_detail.amount")}
-                value={
-                  contractor.rateAmount
-                    ? `${contractor.currency || "USD"} ${Number(contractor.rateAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                    : null
-                }
-                icon={DollarSign}
-              />
-              <InfoRow label={t("portal_contractor_detail.currency")} value={contractor.currency} icon={Coins} />
-              {contractor.notes && (
-                <>
-                  <Separator className="my-2" />
-                  <div className="flex items-start gap-3 py-2">
-                    <StickyNote className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">{t("portal_contractor_detail.notes")}</p>
-                      <p className="text-sm whitespace-pre-wrap">{contractor.notes}</p>
-                    </div>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
+          {/* Right Column: Service & Financial */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Service Details */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-primary" /> {t("portal_contractor_detail.service_details")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                  <InfoItem label={t("portal_contractor_detail.job_title")} value={contractor.jobTitle} icon={Briefcase} />
+                  <InfoItem label={t("portal_contractor_detail.department")} value={contractor.department} icon={Building2} />
+                  <InfoItem label={t("portal_contractor_detail.start_date")} value={contractor.startDate ? formatDate(contractor.startDate) : null} icon={Calendar} />
+                  <InfoItem label={t("portal_contractor_detail.end_date")} value={contractor.endDate ? formatDate(contractor.endDate) : null} icon={Calendar} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Financial Configuration */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-primary" /> {t("portal_contractor_detail.financial_config") || "Financial Configuration"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                  <InfoItem label={t("portal_contractor_detail.payment_frequency")} value={paymentLabel} icon={DollarSign} />
+                  <InfoItem label={t("portal_contractor_detail.amount")} value={amountDisplay} icon={DollarSign} />
+                  <InfoItem label={t("portal_contractor_detail.currency")} value={contractor.currency} icon={Coins} />
+                  <InfoItem label={t("portal_contractor_detail.country")} value={countryName(contractor.country)} icon={Globe} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Notes */}
+            {contractor.notes && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <StickyNote className="w-4 h-4 text-primary" /> {t("portal_contractor_detail.notes")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-sm whitespace-pre-wrap text-muted-foreground leading-relaxed">{contractor.notes}</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
       </div>
     </PortalLayout>

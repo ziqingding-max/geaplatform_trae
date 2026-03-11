@@ -21,18 +21,9 @@ import {
   BookOpen, Scale, Shield, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { countryName, countryFlag } from "@/lib/format";
 
 import { useI18n } from "@/lib/i18n";
-// ─── Country Flag Emoji Helper ───────────────────────────────────────────────
-
-function countryFlag(code: string) {
-  if (!code || code.length !== 2) return "🌍";
-  const base = 0x1f1e6;
-  return String.fromCodePoint(
-    base + code.charCodeAt(0) - 65,
-    base + code.charCodeAt(1) - 65
-  );
-}
 
 // ─── Calendar Component ──────────────────────────────────────────────────────
 
@@ -239,7 +230,7 @@ function HolidayCalendar({
                   <div
                     key={j}
                     className="text-[10px] leading-tight px-1 py-0.5 rounded bg-red-100 text-red-700 mb-0.5 truncate"
-                    title={`${h.holidayName}${h.localName && h.localName !== h.holidayName ? ` (${h.localName})` : ""} — ${h.countryCode}`}
+                    title={`${h.holidayName}${h.localName && h.localName !== h.holidayName ? ` (${h.localName})` : ""} — ${countryName(h.countryCode)}`}
                   >
                     {selectedCountry === "all" && (
                       <span className="mr-0.5">{countryFlag(h.countryCode)}</span>
@@ -320,8 +311,8 @@ function HolidayListView({
                           )}
                         </div>
                         <span className="text-base">{countryFlag(h.countryCode)}</span>
-                        <Badge variant="outline" className="text-xs font-mono shrink-0">
-                          {h.countryCode}
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          {countryName(h.countryCode)}
                         </Badge>
                       </div>
                     );
@@ -509,7 +500,7 @@ export default function PortalCompliance() {
                     <SelectItem key={code} value={code}>
                       <span className="flex items-center gap-2">
                         <span>{countryFlag(code)}</span>
-                        {code}
+                        {countryName(code)}
                       </span>
                     </SelectItem>
                   ))}

@@ -366,7 +366,47 @@ export const portalLeaveRouter = portalRouter({
 
       if (activeCountries.length === 0) return [];
 
-      const countryCodes = activeCountries.map((c) => c.country);
+      // employees.country stores full names (e.g. "Australia"),
+      // but publicHolidays.countryCode stores ISO codes (e.g. "AU").
+      // We need a reverse mapping from name → code.
+      const NAME_TO_CODE: Record<string, string> = {
+        "United Arab Emirates": "AE", "Albania": "AL", "Armenia": "AM", "Argentina": "AR",
+        "Austria": "AT", "Australia": "AU", "Bosnia and Herzegovina": "BA", "Bangladesh": "BD",
+        "Belgium": "BE", "Bulgaria": "BG", "Bahrain": "BH", "Bolivia": "BO", "Brazil": "BR",
+        "Belarus": "BY", "Canada": "CA", "Switzerland": "CH", "Chile": "CL", "China": "CN",
+        "Colombia": "CO", "Costa Rica": "CR", "Cyprus": "CY", "Czech Republic": "CZ",
+        "Germany": "DE", "Denmark": "DK", "Dominican Republic": "DO", "Ecuador": "EC",
+        "Estonia": "EE", "Egypt": "EG", "Spain": "ES", "Finland": "FI", "France": "FR",
+        "United Kingdom": "GB", "Georgia": "GE", "Ghana": "GH", "Greece": "GR",
+        "Guatemala": "GT", "Hong Kong": "HK", "Hong Kong S.A.R.": "HK", "Honduras": "HN",
+        "Croatia": "HR", "Hungary": "HU", "Indonesia": "ID", "Ireland": "IE", "Israel": "IL",
+        "India": "IN", "Iceland": "IS", "Italy": "IT", "Jamaica": "JM", "Japan": "JP",
+        "Kenya": "KE", "South Korea": "KR", "Kuwait": "KW", "Kazakhstan": "KZ",
+        "Lithuania": "LT", "Luxembourg": "LU", "Latvia": "LV", "Morocco": "MA",
+        "Moldova": "MD", "Montenegro": "ME", "North Macedonia": "MK", "Mongolia": "MN",
+        "Malta": "MT", "Mexico": "MX", "Malaysia": "MY", "Nigeria": "NG", "Nicaragua": "NI",
+        "Netherlands": "NL", "Norway": "NO", "New Zealand": "NZ", "Panama": "PA",
+        "Peru": "PE", "Papua New Guinea": "PG", "Philippines": "PH", "Pakistan": "PK",
+        "Poland": "PL", "Puerto Rico": "PR", "Portugal": "PT", "Paraguay": "PY",
+        "Qatar": "QA", "Romania": "RO", "Serbia": "RS", "Russia": "RU",
+        "Saudi Arabia": "SA", "Sweden": "SE", "Singapore": "SG", "Slovenia": "SI",
+        "Slovakia": "SK", "El Salvador": "SV", "Thailand": "TH", "Tunisia": "TN",
+        "Turkey": "TR", "Taiwan": "TW", "Ukraine": "UA", "United States": "US",
+        "Uruguay": "UY", "Venezuela": "VE", "Vietnam": "VN", "South Africa": "ZA",
+        "Cambodia": "KH", "UAE": "AE",
+      };
+
+      // Convert full names to ISO codes; if already a 2-letter code, keep as-is
+      const countryCodes = activeCountries
+        .map((c) => {
+          const val = c.country;
+          if (!val) return null;
+          if (val.length === 2) return val.toUpperCase();
+          return NAME_TO_CODE[val] || null;
+        })
+        .filter((c): c is string => c !== null);
+
+      if (countryCodes.length === 0) return [];
 
       const holidays = await db
         .select()

@@ -135,6 +135,10 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "contractors.milestones.empty": "No milestones found",
     "contractors.invoices.title": "Invoices",
     "contractors.invoices.empty": "No invoices found",
+    "contractors.actions.activate": "Activate",
+    "contractors.actions.terminate": "Terminate",
+    "contractors.actions.reactivate": "Reactivate",
+    "contractors.adjustments.title": "Adjustments",
 
     // Employees
     "employees.title": "Employees",
@@ -1834,6 +1838,10 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_contractor_detail.amount": "Amount",
     "portal_contractor_detail.currency": "Currency",
     "portal_contractor_detail.notes": "Notes",
+    "portal_contractor_detail.financial_config": "Financial Configuration",
+    "portal_contractor_detail.delete": "Delete",
+    "portal_contractor_detail.delete_confirm_title": "Delete Contractor Request?",
+    "portal_contractor_detail.delete_confirm_desc": "Are you sure you want to delete this contractor request? This action cannot be undone.",
 
     // Portal Milestones
     "portal_milestones.tabs.active": "Active",
@@ -2046,7 +2054,10 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "contractors.list.table.header.service": "服务",
     "contractors.list.table.header.status": "状态",
     "contractors.list.table.header.rate": "费率",
-
+    "contractors.actions.activate": "激活",
+    "contractors.actions.terminate": "终止",
+    "contractors.actions.reactivate": "重新激活",
+    "contractors.adjustments.title": "调整项",
     // Employees
     "employees.title": "员工管理",
     "employees.subtitle": "管理您的全球员工团队",
@@ -3746,6 +3757,10 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_contractor_detail.amount": "金额",
     "portal_contractor_detail.currency": "币种",
     "portal_contractor_detail.notes": "备注",
+    "portal_contractor_detail.financial_config": "财务配置",
+    "portal_contractor_detail.delete": "删除",
+    "portal_contractor_detail.delete_confirm_title": "删除承包商申请？",
+    "portal_contractor_detail.delete_confirm_desc": "确定要删除该承包商申请吗？此操作无法撤销。",
 
     // Portal Milestones
     "portal_milestones.tabs.active": "进行中",
@@ -4089,6 +4104,10 @@ const adminTranslations = {
     "contractors.milestones.empty": "No milestones found",
     "contractors.invoices.title": "Invoices",
     "contractors.invoices.empty": "No invoices found",
+    "contractors.actions.activate": "Activate",
+    "contractors.actions.terminate": "Terminate",
+    "contractors.actions.reactivate": "Reactivate",
+    "contractors.adjustments.title": "Adjustments",
 
     // Employees
     "employees.title": "Employees",
@@ -6384,6 +6403,10 @@ const adminTranslations = {
     "contractors.milestones.empty": "未找到里程碑",
     "contractors.invoices.title": "发票",
     "contractors.invoices.empty": "未找到发票",
+    "contractors.actions.activate": "激活",
+    "contractors.actions.terminate": "终止",
+    "contractors.actions.reactivate": "重新激活",
+    "contractors.adjustments.title": "调整项",
 
     // Employees
     "employees.title": "员工管理",

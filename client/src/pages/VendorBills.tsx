@@ -592,7 +592,7 @@ function AIUploadDrawer({
                 {vm?.status === "auto_created" && (
                   <div className="flex items-center gap-2 p-2 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-xs mb-2">
                     <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>{t("vendorBills.review.vendorAutoCreated").replace("{vendorName}", vm.vendor?.name || "").replace("{country}", vm.vendor?.country || "-")}</span>
+                    <span>{t("vendorBills.review.vendorAutoCreated").replace("{vendorName}", vm.vendor?.name || "").replace("{country}", countryName(vm.vendor?.country) || "-")}</span>
                   </div>
                 )}
                 {vm?.status === "matched" && (
@@ -1446,7 +1446,7 @@ function VendorBillDetail({ id }: { id: number }) {
             <CardContent className="space-y-3">
               <div><div className="text-xs text-muted-foreground">{t("common.name")}</div><div className="font-medium">{bill.vendor?.name || "—"}</div></div>
               <div><div className="text-xs text-muted-foreground">{t("common.code")}</div><div className="font-medium">{bill.vendor?.vendorCode || "—"}</div></div>
-              <div><div className="text-xs text-muted-foreground">{t("common.country")}</div><div className="font-medium">{bill.vendor?.country || "—"}</div></div>
+              <div><div className="text-xs text-muted-foreground">{t("common.country")}</div><div className="font-medium">{countryName(bill.vendor?.country) || "—"}</div></div>
               {bill.vendor && (
                 <Button variant="link" className="p-0 h-auto text-xs" onClick={() => setLocation(`/vendors/${bill.vendorId}`)}>
                   View Vendor Details →
@@ -1562,7 +1562,7 @@ function VendorBillDetail({ id }: { id: number }) {
                             <p className="font-medium text-sm">
                               {alloc.employee ? `${alloc.employee.firstName} ${alloc.employee.lastName}` : "\u2014"}
                             </p>
-                            <p className="text-xs text-muted-foreground">{alloc.employee?.country || ""}</p>
+                            <p className="text-xs text-muted-foreground">{countryName(alloc.employee?.country) || ""}</p>
                           </div>
                         </TableCell>
                         <TableCell>
