@@ -18,6 +18,7 @@ import {
 import { getDb } from "../../db";
 import { reimbursements, employees, payrollRuns, payrollItems } from "../../../drizzle/schema";
 import { storagePut } from "../../storage";
+import { enforceCutoff } from "../../utils/cutoff";
 
 export const portalReimbursementsRouter = portalRouter({
   /**
@@ -159,6 +160,9 @@ export const portalReimbursementsRouter = portalRouter({
           message: `Payroll run for ${normalizedMonth.substring(0, 7)} is already ${existingPayroll.status}. Reimbursements cannot be added.`,
         });
       }
+
+      // Enforce cutoff — prevent submissions after cutoff date
+      await enforceCutoff(normalizedMonth, "portal_hr", "create reimbursement");
 
       // Use employee's salary currency
       const currency = emp.salaryCurrency || input.currency;

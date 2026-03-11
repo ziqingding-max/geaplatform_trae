@@ -239,8 +239,8 @@ export const adjustmentsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const existing = await getAdjustmentById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Adjustment not found" });
-      if (existing.status !== "submitted") {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only submitted adjustments can be admin-approved" });
+      if (existing.status !== "client_approved") {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only client-approved adjustments can be admin-approved. Current status: " + existing.status });
       }
 
       await updateAdjustment(input.id, {
@@ -261,7 +261,7 @@ export const adjustmentsRouter = router({
     }),
 
   /**
-   * Admin reject — rejects a submitted adjustment
+   * Admin reject — rejects a client-approved adjustment
    */
   adminReject: operationsManagerProcedure
     .input(z.object({
@@ -271,8 +271,8 @@ export const adjustmentsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const existing = await getAdjustmentById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Adjustment not found" });
-      if (existing.status !== "submitted") {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only submitted adjustments can be admin-rejected" });
+      if (existing.status !== "client_approved") {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Only client-approved adjustments can be admin-rejected. Current status: " + existing.status });
       }
 
       await updateAdjustment(input.id, {
@@ -292,6 +292,45 @@ export const adjustmentsRouter = router({
       });
 
       return { success: true };
+    }),
+
+  /**
+   * Bulk admin approve — approve all client_approved adjustments by IDs
+   */
+  bulkAdminApprove: operationsManagerProcedure
+    .input(z.object({
+      ids: z.array(z.number()).min(1).max(500),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      let approvedCount = 0;
+      let skippedCount = 0;
+
+      for (const id of input.ids) {
+        const existing = await getAdjustmentById(id);
+        if (!existing || existing.status !== "client_approved") {
+          skippedCount++;
+          continue;
+        }
+
+        await updateAdjustment(id, {
+          status: "admin_approved",
+          adminApprovedBy: ctx.user.id,
+          adminApprovedAt: new Date(),
+        } as any);
+
+        await logAuditAction({
+          userId: ctx.user.id,
+          userName: ctx.user.name || null,
+          action: "admin_approve",
+          entityType: "adjustment",
+          entityId: id,
+          changes: JSON.stringify({ bulk: true }),
+        });
+
+        approvedCount++;
+      }
+
+      return { approvedCount, skippedCount };
     }),
 
   // Upload receipt file for reimbursement adjustments

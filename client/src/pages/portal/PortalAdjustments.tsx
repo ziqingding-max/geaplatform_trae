@@ -37,6 +37,7 @@ import { exportToCsv } from "@/lib/csvExport";
 import { cn } from "@/lib/utils";
 import { MonthPicker } from "@/components/DatePicker";
 import CurrencySelect from "@/components/CurrencySelect";
+import PortalPayrollCycleIndicator from "@/components/PortalPayrollCycleIndicator";
 
 import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
@@ -54,7 +55,6 @@ const statusColors: Record<string, string> = {
 const adjustmentTypes = [
   "bonus",
   "allowance",
-  "reimbursement",
   "deduction",
   "other",
 ];
@@ -300,7 +300,7 @@ export default function PortalAdjustments() {
             <SelectContent>
               <SelectItem value="all">{t("portal_adjustments.filter.all_statuses")}</SelectItem>
               <SelectItem value="submitted">{t("portal_adjustments.status.pending_review")}</SelectItem>
-              <SelectItem value="client_approved">{t("portal_adjustments.status.approved")}</SelectItem>
+              <SelectItem value="client_approved">{t("portal_adjustments.status.client_approved")}</SelectItem>
               <SelectItem value="client_rejected">{t("portal_adjustments.status.rejected")}</SelectItem>
               <SelectItem value="admin_approved">{t("portal_adjustments.status.confirmed")}</SelectItem>
               <SelectItem value="admin_rejected">{t("portal_adjustments.status.admin_rejected")}</SelectItem>
@@ -455,6 +455,8 @@ export default function PortalAdjustments() {
             <DialogTitle>{editingId ? t("adjustments.dialog.title.edit") : t("portal_adjustments.button.new")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Payroll Cycle Indicator — matches Admin experience */}
+            <PortalPayrollCycleIndicator month={form.effectiveMonth || undefined} />
             {!editingId && (
               <>
                 <div className="space-y-2">

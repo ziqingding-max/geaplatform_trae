@@ -26,8 +26,61 @@ import {
   generateInviteToken,
   getInviteExpiryDate,
 } from "../portalAuth";
+import {
+  getCurrentPayrollPeriod,
+  getPayrollPeriodInfo,
+  checkCutoffPassed,
+  splitLeaveByMonth,
+  isLeavesCrossMonth,
+} from "../../utils/cutoff";
 
 export const portalSettingsRouter = portalRouter({
+  // ── Payroll Period Endpoints (for Portal PayrollCycleIndicator) ──
+
+  /**
+   * Get the current active payroll period with cutoff info.
+   */
+  currentPayrollPeriod: protectedPortalProcedure.query(async () => {
+    return await getCurrentPayrollPeriod();
+  }),
+
+  /**
+   * Get payroll period info for a specific month.
+   */
+  payrollPeriodInfo: protectedPortalProcedure
+    .input(z.object({ month: z.string().regex(/^\d{4}-\d{2}$/) }))
+    .query(async ({ input }) => {
+      return await getPayrollPeriodInfo(input.month);
+    }),
+
+  /**
+   * Check cutoff status for a specific effective month.
+   */
+  checkCutoff: protectedPortalProcedure
+    .input(z.object({ effectiveMonth: z.string() }))
+    .query(async ({ input }) => {
+      const result = await checkCutoffPassed(input.effectiveMonth);
+      return {
+        passed: result.passed,
+        cutoffDate: result.cutoffDate.toISOString(),
+      };
+    }),
+
+  /**
+   * Preview how a cross-month leave would be split into monthly portions.
+   */
+  previewLeaveSplit: protectedPortalProcedure
+    .input(z.object({
+      startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      totalDays: z.number().positive(),
+    }))
+    .query(({ input }) => {
+      const crossMonth = isLeavesCrossMonth(input.startDate, input.endDate);
+      const splits = splitLeaveByMonth(input.startDate, input.endDate, input.totalDays);
+      return { crossMonth, splits };
+    }),
+
   /**
    * Get company profile — scoped to customerId
    */

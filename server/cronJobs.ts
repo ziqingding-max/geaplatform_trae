@@ -31,6 +31,7 @@ import {
   logAuditAction,
   lockSubmittedAdjustments,
   lockSubmittedLeaveRecords,
+  lockSubmittedReimbursements,
   getSubmittedAdjustmentsForPayroll,
   getSubmittedUnpaidLeaveForPayroll,
   updatePayrollRun,
@@ -222,7 +223,7 @@ export async function runEmployeeAutoActivation(): Promise<{ activated: number; 
  * Auto-lock all submitted adjustments and leave records for the previous month.
  * Runs on the 5th at 00:00 Beijing time (cutoff was 4th 23:59).
  */
-export async function runAutoLock(): Promise<{ adjustmentsLocked: number; leaveLocked: number }> {
+export async function runAutoLock(): Promise<{ adjustmentsLocked: number; leaveLocked: number; reimbursementsLocked: number }> {
   const today = new Date();
   const beijingOffset = 8 * 60;
   const beijingDate = new Date(today.getTime() + (beijingOffset - today.getTimezoneOffset()) * 60000);
@@ -250,16 +251,19 @@ export async function runAutoLock(): Promise<{ adjustmentsLocked: number; leaveL
   const leaveLocked = await lockSubmittedLeaveRecords(prevMonthStr);
   console.log(`[CronJob] Locked ${leaveLocked} leave records for ${prevMonthStr}`);
 
+  // Lock reimbursements (effectiveMonth = YYYY-MM-01)
+  const reimbLocked = await lockSubmittedReimbursements(prevMonthDate);
+  console.log(`[CronJob] Locked ${reimbLocked} reimbursements for ${prevMonthStr}`);
+
   await logAuditAction({
     userName: "System",
     action: "auto_lock_monthly",
     entityType: "system",
     entityId: 0,
-    changes: { detail: `Auto-locked ${adjLocked} adjustments and ${leaveLocked} leave records for ${prevMonthStr}` },
-
+    changes: { detail: `Auto-locked ${adjLocked} adjustments, ${leaveLocked} leave records, and ${reimbLocked} reimbursements for ${prevMonthStr}` },
   });
 
-  return { adjustmentsLocked: adjLocked, leaveLocked };
+  return { adjustmentsLocked: adjLocked, leaveLocked, reimbursementsLocked: reimbLocked };
 }
 
 // ============================================================================

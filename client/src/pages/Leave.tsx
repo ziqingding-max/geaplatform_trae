@@ -27,7 +27,7 @@ import {
   Tabs, TabsContent, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
 import ContractorMilestones from "@/components/pages/ContractorMilestones";
-import { CalendarDays, Plus, Pencil, Trash2, Lock, AlertCircle, Eye, CheckCircle2, XCircle, Download } from "lucide-react";
+import { CalendarDays, Plus, Pencil, Trash2, Lock, AlertCircle, Eye, CheckCircle2, XCircle, Download, Loader2 } from "lucide-react";
 import { DatePicker } from "@/components/DatePicker";
 import { toast } from "sonner";
 import EmployeeSelector from "@/components/EmployeeSelector";
@@ -137,6 +137,14 @@ export default function Leave() {
   const adminRejectMutation = trpc.leave.adminReject.useMutation({
     onSuccess: () => {
       toast.success(t("leave.toast.rejected"));
+      refetch();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const bulkApproveMutation = trpc.leave.bulkAdminApprove.useMutation({
+    onSuccess: (result) => {
+      toast.success(`Approved ${result.approvedCount} leave records${result.skippedCount > 0 ? ` (${result.skippedCount} skipped)` : ""}`);
       refetch();
     },
     onError: (err: any) => toast.error(err.message),
@@ -531,6 +539,29 @@ export default function Leave() {
               </Select>
             </div>
 
+            {/* Bulk Approve Button */}
+            {viewTab === "active" && (() => {
+              const pendingApproval = leaves.filter((l) => l.status === "client_approved");
+              return pendingApproval.length > 0 ? (
+                <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+                  <span className="text-sm text-emerald-800">
+                    <CheckCircle2 className="w-4 h-4 inline mr-1" />
+                    {pendingApproval.length} leave record(s) pending GEA approval
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                    onClick={() => bulkApproveMutation.mutate({ ids: pendingApproval.map((l) => l.id) })}
+                    disabled={bulkApproveMutation.isPending}
+                  >
+                    {bulkApproveMutation.isPending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                    Approve All ({pendingApproval.length})
+                  </Button>
+                </div>
+              ) : null;
+            })()}
+
             {/* Table */}
             <Card>
               <CardContent className="p-0">
@@ -599,7 +630,7 @@ export default function Leave() {
                                     </Button>
                                   </>
                                 )}
-                                {leave.status === "submitted" && (
+                                {["submitted", "client_approved"].includes(leave.status) && (
                                   <>
                                     <Button
                                       variant="ghost" size="icon"

@@ -41,7 +41,7 @@ import {
 import {
   Tabs, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
-import { ArrowUpDown, Plus, Search, Pencil, Trash2, Lock, Upload, FileText, X, Paperclip, Eye, CheckCircle2, XCircle, Download, Briefcase, User } from "lucide-react";
+import { ArrowUpDown, Plus, Search, Pencil, Trash2, Lock, Upload, FileText, X, Paperclip, Eye, CheckCircle2, XCircle, Download, Briefcase, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import WorkerSelector from "@/components/WorkerSelector";
 import PayrollCycleIndicator from "@/components/PayrollCycleIndicator";
@@ -52,6 +52,8 @@ import { useI18n } from "@/lib/i18n";
 
 const statusColors: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-700 border-amber-200",
+  client_approved: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  client_rejected: "bg-red-50 text-red-700 border-red-200",
   admin_approved: "bg-green-50 text-green-700 border-green-200",
   admin_rejected: "bg-orange-50 text-orange-700 border-orange-200",
   locked: "bg-blue-50 text-blue-700 border-blue-200",
@@ -170,6 +172,13 @@ export default function Adjustments() {
   });
   const adminRejectEmployeeMutation = trpc.adjustments.adminReject.useMutation({
     onSuccess: () => { toast.success(t("adjustments.toast.rejectSuccess")); refetch(); },
+    onError: (err) => toast.error(err.message),
+  });
+  const bulkApproveEmployeeMutation = trpc.adjustments.bulkAdminApprove.useMutation({
+    onSuccess: (result) => {
+      toast.success(`Approved ${result.approvedCount} adjustments${result.skippedCount > 0 ? ` (${result.skippedCount} skipped)` : ""}`);
+      refetch();
+    },
     onError: (err) => toast.error(err.message),
   });
   const uploadReceiptMutation = trpc.adjustments.uploadReceipt.useMutation({
@@ -458,7 +467,7 @@ export default function Adjustments() {
       // Status filtering
       // Active tab: submitted, pending
       // History tab: approved, rejected, locked, invoiced
-      const activeStatuses = ["submitted", "pending"];
+      const activeStatuses = ["submitted", "client_approved", "pending"];
       const historyStatuses = ["locked", "admin_approved", "admin_rejected", "approved", "rejected", "invoiced"];
       
       if (viewTab === "active" && !activeStatuses.includes(adj.status)) return false;
@@ -753,6 +762,29 @@ export default function Adjustments() {
           </Select>
         </div>
 
+        {/* Bulk Approve Button */}
+        {viewTab === "active" && (() => {
+          const pendingApproval = filteredAdjustments.filter((a: any) => a.status === "client_approved" && a.workerType === "employee");
+          return pendingApproval.length > 0 ? (
+            <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <span className="text-sm text-emerald-800">
+                <CheckCircle2 className="w-4 h-4 inline mr-1" />
+                {pendingApproval.length} adjustment(s) pending GEA approval
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                onClick={() => bulkApproveEmployeeMutation.mutate({ ids: pendingApproval.map((a: any) => a.id) })}
+                disabled={bulkApproveEmployeeMutation.isPending}
+              >
+                {bulkApproveEmployeeMutation.isPending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
+                Approve All ({pendingApproval.length})
+              </Button>
+            </div>
+          ) : null;
+        })()}
+
         <Card>
           <CardContent className="p-0">
             <Table>
@@ -830,7 +862,7 @@ export default function Adjustments() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            {["submitted", "pending"].includes(adj.status) && (
+                            {["client_approved", "pending"].includes(adj.status) && (
                               <>
                                 <Button
                                   variant="ghost" size="icon" className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
@@ -846,6 +878,9 @@ export default function Adjustments() {
                                 >
                                   <XCircle className="w-3.5 h-3.5" />
                                 </Button>
+                              </>)}
+                            {["submitted", "client_approved", "pending"].includes(adj.status) && (
+                              <>
                                 <Button
                                   variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                                   onClick={() => handleEdit(adj)}

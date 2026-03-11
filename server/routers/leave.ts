@@ -487,6 +487,46 @@ export const leaveRouter = router({
       return { success: true };
     }),
 
+  /**
+   * Bulk admin approve — approve all client_approved leave records matching filters
+   */
+  bulkAdminApprove: operationsManagerProcedure
+    .input(z.object({
+      ids: z.array(z.number()).min(1).max(500),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = getDb();
+      let approvedCount = 0;
+      let skippedCount = 0;
+
+      for (const id of input.ids) {
+        const existing = await getLeaveRecordById(id);
+        if (!existing || existing.status !== "client_approved") {
+          skippedCount++;
+          continue;
+        }
+
+        await updateLeaveRecord(id, {
+          status: "admin_approved",
+          adminApprovedBy: ctx.user.id,
+          adminApprovedAt: new Date(),
+        } as any);
+
+        await logAuditAction({
+          userId: ctx.user.id,
+          userName: ctx.user.name || null,
+          action: "admin_approve",
+          entityType: "leave_record",
+          entityId: id,
+          changes: JSON.stringify({ bulk: true }),
+        });
+
+        approvedCount++;
+      }
+
+      return { approvedCount, skippedCount };
+    }),
+
   balances: userProcedure
     .input(z.object({ employeeId: z.number(), year: z.number().optional() }))
     .query(async ({ input }) => {
