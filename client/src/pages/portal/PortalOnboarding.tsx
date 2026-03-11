@@ -510,13 +510,13 @@ export default function PortalOnboarding() {
           postalCode: formData.postalCode || undefined,
           department: formData.department || undefined,
           jobTitle: formData.jobTitle,
-          serviceType: (formData.serviceType as any) || "eor",
+          serviceType: (needsVisa && formData.serviceType === "eor" ? "visa_eor" : formData.serviceType) as any || "eor",
           employmentType: (formData.employmentType as any) || "long_term",
           startDate: formData.startDate,
           endDate: formData.endDate || undefined,
           baseSalary: formData.baseSalary,
           salaryCurrency: formData.salaryCurrency || "USD",
-          requiresVisa: needsVisa || formData.requiresVisa,
+          requiresVisa: needsVisa || formData.requiresVisa || formData.serviceType === "visa_eor",
           bankDetails: Object.keys(formData.bankDetails).length > 0 ? formData.bankDetails : undefined,
         });
 

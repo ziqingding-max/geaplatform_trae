@@ -248,6 +248,23 @@ export const portalEmployeesRouter = portalRouter({
         throw new TRPCError({ code: "CONFLICT", message: `An active employee with email "${normalizedEmail}" already exists.` });
       }
 
+      // Auto-detect Visa EOR: if nationality differs from employment country, upgrade to visa_eor
+      let serviceType = input.serviceType;
+      let requiresVisa = input.requiresVisa;
+      if (input.nationality && input.country) {
+        const natUpper = input.nationality.toUpperCase();
+        const countryUpper = input.country.toUpperCase();
+        if (natUpper !== countryUpper) {
+          requiresVisa = true;
+          if (serviceType === "eor") {
+            serviceType = "visa_eor";
+          }
+        }
+      }
+      if (serviceType === "visa_eor") {
+        requiresVisa = true;
+      }
+
       const result = await createEmployee({
         customerId: cid,
         firstName: input.firstName,
@@ -266,13 +283,13 @@ export const portalEmployeesRouter = portalRouter({
         postalCode: input.postalCode || null,
         department: input.department || null,
         jobTitle: input.jobTitle,
-        serviceType: input.serviceType,
+        serviceType: serviceType,
         employmentType: input.employmentType,
         startDate: input.startDate as any,
         endDate: (input.endDate || null) as any,
         baseSalary: input.baseSalary,
         salaryCurrency: input.salaryCurrency,
-        requiresVisa: input.requiresVisa,
+        requiresVisa: requiresVisa,
         bankDetails: input.bankDetails || null,
         status: "pending_review",
       });
