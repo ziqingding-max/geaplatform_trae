@@ -891,6 +891,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_onboarding.employment_type.fixed_term": "Fixed Term",
     "portal_onboarding.employment.label.city": "City",
     "portal_onboarding.employment.label.country": "Employment Country/Region",
+    "portal_onboarding.employment.label.onboarding_country": "Onboarding Country/Region",
     "portal_onboarding.employment.label.department": "Department",
     "portal_onboarding.employment.label.employment_type": "Employment Type",
     "portal_onboarding.employment.label.end_date": "End Date",
@@ -1026,6 +1027,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_onboarding.wizard.header.title": "New Worker Onboarding",
     "portal_onboarding.wizard.invite_flow.step2.description": "Job & compensation",
     "portal_onboarding.wizard.invite_flow.step2.title": "Employer Info",
+    "portal_onboarding.wizard.invite_flow.step2.title.aor": "Client Info",
     "portal_onboarding.wizard.invite_flow.step3.description": "Employee details",
     "portal_onboarding.wizard.invite_flow.step3.title": "Send Invite",
 
@@ -1207,6 +1209,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_self_onboarding.expired_link.title": "Link Expired or Invalid",
     "portal_self_onboarding.form.address.city": "City",
     "portal_self_onboarding.form.address.country": "Country/Region",
+    "portal_self_onboarding.form.address.onboarding_country": "Onboarding Country/Region",
     "portal_self_onboarding.form.address.postal_code": "Postal Code",
     "portal_self_onboarding.form.address.state": "State / Province",
     "portal_self_onboarding.form.address.street": "Street Address",
@@ -1266,6 +1269,9 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_self_onboarding.toasts.upload_failed": "Failed to upload",
     "portal_self_onboarding.welcome": "Welcome, {employeeName}! Please fill in your information below.",
     "portal_self_onboarding.employer_prefilled_notice": "Some fields have been pre-filled by your employer and cannot be changed.",
+    "portal_self_onboarding.client_prefilled_notice": "Some fields have been pre-filled by your client and cannot be changed.",
+    "portal_self_onboarding.provided_by_employer": "Provided by employer",
+    "portal_self_onboarding.provided_by_client": "Provided by client",
     "portal_self_onboarding.visa_eor_auto_detect": "Your nationality differs from the employment country. This will be automatically processed as a Visa EOR service to ensure work authorization compliance.",
 
     // Portal Settings
@@ -2815,6 +2821,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_onboarding.employment_type.fixed_term": "固定期限",
     "portal_onboarding.employment.label.city": "城市",
     "portal_onboarding.employment.label.country": "雇佣国家",
+    "portal_onboarding.employment.label.onboarding_country": "入职国家/地区",
     "portal_onboarding.employment.label.department": "部门",
     "portal_onboarding.employment.label.employment_type": "雇佣类型",
     "portal_onboarding.employment.label.end_date": "结束日期",
@@ -2950,6 +2957,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_onboarding.wizard.header.title": "新员工/承包商入职",
     "portal_onboarding.wizard.invite_flow.step2.description": "工作与薪酬",
     "portal_onboarding.wizard.invite_flow.step2.title": "雇主信息",
+    "portal_onboarding.wizard.invite_flow.step2.title.aor": "客户信息",
     "portal_onboarding.wizard.invite_flow.step3.description": "员工信息",
     "portal_onboarding.wizard.invite_flow.step3.title": "发送邀请",
 
@@ -3131,6 +3139,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_self_onboarding.expired_link.title": "链接已过期或无效",
     "portal_self_onboarding.form.address.city": "城市",
     "portal_self_onboarding.form.address.country": "国家/地区",
+    "portal_self_onboarding.form.address.onboarding_country": "入职国家/地区",
     "portal_self_onboarding.form.address.postal_code": "邮政编码",
     "portal_self_onboarding.form.address.state": "州/省",
     "portal_self_onboarding.form.address.street": "街道地址",
@@ -3190,6 +3199,9 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_self_onboarding.toasts.upload_failed": "上传失败",
     "portal_self_onboarding.welcome": "欢迎，{employeeName}！请在下方填写您的信息。",
     "portal_self_onboarding.employer_prefilled_notice": "部分字段已由您的雇主预填，无法修改。",
+    "portal_self_onboarding.client_prefilled_notice": "部分字段已由您的客户预填，无法修改。",
+    "portal_self_onboarding.provided_by_employer": "由雇主提供",
+    "portal_self_onboarding.provided_by_client": "由客户提供",
     "portal_self_onboarding.visa_eor_auto_detect": "您的国籍与受雇国家/地区不一致，系统将自动按 Visa EOR 服务处理，以确保工作授权合规。",
 
     // Portal Settings
@@ -8300,7 +8312,6 @@ const adminTranslations = {
     "employees.actions.reactivate": "重新激活",
     "customers.tabs.wallet": "钱包",
     "adjustments.status.pending": "待处理",
-    "employees.documentType.passport": "护照",
 
     // Common (Added)
     "status.locked": "已锁定",

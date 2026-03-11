@@ -8,10 +8,12 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import CountrySelect from "@/components/CountrySelect";
 import CurrencySelect from "@/components/CurrencySelect";
+import { ALL_COUNTRIES } from "@/components/CountrySelect";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import { BankDetailsForm, type BankDetails } from "@/components/forms/BankDetailsForm";
 import { DatePicker } from "@/components/DatePicker";
@@ -21,12 +23,23 @@ const initialFormData = {
   firstName: "",
   lastName: "",
   email: "",
+  phone: "",
+  dateOfBirth: "",
+  nationality: "",
+  idType: "",
+  idNumber: "",
+  address: "",
+  city: "",
+  state: "",
+  postalCode: "",
   jobTitle: "",
+  department: "",
   country: "",
   currency: "USD",
   rateAmount: "",
   payFrequency: "monthly" as "monthly" | "semi_monthly" | "milestone",
   startDate: "",
+  endDate: "",
   defaultApproverId: 0,
   bankDetails: {} as Partial<BankDetails>,
 };
@@ -44,7 +57,7 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
     onSuccess: () => {
       toast.success("Contractor created successfully");
       setCreateOpen(false);
-      utils.contractors.list.invalidate(); // Invalidate list query
+      utils.contractors.list.invalidate();
       if (onSuccess) onSuccess();
       setFormData({ ...initialFormData });
     },
@@ -64,35 +77,112 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
           <DialogTitle>{t("contractors.actions.addContractor")}</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+           {/* Basic Info */}
            <div className="grid grid-cols-2 gap-4">
              <div className="space-y-2">
-               <Label>First Name</Label>
+               <Label>First Name <span className="text-red-500">*</span></Label>
                <Input value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} />
              </div>
              <div className="space-y-2">
-               <Label>Last Name</Label>
+               <Label>Last Name <span className="text-red-500">*</span></Label>
                <Input value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} />
              </div>
            </div>
            
            <div className="grid grid-cols-2 gap-4">
              <div className="space-y-2">
-               <Label>Email</Label>
+               <Label>Email <span className="text-red-500">*</span></Label>
                <Input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
              </div>
              <div className="space-y-2">
-               <Label>Job Title <span className="text-red-500">*</span></Label>
-               <Input value={formData.jobTitle} onChange={e => setFormData({...formData, jobTitle: e.target.value})} placeholder="e.g. Software Engineer" />
+               <Label>Phone</Label>
+               <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} placeholder="+65 9123 4567" />
              </div>
            </div>
 
            <div className="grid grid-cols-2 gap-4">
              <div className="space-y-2">
-               <Label>Start Date</Label>
+               <Label>Date of Birth</Label>
+               <DatePicker value={formData.dateOfBirth} onChange={(d) => setFormData({...formData, dateOfBirth: d})} />
+             </div>
+             <div className="space-y-2">
+               <Label>Nationality</Label>
+               <Select value={formData.nationality} onValueChange={v => setFormData({...formData, nationality: v})}>
+                 <SelectTrigger><SelectValue placeholder="Select nationality" /></SelectTrigger>
+                 <SelectContent>
+                   {ALL_COUNTRIES.map((c) => (
+                     <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+             </div>
+           </div>
+
+           <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <Label>ID Type</Label>
+               <Select value={formData.idType} onValueChange={v => setFormData({...formData, idType: v})}>
+                 <SelectTrigger><SelectValue placeholder="Select ID type" /></SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value="national_id">National ID</SelectItem>
+                   <SelectItem value="passport">Passport</SelectItem>
+                   <SelectItem value="driver_license">Driver's License</SelectItem>
+                   <SelectItem value="other">Other</SelectItem>
+                 </SelectContent>
+               </Select>
+             </div>
+             <div className="space-y-2">
+               <Label>ID Number</Label>
+               <Input value={formData.idNumber} onChange={e => setFormData({...formData, idNumber: e.target.value})} placeholder="Enter ID number" />
+             </div>
+           </div>
+
+           {/* Address */}
+           <div className="space-y-2">
+             <Label>Address</Label>
+             <Textarea value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Full residential address" rows={2} />
+           </div>
+           <div className="grid grid-cols-3 gap-4">
+             <div className="space-y-2">
+               <Label>City</Label>
+               <Input value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} placeholder="City" />
+             </div>
+             <div className="space-y-2">
+               <Label>State / Province</Label>
+               <Input value={formData.state} onChange={e => setFormData({...formData, state: e.target.value})} placeholder="State / Province" />
+             </div>
+             <div className="space-y-2">
+               <Label>Postal Code</Label>
+               <Input value={formData.postalCode} onChange={e => setFormData({...formData, postalCode: e.target.value})} placeholder="Postal Code" />
+             </div>
+           </div>
+
+           {/* Engagement */}
+           <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <Label>Job Title <span className="text-red-500">*</span></Label>
+               <Input value={formData.jobTitle} onChange={e => setFormData({...formData, jobTitle: e.target.value})} placeholder="e.g. Software Engineer" />
+             </div>
+             <div className="space-y-2">
+               <Label>Department</Label>
+               <Input value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="e.g. Engineering" />
+             </div>
+           </div>
+
+           <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <Label>Start Date <span className="text-red-500">*</span></Label>
                <DatePicker value={formData.startDate} onChange={(d) => setFormData({...formData, startDate: d})} />
              </div>
              <div className="space-y-2">
-               <Label>Customer</Label>
+               <Label>End Date</Label>
+               <DatePicker value={formData.endDate} onChange={(d) => setFormData({...formData, endDate: d})} />
+             </div>
+           </div>
+
+           <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <Label>Customer <span className="text-red-500">*</span></Label>
                <Select value={String(formData.customerId)} onValueChange={v => setFormData({...formData, customerId: parseInt(v)})}>
                  <SelectTrigger><SelectValue placeholder="Select Customer" /></SelectTrigger>
                  <SelectContent>
@@ -100,11 +190,10 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
                  </SelectContent>
                </Select>
              </div>
-           </div>
-           
-           <div className="space-y-2">
-             <Label>Country/Region</Label>
-             <CountrySelect value={formData.country} onValueChange={v => setFormData({...formData, country: v})} showCode={false} scope="all" />
+             <div className="space-y-2">
+               <Label>Onboarding Country/Region <span className="text-red-500">*</span></Label>
+               <CountrySelect value={formData.country} onValueChange={v => setFormData({...formData, country: v})} showCode={false} scope="all" />
+             </div>
            </div>
 
            <div className="space-y-2">
@@ -117,6 +206,7 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
              </Select>
            </div>
            
+           {/* Payment */}
            <div className="grid grid-cols-2 gap-4">
              <div className="space-y-2">
                <Label>Currency</Label>
@@ -147,6 +237,7 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
              </div>
            )}
 
+           {/* Bank Details */}
            <div className="space-y-2">
              <BankDetailsForm 
                value={formData.bankDetails} 
@@ -161,15 +252,19 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
              <Button onClick={() => {
                const submitData: any = {
                  ...formData,
-                 paymentFrequency: formData.payFrequency, // Map local state to backend field
+                 paymentFrequency: formData.payFrequency,
                  bankDetails: Object.keys(formData.bankDetails).length > 0
                    ? JSON.stringify(formData.bankDetails)
-                   : undefined, // Serialize bank details to JSON string for backend
+                   : undefined,
                };
                if (!submitData.customerId) { toast.error("Customer is required"); return; }
+               if (!submitData.firstName) { toast.error("First Name is required"); return; }
+               if (!submitData.lastName) { toast.error("Last Name is required"); return; }
+               if (!submitData.email) { toast.error("Email is required"); return; }
                if (!submitData.jobTitle) { toast.error("Job Title is required"); return; }
+               if (!submitData.country) { toast.error("Country/Region is required"); return; }
+               if (!submitData.startDate) { toast.error("Start Date is required"); return; }
                if (submitData.defaultApproverId === 0) delete submitData.defaultApproverId;
-               // rateAmount is already string, handled by backend
                createMutation.mutate(submitData);
              }} disabled={createMutation.isPending}>
                {createMutation.isPending ? "Creating..." : "Create Contractor"}

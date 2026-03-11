@@ -116,12 +116,20 @@ const EMPLOYER_FILL_STEPS_AOR = [
   { id: 2, title: "Basic Info", icon: User, description: "Contractor details" },
   { id: 3, title: "Engagement", icon: Briefcase, description: "Scope & contract" },
   { id: 4, title: "Payment", icon: DollarSign, description: "Payment terms" },
+  { id: 5, title: "Bank Details", icon: Wallet, description: "Payment info" },
 ];
 
 const INVITE_STEPS = [
   { id: 1, title: "Service", icon: Globe, description: "Choose service type" },
   { id: 2, title: "Employer Info", icon: Briefcase, description: "Job & compensation" },
   { id: 3, title: "Send Invite", icon: Send, description: "Employee details" },
+];
+
+// AOR-specific invite steps (employer → client label)
+const INVITE_STEPS_AOR = [
+  { id: 1, title: "Service", icon: Globe, description: "Choose service type" },
+  { id: 2, title: "Client Info", icon: Briefcase, description: "Job & compensation" },
+  { id: 3, title: "Send Invite", icon: Send, description: "Worker details" },
 ];
 
 interface OnboardingFormData {
@@ -469,8 +477,11 @@ export default function PortalOnboarding() {
           email: formData.email,
           phone: formData.phone || undefined,
           nationality: formData.nationality || undefined,
+          address: formData.address || undefined,
           country: formData.country,
           city: formData.city || undefined,
+          state: formData.state || undefined,
+          postalCode: formData.postalCode || undefined,
           department: formData.department || undefined,
           jobTitle: formData.jobTitle,
           startDate: formData.startDate,
@@ -478,6 +489,7 @@ export default function PortalOnboarding() {
           paymentFrequency: (formData.paymentFrequency as any) || "monthly",
           rateAmount: formData.rateAmount || undefined,
           currency: formData.contractorCurrency || "USD",
+          bankDetails: Object.keys(formData.bankDetails).length > 0 ? formData.bankDetails : undefined,
         });
       } else {
         // EOR / Visa EOR → create employee
@@ -688,28 +700,24 @@ export default function PortalOnboarding() {
           <Input value={formData.idNumber} onChange={(e) => updateField("idNumber", e.target.value)} placeholder="Enter ID number" className="h-10 rounded-xl" />
         </div>
       )}
-      {!isAor && (
-        <>
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.address")} <span className="text-destructive">*</span></Label>
-            <Textarea value={formData.address} onChange={(e) => updateField("address", e.target.value)} placeholder="Full residential address" rows={2} className="rounded-xl" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.city")}</Label>
-              <Input value={formData.city} onChange={(e) => updateField("city", e.target.value)} placeholder="City" className="h-10 rounded-xl" />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">State / Province</Label>
-              <Input value={formData.state} onChange={(e) => updateField("state", e.target.value)} placeholder="State / Province" className="h-10 rounded-xl" />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Postal Code</Label>
-              <Input value={formData.postalCode} onChange={(e) => updateField("postalCode", e.target.value)} placeholder="Postal Code" className="h-10 rounded-xl" />
-            </div>
-          </div>
-        </>
-      )}
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.address")} {!isAor && <span className="text-destructive">*</span>}</Label>
+        <Textarea value={formData.address} onChange={(e) => updateField("address", e.target.value)} placeholder="Full residential address" rows={2} className="rounded-xl" />
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.city")}</Label>
+          <Input value={formData.city} onChange={(e) => updateField("city", e.target.value)} placeholder="City" className="h-10 rounded-xl" />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">State / Province</Label>
+          <Input value={formData.state} onChange={(e) => updateField("state", e.target.value)} placeholder="State / Province" className="h-10 rounded-xl" />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Postal Code</Label>
+          <Input value={formData.postalCode} onChange={(e) => updateField("postalCode", e.target.value)} placeholder="Postal Code" className="h-10 rounded-xl" />
+        </div>
+      </div>
     </div>
   );
 
@@ -720,7 +728,7 @@ export default function PortalOnboarding() {
     <div className="space-y-6 animate-page-in">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.country")} <span className="text-destructive">*</span></Label>
+          <Label className="text-sm font-medium">{isAor ? t("portal_onboarding.employment.label.onboarding_country") : t("portal_onboarding.employment.label.country")} <span className="text-destructive">*</span></Label>
           <Select value={formData.country} onValueChange={(v) => {
             updateField("country", v);
             const c = countries?.find((c) => c.countryCode === v);
@@ -998,7 +1006,7 @@ export default function PortalOnboarding() {
         <div className="flex items-start gap-3">
           <Briefcase className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-blue-800">{t("portal_onboarding.wizard.invite_flow.step2.title")}</p>
+            <p className="text-sm font-medium text-blue-800">{isAor ? t("portal_onboarding.wizard.invite_flow.step2.title.aor") : t("portal_onboarding.wizard.invite_flow.step2.title")}</p>
             <p className="text-sm text-blue-700 mt-1">
               {t("portal_onboarding.invite_flow.step2.description")}
             </p>
@@ -1007,7 +1015,7 @@ export default function PortalOnboarding() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.country")} <span className="text-destructive">*</span></Label>
+          <Label className="text-sm font-medium">{isAor ? t("portal_onboarding.employment.label.onboarding_country") : t("portal_onboarding.employment.label.country")} <span className="text-destructive">*</span></Label>
           <Select value={formData.country} onValueChange={(v) => {
             updateField("country", v);
             const c = countries?.find((c) => c.countryCode === v);
@@ -1247,7 +1255,7 @@ export default function PortalOnboarding() {
   // ═══════════════════════════════════════════════════
   const steps = mode === "employer-fill"
     ? (isAor ? EMPLOYER_FILL_STEPS_AOR : EMPLOYER_FILL_STEPS_EOR)
-    : INVITE_STEPS;
+    : (isAor ? INVITE_STEPS_AOR : INVITE_STEPS);
   const totalSteps = steps.length;
 
   function canProceedStep(): boolean {
@@ -1268,8 +1276,13 @@ export default function PortalOnboarding() {
             return !!formData.rateAmount;
           }
           return !!formData.baseSalary;
-        case 5: return true; // Documents step (EOR only)
-        case 6: return !!(formData.bankDetails?.accountHolderName && formData.bankDetails?.bankName && (formData.bankDetails?.accountNumber || formData.bankDetails?.iban)); // Bank Details
+        case 5:
+          if (isAor) {
+            // AOR step 5 = Bank Details
+            return !!(formData.bankDetails?.accountHolderName && formData.bankDetails?.bankName && (formData.bankDetails?.accountNumber || formData.bankDetails?.iban));
+          }
+          return true; // EOR Documents step
+        case 6: return !!(formData.bankDetails?.accountHolderName && formData.bankDetails?.bankName && (formData.bankDetails?.accountNumber || formData.bankDetails?.iban)); // EOR Bank Details
         default: return false;
       }
     } else {
@@ -1297,7 +1310,7 @@ export default function PortalOnboarding() {
         case 2: return renderPersonalInfo();
         case 3: return renderEmployment();
         case 4: return renderCompensation();
-        case 5: return isAor ? null : renderDocuments(); // AOR has no step 5
+        case 5: return isAor ? renderBankDetails() : renderDocuments(); // AOR: Bank Details, EOR: Documents
         case 6: return renderBankDetails(); // EOR Bank Details step
       }
     } else {

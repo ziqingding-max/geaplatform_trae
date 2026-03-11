@@ -149,8 +149,8 @@ export default function PortalSelfOnboarding() {
 
   const isAorInvite = invite?.serviceType === "aor";
 
-  // For AOR invites, skip documents and bank details steps
-  const activeSteps = isAorInvite ? STEPS.filter((s) => s.id !== 3 && s.id !== 4) : STEPS;
+  // For AOR invites, skip documents step only (keep bank details)
+  const activeSteps = isAorInvite ? STEPS.filter((s) => s.id !== 3) : STEPS;
   const maxStep = activeSteps.length;
   const isLastStep = currentStep === maxStep;
 
@@ -330,31 +330,31 @@ export default function PortalSelfOnboarding() {
 
         <div className="mb-6 sm:mb-8 overflow-x-auto">
           <div className="inline-flex min-w-full items-center justify-start sm:justify-center gap-2 pr-2">
-            {STEPS.map((step, idx) => {
+            {activeSteps.map((step, idx) => {
               const StepIcon = step.icon;
               return (
                 <div key={step.id} className="flex items-center shrink-0">
                   <div
                     className={cn(
                       "w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors",
-                      currentStep === step.id
+                      currentStep === idx + 1
                         ? "bg-primary text-primary-foreground"
-                        : currentStep > step.id
+                        : currentStep > idx + 1
                           ? "bg-emerald-100 text-emerald-700"
                           : "bg-muted text-muted-foreground"
                     )}
                   >
-                    {currentStep > step.id ? <CheckCircle2 className="w-4 h-4" /> : <StepIcon className="w-4 h-4" />}
+                    {currentStep > idx + 1 ? <CheckCircle2 className="w-4 h-4" /> : <StepIcon className="w-4 h-4" />}
                   </div>
                   <span
                     className={cn(
                       "ml-2 text-xs sm:text-sm whitespace-nowrap",
-                      currentStep === step.id ? "font-medium" : "text-muted-foreground"
+                      currentStep === idx + 1 ? "font-medium" : "text-muted-foreground"
                     )}
                   >
-                    {t(step.titleKey)}
+                    {isAorInvite && step.titleKey === "portal_self_onboarding.steps.employment" ? t("portal_self_onboarding.steps.engagement") : t(step.titleKey)}
                   </span>
-                  {idx < STEPS.length - 1 && <div className="w-6 sm:w-8 h-px bg-border mx-2 sm:mx-3" />}
+                  {idx < activeSteps.length - 1 && <div className="w-6 sm:w-8 h-px bg-border mx-2 sm:mx-3" />}
                 </div>
               );
             })}
@@ -381,7 +381,7 @@ export default function PortalSelfOnboarding() {
                     {employerFieldsLocked && invite?.employeeEmail ? (
                       <div className="flex items-center h-10 px-3 bg-muted/30 rounded-md border text-sm">
                         {formData.email}
-                        <span className="ml-2 text-xs text-muted-foreground">(provided by employer)</span>
+                        <span className="ml-2 text-xs text-muted-foreground">({isAorInvite ? t("portal_self_onboarding.provided_by_client") : t("portal_self_onboarding.provided_by_employer")})</span>
                       </div>
                     ) : (
                       <Input type="email" value={formData.email} onChange={(e) => updateField("email", e.target.value)} placeholder="john@example.com" />
@@ -473,12 +473,12 @@ export default function PortalSelfOnboarding() {
               <div className="space-y-4">
                 {employerFieldsLocked && (
                   <div className="rounded-lg border border-blue-200/60 bg-blue-50/30 p-3 text-sm text-blue-700">
-                    {t("portal_self_onboarding.employer_prefilled_notice")}
+                    {isAorInvite ? t("portal_self_onboarding.client_prefilled_notice") : t("portal_self_onboarding.employer_prefilled_notice")}
                   </div>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>{t("portal_self_onboarding.form.address.country")}</Label>
+                    <Label>{isAorInvite ? t("portal_self_onboarding.form.address.onboarding_country") : t("portal_self_onboarding.form.address.country")}</Label>
                     {employerFieldsLocked && formData.country ? (
                       <div className="flex items-center h-10 px-3 bg-muted/30 rounded-md border text-sm">
                         {(countries || []).find((c) => c.countryCode === formData.country)?.countryName || formData.country}
@@ -560,16 +560,18 @@ export default function PortalSelfOnboarding() {
               </div>
             )}
 
-            {currentStep === 4 && !isAorInvite && (
+            {((currentStep === 4 && !isAorInvite) || (currentStep === 3 && isAorInvite)) && (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Please provide your bank account details for salary payments. Fields marked with * are required.
+                  {isAorInvite
+                    ? "Please provide your bank account details for contractor payments. Fields marked with * are required."
+                    : "Please provide your bank account details for salary payments. Fields marked with * are required."}
                 </p>
                 <BankDetailsForm
                   value={formData.bankDetails}
                   onChange={(val) => setFormData((prev) => ({ ...prev, bankDetails: val }))}
-                  countryCode={formData.country || invite?.country}
-                  currency={invite?.salaryCurrency}
+                  countryCode={formData.country || invite?.country || undefined}
+                  currency={(isAorInvite ? invite?.contractorCurrency : invite?.salaryCurrency) || undefined}
                 />
               </div>
             )}
@@ -593,7 +595,7 @@ export default function PortalSelfOnboarding() {
                 onClick={() => setCurrentStep((s) => Math.min(maxStep, s + 1))}
                 disabled={
                   (currentStep === 1 && (!formData.firstName || !formData.lastName || !formData.email || !formData.dateOfBirth || !formData.gender || !formData.nationality || !formData.idType || !formData.idNumber || !formData.address)) ||
-                  (currentStep === 4 && (!formData.bankDetails?.accountHolderName || !formData.bankDetails?.bankName || (!formData.bankDetails?.accountNumber && !formData.bankDetails?.iban)))
+                  ((currentStep === 4 || (currentStep === 3 && isAorInvite)) && (!formData.bankDetails?.accountHolderName || !formData.bankDetails?.bankName || (!formData.bankDetails?.accountNumber && !formData.bankDetails?.iban)))
                 }
               >
                 {t("portal_self_onboarding.buttons.next")}

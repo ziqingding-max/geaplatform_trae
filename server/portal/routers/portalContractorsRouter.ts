@@ -128,6 +128,7 @@ export const portalContractorsRouter = portalRouter({
           currency: contractors.currency,
           paymentFrequency: contractors.paymentFrequency,
           rateAmount: contractors.rateAmount,
+          bankDetails: contractors.bankDetails,
           notes: contractors.notes,
           createdAt: contractors.createdAt,
           updatedAt: contractors.updatedAt,
@@ -167,6 +168,7 @@ export const portalContractorsRouter = portalRouter({
         paymentFrequency: z.enum(["monthly", "semi_monthly", "milestone"]).default("monthly"),
         rateAmount: z.string().optional(),
         currency: z.string().default("USD"),
+        bankDetails: z.any().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -208,6 +210,7 @@ export const portalContractorsRouter = portalRouter({
           paymentFrequency: input.paymentFrequency,
           rateAmount: input.rateAmount || null,
           currency: input.currency,
+          bankDetails: input.bankDetails ? (typeof input.bankDetails === 'string' ? JSON.parse(input.bankDetails) : input.bankDetails) : null,
         })
         .returning();
 

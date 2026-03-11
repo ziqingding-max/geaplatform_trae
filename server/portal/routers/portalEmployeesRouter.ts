@@ -430,18 +430,33 @@ export const portalEmployeesRouter = portalRouter({
         throw new TRPCError({ code: "CONFLICT", message: "An invitation is already pending for this email address." });
       }
 
-      // Email uniqueness check: no active employee with same email under this customer
-      const [existingEmployee] = await db
-        .select({ id: employees.id, status: employees.status })
-        .from(employees)
-        .where(
-          and(
-            eq(employees.customerId, cid),
-            eq(employees.email, normalizedEmail)
-          )
-        );
-      if (existingEmployee && existingEmployee.status !== "terminated") {
-        throw new TRPCError({ code: "CONFLICT", message: "An active employee with this email already exists." });
+      // Email uniqueness check: for AOR, check contractors table; for EOR, check employees table
+      if (input.serviceType === "aor") {
+        const [existingContractor] = await db
+          .select({ id: contractors.id, status: contractors.status })
+          .from(contractors)
+          .where(
+            and(
+              eq(contractors.customerId, cid),
+              eq(contractors.email, normalizedEmail)
+            )
+          );
+        if (existingContractor && existingContractor.status !== "terminated") {
+          throw new TRPCError({ code: "CONFLICT", message: "An active contractor with this email already exists." });
+        }
+      } else {
+        const [existingEmployee] = await db
+          .select({ id: employees.id, status: employees.status })
+          .from(employees)
+          .where(
+            and(
+              eq(employees.customerId, cid),
+              eq(employees.email, normalizedEmail)
+            )
+          );
+        if (existingEmployee && existingEmployee.status !== "terminated") {
+          throw new TRPCError({ code: "CONFLICT", message: "An active employee with this email already exists." });
+        }
       }
 
       // Generate a unique token
@@ -749,6 +764,7 @@ export const portalEmployeesRouter = portalRouter({
           paymentFrequency: (invite.paymentFrequency as any) || "monthly",
           rateType: invite.paymentFrequency === "milestone" ? "milestone_only" : "fixed_monthly",
           rateAmount: invite.rateAmount || null,
+          bankDetails: input.bankDetails ? input.bankDetails : null,
           status: "pending_review",
         });
 
