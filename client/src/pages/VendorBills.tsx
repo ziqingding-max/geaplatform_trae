@@ -294,11 +294,14 @@ function AIUploadDrawer({
           quantity: item.quantity?.toString() || "1",
           unitPrice: item.unitPrice?.toString() || "0",
           amount: item.amount?.toString() || "0",
+          itemType: item.itemType || "other",
           relatedEmployeeId: item.matchedEmployeeId || undefined,
           relatedCustomerId: item.matchedCustomerId || undefined,
           relatedCountryCode: item.countryCode || "",
           employeeName: item.employeeName || "",
           confidence: item.confidence || 0,
+          matchConfidence: item.matchConfidence || 0,
+          matchReason: item.matchReason || "",
         })));
       }
 
@@ -366,6 +369,7 @@ function AIUploadDrawer({
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           amount: item.amount,
+          itemType: item.itemType || "other",
           relatedEmployeeId: item.relatedEmployeeId || undefined,
           relatedCustomerId: item.relatedCustomerId || undefined,
           relatedCountryCode: item.relatedCountryCode || undefined,
@@ -736,31 +740,47 @@ function AIUploadDrawer({
                       <TableHeader>
                         <TableRow>
                           <TableHead className="text-xs">{t("vendorBills.details.descriptionLabel")}</TableHead>
+                          <TableHead className="text-xs w-28">Cost Type</TableHead>
                           <TableHead className="text-xs text-right w-16">{t("vendorBills.lineItems.quantityHeader")}</TableHead>
-                          <TableHead className="text-xs text-right w-24">{t("vendorBills.lineItems.unitPriceHeader")}</TableHead>
                           <TableHead className="text-xs text-right w-24">{t("vendorBills.lineItems.amountHeader")}</TableHead>
-                          <TableHead className="text-xs w-28">{t("vendorBills.lineItems.employeeHeader")}</TableHead>
+                          <TableHead className="text-xs w-36">{t("vendorBills.lineItems.employeeHeader")}</TableHead>
                           <TableHead className="text-xs w-16">{t("vendorBills.lineItems.countryHeader")}</TableHead>
-                          <TableHead className="text-xs w-12">{t("vendorBills.lineItems.confidenceHeader")}</TableHead>
+                          <TableHead className="text-xs w-16">{t("vendorBills.lineItems.confidenceHeader")}</TableHead>
                           <TableHead className="w-8"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {editedItems.map((item, idx) => (
-                          <TableRow key={idx} className={item.confidence < 60 ? "bg-amber-50/50" : ""}>
+                        {editedItems.map((item, idx) => {
+                          // Determine row highlight based on match confidence
+                          const matchConf = item.matchConfidence || 0;
+                          const rowBg = matchConf >= 85 ? "bg-emerald-50/30" : matchConf >= 50 ? "bg-amber-50/50" : item.relatedEmployeeId ? "bg-red-50/30" : "";
+                          return (
+                          <TableRow key={idx} className={rowBg}>
                             <TableCell>
                               <Input value={item.description} onChange={(e) => {
                                 const n = [...editedItems]; n[idx] = { ...n[idx], description: e.target.value }; setEditedItems(n);
                               }} className="h-7 text-xs" />
                             </TableCell>
                             <TableCell>
-                              <Input type="number" value={item.quantity} onChange={(e) => {
-                                const n = [...editedItems]; n[idx] = { ...n[idx], quantity: e.target.value }; setEditedItems(n);
-                              }} className="h-7 text-xs text-right" />
+                              <select
+                                value={item.itemType || "other"}
+                                onChange={(e) => {
+                                  const n = [...editedItems]; n[idx] = { ...n[idx], itemType: e.target.value }; setEditedItems(n);
+                                }}
+                                className="h-7 text-xs border rounded px-1 w-full bg-background"
+                              >
+                                <option value="employment_cost">Employment Cost</option>
+                                <option value="service_fee">Service Fee</option>
+                                <option value="visa_fee">Visa Fee</option>
+                                <option value="equipment_purchase">Equipment</option>
+                                <option value="deposit">Deposit</option>
+                                <option value="deposit_refund">Deposit Refund</option>
+                                <option value="other">Other</option>
+                              </select>
                             </TableCell>
                             <TableCell>
-                              <Input type="number" step="0.01" value={item.unitPrice} onChange={(e) => {
-                                const n = [...editedItems]; n[idx] = { ...n[idx], unitPrice: e.target.value }; setEditedItems(n);
+                              <Input type="number" value={item.quantity} onChange={(e) => {
+                                const n = [...editedItems]; n[idx] = { ...n[idx], quantity: e.target.value }; setEditedItems(n);
                               }} className="h-7 text-xs text-right" />
                             </TableCell>
                             <TableCell>
@@ -769,9 +789,14 @@ function AIUploadDrawer({
                               }} className="h-7 text-xs text-right font-medium" />
                             </TableCell>
                             <TableCell>
-                              <div className="text-xs truncate max-w-[120px]" title={item.employeeName || "—"}>
-                                {item.employeeName || "—"}
-                                {item.relatedEmployeeId && <span className="text-emerald-600 ml-1">✓</span>}
+                              <div className="text-xs" title={item.matchReason || ""}>
+                                <div className="flex items-center gap-1 truncate max-w-[140px]">
+                                  {item.employeeName || "—"}
+                                  {item.relatedEmployeeId && matchConf >= 85 && <span className="text-emerald-600 ml-0.5" title="High confidence match">●</span>}
+                                  {item.relatedEmployeeId && matchConf >= 50 && matchConf < 85 && <span className="text-amber-500 ml-0.5" title="Medium confidence - please verify">●</span>}
+                                  {item.relatedEmployeeId && matchConf < 50 && <span className="text-red-500 ml-0.5" title="Low confidence - needs manual check">●</span>}
+                                </div>
+                                {item.matchReason && <p className="text-[10px] text-muted-foreground truncate">{item.matchReason}</p>}
                               </div>
                             </TableCell>
                             <TableCell>
@@ -786,7 +811,8 @@ function AIUploadDrawer({
                               </Button>
                             </TableCell>
                           </TableRow>
-                        ))}
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -1226,6 +1252,14 @@ function VendorBillDetail({ id }: { id: number }) {
   }, [invoicesQuery.data, bill?.billType]);
   const employeesQuery = trpc.employees.list.useQuery({ limit: 500 }, { enabled: allocOpen });
 
+  // Employee monthly revenue query for allocation ceiling display
+  const allocBillMonth = bill?.billMonth;
+  const allocMonthStr = allocBillMonth ? (typeof allocBillMonth === 'string' ? allocBillMonth.substring(0, 7) : new Date(allocBillMonth).toISOString().substring(0, 7)) : '';
+  const selectedEmpRevenueQuery = trpc.allocations.singleEmployeeRevenue.useQuery(
+    { employeeId: parseInt(allocForm.employeeId || '0'), serviceMonth: allocMonthStr },
+    { enabled: !!allocForm.employeeId && !!allocMonthStr && allocOpen }
+  );
+
   const createAllocMutation = trpc.allocations.create.useMutation();
   const deleteAllocMutation = trpc.allocations.delete.useMutation();
   const utils = trpc.useUtils();
@@ -1268,18 +1302,27 @@ function VendorBillDetail({ id }: { id: number }) {
       return;
     }
     try {
-      await createAllocMutation.mutateAsync({
+      const result = await createAllocMutation.mutateAsync({
         vendorBillId: id,
         invoiceId: parseInt(allocForm.invoiceId),
         employeeId: parseInt(allocForm.employeeId),
         allocatedAmount: allocForm.amount,
         description: allocForm.description || undefined,
       });
-      toast.success("Allocation created");
+      // Show warnings if any
+      const warnings = (result as any)?.warnings;
+      if (warnings?.employeeRevenueExceeded) {
+        toast.warning(`Allocation created, but total allocated (${formatAmount(warnings.employeeAllocatedTotal)}) exceeds employee monthly revenue (${formatAmount(warnings.employeeRevenue)})`);
+      } else if (warnings?.billOverAllocated) {
+        toast.warning(`Allocation created, but bill is now over-allocated by ${formatAmount(warnings.billOverAmount)}`);
+      } else {
+        toast.success("Allocation created");
+      }
       setAllocOpen(false);
       setAllocForm({ invoiceId: "", employeeId: "", amount: "", description: "" });
       allocQuery.refetch();
       summaryQuery.refetch();
+      selectedEmpRevenueQuery.refetch();
       refetch();
     } catch (err: any) {
       toast.error(err.message || "Failed to create allocation");
@@ -1485,24 +1528,39 @@ function VendorBillDetail({ id }: { id: number }) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t("vendorBills.details.descriptionLabel")}</TableHead>
+                    <TableHead>Cost Type</TableHead>
                     <TableHead className="text-right">{t("vendorBills.lineItems.quantityHeader")}</TableHead>
-                    <TableHead className="text-right">{t("vendorBills.lineItems.unitPriceHeader")}</TableHead>
                     <TableHead className="text-right">{t("vendorBills.lineItems.amountHeader")}</TableHead>
-                    <TableHead>{t("vendorBills.allocations.customerHeader")}</TableHead>
+                    <TableHead>{t("vendorBills.lineItems.employeeHeader")}</TableHead>
                     <TableHead className="min-w-[120px]">{t("common.country")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {bill.items.map((item) => (
+                  {bill.items.map((item) => {
+                    const typeLabels: Record<string, string> = {
+                      employment_cost: "Employment Cost",
+                      service_fee: "Service Fee",
+                      visa_fee: "Visa Fee",
+                      equipment_purchase: "Equipment",
+                      deposit: "Deposit",
+                      deposit_refund: "Deposit Refund",
+                      other: "Other",
+                    };
+                    return (
                     <TableRow key={item.id}>
                       <TableCell>{item.description}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                          {typeLabels[(item as any).itemType] || "Other"}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-right font-mono">{item.quantity}</TableCell>
-                      <TableCell className="text-right font-mono">{formatAmount(item.unitPrice)}</TableCell>
                       <TableCell className="text-right font-mono">{formatAmount(item.amount)}</TableCell>
-                      <TableCell>{item.relatedCustomerId || "—"}</TableCell>
+                      <TableCell>{(item as any).relatedEmployeeId || item.relatedCustomerId || "—"}</TableCell>
                       <TableCell>{item.relatedCountryCode || "—"}</TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -1638,6 +1696,23 @@ function VendorBillDetail({ id }: { id: number }) {
                     ))}
                   </SelectContent>
                 </Select>
+                {/* Employee monthly revenue hint */}
+                {allocForm.employeeId && allocMonthStr && selectedEmpRevenueQuery.data && (() => {
+                  const rev = selectedEmpRevenueQuery.data;
+                  const amount = parseFloat(allocForm.amount || '0');
+                  const isOver = rev.total > 0 && amount > rev.total;
+                  const getBreakdownAmount = (type: string) => {
+                    const item = (rev.breakdown || []).find((b: any) => b.itemType === type);
+                    return item ? item.amount : 0;
+                  };
+                  return (
+                    <div className={`text-xs p-2 rounded ${isOver ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
+                      <p>Monthly revenue ({allocMonthStr}): <strong>{bill?.currency} {formatAmount(rev.total)}</strong></p>
+                      <p className="text-[10px]">Service fee: {formatAmount(getBreakdownAmount('eor_service_fee'))} | Employment cost: {formatAmount(getBreakdownAmount('employment_cost'))} | Other: {formatAmount(rev.total - getBreakdownAmount('eor_service_fee') - getBreakdownAmount('employment_cost'))}</p>
+                      {isOver && <p className="font-medium mt-1">Warning: Allocation amount exceeds employee monthly revenue!</p>}
+                    </div>
+                  );
+                })()}
               </div>
               <div className="space-y-2">
                 <Label>{t("common.invoice")} *</Label>

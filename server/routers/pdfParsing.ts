@@ -255,10 +255,12 @@ The documents may include invoices, payment receipts (POP), bank statements, or 
 YOUR TASK:
 1. Cross-reference ALL uploaded documents to extract and verify vendor bill information
 2. Match line items to employees and customers in our system
-3. Suggest cost allocations (link vendor costs to our customer invoices)
-4. Report confidence levels and any discrepancies between documents
+3. Classify each line item's cost type (employment_cost, service_fee, visa_fee, equipment_purchase, deposit, deposit_refund, or other)
+4. Suggest cost allocations (link vendor costs to our customer invoices)
+5. Report confidence levels and any discrepancies between documents
 
 SYSTEM DATA (our active employees, customers, and invoices):
+Each employee has: id, code (unique identifier like EMP-0001), name, country, customerId, customerName, salary, linkedInvoices.
 ${JSON.stringify(systemContext.employees.slice(0, 200), null, 1)}
 
 CUSTOMERS:
@@ -309,13 +311,17 @@ Return a JSON object with these fields:
   - description: string
   - employeeName: string | null (employee name as shown in document)
   - matchedEmployeeId: number | null (ID from our system if matched, from the SYSTEM DATA above)
+  - matchedEmployeeCode: string | null (employee code like EMP-0001 if matched)
   - matchedCustomerId: number | null (customer ID from our system if matched via employee)
   - matchedInvoiceId: number | null (invoice ID from our system if matched)
+  - itemType: string (REQUIRED - classify each line item as one of: "employment_cost" for salary/wages/social contributions/tax/pension/insurance paid on behalf of employee, "service_fee" for the vendor's own processing/management/service fee, "visa_fee" for visa/immigration/work permit related costs, "equipment_purchase" for equipment/hardware procurement, "deposit" for security deposit or guarantee, "deposit_refund" for deposit being returned, "other" for anything that doesn't fit above categories)
   - quantity: number
   - unitPrice: number
   - amount: number
   - countryCode: string | null (2-3 letter country code)
   - confidence: number (0-100)
+  - matchConfidence: number (0-100, how confident you are specifically about the employee matching. Use 90+ ONLY when employee name/code is explicitly written in the document and clearly matches one employee in SYSTEM DATA. Use 50-89 when matching is based on partial name, country, or inference. Use 0-49 when you are guessing or cannot determine the employee.)
+  - matchReason: string | null (explain WHY you matched or didn't match this line item to an employee, e.g. "Name 'John Zhang' exactly matches employee EMP-0012 John Zhang" or "Line item mentions 'China payroll' but cannot determine specific employee" or "No employee information found in this line item")
   - allocationSuggestion: object | null (only for client_related vendor type):
     - invoiceId: number (from our system)
     - employeeId: number (from our system)
@@ -330,13 +336,27 @@ Return a JSON object with these fields:
   - warnings: array of strings (any discrepancies or issues found)
   - notes: array of strings (any helpful observations)
 
-IMPORTANT RULES:
-- Match employees by name carefully. Names may appear in different orders (e.g. "John Smith" vs "Smith, John") or with slight variations.
+CRITICAL RULES FOR EMPLOYEE MATCHING:
+- Employee code (e.g. EMP-0001) is the MOST RELIABLE identifier. If you see an employee code in the document, use it as the primary matching key.
+- If no employee code is found, match by name. Names may appear in different orders (e.g. "John Smith" vs "Smith, John"), in local scripts (Chinese, Japanese, Korean), or with slight variations.
+- NEVER guess an employee match. If you are not confident (matchConfidence < 50), set matchedEmployeeId to null and explain in matchReason.
 - For matchedEmployeeId, ONLY use IDs from the SYSTEM DATA provided. If no match, use null.
 - For matchedCustomerId, derive from the matched employee's customerId in SYSTEM DATA.
 - For matchedInvoiceId, find the invoice linked to the matched employee for this service month.
-- Be conservative with confidence scores. Use 90+ only when data is clearly readable and cross-validated.
-- If a field is missing or unclear, use null and lower the confidence.
+
+CRITICAL RULES FOR ITEM TYPE CLASSIFICATION:
+- itemType is REQUIRED for every line item. You MUST classify each line item.
+- "employment_cost": Any cost that is the actual compensation or statutory cost of employing someone (salary, wages, social security, pension, health insurance, tax withholding, etc.)
+- "service_fee": The vendor's own fee for providing their service (processing fee, management fee, admin fee, platform fee, etc.)
+- "visa_fee": Government fees, legal fees, or processing fees specifically for visa/work permit/immigration
+- "equipment_purchase": Hardware, laptops, office equipment purchased for employees
+- If a line item contains BOTH employment cost and service fee bundled together, classify it as "employment_cost" and add a warning in crossValidation.warnings
+
+CONFIDENCE SCORING RULES:
+- Be VERY conservative. Use 90+ only when data is clearly readable, unambiguous, and cross-validated across documents.
+- Use 70-89 when data is readable but has minor ambiguity or cannot be cross-validated.
+- Use 50-69 when data requires inference or interpretation.
+- Use below 50 when you are uncertain. In this case, set the field to null and explain in matchReason or crossValidation.warnings.
 - For operational costs (bank fees, office rent, etc.), set vendorType to "operational" and skip allocation suggestions.`,
           },
           {
@@ -536,6 +556,7 @@ IMPORTANT RULES:
             quantity: z.string().default("1"),
             unitPrice: z.string(),
             amount: z.string(),
+            itemType: z.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other"]).default("other"),
             relatedEmployeeId: z.number().optional(),
             relatedCustomerId: z.number().optional(),
             relatedCountryCode: z.string().optional(),
@@ -791,6 +812,7 @@ Be precise with numbers. If a field is not found, use null.`,
             quantity: z.string().default("1"),
             unitPrice: z.string(),
             amount: z.string(),
+            itemType: z.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other"]).default("other"),
             relatedEmployeeId: z.number().optional(),
             relatedCustomerId: z.number().optional(),
             relatedCountryCode: z.string().optional(),

@@ -1200,6 +1200,16 @@ export const vendorBillItems = sqliteTable(
     quantity: text("quantity").default("1").notNull(),
     unitPrice: text("unitPrice").notNull(),
     amount: text("amount").notNull(),
+    // Cost type classification (for matching against invoice revenue items)
+    itemType: text("itemType", { enum: [
+      "employment_cost",     // Payroll, salary, social contributions paid to vendor
+      "service_fee",         // Vendor's own service/processing fee
+      "visa_fee",            // Visa/immigration related costs
+      "equipment_purchase",  // Equipment procurement costs
+      "deposit",             // Security deposit / guarantee
+      "deposit_refund",      // Deposit returned by vendor
+      "other",               // Miscellaneous / unclassified
+    ] }).default("other").notNull(),
     // Cost allocation fields (optional — for linking expenses to revenue)
     relatedCustomerId: integer("relatedCustomerId"),
     relatedEmployeeId: integer("relatedEmployeeId"),

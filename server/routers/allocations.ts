@@ -21,9 +21,11 @@ import {
   logAuditAction,
   listVendors,
   getDb,
+  getEmployeeMonthlyRevenue,
+  getAllEmployeesMonthlyRevenue,
 } from "../db";
 import { TRPCError } from "@trpc/server";
-import { invoices, employees, vendors } from "../../drizzle/schema";
+import { invoices, employees, vendors, billInvoiceAllocations, vendorBills } from "../../drizzle/schema";
 import { eq, sql, and, desc } from "drizzle-orm";
 
 export const allocationsRouter = router({
@@ -126,6 +128,32 @@ export const allocationsRouter = router({
       const invoiceTotal = parseFloat(String(invRows[0].total));
       const newInvoiceCostTotal = invoiceCostTotal + amount;
 
+      // Check employee monthly revenue ceiling (warn but allow)
+      const billMonth = (bill as any).billMonth;
+      let employeeRevenueWarning = false;
+      let employeeRevenue = 0;
+      let employeeAllocatedTotal = 0;
+      if (billMonth) {
+        const monthStr = typeof billMonth === 'string' ? billMonth.substring(0, 7) : new Date(billMonth).toISOString().substring(0, 7);
+        const revenueData = await getEmployeeMonthlyRevenue(input.employeeId, monthStr);
+        employeeRevenue = revenueData.total;
+        // Get existing allocations for this employee in this month
+        const existingAllocations = await db
+          .select({ allocatedAmount: billInvoiceAllocations.allocatedAmount })
+          .from(billInvoiceAllocations)
+          .innerJoin(vendorBills, eq(billInvoiceAllocations.vendorBillId, vendorBills.id))
+          .where(
+            and(
+              eq(billInvoiceAllocations.employeeId, input.employeeId),
+              sql`strftime('%Y-%m', ${vendorBills.billMonth}) = ${monthStr}`
+            )
+          );
+        employeeAllocatedTotal = existingAllocations.reduce((sum, a) => sum + parseFloat(String(a.allocatedAmount || '0')), 0);
+        if (employeeRevenue > 0 && (employeeAllocatedTotal + amount) > employeeRevenue) {
+          employeeRevenueWarning = true;
+        }
+      }
+
       // Create the allocation
       const allocationId = await createBillInvoiceAllocation({
         vendorBillId: input.vendorBillId,
@@ -158,6 +186,9 @@ export const allocationsRouter = router({
           billOverAmount: newBillTotal > billTotal ? newBillTotal - billTotal : 0,
           invoiceLoss: newInvoiceCostTotal > invoiceTotal,
           invoiceLossAmount: newInvoiceCostTotal > invoiceTotal ? newInvoiceCostTotal - invoiceTotal : 0,
+          employeeRevenueExceeded: employeeRevenueWarning,
+          employeeRevenue,
+          employeeAllocatedTotal: employeeAllocatedTotal + amount,
         },
       };
     }),
@@ -376,5 +407,19 @@ export const allocationsRouter = router({
       }
 
       return results.sort((a, b) => b.totalBilled - a.totalBilled);
+    }),
+
+  // Get monthly revenue for all employees (used by allocation UI for ceiling display)
+  employeeMonthlyRevenue: userProcedure
+    .input(z.object({ serviceMonth: z.string() })) // YYYY-MM
+    .query(async ({ input }) => {
+      return await getAllEmployeesMonthlyRevenue(input.serviceMonth);
+    }),
+
+  // Get monthly revenue for a single employee (used for inline validation)
+  singleEmployeeRevenue: userProcedure
+    .input(z.object({ employeeId: z.number(), serviceMonth: z.string() }))
+    .query(async ({ input }) => {
+      return await getEmployeeMonthlyRevenue(input.employeeId, input.serviceMonth);
     }),
 });

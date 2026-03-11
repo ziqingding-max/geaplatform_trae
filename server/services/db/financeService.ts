@@ -1,5 +1,5 @@
 
-import { eq, like, count, desc, and, inArray, sum } from "drizzle-orm";
+import { eq, like, count, desc, and, inArray, sum, sql } from "drizzle-orm";
 import { 
   invoices, InsertInvoice,
   invoiceItems, InsertInvoiceItem,
@@ -176,8 +176,25 @@ export async function deleteInvoiceItem(id: number) {
 }
 
 export async function getInvoiceProfitAnalysis(invoiceId: number) {
-  // Complex logic placeholder
-  return null;
+  const db = await getDb();
+  if (!db) return null;
+  const inv = await db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+  if (!inv[0]) return null;
+  const revenue = parseFloat(String(inv[0].total || "0"));
+  const costAllocated = parseFloat(String(inv[0].costAllocated || "0"));
+  const profit = revenue - costAllocated;
+  const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+  const allocations = await listDetailedAllocationsByInvoice(invoiceId);
+  return {
+    invoiceId,
+    invoiceNumber: inv[0].invoiceNumber,
+    revenue,
+    costAllocated,
+    profit: Math.round(profit * 100) / 100,
+    profitMargin: Math.round(margin * 100) / 100,
+    isLoss: profit < 0,
+    allocations,
+  };
 }
 
 // PAYROLL
@@ -530,7 +547,21 @@ export async function deleteVendor(id: number) {
 }
 
 export async function getVendorProfitAnalysis(vendorId: number) {
-  return null;
+  const db = await getDb();
+  if (!db) return { totalBilled: 0, totalAllocated: 0, totalUnallocated: 0, billCount: 0 };
+  const bills = await db.select().from(vendorBills).where(eq(vendorBills.vendorId, vendorId));
+  let totalBilled = 0;
+  let totalAllocated = 0;
+  for (const bill of bills) {
+    totalBilled += parseFloat(String(bill.totalAmount || "0"));
+    totalAllocated += parseFloat(String(bill.allocatedAmount || "0"));
+  }
+  return {
+    totalBilled: Math.round(totalBilled * 100) / 100,
+    totalAllocated: Math.round(totalAllocated * 100) / 100,
+    totalUnallocated: Math.round((totalBilled - totalAllocated) * 100) / 100,
+    billCount: bills.length,
+  };
 }
 
 // VENDOR BILLS
@@ -624,10 +655,11 @@ export async function listVendorBillItemsByBill(billId: number) {
 }
 
 // BILL ALLOCATIONS
-export async function createBillInvoiceAllocation(data: InsertBillInvoiceAllocation) {
+export async function createBillInvoiceAllocation(data: InsertBillInvoiceAllocation): Promise<number | undefined> {
   const db = await getDb();
-  if (!db) return;
-  await db.insert(billInvoiceAllocations).values(data);
+  if (!db) return undefined;
+  const result = await db.insert(billInvoiceAllocations).values(data).returning({ id: billInvoiceAllocations.id });
+  return result[0]?.id;
 }
 
 export async function getBillInvoiceAllocationById(id: number) {
@@ -670,20 +702,101 @@ export async function deleteAllocationsByBill(billId: number) {
 export async function getBillAllocatedTotal(billId: number) {
   const db = await getDb();
   if (!db) return 0;
-  // Implementation of sum
-  return 0; 
+  const result = await db
+    .select({ total: sum(billInvoiceAllocations.allocatedAmount) })
+    .from(billInvoiceAllocations)
+    .where(eq(billInvoiceAllocations.vendorBillId, billId));
+  return parseFloat(String(result[0]?.total || "0"));
 }
 
 export async function getInvoiceCostAllocatedTotal(invoiceId: number) {
   const db = await getDb();
   if (!db) return 0;
-  return 0;
+  const result = await db
+    .select({ total: sum(billInvoiceAllocations.allocatedAmount) })
+    .from(billInvoiceAllocations)
+    .where(eq(billInvoiceAllocations.invoiceId, invoiceId));
+  return parseFloat(String(result[0]?.total || "0"));
 }
 
-export async function recalcBillAllocation(billId: number) {}
-export async function recalcInvoiceCostAllocation(invoiceId: number) {}
-export async function listDetailedAllocationsByBill(billId: number) { return []; }
-export async function listDetailedAllocationsByInvoice(invoiceId: number) { return []; }
+export async function recalcBillAllocation(billId: number) {
+  const db = await getDb();
+  if (!db) return;
+  const allocated = await getBillAllocatedTotal(billId);
+  const bill = await getVendorBillById(billId);
+  if (!bill) return;
+  const totalAmount = parseFloat(String(bill.totalAmount));
+  const unallocated = Math.max(0, totalAmount - allocated);
+  await db.update(vendorBills).set({
+    allocatedAmount: String(allocated),
+    unallocatedAmount: String(unallocated),
+  }).where(eq(vendorBills.id, billId));
+}
+export async function recalcInvoiceCostAllocation(invoiceId: number) {
+  const db = await getDb();
+  if (!db) return;
+  const costAllocated = await getInvoiceCostAllocatedTotal(invoiceId);
+  await db.update(invoices).set({
+    costAllocated: String(costAllocated),
+  }).where(eq(invoices.id, invoiceId));
+}
+export async function listDetailedAllocationsByBill(billId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { employees, invoices: inv, vendorBillItems: vbi } = await import("../../../drizzle/schema");
+  const rows = await db
+    .select({
+      id: billInvoiceAllocations.id,
+      vendorBillId: billInvoiceAllocations.vendorBillId,
+      vendorBillItemId: billInvoiceAllocations.vendorBillItemId,
+      invoiceId: billInvoiceAllocations.invoiceId,
+      employeeId: billInvoiceAllocations.employeeId,
+      allocatedAmount: billInvoiceAllocations.allocatedAmount,
+      description: billInvoiceAllocations.description,
+      allocatedBy: billInvoiceAllocations.allocatedBy,
+      createdAt: billInvoiceAllocations.createdAt,
+      employeeName: sql<string>`${employees.firstName} || ' ' || ${employees.lastName}`,
+      employeeCode: employees.employeeCode,
+      invoiceNumber: inv.invoiceNumber,
+      invoiceTotal: inv.total,
+      invoiceCurrency: inv.currency,
+    })
+    .from(billInvoiceAllocations)
+    .leftJoin(employees, eq(billInvoiceAllocations.employeeId, employees.id))
+    .leftJoin(inv, eq(billInvoiceAllocations.invoiceId, inv.id))
+    .where(eq(billInvoiceAllocations.vendorBillId, billId))
+    .orderBy(desc(billInvoiceAllocations.createdAt));
+  return rows;
+}
+export async function listDetailedAllocationsByInvoice(invoiceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const { employees, vendorBills: vb } = await import("../../../drizzle/schema");
+  const rows = await db
+    .select({
+      id: billInvoiceAllocations.id,
+      vendorBillId: billInvoiceAllocations.vendorBillId,
+      vendorBillItemId: billInvoiceAllocations.vendorBillItemId,
+      invoiceId: billInvoiceAllocations.invoiceId,
+      employeeId: billInvoiceAllocations.employeeId,
+      allocatedAmount: billInvoiceAllocations.allocatedAmount,
+      description: billInvoiceAllocations.description,
+      allocatedBy: billInvoiceAllocations.allocatedBy,
+      createdAt: billInvoiceAllocations.createdAt,
+      employeeName: sql<string>`${employees.firstName} || ' ' || ${employees.lastName}`,
+      employeeCode: employees.employeeCode,
+      billNumber: vb.billNumber,
+      billTotal: vb.totalAmount,
+      billCurrency: vb.currency,
+      vendorId: vb.vendorId,
+    })
+    .from(billInvoiceAllocations)
+    .leftJoin(employees, eq(billInvoiceAllocations.employeeId, employees.id))
+    .leftJoin(vb, eq(billInvoiceAllocations.vendorBillId, vb.id))
+    .where(eq(billInvoiceAllocations.invoiceId, invoiceId))
+    .orderBy(desc(billInvoiceAllocations.createdAt));
+  return rows;
+}
 
 // ── REIMBURSEMENT PAYROLL INTEGRATION ──
 // Added as part of unified approval flow: Reimbursement auto-lock and payroll integration
@@ -763,4 +876,178 @@ export async function lockSubmittedReimbursements(monthStr: string, countryCode?
 
   const result = await db.update(reimbursements).set({ status: 'locked' as any }).where(and(...conditions));
   return (result as any).changes || 0;
+}
+
+// ── EMPLOYEE MONTHLY REVENUE (for Vendor Bill allocation ceiling) ──
+
+/**
+ * Get the total revenue (income) for a specific employee in a given month.
+ * This sums all invoiceItems linked to the employee for invoices in that month,
+ * excluding deposit-type items (deposits are balance sheet items, not P&L).
+ *
+ * @param employeeId - The employee ID
+ * @param serviceMonth - The month in YYYY-MM format
+ * @returns Object with total revenue breakdown by itemType
+ */
+export async function getEmployeeMonthlyRevenue(employeeId: number, serviceMonth: string) {
+  const db = await getDb();
+  if (!db) return { total: 0, breakdown: [] };
+
+  // Find all invoices for this month (excluding credit_note and deposit_refund)
+  const { ne } = await import("drizzle-orm");
+  const monthInvoices = await db
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(
+      and(
+        sql`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth}`,
+        ne(invoices.invoiceType, "credit_note"),
+        ne(invoices.invoiceType, "deposit_refund"),
+      )
+    );
+
+  if (monthInvoices.length === 0) return { total: 0, breakdown: [] };
+
+  const invoiceIds = monthInvoices.map((i) => i.id);
+
+  // Get all invoice items for this employee in these invoices, excluding deposit items
+  const items = await db
+    .select({
+      itemType: invoiceItems.itemType,
+      amount: invoiceItems.amount,
+      invoiceId: invoiceItems.invoiceId,
+    })
+    .from(invoiceItems)
+    .where(
+      and(
+        eq(invoiceItems.employeeId, employeeId),
+        inArray(invoiceItems.invoiceId, invoiceIds),
+        ne(invoiceItems.itemType, "deposit"),
+      )
+    );
+
+  // Calculate breakdown by itemType
+  const breakdownMap: Record<string, number> = {};
+  let total = 0;
+  for (const item of items) {
+    const amount = parseFloat(String(item.amount || "0"));
+    total += amount;
+    const type = item.itemType || "other";
+    breakdownMap[type] = (breakdownMap[type] || 0) + amount;
+  }
+
+  const breakdown = Object.entries(breakdownMap).map(([itemType, amount]) => ({
+    itemType,
+    amount: Math.round(amount * 100) / 100,
+  }));
+
+  return {
+    total: Math.round(total * 100) / 100,
+    breakdown,
+  };
+}
+
+/**
+ * Get monthly revenue for ALL employees in a given month.
+ * Used by the allocation UI to show revenue ceilings for each employee.
+ *
+ * @param serviceMonth - The month in YYYY-MM format
+ * @returns Array of { employeeId, employeeName, employeeCode, customerId, total, breakdown }
+ */
+export async function getAllEmployeesMonthlyRevenue(serviceMonth: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const { employees, customers } = await import("../../../drizzle/schema");
+  const { ne } = await import("drizzle-orm");
+
+  // Find all invoices for this month (excluding credit_note and deposit_refund)
+  const monthInvoices = await db
+    .select({ id: invoices.id })
+    .from(invoices)
+    .where(
+      and(
+        sql`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth}`,
+        ne(invoices.invoiceType, "credit_note"),
+        ne(invoices.invoiceType, "deposit_refund"),
+      )
+    );
+
+  if (monthInvoices.length === 0) return [];
+
+  const invoiceIds = monthInvoices.map((i) => i.id);
+
+  // Get all invoice items with employee info for these invoices, excluding deposits
+  const items = await db
+    .select({
+      employeeId: invoiceItems.employeeId,
+      itemType: invoiceItems.itemType,
+      amount: invoiceItems.amount,
+    })
+    .from(invoiceItems)
+    .where(
+      and(
+        inArray(invoiceItems.invoiceId, invoiceIds),
+        ne(invoiceItems.itemType, "deposit"),
+      )
+    );
+
+  // Group by employee
+  const empMap: Record<number, { total: number; breakdown: Record<string, number> }> = {};
+  for (const item of items) {
+    if (!item.employeeId) continue;
+    if (!empMap[item.employeeId]) {
+      empMap[item.employeeId] = { total: 0, breakdown: {} };
+    }
+    const amount = parseFloat(String(item.amount || "0"));
+    empMap[item.employeeId].total += amount;
+    const type = item.itemType || "other";
+    empMap[item.employeeId].breakdown[type] = (empMap[item.employeeId].breakdown[type] || 0) + amount;
+  }
+
+  // Enrich with employee info
+  const empIds = Object.keys(empMap).map(Number);
+  if (empIds.length === 0) return [];
+
+  const empRows = await db
+    .select({
+      id: employees.id,
+      employeeCode: employees.employeeCode,
+      firstName: employees.firstName,
+      lastName: employees.lastName,
+      customerId: employees.customerId,
+      country: employees.country,
+    })
+    .from(employees)
+    .where(inArray(employees.id, empIds));
+
+  // Get customer names
+  const customerIds = Array.from(new Set(empRows.map((e) => e.customerId)));
+  const custRows = customerIds.length > 0
+    ? await db
+        .select({ id: customers.id, companyName: customers.companyName })
+        .from(customers)
+        .where(inArray(customers.id, customerIds))
+    : [];
+  const custMap: Record<number, string> = {};
+  for (const c of custRows) {
+    custMap[c.id] = c.companyName;
+  }
+
+  return empRows.map((emp) => {
+    const data = empMap[emp.id];
+    return {
+      employeeId: emp.id,
+      employeeCode: emp.employeeCode,
+      employeeName: `${emp.firstName} ${emp.lastName}`,
+      customerId: emp.customerId,
+      customerName: custMap[emp.customerId] || "Unknown",
+      country: emp.country,
+      total: Math.round(data.total * 100) / 100,
+      breakdown: Object.entries(data.breakdown).map(([itemType, amount]) => ({
+        itemType,
+        amount: Math.round(amount * 100) / 100,
+      })),
+    };
+  });
 }

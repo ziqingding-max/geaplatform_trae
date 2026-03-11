@@ -21,6 +21,7 @@ const billItemSchema = z.object({
   quantity: z.string().default("1"),
   unitPrice: z.string(),
   amount: z.string(),
+  itemType: z.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other"]).default("other"),
   relatedCustomerId: z.number().optional(),
   relatedEmployeeId: z.number().optional(),
   relatedCountryCode: z.string().optional(),
