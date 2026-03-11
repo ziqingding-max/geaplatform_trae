@@ -689,10 +689,26 @@ export default function PortalOnboarding() {
         </div>
       )}
       {!isAor && (
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.address")} <span className="text-destructive">*</span></Label>
-          <Textarea value={formData.address} onChange={(e) => updateField("address", e.target.value)} placeholder="Full residential address" rows={2} className="rounded-xl" />
-        </div>
+        <>
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t("portal_onboarding.personal_info.label.address")} <span className="text-destructive">*</span></Label>
+            <Textarea value={formData.address} onChange={(e) => updateField("address", e.target.value)} placeholder="Full residential address" rows={2} className="rounded-xl" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.city")}</Label>
+              <Input value={formData.city} onChange={(e) => updateField("city", e.target.value)} placeholder="City" className="h-10 rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">State / Province</Label>
+              <Input value={formData.state} onChange={(e) => updateField("state", e.target.value)} placeholder="State / Province" className="h-10 rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Postal Code</Label>
+              <Input value={formData.postalCode} onChange={(e) => updateField("postalCode", e.target.value)} placeholder="Postal Code" className="h-10 rounded-xl" />
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -717,10 +733,6 @@ export default function PortalOnboarding() {
               ))}
             </SelectContent>
           </Select>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.city")}</Label>
-          <Input value={formData.city} onChange={(e) => updateField("city", e.target.value)} placeholder={t("portal_onboarding.employment.label.city")} className="h-10 rounded-xl" />
         </div>
       </div>
       {!isAor && needsVisa && (
@@ -1393,8 +1405,8 @@ export default function PortalOnboarding() {
           </div>
 
           {/* Step Indicator — Glass Pill Style */}
-          <div className="flex items-center justify-center mb-8">
-            <div className="inline-flex items-center gap-1 p-1.5 rounded-2xl bg-muted/40 backdrop-blur-sm border border-border/40">
+          <div className="flex items-center justify-center mb-8 overflow-x-auto">
+            <div className="inline-flex items-center gap-0.5 p-1 rounded-2xl bg-muted/40 backdrop-blur-sm border border-border/40">
               {steps.map((step, idx) => {
                 const isActive = currentStep === step.id;
                 const isCompleted = currentStep > step.id;
@@ -1406,7 +1418,7 @@ export default function PortalOnboarding() {
                         if (isCompleted) setCurrentStep(step.id);
                       }}
                       className={cn(
-                        "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-300",
+                        "flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-medium transition-all duration-300 whitespace-nowrap",
                         isActive
                           ? "bg-white shadow-sm text-foreground"
                           : isCompleted
@@ -1415,15 +1427,15 @@ export default function PortalOnboarding() {
                       )}
                     >
                       {isCompleted ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                        <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 text-emerald-500" />
                       ) : (
-                        <StepIcon className={cn("w-4 h-4", isActive ? "text-primary" : "")} />
+                        <StepIcon className={cn("w-3.5 h-3.5 flex-shrink-0", isActive ? "text-primary" : "")} />
                       )}
                       <span className="hidden md:inline">{step.title}</span>
                     </button>
                     {idx < steps.length - 1 && (
                       <div className={cn(
-                        "w-6 h-px mx-0.5",
+                        "w-4 h-px mx-0.5",
                         isCompleted ? "bg-emerald-300" : "bg-border/60"
                       )} />
                     )}
