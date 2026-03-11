@@ -702,6 +702,9 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_invoice_detail.wallet_payment.will_deduct": "Will Deduct",
     "portal_invoice_detail.wallet_payment.pay_button": "Pay with Wallet",
     "portal_invoice_detail.wallet_payment.coming_soon": "Wallet payment will be available soon.",
+    "portal_invoice_detail.wallet_payment.confirm_message": "Are you sure you want to apply your wallet balance to this invoice?",
+    "portal_invoice_detail.wallet_payment.success": "Wallet payment applied successfully!",
+    "portal_invoice_detail.wallet_payment.error": "Failed to process wallet payment. Please try again.",
 
     // Portal Invoices
     "portal_invoices.description": "Manage invoices, credit notes, and deposits",
@@ -2594,6 +2597,9 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_invoice_detail.wallet_payment.will_deduct": "将扣除",
     "portal_invoice_detail.wallet_payment.pay_button": "使用钱包支付",
     "portal_invoice_detail.wallet_payment.coming_soon": "钱包支付功能即将上线。",
+    "portal_invoice_detail.wallet_payment.confirm_message": "确定要使用钱包余额支付此发票吗？",
+    "portal_invoice_detail.wallet_payment.success": "钱包支付已成功！",
+    "portal_invoice_detail.wallet_payment.error": "钱包支付处理失败，请重试。",
 
     // Portal Invoices
     "portal_invoices.description": "管理发票、贷项通知单和押金",

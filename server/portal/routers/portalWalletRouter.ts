@@ -3,8 +3,9 @@ import { portalRouter, protectedPortalProcedure } from "../portalTrpc";
 import { walletService } from "../../services/walletService";
 import { getDb } from "../../db";
 import { walletTransactions, invoices } from "../../../drizzle/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { getInvoiceById, updateInvoice } from "../../services/db/financeService";
 
 export const portalWalletRouter = portalRouter({
   get: protectedPortalProcedure
@@ -14,6 +15,79 @@ export const portalWalletRouter = portalRouter({
     .query(async ({ input, ctx }) => {
       // Security: Always use ctx.portalUser.customerId
       return await walletService.getWallet(ctx.portalUser.customerId, input.currency);
+    }),
+
+  payWithWallet: protectedPortalProcedure
+    .input(z.object({
+      invoiceId: z.number(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const customerId = ctx.portalUser.customerId;
+
+      // 1. Verify invoice belongs to this customer and is payable
+      const invoice = await getInvoiceById(input.invoiceId);
+      if (!invoice) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice not found" });
+      if (invoice.customerId !== customerId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied" });
+      }
+      if (invoice.status === "paid" || invoice.status === "cancelled" || invoice.status === "void") {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: `Invoice is already ${invoice.status}` });
+      }
+
+      // 2. Calculate how much to deduct
+      const total = parseFloat(invoice.total?.toString() || "0");
+      const currentPaid = parseFloat(invoice.paidAmount?.toString() || "0");
+      const currentWalletApplied = parseFloat(invoice.walletAppliedAmount?.toString() || "0");
+      const remainingDue = Math.max(0, total - currentPaid - currentWalletApplied);
+
+      if (remainingDue <= 0) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No balance due on this invoice" });
+      }
+
+      // 3. Check wallet balance
+      const wallet = await walletService.getWallet(customerId, invoice.currency);
+      const walletBal = parseFloat(wallet.balance);
+      if (walletBal <= 0) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Insufficient wallet balance" });
+      }
+
+      // Deduct the lesser of wallet balance and remaining due
+      const deductAmount = Math.min(walletBal, remainingDue);
+
+      // 4. Deduct from wallet
+      await walletService.transact({
+        walletId: wallet.id,
+        type: "invoice_deduction",
+        amount: deductAmount.toFixed(2),
+        direction: "debit",
+        referenceId: invoice.id,
+        referenceType: "invoice",
+        description: `Wallet payment for Invoice #${invoice.invoiceNumber}`,
+        createdBy: ctx.portalUser.contactId,
+      });
+
+      // 5. Update invoice
+      const newWalletApplied = currentWalletApplied + deductAmount;
+      const newRemainingDue = Math.max(0, total - currentPaid - newWalletApplied);
+      const newStatus = newRemainingDue <= 0.01 ? "paid" : invoice.status;
+
+      const updateData: any = {
+        walletAppliedAmount: newWalletApplied.toFixed(2),
+        amountDue: newRemainingDue.toFixed(2),
+        status: newStatus,
+      };
+      if (newStatus === "paid") {
+        updateData.paidDate = new Date();
+      }
+
+      await updateInvoice(invoice.id, updateData);
+
+      return {
+        success: true,
+        deducted: deductAmount.toFixed(2),
+        newStatus,
+        remainingDue: newRemainingDue.toFixed(2),
+      };
     }),
 
   listTransactions: protectedPortalProcedure

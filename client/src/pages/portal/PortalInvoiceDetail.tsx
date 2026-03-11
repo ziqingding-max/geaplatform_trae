@@ -14,6 +14,7 @@ import { useParams, useLocation } from "wouter";
 import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { portalPath } from "@/lib/portalBasePath";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,22 @@ export default function PortalInvoiceDetail() {
     { enabled: !!data && data.balanceDue > 0 }
   );
   const walletBalance = walletData ? parseFloat(walletData.balance) : 0;
+
+  const utils = portalTrpc.useUtils();
+  const walletPayMutation = portalTrpc.wallet.payWithWallet.useMutation({
+    onSuccess: (result) => {
+      toast.success(
+        t("portal_invoice_detail.wallet_payment.success") ||
+        `Payment of ${data?.currency || ""} ${result.deducted} applied successfully`
+      );
+      // Refresh invoice detail and wallet balance
+      utils.invoices.detail.invalidate({ id: invoiceId });
+      utils.wallet.get.invalidate();
+    },
+    onError: (err: any) => {
+      toast.error(err.message || t("portal_invoice_detail.wallet_payment.error") || "Payment failed");
+    },
+  });
 
   function handleDownload() {
     window.open(`/api/portal-invoices/${invoiceId}/pdf`, "_blank");
@@ -534,13 +551,17 @@ export default function PortalInvoiceDetail() {
                   <Button
                     className="w-full gap-2"
                     variant="default"
+                    disabled={walletPayMutation.isPending}
                     onClick={() => {
-                      // TODO: Call payWithWallet mutation when backend endpoint is ready
-                      alert(t("portal_invoice_detail.wallet_payment.coming_soon"));
+                      if (confirm(t("portal_invoice_detail.wallet_payment.confirm_message") || `Apply ${formatCurrency(data.currency, Math.min(walletBalance, data.balanceDue))} from wallet to this invoice?`)) {
+                        walletPayMutation.mutate({ invoiceId: data.id });
+                      }
                     }}
                   >
                     <CreditCard className="w-4 h-4" />
-                    {t("portal_invoice_detail.wallet_payment.pay_button")}
+                    {walletPayMutation.isPending
+                      ? (t("common.processing") || "Processing...")
+                      : t("portal_invoice_detail.wallet_payment.pay_button")}
                   </Button>
                 </CardContent>
               </Card>

@@ -113,11 +113,17 @@ async function recalculateInvoiceTotals(invoiceId: number) {
 
   // Also update invoice-level exchange rate from line items
   const foreignItems = items.filter(item => item.localCurrency && item.localCurrency !== settlementCurrency);
+  // Recalculate amountDue: total minus any wallet applied amount
+  const walletApplied = parseFloat(invoice?.walletAppliedAmount?.toString() || "0");
+  const paidAmount = parseFloat(invoice?.paidAmount?.toString() || "0");
+  const newAmountDue = Math.max(0, total - walletApplied - paidAmount);
+
   const updateData: Record<string, string> = {
     subtotal: subtotal.toFixed(2),
     serviceFeeTotal: serviceFeeTotal.toFixed(2),
     tax: taxTotal.toFixed(2),
     total: total.toFixed(2),
+    amountDue: newAmountDue.toFixed(2),
   };
 
   if (foreignItems.length > 0) {

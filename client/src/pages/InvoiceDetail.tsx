@@ -159,7 +159,10 @@ export default function InvoiceDetail() {
   // Reference data
   const { data: customers } = trpc.customers.list.useQuery({ limit: 500 });
   const { data: billingEntities } = trpc.billingEntities.list.useQuery();
-  const { data: employees } = trpc.employees.list.useQuery({ limit: 500 });
+  const { data: employees } = trpc.employees.list.useQuery(
+    { limit: 500, customerId: invoice?.customerId },
+    { enabled: !!invoice?.customerId }
+  );
 
   // Exchange rate reference (finance manager only)
   const isFinanceManager = user?.role?.includes("admin") || user?.role?.includes("finance_manager");
@@ -186,15 +189,15 @@ export default function InvoiceDetail() {
     onError: (err) => toast.error(err.message),
   });
   const addItemMutation = trpc.invoices.addItem.useMutation({
-    onSuccess: () => { toast.success("Item added"); refetch(); },
+    onSuccess: () => { toast.success("Item added"); refetch(); refetchRate(); },
     onError: (err) => toast.error(err.message),
   });
   const updateItemMutation = trpc.invoices.updateItem.useMutation({
-    onSuccess: () => { toast.success("Item updated"); refetch(); },
+    onSuccess: () => { toast.success("Item updated"); refetch(); refetchRate(); },
     onError: (err) => toast.error(err.message),
   });
   const deleteItemMutation = trpc.invoices.deleteItem.useMutation({
-    onSuccess: () => { toast.success("Item deleted"); refetch(); },
+    onSuccess: () => { toast.success("Item deleted"); refetch(); refetchRate(); },
     onError: (err) => toast.error(err.message),
   });
   const createCreditNoteMutation = trpc.invoices.createCreditNote.useMutation({

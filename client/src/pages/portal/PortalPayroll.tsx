@@ -460,13 +460,24 @@ export default function PortalPayroll() {
     return visibleRuns.filter((r: any) => r.countryCode === selectedCountry);
   }, [visibleRuns, selectedCountry]);
 
-  // Summary stats
+  // Summary stats — group by currency for multi-currency support
   const stats = useMemo(() => {
-    const totalGross = filteredRuns.reduce((s: number, r: any) => s + Number(r.customerTotalGross || 0), 0);
-    const totalNet = filteredRuns.reduce((s: number, r: any) => s + Number(r.customerTotalNet || 0), 0);
-    const totalEmployees = filteredRuns.reduce((s: number, r: any) => s + (r.employeeCount || 0), 0);
-    const currency = filteredRuns[0]?.currency || "USD";
-    return { totalGross, totalNet, totalEmployees, currency, runCount: filteredRuns.length };
+    const byCurrency: Record<string, { gross: number; net: number }> = {};
+    let totalEmployees = 0;
+    for (const r of filteredRuns) {
+      const cur = r.currency || "USD";
+      if (!byCurrency[cur]) byCurrency[cur] = { gross: 0, net: 0 };
+      byCurrency[cur].gross += Number(r.customerTotalGross || 0);
+      byCurrency[cur].net += Number(r.customerTotalNet || 0);
+      totalEmployees += r.employeeCount || 0;
+    }
+    const currencies = Object.keys(byCurrency);
+    const isMultiCurrency = currencies.length > 1;
+    // For single currency, keep backward-compatible shape
+    const currency = currencies[0] || "USD";
+    const totalGross = isMultiCurrency ? 0 : (byCurrency[currency]?.gross || 0);
+    const totalNet = isMultiCurrency ? 0 : (byCurrency[currency]?.net || 0);
+    return { totalGross, totalNet, totalEmployees, currency, runCount: filteredRuns.length, isMultiCurrency, byCurrency };
   }, [filteredRuns]);
 
   const handleSelectEmployee = (employee: any, run: any) => {
@@ -554,9 +565,19 @@ export default function PortalPayroll() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{t("portal_payroll.summary.total_gross")}</p>
-                    <p className="text-lg font-bold font-mono truncate">
-                      {formatCurrency(stats.currency, stats.totalGross)}
-                    </p>
+                    {stats.isMultiCurrency ? (
+                      <div className="space-y-0.5">
+                        {Object.entries(stats.byCurrency).map(([cur, val]) => (
+                          <p key={cur} className="text-sm font-bold font-mono truncate">
+                            {formatCurrency(cur, val.gross)}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-lg font-bold font-mono truncate">
+                        {formatCurrency(stats.currency, stats.totalGross)}
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -569,9 +590,19 @@ export default function PortalPayroll() {
                   </div>
                   <div className="min-w-0">
                     <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{t("portal_payroll.summary.total_net")}</p>
-                    <p className="text-lg font-bold font-mono truncate">
-                      {formatCurrency(stats.currency, stats.totalNet)}
-                    </p>
+                    {stats.isMultiCurrency ? (
+                      <div className="space-y-0.5">
+                        {Object.entries(stats.byCurrency).map(([cur, val]) => (
+                          <p key={cur} className="text-sm font-bold font-mono truncate">
+                            {formatCurrency(cur, val.net)}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-lg font-bold font-mono truncate">
+                        {formatCurrency(stats.currency, stats.totalNet)}
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
