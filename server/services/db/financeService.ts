@@ -684,3 +684,83 @@ export async function recalcBillAllocation(billId: number) {}
 export async function recalcInvoiceCostAllocation(invoiceId: number) {}
 export async function listDetailedAllocationsByBill(billId: number) { return []; }
 export async function listDetailedAllocationsByInvoice(invoiceId: number) { return []; }
+
+// ── REIMBURSEMENT PAYROLL INTEGRATION ──
+// Added as part of unified approval flow: Reimbursement auto-lock and payroll integration
+
+/**
+ * Get admin_approved reimbursements for payroll calculation.
+ * Mirrors getSubmittedAdjustmentsForPayroll pattern.
+ *
+ * @param countryCodeOrEmployeeId - Country code (string) for batch, or employee ID (number) for single
+ * @param monthStr - Effective month in YYYY-MM-01 format
+ * @param statuses - Statuses to include (default: ['admin_approved'])
+ */
+export async function getSubmittedReimbursementsForPayroll(
+  countryCodeOrEmployeeId: string | number,
+  monthStr: string,
+  statuses: string[] = ['admin_approved']
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  if (typeof countryCodeOrEmployeeId === 'string') {
+    const { employees } = await import('../../../drizzle/schema');
+    const results = await db.select({
+      id: reimbursements.id,
+      employeeId: reimbursements.employeeId,
+      customerId: reimbursements.customerId,
+      category: reimbursements.category,
+      description: reimbursements.description,
+      amount: reimbursements.amount,
+      currency: reimbursements.currency,
+      status: reimbursements.status,
+      effectiveMonth: reimbursements.effectiveMonth,
+      createdAt: reimbursements.createdAt,
+    }).from(reimbursements)
+      .innerJoin(employees, eq(reimbursements.employeeId, employees.id))
+      .where(and(
+        eq(employees.country, countryCodeOrEmployeeId),
+        eq(reimbursements.effectiveMonth, monthStr),
+        inArray(reimbursements.status, statuses as any[])
+      ));
+    return results;
+  } else {
+    return await db.select().from(reimbursements)
+      .where(and(
+        eq(reimbursements.employeeId, countryCodeOrEmployeeId),
+        eq(reimbursements.effectiveMonth, monthStr),
+        inArray(reimbursements.status, statuses as any[])
+      ));
+  }
+}
+
+/**
+ * Lock admin_approved reimbursements for a given month (and optionally country).
+ * Mirrors lockSubmittedAdjustments pattern.
+ * Called by the monthly auto-lock cron job on the 5th.
+ *
+ * @param monthStr - Effective month in YYYY-MM-01 format
+ * @param countryCode - Optional country code to scope the lock
+ * @returns Number of records locked
+ */
+export async function lockSubmittedReimbursements(monthStr: string, countryCode?: string) {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const conditions: any[] = [
+    eq(reimbursements.effectiveMonth, monthStr),
+    eq(reimbursements.status, 'admin_approved' as any)
+  ];
+
+  if (countryCode) {
+    const { employees } = await import('../../../drizzle/schema');
+    const empRows = await db.select({ id: employees.id }).from(employees).where(eq(employees.country, countryCode));
+    const empIds = empRows.map(e => e.id);
+    if (empIds.length === 0) return 0;
+    conditions.push(inArray(reimbursements.employeeId, empIds));
+  }
+
+  const result = await db.update(reimbursements).set({ status: 'locked' as any }).where(and(...conditions));
+  return (result as any).changes || 0;
+}

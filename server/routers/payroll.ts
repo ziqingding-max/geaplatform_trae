@@ -18,11 +18,14 @@ import {
   findPayrollRunByCountryMonth,
   getSubmittedAdjustmentsForPayroll,
   getSubmittedUnpaidLeaveForPayroll,
+  getSubmittedReimbursementsForPayroll,
   updateAdjustment,
   updateLeaveRecord,
+  updateReimbursement,
   getEmployeeById,
   lockSubmittedAdjustments,
   lockSubmittedLeaveRecords,
+  lockSubmittedReimbursements,
 } from "../db";
 
 /**
@@ -276,6 +279,15 @@ export const payrollRouter = router({
           case "other": totalAllowances += amount; break;
         }
         breakdown.push({ id: adj.id, type: adj.adjustmentType, category: adj.category, amount: adj.amount });
+      }
+
+      // Get submitted reimbursements for this employee (from standalone reimbursements table)
+      const allReimb = await getSubmittedReimbursementsForPayroll(run.countryCode, payrollMonth);
+      const empReimb = allReimb.filter(r => r.employeeId === input.employeeId);
+      for (const reimb of empReimb) {
+        const amount = parseFloat(reimb.amount?.toString() ?? "0");
+        totalReimbursements += amount;
+        breakdown.push({ id: reimb.id, type: 'reimbursement', category: reimb.category, amount: reimb.amount, source: 'reimbursement_table' });
       }
 
       // Get submitted unpaid leave for this employee
@@ -585,6 +597,17 @@ export const payrollRouter = router({
         adjByEmployee.set(adj.employeeId, list);
       }
 
+      // Fetch submitted reimbursements for this country + month (from standalone reimbursements table)
+      const allReimbursements = await getSubmittedReimbursementsForPayroll(run.countryCode, payrollMonth);
+
+      // Group reimbursements by employeeId
+      const reimbByEmployee = new Map<number, typeof allReimbursements>();
+      for (const reimb of allReimbursements) {
+        const list = reimbByEmployee.get(reimb.employeeId) ?? [];
+        list.push(reimb);
+        reimbByEmployee.set(reimb.employeeId, list);
+      }
+
       // Fetch submitted unpaid leave for this country + month
       const allUnpaidLeave = await getSubmittedUnpaidLeaveForPayroll(run.countryCode, payrollMonth);
 
@@ -599,6 +622,7 @@ export const payrollRouter = router({
       const newItems = [];
       const lockedAdjustmentIds: number[] = [];
       const lockedLeaveIds: number[] = [];
+      const lockedReimbursementIds: number[] = [];
 
       for (const emp of activeEmployees) {
         if (existingEmployeeIds.has(emp.id)) continue;
@@ -641,6 +665,22 @@ export const payrollRouter = router({
             amount: adj.amount,
           });
           lockedAdjustmentIds.push(adj.id);
+        }
+
+        // Aggregate standalone reimbursements for this employee
+        const empReimb = reimbByEmployee.get(emp.id) ?? [];
+        for (const reimb of empReimb) {
+          const amount = parseFloat(reimb.amount?.toString() ?? "0");
+          totalReimbursements += amount;
+          adjustmentsBreakdown.push({
+            id: reimb.id,
+            type: 'reimbursement',
+            category: reimb.category,
+            description: reimb.description,
+            amount: reimb.amount,
+            source: 'reimbursement_table',
+          });
+          lockedReimbursementIds.push(reimb.id);
         }
 
         // Aggregate unpaid leave for this employee
@@ -702,6 +742,11 @@ export const payrollRouter = router({
         await updateLeaveRecord(leaveId, { status: "locked" } as any);
       }
 
+      // Lock all aggregated standalone reimbursements
+      for (const reimbId of lockedReimbursementIds) {
+        await updateReimbursement(reimbId, { status: "locked" } as any);
+      }
+
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
         action: "auto_fill",
@@ -711,6 +756,7 @@ export const payrollRouter = router({
           employeesAdded: newItems.length,
           adjustmentsLocked: lockedAdjustmentIds.length,
           leaveRecordsLocked: lockedLeaveIds.length,
+          reimbursementsLocked: lockedReimbursementIds.length,
         }),
       });
 
@@ -719,6 +765,7 @@ export const payrollRouter = router({
         itemsAdded: newItems.length,
         adjustmentsLocked: lockedAdjustmentIds.length,
         leaveRecordsLocked: lockedLeaveIds.length,
+        reimbursementsLocked: lockedReimbursementIds.length,
       };
     }),
 });
