@@ -987,17 +987,17 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
         <div class="total-amount">USD ${fmt(parseFloat(data.totalMonthly))}</div>
       </div>
     </div>
-
-    ${data.notes ? `
-    <div class="notes-box">
-      <strong>Notes:</strong><br>${data.notes}
-    </div>` : ""}
   `, branding);
 
-  // 4. Terms & Conditions page
+  // 4. Notes (if any) + Terms & Conditions page
   const contactEmail = data.createdByEmail ?? branding.contactEmail ?? data.billingEntity?.contactEmail ?? "sales@geahr.com";
   const contactName = data.createdByName ?? branding.shortName + " account manager";
+  const notesHtml = data.notes ? `
+    <div class="notes-box" style="margin-bottom:6mm;">
+      <strong>Notes:</strong><br>${data.notes}
+    </div>` : "";
   pages += contentPage(headerTitle, 4, 0, `
+    ${notesHtml}
     <h2>Terms &amp; Conditions</h2>
     <div class="section-card" style="font-size: 8pt; line-height: 1.5;">
         <h3>1. Agreement &amp; Validity</h3>
