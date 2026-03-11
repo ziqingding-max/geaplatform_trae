@@ -30,9 +30,13 @@ import {
 } from "@/components/ui/tabs";
 import {
   Banknote, Plus, ArrowLeft, ChevronRight, Calculator, Send, CheckCircle,
-  XCircle, Pencil, Trash2, UserPlus, Filter, Eye, Download,
+  XCircle, Pencil, Trash2, UserPlus, Filter, Eye, Download, AlertTriangle, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import EmployeeSelector from "@/components/EmployeeSelector";
 import { formatCurrencyAmount, CurrencyInput } from "@/components/CurrencyAmount";
 import { exportToCsv } from "@/lib/csvExport";
@@ -440,6 +444,27 @@ function PayrollDetail({ id }: { id: number }) {
     onError: (err: any) => toast.error(err.message),
   });
 
+  // Pending review warning state
+  const [showAutoFillWarning, setShowAutoFillWarning] = useState(false);
+  const [pendingCounts, setPendingCounts] = useState<{
+    pendingLeaves: number; pendingAdjustments: number; pendingReimbursements: number; total: number;
+  } | null>(null);
+
+  const pendingReviewQuery = trpc.payroll.getPendingReviewCounts.useQuery(
+    { payrollRunId: run?.id ?? 0 },
+    { enabled: !!run?.id }
+  );
+
+  const handleAutoFillClick = () => {
+    const counts = pendingReviewQuery.data;
+    if (counts && counts.total > 0) {
+      setPendingCounts(counts);
+      setShowAutoFillWarning(true);
+    } else {
+      autoFillMutation.mutate({ payrollRunId: run!.id });
+    }
+  };
+
   // Filter employees by country (payroll runs are country-based, across all customers)
   const filteredEmployees = useMemo(() => {
     if (!run || !employees?.data) return [];
@@ -686,7 +711,7 @@ function PayrollDetail({ id }: { id: number }) {
                 </Button>
               {isDraft && (
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => autoFillMutation.mutate({ payrollRunId: run.id })} disabled={autoFillMutation.isPending}>
+                  <Button size="sm" variant="outline" onClick={handleAutoFillClick} disabled={autoFillMutation.isPending}>
                     <Calculator className="w-4 h-4 mr-2" />{autoFillMutation.isPending ? "Filling..." : "Auto-Fill Employees"}
                   </Button>
                   <Dialog open={addItemOpen} onOpenChange={(open) => { setAddItemOpen(open); if (!open) { setItemForm(defaultItemForm); setEditItemId(null); setSelectedEmployeeId(0); } }}>
@@ -988,11 +1013,53 @@ function PayrollDetail({ id }: { id: number }) {
             )}
           </DialogContent>
         </Dialog>
+      {/* Auto-Fill Pending Review Warning Dialog */}
+      <AlertDialog open={showAutoFillWarning} onOpenChange={setShowAutoFillWarning}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Pending Items Detected
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>There are items that have <strong>not yet been fully approved</strong> for this payroll period. These items will <strong>NOT</strong> be included in the auto-fill.</p>
+                {pendingCounts && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
+                    {pendingCounts.pendingLeaves > 0 && (
+                      <p className="text-sm text-amber-800">Leave records pending: <strong>{pendingCounts.pendingLeaves}</strong></p>
+                    )}
+                    {pendingCounts.pendingAdjustments > 0 && (
+                      <p className="text-sm text-amber-800">Adjustments pending: <strong>{pendingCounts.pendingAdjustments}</strong></p>
+                    )}
+                    {pendingCounts.pendingReimbursements > 0 && (
+                      <p className="text-sm text-amber-800">Reimbursements pending: <strong>{pendingCounts.pendingReimbursements}</strong></p>
+                    )}
+                    <p className="text-sm font-semibold text-amber-900 pt-1">Total: {pendingCounts.total} item(s) not yet approved</p>
+                  </div>
+                )}
+                <p className="text-sm text-muted-foreground">Please review and approve these items in the Leave, Adjustments, or Reimbursements modules before proceeding, or continue with auto-fill to exclude them.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go Back & Review</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={() => {
+                setShowAutoFillWarning(false);
+                autoFillMutation.mutate({ payrollRunId: run!.id });
+              }}
+            >
+              Continue Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </div>
     </Layout>
   );
 }
-
 export default function Payroll() {
   const [matchDetail, params] = useRoute("/payroll/:id");
   if (matchDetail && params?.id) {

@@ -555,8 +555,66 @@ export const payrollRouter = router({
     }),
 
   /**
-   * Auto-fill payroll items based on all active employees in the country.
-   * Now integrates:
+   * Get counts of pending review items (client_approved but not yet admin_approved)
+   * for a given payroll run's country and month.
+   * Used by frontend to show a warning before auto-fill.
+   */
+  getPendingReviewCounts: operationsManagerProcedure
+    .input(z.object({ payrollRunId: z.number() }))
+    .query(async ({ input }) => {
+      const run = await getPayrollRunById(input.payrollRunId);
+      if (!run) throw new TRPCError({ code: 'BAD_REQUEST', message: "Payroll run not found" });
+
+      let payrollMonth: string;
+      if (run.payrollMonth instanceof Date) {
+        const y = run.payrollMonth.getUTCFullYear();
+        const m = String(run.payrollMonth.getUTCMonth() + 1).padStart(2, "0");
+        const d = String(run.payrollMonth.getUTCDate()).padStart(2, "0");
+        payrollMonth = `${y}-${m}-${d}`;
+      } else {
+        payrollMonth = String(run.payrollMonth);
+      }
+
+      // Count items still in submitted or client_approved (not yet admin_approved)
+      const { getDb } = await import("../db");
+      const db = getDb();
+      const { leaveRecords, adjustments, reimbursements } = await import("../../drizzle/schema");
+      const { and, eq, inArray, sql } = await import("drizzle-orm");
+
+      // Count pending leaves (submitted or client_approved) for this country + month
+      const pendingLeaves = await db.select({ count: sql<number>`count(*)` })
+        .from(leaveRecords)
+        .where(and(
+          inArray(leaveRecords.status, ["submitted", "client_approved"]),
+          eq(leaveRecords.payrollMonth, payrollMonth),
+        ));
+
+      // Count pending adjustments (submitted or client_approved) for this country + month
+      const pendingAdjustments = await db.select({ count: sql<number>`count(*)` })
+        .from(adjustments)
+        .where(and(
+          inArray(adjustments.status, ["submitted", "client_approved"]),
+          eq(adjustments.effectiveMonth, payrollMonth),
+        ));
+
+      // Count pending reimbursements (submitted or client_approved) for this month
+      const pendingReimbursements = await db.select({ count: sql<number>`count(*)` })
+        .from(reimbursements)
+        .where(and(
+          inArray(reimbursements.status, ["submitted", "client_approved"]),
+          eq(reimbursements.effectiveMonth, payrollMonth),
+        ));
+
+      return {
+        pendingLeaves: Number(pendingLeaves[0]?.count ?? 0),
+        pendingAdjustments: Number(pendingAdjustments[0]?.count ?? 0),
+        pendingReimbursements: Number(pendingReimbursements[0]?.count ?? 0),
+        total: Number(pendingLeaves[0]?.count ?? 0) + Number(pendingAdjustments[0]?.count ?? 0) + Number(pendingReimbursements[0]?.count ?? 0),
+      };
+    }),
+
+  /**
+   * Auto-fill payroll items for all active employees in the payroll run's country.* Now integrates:
    * - Adjustments: aggregates submitted adjustments (bonus/allowance/reimbursement/deduction) per employee
    * - Leave: aggregates submitted unpaid leave deductions per employee
    * After auto-fill, linked adjustments and leave records are locked.
