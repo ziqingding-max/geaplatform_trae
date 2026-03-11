@@ -100,12 +100,13 @@ export async function generateInvoicesFromPayroll(
         .where(inArray(payrollItems.payrollRunId, runIds));
     }
 
-    // 4. Group by Customer + Currency (EOR)
-    // Map key: "customerId|currency"
+    // 4. Group by Customer + Currency + ServiceType (EOR vs Visa EOR)
+    // Map key: "customerId|currency|serviceType"
     const groups = new Map<string, typeof payrollItemsData>();
 
     for (const row of payrollItemsData) {
-      const key = `${row.employee.customerId}|${row.run.currency}`;
+      const svcType = row.employee.serviceType === "visa_eor" ? "visa_eor" : "eor";
+      const key = `${row.employee.customerId}|${row.run.currency}|${svcType}`;
       if (!groups.has(key)) {
         groups.set(key, []);
       }
@@ -115,9 +116,9 @@ export async function generateInvoicesFromPayroll(
     const invoiceIds: number[] = [...(aorResult.invoiceIds || [])];
     let skippedDuplicates = 0;
 
-    // 5. Process each group -> Create EOR Invoice
-    for (const [key, items] of groups.entries()) {
-      const [customerIdStr, currency] = key.split("|");
+    // 5. Process each group -> Create EOR / Visa EOR Invoice
+    for (const [key, items] of Array.from(groups.entries())) {
+      const [customerIdStr, currency, groupServiceType] = key.split("|");
       const customerId = parseInt(customerIdStr);
 
       // Check for existing invoice for this month/customer/type
@@ -187,7 +188,7 @@ export async function generateInvoicesFromPayroll(
         employeeItems.get(row.employee.id)!.push(row);
       }
 
-      for (const [empId, empRows] of employeeItems.entries()) {
+      for (const [empId, empRows] of Array.from(employeeItems.entries())) {
         const employee = empRows[0].employee;
         
         // Sum up costs for this employee
@@ -256,11 +257,14 @@ export async function generateInvoicesFromPayroll(
       const dueDate = new Date(issueDate);
       dueDate.setDate(dueDate.getDate() + termDays);
 
+      // Determine invoice type based on the group's service type
+      const invoiceType = groupServiceType === "visa_eor" ? "monthly_visa_eor" : "monthly_eor";
+
       const invoiceData: InsertInvoice = {
         customerId,
         billingEntityId,
         invoiceNumber,
-        invoiceType: "monthly_eor", // or mixed?
+        invoiceType,
         invoiceMonth: payrollMonthStr,
         currency: settlementCurrency,
         exchangeRate: exchangeRate.toString(),
@@ -551,14 +555,15 @@ export async function regenerateInvoices(
 
   const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
 
-  // 1. Find all DRAFT invoices for this month
+  // 1. Find only DRAFT monthly invoices for this month (preserve deposit, visa_service, etc.)
   const drafts = await db
     .select({ id: invoices.id })
     .from(invoices)
     .where(
       and(
         eq(invoices.invoiceMonth, payrollMonthStr),
-        eq(invoices.status, "draft")
+        eq(invoices.status, "draft"),
+        inArray(invoices.invoiceType, ["monthly_eor", "monthly_visa_eor", "monthly_aor"])
       )
     );
 

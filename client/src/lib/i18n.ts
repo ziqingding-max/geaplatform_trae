@@ -492,6 +492,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_employees.employment.bankNameHint": "Bank for salary deposit",
     "portal_employees.employment.compensation": "Compensation",
     "portal_employees.employment.compensationHint": "Salary and payment details",
+    "portal_employees.employment.bankDetails": "Bank Details",
     "portal_employees.employment.department": "Department",
     "portal_employees.employment.departmentHint": "Team or department",
     "portal_employees.employment.endDate": "End Date",
@@ -696,6 +697,11 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_invoice_detail.application_history.title": "Application History",
     "portal_invoice_detail.application_history.description": "Invoices this credit note has been applied to",
     "portal_invoice_detail.credit_balance.applied_percent": "applied",
+    "portal_invoice_detail.wallet_payment.title": "Pay with Wallet",
+    "portal_invoice_detail.wallet_payment.available_balance": "Available Balance",
+    "portal_invoice_detail.wallet_payment.will_deduct": "Will Deduct",
+    "portal_invoice_detail.wallet_payment.pay_button": "Pay with Wallet",
+    "portal_invoice_detail.wallet_payment.coming_soon": "Wallet payment will be available soon.",
 
     // Portal Invoices
     "portal_invoices.description": "Manage invoices, credit notes, and deposits",
@@ -2378,6 +2384,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_employees.employment.bankNameHint": "用于薪资存款的银行",
     "portal_employees.employment.compensation": "薪酬",
     "portal_employees.employment.compensationHint": "薪资和支付详情",
+    "portal_employees.employment.bankDetails": "银行信息",
     "portal_employees.employment.department": "部门",
     "portal_employees.employment.departmentHint": "团队或部门",
     "portal_employees.employment.endDate": "离职日期",
@@ -2582,6 +2589,11 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_invoice_detail.application_history.title": "应用历史",
     "portal_invoice_detail.application_history.description": "此贷项通知已应用到的发票",
     "portal_invoice_detail.credit_balance.applied_percent": "已应用",
+    "portal_invoice_detail.wallet_payment.title": "钱包支付",
+    "portal_invoice_detail.wallet_payment.available_balance": "可用余额",
+    "portal_invoice_detail.wallet_payment.will_deduct": "将扣除",
+    "portal_invoice_detail.wallet_payment.pay_button": "使用钱包支付",
+    "portal_invoice_detail.wallet_payment.coming_soon": "钱包支付功能即将上线。",
 
     // Portal Invoices
     "portal_invoices.description": "管理发票、贷项通知单和押金",

@@ -261,9 +261,8 @@ export default function PortalInvoiceDetail() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/30">
-                        <TableHead className="pl-6">{t("portal_invoice_detail.line_items.description")}</TableHead>
-                        <TableHead>{t("portal_invoice_detail.line_items.category")}</TableHead>
-                        <TableHead>{t("portal_invoice_detail.line_items.currency")}</TableHead>
+                        <TableHead className="pl-6 min-w-[240px]">{t("portal_invoice_detail.line_items.description")}</TableHead>
+                        <TableHead className="text-center">{t("portal_invoice_detail.line_items.currency")}</TableHead>
                         <TableHead className="text-right">{t("portal_invoice_detail.line_items.quantity")}</TableHead>
                         <TableHead className="text-right">{t("portal_invoice_detail.line_items.unit_price")}</TableHead>
                         <TableHead className="text-right pr-6">{t("portal_invoice_detail.line_items.amount")}</TableHead>
@@ -272,7 +271,7 @@ export default function PortalInvoiceDetail() {
                     <TableBody>
                       {(data.items || []).length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                             {t("portal_invoice_detail.line_items.empty")}
                           </TableCell>
                         </TableRow>
@@ -280,17 +279,16 @@ export default function PortalInvoiceDetail() {
                         (data.items || []).map((item: any, idx: number) => (
                           <TableRow key={item.id || idx}>
                             <TableCell className="pl-6">
-                              <p className="text-sm font-medium">{item.description || "-"}</p>
-                              {item.countryCode && (
-                                <p className="text-xs text-muted-foreground mt-0.5">{item.countryCode}</p>
-                              )}
+                              <div>
+                                <Badge variant="outline" className="text-xs font-medium mb-0.5">
+                                  {item.itemType?.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) || "-"}
+                                </Badge>
+                                {item.description && (
+                                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.description}</p>
+                                )}
+                              </div>
                             </TableCell>
-                            <TableCell>
-                              <span className="text-xs text-muted-foreground capitalize px-2 py-0.5 rounded-full bg-muted/50">
-                                {item.itemType?.replace(/_/g, " ") || "-"}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-sm">
+                            <TableCell className="text-center text-sm font-mono">
                               {item.localCurrency || data.currency || "—"}
                             </TableCell>
                             <TableCell className="text-right font-mono text-sm tabular-nums">

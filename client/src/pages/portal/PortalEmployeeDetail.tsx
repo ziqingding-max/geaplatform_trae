@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { formatDate } from "@/lib/format";
 
 import { useI18n } from "@/lib/i18n";
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -203,7 +204,7 @@ export default function PortalEmployeeDetail() {
                 } />
                 <ContactRow icon={Globe} label={t("portal_employees.personal.nationality")} value={employee.nationality} />
                 <ContactRow icon={Calendar} label="Date of Birth" value={
-                  employee.dateOfBirth ? new Date(employee.dateOfBirth).toLocaleDateString() : undefined
+                  employee.dateOfBirth ? formatDate(employee.dateOfBirth) : undefined
                 } />
               </div>
             </CardContent>
@@ -229,7 +230,7 @@ export default function PortalEmployeeDetail() {
                       <InfoField icon={User} label="Full Name" value={`${employee.firstName} ${employee.lastName}`} hint="Legal name as per ID" />
                       <InfoField icon={Mail} label="Email Address" value={employee.email} hint="Primary contact email" />
                       <InfoField icon={Phone} label="Phone Number" value={employee.phone} hint="Contact number" />
-                      <InfoField icon={Calendar} label="Date of Birth" value={employee.dateOfBirth ? new Date(employee.dateOfBirth).toLocaleDateString() : undefined} hint="DD/MM/YYYY" />
+                      <InfoField icon={Calendar} label="Date of Birth" value={employee.dateOfBirth ? formatDate(employee.dateOfBirth) : undefined} hint="DD MMM YYYY" />
                       <InfoField icon={User} label={t("portal_employees.personal.gender")} value={
                         employee.gender === "male" ? "Male" :
                         employee.gender === "female" ? "Female" :
@@ -277,8 +278,8 @@ export default function PortalEmployeeDetail() {
                         employee.employmentType === "fixed_term" ? "Fixed Term" :
                         employee.employmentType
                       } hint="Contract duration type" />
-                      <InfoField icon={Calendar} label="Start Date" value={employee.startDate ? new Date(employee.startDate).toLocaleDateString() : undefined} hint="Employment start date" />
-                      <InfoField icon={Calendar} label="End Date" value={employee.endDate ? new Date(employee.endDate).toLocaleDateString() : undefined} hint="Contract end date (if fixed term)" />
+                      <InfoField icon={Calendar} label="Start Date" value={employee.startDate ? formatDate(employee.startDate) : undefined} hint="Employment start date" />
+                      <InfoField icon={Calendar} label="End Date" value={employee.endDate ? formatDate(employee.endDate) : undefined} hint="Contract end date (if fixed term)" />
                       <InfoField icon={MapPin} label="Employment Country" value={employee.country} hint="Country of employment" />
                       <InfoField icon={Briefcase} label={t("portal_employees.employment.department")} value={employee.department} hint="Organizational department" />
                       <InfoField icon={Briefcase} label="Job Title" value={employee.jobTitle} hint="Current position" />
@@ -295,12 +296,41 @@ export default function PortalEmployeeDetail() {
                       <InfoField icon={CreditCard} label="Salary Currency" value={employee.salaryCurrency} hint="Payment currency" />
                     </div>
 
+                    {/* Bank Details Section */}
+                    {(() => {
+                      const bd = employee.bankDetails as Record<string, string> | null;
+                      if (!bd || typeof bd !== "object" || Object.keys(bd).length === 0) return null;
+                      return (
+                        <>
+                          <SectionTitle className="mt-8">{t("portal_employees.employment.bankDetails") || "Bank Details"}</SectionTitle>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-y-5 gap-x-8">
+                            {Object.entries(bd).map(([key, value]) => (
+                              value ? (
+                                <InfoField
+                                  key={key}
+                                  icon={CreditCard}
+                                  label={key.replace(/([A-Z])/g, " $1").replace(/^./, (s: string) => s.toUpperCase()).trim()}
+                                  value={String(value)}
+                                  hint={`Bank ${key}`}
+                                />
+                              ) : null
+                            ))}
+                          </div>
+                        </>
+                      );
+                    })()}
+
                     {employee.requiresVisa && (
                       <>
                         <SectionTitle className="mt-8">Visa Information</SectionTitle>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-y-5 gap-x-8">
-                          <InfoField icon={Shield} label="Visa Status" value={employee.visaStatus || "Pending"} hint="Current visa processing status" />
-                          <InfoField icon={Calendar} label="Visa Expiry" value={employee.visaExpiryDate ? new Date(employee.visaExpiryDate).toLocaleDateString() : undefined} hint="Visa expiration date" />
+                          <InfoField icon={Shield} label="Visa Status" value={
+                            employee.visaStatus
+                              ? employee.visaStatus.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+                              : "Pending"
+                          } hint="Current visa processing status" />
+                          <InfoField icon={Calendar} label="Visa Expiry" value={employee.visaExpiryDate ? formatDate(employee.visaExpiryDate) : undefined} hint="Visa expiration date" />
+                          <InfoField icon={FileText} label="Visa Notes" value={employee.visaNotes} hint="Additional visa information" />
                         </div>
                       </>
                     )}
@@ -365,7 +395,7 @@ export default function PortalEmployeeDetail() {
                                 <p className="text-sm font-medium">{doc.documentName}</p>
                                 <p className="text-xs text-muted-foreground">
                                   {docTypeLabels[doc.documentType] || doc.documentType}
-                                  {doc.uploadedAt && ` · ${new Date(doc.uploadedAt).toLocaleDateString()}`}
+                                  {doc.uploadedAt && ` · ${formatDate(doc.uploadedAt)}`}
                                 </p>
                               </div>
                             </div>
@@ -409,8 +439,8 @@ export default function PortalEmployeeDetail() {
                               <div>
                                 <p className="text-sm font-medium">{contract.contractType || "Employment Contract"}</p>
                                 <p className="text-xs text-muted-foreground">
-                                  {contract.effectiveDate && `Effective: ${new Date(contract.effectiveDate).toLocaleDateString()}`}
-                                  {contract.expiryDate && ` — Expires: ${new Date(contract.expiryDate).toLocaleDateString()}`}
+                                  {contract.effectiveDate && `Effective: ${formatDate(contract.effectiveDate)}`}
+                                  {contract.expiryDate && ` — Expires: ${formatDate(contract.expiryDate)}`}
                                 </p>
                               </div>
                             </div>

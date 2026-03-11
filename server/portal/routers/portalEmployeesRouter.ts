@@ -61,9 +61,11 @@ const PORTAL_EMPLOYEE_FIELDS = {
   requiresVisa: employees.requiresVisa,
   visaStatus: employees.visaStatus,
   visaExpiryDate: employees.visaExpiryDate,
+  visaNotes: employees.visaNotes,
+  bankDetails: employees.bankDetails,
   createdAt: employees.createdAt,
   updatedAt: employees.updatedAt,
-  // NOTE: estimatedEmployerCost, visaNotes, and other internal fields are NOT included
+  // NOTE: estimatedEmployerCost and other internal cost fields are NOT included
 } as const;
 
 export const portalEmployeesRouter = portalRouter({

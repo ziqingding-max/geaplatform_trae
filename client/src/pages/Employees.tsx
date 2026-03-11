@@ -1204,6 +1204,20 @@ function EmployeeDetail({ id }: { id: number }) {
                   <InfoRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Est. Employer Cost" value={formatCurrencyAmount(employee.estimatedEmployerCost, employee.salaryCurrency, { showCurrency: true })} />
                   <InfoRow icon={<DollarSign className="w-3.5 h-3.5" />} label="Total Empl. Cost" value={formatCurrencyAmount(parseFloat(employee.baseSalary?.toString() || "0") + parseFloat(employee.estimatedEmployerCost?.toString() || "0"), employee.salaryCurrency, { showCurrency: true })} />
                 </div>
+                {(() => {
+                  const bd = employee.bankDetails as Record<string, string> | null;
+                  if (!bd || typeof bd !== "object" || Object.keys(bd).length === 0) return null;
+                  return (
+                    <div className="border-t pt-3 mt-3">
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Bank Details</div>
+                      {Object.entries(bd).map(([key, value]) => (
+                        value ? (
+                          <InfoRow key={key} icon={<CreditCard className="w-3.5 h-3.5" />} label={key.replace(/([A-Z])/g, " $1").replace(/^./, (s: string) => s.toUpperCase()).trim()} value={String(value)} />
+                        ) : null
+                      ))}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </div>

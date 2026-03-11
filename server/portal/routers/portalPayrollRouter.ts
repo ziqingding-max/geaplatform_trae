@@ -56,7 +56,7 @@ export const portalPayrollRouter = portalRouter({
 
       if (input.year) {
         conditions.push(
-          sql`YEAR(${payrollRuns.payrollMonth}) = ${input.year}`
+          sql`substr(${payrollRuns.payrollMonth}, 1, 4) = ${String(input.year)}`
         );
       }
 
@@ -173,7 +173,7 @@ export const portalPayrollRouter = portalRouter({
         .select({
           id: payrollItems.id,
           employeeId: payrollItems.employeeId,
-          employeeName: sql<string>`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
+          employeeName: sql<string>`(${employees.firstName} || ' ' || ${employees.lastName})`,
           employeeCode: employees.employeeCode,
           jobTitle: employees.jobTitle,
           baseSalary: payrollItems.baseSalary,
