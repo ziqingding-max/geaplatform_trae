@@ -19,7 +19,7 @@ import {
   billingEntities, countriesConfig, leaveTypes, publicHolidays,
   countryGuideChapters, countrySocialInsuranceItems, aiProviderConfigs
 } from '../drizzle/schema';
-import { eq, and, notInArray } from 'drizzle-orm';
+import { eq, and, not, inArray } from 'drizzle-orm';
 import { socialInsuranceRules } from './seed/data/socialInsuranceRules';
 // @ts-ignore
 import seedData from '../data/seed-migration-data.json';
@@ -131,11 +131,17 @@ async function seedSystemData(db: any) {
     console.log(`[Seed] Processed ${count} countries`);
 
     // Clean up any test/orphan countries not in baseline data
-    const validCodes = countries.map((c: any) => c.countryCode || c.code);
-    const deleted = await db.delete(countriesConfig)
-      .where(notInArray(countriesConfig.countryCode, validCodes));
-    if (deleted.changes > 0) {
-      console.log(`[Seed] Removed ${deleted.changes} orphan/test countries not in baseline`);
+    const validCodes = new Set(countries.map((c: any) => c.countryCode || c.code));
+    const allDbCountries = await db.select({ countryCode: countriesConfig.countryCode }).from(countriesConfig);
+    const orphanCodes = allDbCountries
+      .map((r: any) => r.countryCode)
+      .filter((code: string) => !validCodes.has(code));
+    if (orphanCodes.length > 0) {
+      for (const code of orphanCodes) {
+        await db.delete(countriesConfig).where(eq(countriesConfig.countryCode, code));
+        console.log(`[Seed] Removed orphan/test country: ${code}`);
+      }
+      console.log(`[Seed] Cleaned up ${orphanCodes.length} orphan/test countries`);
     }
   }
 
