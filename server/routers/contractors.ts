@@ -320,8 +320,12 @@ export const contractorsRouter = router({
         // Currency is locked from the contractor record
         const currency = contractor.currency || input.currency;
         const result = await createContractorAdjustment({
-          ...input,
+          contractorId: input.contractorId,
+          type: input.type,
+          description: input.description,
+          amount: input.amount,
           currency,
+          attachmentUrl: input.attachmentUrl || null,
           customerId: contractor.customerId,
           effectiveMonth: input.date.substring(0, 7) + "-01", // Derive from date: YYYY-MM-01
           status: "submitted" as any,
