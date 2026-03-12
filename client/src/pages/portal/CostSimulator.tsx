@@ -38,21 +38,21 @@ export default function CostSimulator() {
       <div className="p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">{t("nav.costSimulator")}</h1>
-          <p className="text-muted-foreground">Calculate employer costs and social insurance contributions instantly.</p>
+          <p className="text-muted-foreground">{t("cost_simulator.subtitle")}</p>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
           {/* Input Card */}
           <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-md">
             <CardHeader>
-              <CardTitle>Simulation Parameters</CardTitle>
+              <CardTitle>{t("cost_simulator.parameters_title")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Country/Region</Label>
+                <Label>{t("cost_simulator.country_label")}</Label>
                 <Select value={countryCode} onValueChange={setCountryCode}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select country" />
+                    <SelectValue placeholder={t("cost_simulator.country_placeholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {countries?.map((c) => (
@@ -66,10 +66,10 @@ export default function CostSimulator() {
 
               {countryCode === "CN" && (
                 <div className="space-y-2">
-                  <Label>City / Region</Label>
+                  <Label>{t("cost_simulator.city_label")}</Label>
                   <Select value={regionCode} onValueChange={setRegionCode}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select city" />
+                      <SelectValue placeholder={t("cost_simulator.city_placeholder")} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="CN-BJ">Beijing</SelectItem>
@@ -85,12 +85,12 @@ export default function CostSimulator() {
               )}
 
               <div className="space-y-2">
-                <Label>Monthly Gross Salary ({selectedCountry?.localCurrency || "USD"})</Label>
+                <Label>{t("cost_simulator.salary_label", { currency: selectedCountry?.localCurrency || "USD" })}</Label>
                 <Input 
                   type="number" 
                   value={salary} 
                   onChange={(e) => setSalary(e.target.value)} 
-                  placeholder="e.g. 5000"
+                  placeholder={t("cost_simulator.salary_placeholder")}
                 />
               </div>
 
@@ -100,7 +100,7 @@ export default function CostSimulator() {
                 className="w-full"
               >
                 {calculateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calculator className="mr-2 h-4 w-4" />}
-                Calculate
+                {t("cost_simulator.calculate")}
               </Button>
             </CardContent>
           </Card>
@@ -109,28 +109,28 @@ export default function CostSimulator() {
           {result && (
             <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-md animate-in fade-in slide-in-from-bottom-4">
               <CardHeader className="bg-primary/5 pb-4">
-                <CardTitle className="text-primary">Total Employment Cost</CardTitle>
+                <CardTitle className="text-primary">{t("cost_simulator.total_employment_cost")}</CardTitle>
                 <div className="text-3xl font-bold mt-2">
                   {formatCurrency(result.countryCode === "CN" ? "CNY" : selectedCountry?.localCurrency || "USD", parseFloat(result.totalCost))}
                 </div>
                 <CardDescription>
-                  Base Salary + Employer Contributions
+                  {t("cost_simulator.base_plus_contributions")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-6">
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Base Salary</span>
+                    <span className="text-muted-foreground">{t("cost_simulator.base_salary")}</span>
                     <span className="font-medium">{formatCurrency(selectedCountry?.localCurrency, result.salary)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Employer Contributions</span>
+                    <span className="text-muted-foreground">{t("cost_simulator.employer_contributions")}</span>
                     <span className="font-medium text-destructive">+{formatCurrency(selectedCountry?.localCurrency, parseFloat(result.totalEmployer))}</span>
                   </div>
                 </div>
 
                 <div className="border-t pt-4">
-                  <h4 className="font-semibold mb-3 text-sm">Employer Contribution Breakdown</h4>
+                  <h4 className="font-semibold mb-3 text-sm">{t("cost_simulator.breakdown_title")}</h4>
                   <div className="space-y-2">
                     {result.items.map((item: any) => (
                       parseFloat(item.employerContribution) > 0 && (
@@ -146,7 +146,7 @@ export default function CostSimulator() {
                 <div className="bg-muted/50 p-3 rounded-lg flex gap-2 text-xs text-muted-foreground">
                   <Info className="w-4 h-4 flex-shrink-0" />
                   <p>
-                    This is an estimation based on current statutory regulations. Actual costs may vary depending on specific employee circumstances.
+                    {t("cost_simulator.disclaimer")}
                   </p>
                 </div>
               </CardContent>

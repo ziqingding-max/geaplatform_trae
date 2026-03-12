@@ -411,6 +411,23 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_compliance.view_mode.calendar": "Calendar",
     "portal_compliance.view_mode.list": "List",
 
+    // Portal Cost Simulator
+    "cost_simulator.subtitle": "Calculate employer costs and social insurance contributions instantly.",
+    "cost_simulator.parameters_title": "Simulation Parameters",
+    "cost_simulator.country_label": "Country/Region",
+    "cost_simulator.country_placeholder": "Select country",
+    "cost_simulator.city_label": "City / Region",
+    "cost_simulator.city_placeholder": "Select city",
+    "cost_simulator.salary_label": "Monthly Gross Salary ({currency})",
+    "cost_simulator.salary_placeholder": "e.g. 5000",
+    "cost_simulator.calculate": "Calculate",
+    "cost_simulator.total_employment_cost": "Total Employment Cost",
+    "cost_simulator.base_plus_contributions": "Base Salary + Employer Contributions",
+    "cost_simulator.base_salary": "Base Salary",
+    "cost_simulator.employer_contributions": "Employer Contributions",
+    "cost_simulator.breakdown_title": "Employer Contribution Breakdown",
+    "cost_simulator.disclaimer": "This is an estimation based on current statutory regulations. Actual costs may vary depending on specific employee circumstances.",
+
     // Portal Dashboard
     "portal_dashboard.action_items.all_caught_up": "All caught up!",
     "portal_dashboard.action_items.no_pending_actions": "No pending actions required",
@@ -2348,6 +2365,23 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_compliance.upcoming_holidays.banner_title": "即将到来的假期（未来30天）",
     "portal_compliance.view_mode.calendar": "日历",
     "portal_compliance.view_mode.list": "列表",
+
+    // Portal Cost Simulator
+    "cost_simulator.subtitle": "即时计算雇主成本和社会保险缴费。",
+    "cost_simulator.parameters_title": "模拟参数",
+    "cost_simulator.country_label": "国家/地区",
+    "cost_simulator.country_placeholder": "选择国家",
+    "cost_simulator.city_label": "城市 / 地区",
+    "cost_simulator.city_placeholder": "选择城市",
+    "cost_simulator.salary_label": "月度总薪资 ({currency})",
+    "cost_simulator.salary_placeholder": "例如 5000",
+    "cost_simulator.calculate": "计算",
+    "cost_simulator.total_employment_cost": "总雇佣成本",
+    "cost_simulator.base_plus_contributions": "基本工资 + 雇主缴费",
+    "cost_simulator.base_salary": "基本工资",
+    "cost_simulator.employer_contributions": "雇主缴费",
+    "cost_simulator.breakdown_title": "雇主缴费明细",
+    "cost_simulator.disclaimer": "此为基于现行法定规定的估算值。实际成本可能因具体员工情况而有所不同。",
 
     // Portal Dashboard
     "portal_dashboard.action_items.all_caught_up": "全部处理完毕！",
