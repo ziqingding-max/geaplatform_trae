@@ -38,7 +38,7 @@ export const portalKnowledgeBaseRouter = portalRouter({
           )
         )
         .orderBy(desc(knowledgeItems.publishedAt), desc(knowledgeItems.createdAt))
-        .limit(100);
+        .limit(500);
 
       const topicCounts = topics.reduce<Record<string, number>>((acc, topic) => {
         acc[topic] = items.filter((item) => item.topic === topic).length;
