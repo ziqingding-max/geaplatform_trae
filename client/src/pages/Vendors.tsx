@@ -327,6 +327,77 @@ function VendorList() {
   );
 }
 
+/* ========== Vendor Bills Section (embedded in VendorDetail) ========== */
+function VendorBillsSection({ vendorId, vendorName, t }: { vendorId: number; vendorName: string; t: (key: string) => string }) {
+  const [, setLocation] = useLocation();
+  const { data, isLoading } = trpc.vendorBills.list.useQuery({
+    vendorId,
+    limit: 50,
+  });
+
+  const bills = Array.isArray(data) ? data : (data as any)?.data || [];
+
+  const statusColorMap: Record<string, string> = {
+    draft: "bg-gray-500/15 text-gray-600 border-gray-500/30",
+    pending_approval: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+    approved: "bg-blue-500/15 text-blue-600 border-blue-500/30",
+    paid: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
+    partially_paid: "bg-teal-500/15 text-teal-600 border-teal-500/30",
+    overdue: "bg-red-500/15 text-red-600 border-red-500/30",
+    cancelled: "bg-gray-500/15 text-gray-400 border-gray-500/30",
+    void: "bg-gray-500/15 text-gray-400 border-gray-500/30",
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+          <FileText className="w-4 h-4" /> {t("vendorBills.vendor.bills")} ({bills.length})
+        </CardTitle>
+        <Button size="sm" variant="outline" onClick={() => setLocation("/vendor-bills")}>
+          {t("vendorBills.title")}
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-20 w-full" />
+        ) : bills.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">{t("vendorBills.vendor.noBills")}</p>
+        ) : (
+          <div className="rounded-lg border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">{t("vendorBills.table.billNumberHeader")}</TableHead>
+                  <TableHead className="text-xs">{t("vendorBills.table.statusHeader")}</TableHead>
+                  <TableHead className="text-xs">{t("vendorBills.table.billDateHeader")}</TableHead>
+                  <TableHead className="text-xs text-right">{t("vendorBills.table.totalHeader")}</TableHead>
+                  <TableHead className="w-8"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {bills.map((bill: any) => (
+                  <TableRow key={bill.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/vendor-bills/${bill.id}`)}>
+                    <TableCell className="font-medium text-sm">{bill.billNumber}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-xs ${statusColorMap[bill.status] || ""}`}>
+                        {t(`vendorBills.status.${bill.status}`)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{formatDate(bill.billDate)}</TableCell>
+                    <TableCell className="text-sm text-right font-medium">{bill.currency} {formatAmount(parseFloat(bill.totalAmount || "0"))}</TableCell>
+                    <TableCell><ChevronRight className="w-4 h-4 text-muted-foreground" /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 /* ========== Vendor Detail ========== */
 function VendorDetail({ id }: { id: number }) {
   const { t } = useI18n();
@@ -506,6 +577,9 @@ function VendorDetail({ id }: { id: number }) {
             </Card>
           )}
         </div>
+
+        {/* Vendor Bills */}
+        <VendorBillsSection vendorId={id} vendorName={vendor.name} t={t} />
 
         <div className="text-xs text-muted-foreground">
           {t("employees.detail.field.createdAt")}: {formatDate(vendor.createdAt)} · {t("employees.detail.field.updatedAt")}: {formatDate(vendor.updatedAt)}

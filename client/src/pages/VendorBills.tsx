@@ -1,14 +1,15 @@
 /**
- * GEA Admin — Vendor Bill Management
- * List + Detail view for tracking payments to vendors (Accounts Payable)
- * Includes: Multi-file upload → AI parse with system context → Cross-validation → Review & confirm → Create bill + allocations
+ * GEA Admin — Vendor Bills (Unified Rebuild)
+ * Combines AI-parsed and manual bill creation into one consistent flow.
+ * Full i18n support. Integrated cost allocation with employee revenue ceiling.
  */
 import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
-import { formatDate, formatMonth, formatAmount, countryName } from "@/lib/format";
-import { DatePicker, MonthPicker } from "@/components/DatePicker";
+import { DatePicker } from "@/components/DatePicker";
+import { formatDate, formatAmount, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useI18n } from "@/lib/i18n";
+import { useState, useMemo, useCallback } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,691 +19,326 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter,
+  Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter,
 } from "@/components/ui/table";
 import {
-  FileStack, Plus, Search, ArrowLeft, ChevronRight, DollarSign, Calendar,
-  Pencil, Trash2, CheckCircle2, Clock, AlertTriangle, XCircle, Eye, Building2,
-  Upload, Sparkles, FileText, Loader2, Bot, Check, X, FileUp, Info, Shield,
-  ArrowRightLeft, Users, Receipt,
+  FileStack, Plus, Search, ArrowLeft, Upload, Check, X, Loader2,
+  Clock, AlertTriangle, DollarSign, FileText, Users, Pencil,
+  XCircle, Trash2, Download, ChevronRight, Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { useI18n } from "@/lib/i18n";
-const statusColors: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-600 border-gray-300",
-  pending_approval: "bg-amber-100 text-amber-700 border-amber-300",
-  approved: "bg-blue-100 text-blue-700 border-blue-300",
-  paid: "bg-emerald-100 text-emerald-700 border-emerald-300",
-  partially_paid: "bg-cyan-100 text-cyan-700 border-cyan-300",
-  overdue: "bg-red-100 text-red-700 border-red-300",
-  cancelled: "bg-gray-100 text-gray-500 border-gray-300",
-  void: "bg-slate-100 text-slate-500 border-slate-300",
-};
-
-const statusLabels: Record<string, string> = {
-  draft: "Draft",
-  pending_approval: "Pending Approval",
-  approved: "Approved",
-  paid: "Paid",
-  partially_paid: "Partially Paid",
-  overdue: "Overdue",
-  cancelled: "Cancelled",
-  void: "Void",
-};
-
-const categoryLabels: Record<string, string> = {
-  payroll_processing: "Payroll Processing",
-  social_contributions: "Social Contributions",
-  tax_filing: "Tax Filing",
-  legal_compliance: "Legal & Compliance",
-  visa_immigration: "Visa & Immigration",
-  hr_advisory: "HR Advisory",
-  it_services: "IT Services",
-  office_rent: "Office Rent",
-  insurance: "Insurance",
-  bank_charges: "Bank Charges",
-  consulting: "Consulting",
-  equipment: "Equipment",
-  travel: "Travel",
-  marketing: "Marketing",
-  other: "Other",
-};
-
-const fileTypeLabels: Record<string, string> = {
-  invoice: "Invoice",
-  payment_receipt: "Payment Receipt / POP",
-  statement: "Statement",
-  other: "Other",
-};
-
-function ConfidenceBadge({ score }: { score: number }) {
-  if (score >= 85) return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 text-[10px] px-1.5">{score}%</Badge>;
-  if (score >= 60) return <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-300 text-[10px] px-1.5">{score}%</Badge>;
-  return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300 text-[10px] px-1.5">{score}%</Badge>;
+/* ─── Helpers ─── */
+function safeDate(d: any): string {
+  if (!d) return "";
+  if (typeof d === "string") return d.substring(0, 10);
+  return new Date(d).toISOString().substring(0, 10);
+}
+function safeMonth(d: any): string {
+  if (!d) return "";
+  if (typeof d === "string") return d.substring(0, 7);
+  return new Date(d).toISOString().substring(0, 7);
 }
 
-const safeDate = (d: string | Date | null | undefined): string => {
-  if (!d) return "";
-  try {
-    return new Date(d).toISOString().split("T")[0];
-  } catch (e) {
-    return "";
-  }
+const statusColorMap: Record<string, string> = {
+  draft: "bg-gray-500/15 text-gray-600 border-gray-500/30",
+  pending_approval: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+  approved: "bg-blue-500/15 text-blue-600 border-blue-500/30",
+  paid: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
+  partially_paid: "bg-teal-500/15 text-teal-600 border-teal-500/30",
+  overdue: "bg-red-500/15 text-red-600 border-red-500/30",
+  cancelled: "bg-gray-500/15 text-gray-400 border-gray-500/30",
+  void: "bg-gray-500/15 text-gray-400 border-gray-500/30",
 };
 
-const safeMonth = (d: string | Date | null | undefined): string => {
-  if (!d) return "";
-  try {
-    return new Date(d).toISOString().slice(0, 7);
-  } catch (e) {
-    return "";
-  }
-};
+const categoryKeys = [
+  "payroll_processing", "social_contributions", "tax_filing", "legal_compliance",
+  "visa_immigration", "hr_advisory", "it_services", "office_rent", "insurance",
+  "bank_charges", "consulting", "equipment", "travel", "marketing", "other",
+];
 
-/* ========== Multi-File AI Upload & Parse Drawer ========== */
-function AIUploadDrawer({
-  open,
-  onOpenChange,
-  vendors,
-  onBillCreated,
-  onVendorAutoCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  vendors: any[];
-  onBillCreated: () => void;
-  onVendorAutoCreated: () => void;
-}) {
+const statusKeys = [
+  "draft", "pending_approval", "approved", "paid", "partially_paid", "overdue", "cancelled", "void",
+];
+
+const itemTypeKeys = [
+  "employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other",
+];
+
+interface LineItem {
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  amount: string;
+  itemType: string;
+  relatedEmployeeId?: string;
+  employeeName?: string;
+  relatedCountryCode?: string;
+  matchConfidence?: number;
+  matchReason?: string;
+  confidence?: number;
+}
+
+function ConfidenceBadge({ score }: { score: number }) {
+  if (score >= 85) return <Badge variant="outline" className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-[10px] px-1">{score}%</Badge>;
+  if (score >= 50) return <Badge variant="outline" className="bg-amber-500/15 text-amber-600 border-amber-500/30 text-[10px] px-1">{score}%</Badge>;
+  return <Badge variant="outline" className="bg-red-500/15 text-red-600 border-red-500/30 text-[10px] px-1">{score}%</Badge>;
+}
+
+/* ========== AI Upload Drawer ========== */
+function AIUploadDrawer({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void }) {
   const { t } = useI18n();
   const [step, setStep] = useState<"upload" | "parsing" | "review">("upload");
-  const [dragOver, setDragOver] = useState(false);
-  const [serviceMonth, setServiceMonth] = useState("");
-  const [pendingFiles, setPendingFiles] = useState<Array<{ file: File; type: "invoice" | "payment_receipt" | "statement" | "other"; uploaded?: { url: string; key: string } }>>([]);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [serviceMonth, setServiceMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
   const [parsedResult, setParsedResult] = useState<any>(null);
-  const [selectedVendorId, setSelectedVendorId] = useState<number>(0);
+
+  // Review state
   const [editedBill, setEditedBill] = useState<any>({});
-  const [editedItems, setEditedItems] = useState<any[]>([]);
+  const [editedItems, setEditedItems] = useState<LineItem[]>([]);
   const [editedAllocations, setEditedAllocations] = useState<any[]>([]);
   const [editedPayment, setEditedPayment] = useState<any>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const uploadMutation = trpc.pdfParsing.uploadFile.useMutation();
-  const parseMultiMutation = trpc.pdfParsing.parseMultiFile.useMutation();
+  const vendorsQuery = trpc.vendors.list.useQuery({ limit: 500 });
+  const vendors = (vendorsQuery.data as any)?.data || vendorsQuery.data || [];
+
+  const parseMutation = trpc.pdfParsing.parseMultiFile.useMutation();
   const applyMutation = trpc.pdfParsing.applyMultiFileParse.useMutation();
 
-  function resetState() {
-    setStep("upload");
-    setServiceMonth("");
-    setPendingFiles([]);
-    setParsedResult(null);
-    setSelectedVendorId(0);
-    setEditedBill({});
-    setEditedItems([]);
-    setEditedAllocations([]);
-    setEditedPayment(null);
-  }
-
-  function handleOpenChange(open: boolean) {
-    if (!open) resetState();
-    onOpenChange(open);
-  }
-
-  function addFiles(fileList: FileList | File[]) {
-    const maxSize = 16 * 1024 * 1024;
-    const allowedTypes = ["application/pdf", "image/png", "image/jpeg", "image/jpg", "image/webp"];
-    const newFiles: typeof pendingFiles = [];
-
-    for (const file of Array.from(fileList)) {
-      if (file.size > maxSize) {
-        toast.error(`"${file.name}" is too large (max 16MB). Skipped.`);
-        continue;
-      }
-      if (!allowedTypes.includes(file.type)) {
-        toast.error(`"${file.name}" is not a supported format. Skipped.`);
-        continue;
-      }
-      if (pendingFiles.length + newFiles.length >= 10) {
-        toast.error("Maximum 10 files allowed.");
-        break;
-      }
-      // Auto-detect file type from name
-      const nameLower = file.name.toLowerCase();
-      let type: "invoice" | "payment_receipt" | "statement" | "other" = "invoice";
-      if (nameLower.includes("pop") || nameLower.includes("receipt") || nameLower.includes("payment") || nameLower.includes("proof")) {
-        type = "payment_receipt";
-      } else if (nameLower.includes("statement") || nameLower.includes("bank")) {
-        type = "statement";
-      }
-      newFiles.push({ file, type });
-    }
-
-    if (newFiles.length > 0) {
-      setPendingFiles([...pendingFiles, ...newFiles]);
-    }
-  }
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    addFiles(e.dataTransfer.files);
-  }, [pendingFiles]);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback(() => setDragOver(false), []);
-
-  function removeFile(idx: number) {
-    setPendingFiles(pendingFiles.filter((_, i) => i !== idx));
-  }
-
-  function updateFileType(idx: number, type: "invoice" | "payment_receipt" | "statement" | "other") {
-    const updated = [...pendingFiles];
-    updated[idx] = { ...updated[idx], type };
-    setPendingFiles(updated);
-  }
-
-  async function handleStartAnalysis() {
-    if (!serviceMonth) {
-      toast.error("Please select a service month.");
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (pendingFiles.length + files.length > 10) {
+      toast.error(t("vendorBills.toast.maxFiles"));
       return;
     }
-    if (pendingFiles.length === 0) {
-      toast.error("Please add at least one file.");
-      return;
-    }
+    setPendingFiles((prev) => [...prev, ...files]);
+  }
+
+  async function handleAnalyze() {
+    if (!serviceMonth) { toast.error(t("vendorBills.toast.selectMonth")); return; }
+    if (pendingFiles.length === 0) { toast.error(t("vendorBills.toast.addFile")); return; }
 
     setStep("parsing");
-
     try {
-      // Step 1: Upload all files to S3
-      const uploadedFiles: Array<{ fileUrl: string; fileKey: string; fileName: string; fileType: "invoice" | "payment_receipt" | "statement" | "other" }> = [];
+      const formData = new FormData();
+      pendingFiles.forEach((f) => formData.append("files", f));
+      formData.append("serviceMonth", serviceMonth);
 
-      for (const pf of pendingFiles) {
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve, reject) => {
-          reader.onload = () => {
-            const result = reader.result as string;
-            resolve(result.split(",")[1]);
-          };
-          reader.onerror = reject;
-          reader.readAsDataURL(pf.file);
-        });
+      const res = await fetch("/api/upload-vendor-docs", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      const { fileKeys, fileTypes: detectedTypes } = await res.json();
 
-        const uploadResult = await uploadMutation.mutateAsync({
-          fileName: pf.file.name,
-          fileBase64: base64,
-          contentType: pf.file.type,
-        });
+      const filesPayload = (fileKeys as string[]).map((key: string, idx: number) => ({
+        fileUrl: key,
+        fileKey: key,
+        fileName: pendingFiles[idx]?.name || `file-${idx}`,
+        fileType: (detectedTypes?.[idx] || "invoice") as "invoice" | "payment_receipt" | "statement" | "other",
+      }));
 
-        uploadedFiles.push({
-          fileUrl: uploadResult.url,
-          fileKey: uploadResult.key,
-          fileName: pf.file.name,
-          fileType: pf.type as "invoice" | "payment_receipt" | "statement" | "other",
-        });
-      }
-
-      // Step 2: Call multi-file AI parse
-      const result = await parseMultiMutation.mutateAsync({
-        files: uploadedFiles,
+      const result = await parseMutation.mutateAsync({
+        files: filesPayload,
         serviceMonth,
       });
 
       setParsedResult(result);
-      const p = result.parsed;
 
-      // Pre-fill vendor
-      if (p.vendorMatch?.vendor?.id) {
-        setSelectedVendorId(p.vendorMatch.vendor.id);
-      }
-      if (p.vendorMatch?.status === "auto_created") {
-        onVendorAutoCreated();
-      }
-
-      // Pre-fill bill data
-      setEditedBill({
-        billNumber: p.bill?.invoiceNumber || "",
-        billDate: p.bill?.invoiceDate || "",
-        dueDate: p.bill?.dueDate || "",
-        billMonth: p.bill?.serviceMonth || serviceMonth,
-        currency: p.bill?.currency || "USD",
-        subtotal: p.bill?.subtotal?.toString() || "",
-        tax: p.bill?.tax?.toString() || "0",
-        totalAmount: p.bill?.totalAmount?.toString() || "",
-        category: p.bill?.category || "other",
-        billType: p.bill?.billType || "operational",
-        description: p.bill?.description || "",
-      });
-
-      // Pre-fill line items
-      if (p.lineItems?.length > 0) {
-        setEditedItems(p.lineItems.map((item: any) => ({
-          description: item.description || "",
-          quantity: item.quantity?.toString() || "1",
-          unitPrice: item.unitPrice?.toString() || "0",
-          amount: item.amount?.toString() || "0",
-          itemType: item.itemType || "other",
-          relatedEmployeeId: item.matchedEmployeeId || undefined,
-          relatedCustomerId: item.matchedCustomerId || undefined,
-          relatedCountryCode: item.countryCode || "",
-          employeeName: item.employeeName || "",
-          confidence: item.confidence || 0,
-          matchConfidence: item.matchConfidence || 0,
-          matchReason: item.matchReason || "",
-        })));
-      }
-
-      // Pre-fill allocation suggestions (new schema uses hasAllocation flag instead of null object)
-      if (p.lineItems?.length > 0) {
-        const allocs = p.lineItems
-          .filter((item: any) => item.allocationSuggestion?.hasAllocation)
-          .map((item: any) => ({
-            ...item.allocationSuggestion,
-            allocatedAmount: item.allocationSuggestion.allocatedAmount?.toString() || "0",
-            enabled: true,
-          }));
-        setEditedAllocations(allocs);
-      }
-
-      // Pre-fill payment info (new schema uses hasPaymentInfo flag instead of null object)
-      if (p.payment?.hasPaymentInfo) {
-        setEditedPayment({
-          paidDate: p.payment.paymentDate || "",
-          paidAmount: p.payment.localAmount?.toString() || p.bill?.totalAmount?.toString() || "",
-          bankReference: p.payment.transactionReference || "",
-          bankName: p.payment.bankName || "",
-          bankFee: p.payment.bankFee?.toString() || "0",
+      // Populate review state from AI result
+      const p = (result as any)?.parsed;
+      if (p) {
+        setEditedBill({
+          vendorId: p.matchedVendorId || "",
+          billNumber: p.billNumber || "",
+          category: p.category || "other",
+          billType: p.billType || "operational",
+          billDate: p.billDate || "",
+          dueDate: p.dueDate || "",
+          billMonth: serviceMonth,
+          currency: p.currency || "USD",
+          subtotal: p.subtotal?.toString() || "",
+          tax: p.tax?.toString() || "0",
+          totalAmount: p.totalAmount?.toString() || "",
+          description: p.description || "",
+          internalNotes: p.internalNotes || "",
         });
+        setEditedItems(
+          (p.lineItems || []).map((li: any) => ({
+            description: li.description || "",
+            quantity: li.quantity?.toString() || "1",
+            unitPrice: li.unitPrice?.toString() || "",
+            amount: li.amount?.toString() || "0",
+            itemType: li.itemType || "other",
+            relatedEmployeeId: li.relatedEmployeeId?.toString() || "",
+            employeeName: li.employeeName || "",
+            relatedCountryCode: li.relatedCountryCode || "",
+            matchConfidence: li.matchConfidence || 0,
+            matchReason: li.matchReason || "",
+            confidence: li.confidence || 0,
+          }))
+        );
+        setEditedAllocations(
+          (p.suggestedAllocations || []).map((a: any) => ({ ...a, enabled: true }))
+        );
+        if (p.payment) {
+          setEditedPayment({ ...p.payment });
+        }
       }
-
       setStep("review");
-      toast.success(`AI analysis complete! ${p.crossValidation?.documentsAnalyzed || pendingFiles.length} document(s) analyzed.`);
     } catch (err: any) {
-      toast.error(err.message || "Failed to analyze documents");
+      toast.error(err.message || t("vendorBills.toast.analysisFailed"));
       setStep("upload");
     }
   }
 
   async function handleConfirmCreate() {
-    if (!selectedVendorId) {
-      toast.error("Please select a vendor");
-      return;
-    }
-    if (!editedBill.billNumber?.trim()) {
-      toast.error("Bill number is required");
-      return;
-    }
-    if (!editedBill.totalAmount) {
-      toast.error("Total amount is required");
-      return;
-    }
+    if (!editedBill.vendorId) { toast.error(t("vendorBills.toast.selectVendor")); return; }
+    if (!editedBill.billNumber) { toast.error(t("vendorBills.toast.billNumberRequired")); return; }
+    if (!editedBill.totalAmount) { toast.error(t("vendorBills.toast.totalRequired")); return; }
 
     try {
-      const payload: any = {
-        vendorId: selectedVendorId,
+      const parsed = parsedResult?.parsed;
+      await applyMutation.mutateAsync({
+        vendorId: parseInt(editedBill.vendorId),
         billNumber: editedBill.billNumber,
+        category: editedBill.category,
+        billType: editedBill.billType || "operational",
         billDate: editedBill.billDate,
-        dueDate: editedBill.dueDate || undefined,
-        billMonth: editedBill.billMonth || undefined,
-        currency: editedBill.currency || "USD",
-        subtotal: editedBill.subtotal || editedBill.totalAmount,
+        dueDate: editedBill.dueDate,
+        billMonth: editedBill.billMonth || serviceMonth,
+        currency: editedBill.currency,
+        subtotal: editedBill.subtotal,
         tax: editedBill.tax || "0",
         totalAmount: editedBill.totalAmount,
-        category: editedBill.category || "other",
-        billType: editedBill.billType || "operational",
-        description: editedBill.description || undefined,
-        items: editedItems.length > 0 ? editedItems.map((item) => ({
+        description: editedBill.description || "",
+        items: editedItems.map((item) => ({
           description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
+          quantity: item.quantity || "1",
+          unitPrice: item.unitPrice || item.amount,
           amount: item.amount,
-          itemType: item.itemType || "other",
-          relatedEmployeeId: item.relatedEmployeeId || undefined,
-          relatedCustomerId: item.relatedCustomerId || undefined,
+          itemType: (item.itemType || "other") as "employment_cost" | "service_fee" | "visa_fee" | "equipment_purchase" | "deposit" | "deposit_refund" | "other",
+          relatedEmployeeId: item.relatedEmployeeId ? parseInt(String(item.relatedEmployeeId)) : undefined,
           relatedCountryCode: item.relatedCountryCode || undefined,
-        })) : undefined,
-      };
-
-      // Add payment info if available
-      if (editedPayment && editedPayment.paidDate) {
-        payload.paymentInfo = editedPayment;
-      }
-
-      // Add enabled allocations
-      const enabledAllocs = editedAllocations.filter((a) => a.enabled);
-      if (enabledAllocs.length > 0) {
-        payload.allocations = enabledAllocs.map((a) => ({
+        })),
+        allocations: editedAllocations.filter((a) => a.enabled).map((a) => ({
           invoiceId: a.invoiceId,
           employeeId: a.employeeId,
-          allocatedAmount: a.allocatedAmount,
-          description: a.reason || t("vendorBills.review.aiSuggestedAllocation"),
-        }));
-      }
+          allocatedAmount: a.allocatedAmount?.toString(),
+          description: a.reason || "",
+        })),
+        paymentInfo: editedPayment ? {
+          paidDate: editedPayment.paidDate,
+          paidAmount: editedPayment.paidAmount,
+          bankName: editedPayment.bankName || "",
+          bankReference: editedPayment.bankReference || "",
+          bankFee: editedPayment.bankFee || "0",
+        } : undefined,
+        receiptFileUrl: parsedResult?.fileKeys?.[0] || undefined,
+        receiptFileKey: parsedResult?.fileKeys?.[0] || undefined,
+      });
 
-      const result = await applyMutation.mutateAsync(payload);
-
-      const msg = [t("vendorBills.toast.billCreatedWithId", { id: String(result.id) })];
-      if (result.itemsCreated > 0) msg.push(t("vendorBills.toast.itemsCreated", { count: String(result.itemsCreated) }));
-      if (result.allocationsCreated > 0) msg.push(t("vendorBills.toast.allocationsCreated", { count: String(result.allocationsCreated) }));
-      toast.success(msg.join(", "));
-
-      handleOpenChange(false);
-      onBillCreated();
+      toast.success(t("vendorBills.toast.createdSuccess"));
+      onCreated();
+      onOpenChange(false);
+      // Reset
+      setStep("upload");
+      setPendingFiles([]);
+      setParsedResult(null);
+      setEditedBill({});
+      setEditedItems([]);
+      setEditedAllocations([]);
+      setEditedPayment(null);
     } catch (err: any) {
       toast.error(err.message || t("vendorBills.toast.createFailed"));
     }
   }
 
+  const cv = parsedResult?.parsed?.crossValidation;
+
   return (
-    <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent side="right" className="!w-[680px] !max-w-[90vw] sm:!max-w-[680px] flex flex-col p-0">
-        <SheetHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
-          <SheetTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-primary" />
-            {step === "upload" && t("vendorBills.aiUpload.title")}
-            {step === "parsing" && t("vendorBills.aiUpload.parsingTitle")}
-            {step === "review" && t("vendorBills.review.title")}
-          </SheetTitle>
-          <SheetDescription>
-            {step === "upload" && t("vendorBills.aiUpload.prompt")}
-            {step === "parsing" && t("vendorBills.aiUpload.parsingDescription")}
-            {step === "review" && t("vendorBills.review.description")}
-          </SheetDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>{t("vendorBills.actions.analyzeWithAI")}</SheetTitle>
         </SheetHeader>
-
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-
-        {/* ===== Step 1: Upload ===== */}
-        {step === "upload" && (
-          <div className="space-y-5">
-            {/* Guidance Banner */}
-            <div className="flex gap-3 p-3.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-800">
-              <Info className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <div className="text-sm space-y-1">
-                <p className="font-medium">{t("vendorBills.aiUpload.singleVendorTitle")}</p>
-                <p className="text-blue-600 text-xs">{t("vendorBills.aiUpload.singleVendorHint")}</p>
+        <div className="mt-4 space-y-6">
+          {/* Step: Upload */}
+          {step === "upload" && (
+            <div className="space-y-4">
+              <div>
+                <Label>{t("vendorBills.details.serviceMonthLabel")}</Label>
+                <Input type="month" value={serviceMonth} onChange={(e) => setServiceMonth(e.target.value)} className="mt-1" />
               </div>
-            </div>
-
-            {/* Service Month Selection */}
-            <div className="space-y-2">
-              <Label className="font-medium">{t("vendorBills.aiUpload.serviceMonthLabel")}</Label>
-              <MonthPicker
-                value={serviceMonth}
-                onChange={setServiceMonth}
-                placeholder={t("vendorBills.aiUpload.serviceMonthHint")}
-              />
-            </div>
-
-            {/* Drop Zone */}
-            <div
-              className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
-                dragOver ? "border-primary bg-primary/5 scale-[1.01]" : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/30"
-              }`}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                accept=".pdf,.png,.jpg,.jpeg,.webp"
-                multiple
-                onChange={(e) => {
-                  if (e.target.files) addFiles(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-              <FileUp className="w-10 h-10 mx-auto mb-3 text-muted-foreground/50" />
-              <h3 className="text-base font-semibold mb-1">{t("vendorBills.aiUpload.dropzone")}</h3>
-              <p className="text-xs text-muted-foreground">{t("vendorBills.aiUpload.dropzoneHint")}</p>
-            </div>
-
-            {/* File List */}
-            {pendingFiles.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">{t("vendorBills.aiUpload.filesReady", { count: String(pendingFiles.length) })}</Label>
-                <div className="space-y-1.5">
-                  {pendingFiles.map((pf, idx) => (
-                    <div key={idx} className="flex items-center gap-2 p-2.5 rounded-lg border bg-muted/30">
-                      <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                      <span className="text-sm truncate flex-1 min-w-0" title={pf.file.name}>{pf.file.name}</span>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">{(pf.file.size / 1024).toFixed(0)} KB</span>
-                      <Select value={pf.type} onValueChange={(v) => updateFileType(idx, v as "invoice" | "payment_receipt" | "statement" | "other")}>
-                        <SelectTrigger className="w-[140px] h-7 text-xs flex-shrink-0">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(fileTypeLabels).map(([k, v]) => (
-                            <SelectItem key={k} value={k}>{v}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeFile(idx)}>
-                        <X className="w-3.5 h-3.5" />
+              <div className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                onClick={() => document.getElementById("ai-file-input")?.click()}>
+                <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">{t("vendorBills.aiUpload.dropzone")}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t("vendorBills.aiUpload.dropzoneHint")}</p>
+                <input id="ai-file-input" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.webp" className="hidden" onChange={handleFileChange} />
+              </div>
+              {pendingFiles.length > 0 && (
+                <div className="space-y-1">
+                  {pendingFiles.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm p-2 rounded bg-muted/50">
+                      <span className="truncate">{f.name}</span>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setPendingFiles(pendingFiles.filter((_, j) => j !== i))}>
+                        <X className="w-3 h-3" />
                       </Button>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => handleOpenChange(false)}>{t("common.cancel")}</Button>
-              <Button
-                onClick={handleStartAnalysis}
-                disabled={pendingFiles.length === 0 || !serviceMonth}
-                className="gap-2"
-              >
-                <Sparkles className="w-4 h-4" />
-                Analyze {pendingFiles.length} File{pendingFiles.length !== 1 ? "s" : ""} with AI
+              )}
+              <Button onClick={handleAnalyze} disabled={pendingFiles.length === 0} className="w-full">
+                <Upload className="w-4 h-4 mr-2" />{t("vendorBills.actions.analyzeWithAI")}
               </Button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ===== Step 2: Parsing Animation ===== */}
-        {step === "parsing" && (
-          <div className="py-16 text-center space-y-6">
-            <div className="relative mx-auto w-20 h-20">
-              <div className="absolute inset-0 rounded-full border-4 border-primary/20 animate-ping" />
-              <div className="absolute inset-2 rounded-full border-4 border-primary/30 animate-pulse" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Bot className="w-10 h-10 text-primary animate-bounce" />
-              </div>
+          {/* Step: Parsing */}
+          {step === "parsing" && (
+            <div className="text-center py-16">
+              <Loader2 className="w-10 h-10 mx-auto mb-4 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">{t("vendorBills.review.aiAnalyzingDocs")}</p>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold">{t("vendorBills.review.aiAnalyzingDocs").replace("{count}", String(pendingFiles.length))}</h3>
-              <p className="text-sm text-muted-foreground mt-1">{t("vendorBills.aiUpload.parsingCrossReference")}</p>
-            </div>
-            <div className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>{t("vendorBills.aiUpload.parsingTimeEstimate")}</span>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* ===== Step 3: Review Results ===== */}
-        {step === "review" && parsedResult?.parsed && (() => {
-          const p = parsedResult.parsed;
-          const cv = p.crossValidation;
-          const vm = p.vendorMatch;
-
-          return (
-            <div className="space-y-5">
-              {/* Overall Confidence + Cross-Validation Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Confidence Score */}
-                <div className={`flex items-center gap-3 p-3 rounded-lg border ${
-                  p.overallConfidence >= 85 ? "bg-emerald-50 border-emerald-200 text-emerald-800" :
-                  p.overallConfidence >= 60 ? "bg-amber-50 border-amber-200 text-amber-800" :
-                  "bg-red-50 border-red-200 text-red-800"
-                }`}>
-                  <Shield className="w-5 h-5 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold">Overall Confidence: {p.overallConfidence}%</p>
-                    <p className="text-xs opacity-80">{cv?.documentsAnalyzed || 0} document(s) analyzed</p>
-                  </div>
-                </div>
-
-                {/* Cross-Validation */}
-                <div className={`flex items-center gap-3 p-3 rounded-lg border ${
-                  cv?.warnings?.length > 0 ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-emerald-50 border-emerald-200 text-emerald-800"
-                }`}>
-                  <ArrowRightLeft className="w-5 h-5 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {cv?.lineItemsSumMatchesTotal ? "Line items match total ✓" : "Line items mismatch ⚠"}
-                      {cv?.invoiceVsPaymentMatch === true && " · Payment verified ✓"}
-                      {cv?.invoiceVsPaymentMatch === false && " · Payment mismatch ⚠"}
-                    </p>
-                    {cv?.warnings?.length > 0 && (
-                      <p className="text-xs opacity-80">{cv.warnings.length} warning(s)</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Warnings */}
-              {cv?.warnings?.length > 0 && (
-                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 space-y-1">
-                  {cv.warnings.map((w: string, i: number) => (
-                    <div key={i} className="flex items-start gap-2 text-xs text-amber-800">
-                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                      <span>{w}</span>
-                    </div>
-                  ))}
+          {/* Step: Review */}
+          {step === "review" && (
+            <div className="space-y-6">
+              {/* Overall confidence */}
+              {cv && (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
+                  <span className="text-sm font-medium">{t("vendorBills.review.overallConfidence")}</span>
+                  <ConfidenceBadge score={cv.overallConfidence || 0} />
+                  {cv.warnings?.length > 0 && (
+                    <span className="text-xs text-amber-600 ml-auto">{t("vendorBills.review.warningsCount", { count: String(cv.warnings.length) })}</span>
+                  )}
                 </div>
               )}
 
-              {/* Vendor Match Status */}
-              <div>
-                <Label className="text-sm font-medium">{t("vendorBills.review.vendorLabel")}</Label>
-                {vm?.status === "auto_created" && (
-                  <div className="flex items-center gap-2 p-2 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-xs mb-2">
-                    <Sparkles className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>{t("vendorBills.review.vendorAutoCreated").replace("{vendorName}", vm.vendor?.name || "").replace("{country}", countryName(vm.vendor?.country) || "-")}</span>
-                  </div>
-                )}
-                {vm?.status === "matched" && (
-                  <div className="flex items-center gap-2 p-2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs mb-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>{t("vendorBills.review.vendorMatched").replace("{vendorName}", vm.vendor?.name || "").replace("{vendorCode}", vm.vendor?.vendorCode || "-")}</span>
-                  </div>
-                )}
-                {vm?.status === "not_found" && (
-                  <div className="flex items-center gap-2 p-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-xs mb-2">
-                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>{t("vendorBills.review.vendorNotFound")}</span>
-                  </div>
-                )}
-                <Select
-                  value={selectedVendorId ? String(selectedVendorId) : ""}
-                  onValueChange={(v) => setSelectedVendorId(parseInt(v))}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select vendor" /></SelectTrigger>
-                  <SelectContent>
-                    {vendors.map((v) => (
-                      <SelectItem key={v.id} value={String(v.id)}>{v.name} ({v.vendorCode})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Bill Details */}
-              <div>
-                <Label className="text-sm font-medium flex items-center gap-2 mb-2">
-                  <Receipt className="w-4 h-4" /> Bill Details
-                  {p.bill?.confidence != null && <ConfidenceBadge score={p.bill.confidence} />}
-                </Label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">{t("vendorBills.details.billNumberLabel")} *</Label>
-                    <Input value={editedBill.billNumber || ""} onChange={(e) => setEditedBill({ ...editedBill, billNumber: e.target.value })} className="h-8 text-sm" />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">{t("vendorBills.details.categoryLabel")}</Label>
-                    <Select value={editedBill.category || "other"} onValueChange={(v) => setEditedBill({ ...editedBill, category: v })}>
-                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(categoryLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">{t("vendorBills.details.billTypeLabel")}</Label>
-                    <Select value={editedBill.billType || "operational"} onValueChange={(v) => setEditedBill({ ...editedBill, billType: v })}>
-                      <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="operational">{t("vendorBills.details.billTypeOperational")}</SelectItem>
-                        <SelectItem value="deposit">{t("vendorBills.details.billTypeDeposit")}</SelectItem>
-                        <SelectItem value="deposit_refund">{t("vendorBills.details.billTypeDepositRefund")}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">{t("vendorBills.details.currencyLabel")}</Label>
-                    <CurrencySelect value={editedBill.currency || "USD"} onValueChange={(v) => setEditedBill({ ...editedBill, currency: v })} />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">{t("vendorBills.details.billDateLabel")}</Label>
-                    <DatePicker value={editedBill.billDate || ""} onChange={(d) => setEditedBill({ ...editedBill, billDate: d })} placeholder="Bill date" />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">{t("vendorBills.details.dueDateLabel")}</Label>
-                    <DatePicker value={editedBill.dueDate || ""} onChange={(d) => setEditedBill({ ...editedBill, dueDate: d })} placeholder="Due date" />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">{t("vendorBills.details.serviceMonthLabel")}</Label>
-                    <MonthPicker value={editedBill.billMonth || ""} onChange={(m) => setEditedBill({ ...editedBill, billMonth: m })} placeholder="Service month" />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">{t("vendorBills.details.subtotalLabel")}</Label>
-                    <Input type="number" step="0.01" value={editedBill.subtotal || ""} onChange={(e) => setEditedBill({ ...editedBill, subtotal: e.target.value })} className="h-8 text-sm" />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">{t("vendorBills.details.taxLabel")}</Label>
-                    <Input type="number" step="0.01" value={editedBill.tax || "0"} onChange={(e) => setEditedBill({ ...editedBill, tax: e.target.value })} className="h-8 text-sm" />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">{t("vendorBills.details.totalAmountLabel")}</Label>
-                    <Input type="number" step="0.01" value={editedBill.totalAmount || ""} onChange={(e) => setEditedBill({ ...editedBill, totalAmount: e.target.value })} className={`h-8 text-sm font-semibold ${!editedBill.totalAmount ? "border-amber-400" : ""}`} />
-                  </div>
-                </div>
-                {editedBill.description && (
-                  <div className="mt-2">
-                    <Label className="text-xs text-muted-foreground">{t("vendorBills.details.descriptionLabel")}</Label>
-                    <Textarea value={editedBill.description} onChange={(e) => setEditedBill({ ...editedBill, description: e.target.value })} rows={2} className="text-sm" />
-                  </div>
-                )}
-              </div>
+              {/* Bill Details Form (shared with manual) */}
+              <BillFormFields bill={editedBill} onChange={setEditedBill} vendors={vendors} t={t} />
 
               {/* Payment Info (from POP) */}
               {editedPayment && (
                 <div>
                   <Label className="text-sm font-medium flex items-center gap-2 mb-2">
                     <DollarSign className="w-4 h-4" /> {t("vendorBills.payment.title")}
-                    {p.payment?.confidence != null && <ConfidenceBadge score={p.payment.confidence} />}
                   </Label>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 rounded-lg bg-emerald-50/50 border border-emerald-200/50">
                     <div>
                       <Label className="text-xs text-muted-foreground">{t("vendorBills.payment.dateLabel")}</Label>
-                      <DatePicker value={editedPayment.paidDate || ""} onChange={(d) => setEditedPayment({ ...editedPayment, paidDate: d })} placeholder={t("vendorBills.payment.datePlaceholder")} />
+                      <DatePicker value={editedPayment.paidDate || ""} onChange={(d: string) => setEditedPayment({ ...editedPayment, paidDate: d })} placeholder={t("vendorBills.payment.datePlaceholder")} />
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">{t("vendorBills.payment.paidAmountLabel")}</Label>
@@ -730,94 +366,7 @@ function AIUploadDrawer({
               )}
 
               {/* Line Items */}
-              {editedItems.length > 0 && (
-                <div>
-                  <Label className="text-sm font-medium flex items-center gap-2 mb-2">
-                    <FileText className="w-4 h-4" /> {t("vendorBills.lineItems.title")} ({editedItems.length})
-                  </Label>
-                  <div className="rounded-lg border overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-xs">{t("vendorBills.details.descriptionLabel")}</TableHead>
-                          <TableHead className="text-xs w-28">Cost Type</TableHead>
-                          <TableHead className="text-xs text-right w-16">{t("vendorBills.lineItems.quantityHeader")}</TableHead>
-                          <TableHead className="text-xs text-right w-24">{t("vendorBills.lineItems.amountHeader")}</TableHead>
-                          <TableHead className="text-xs w-36">{t("vendorBills.lineItems.employeeHeader")}</TableHead>
-                          <TableHead className="text-xs w-16">{t("vendorBills.lineItems.countryHeader")}</TableHead>
-                          <TableHead className="text-xs w-16">{t("vendorBills.lineItems.confidenceHeader")}</TableHead>
-                          <TableHead className="w-8"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {editedItems.map((item, idx) => {
-                          // Determine row highlight based on match confidence
-                          const matchConf = item.matchConfidence || 0;
-                          const rowBg = matchConf >= 85 ? "bg-emerald-50/30" : matchConf >= 50 ? "bg-amber-50/50" : item.relatedEmployeeId ? "bg-red-50/30" : "";
-                          return (
-                          <TableRow key={idx} className={rowBg}>
-                            <TableCell>
-                              <Input value={item.description} onChange={(e) => {
-                                const n = [...editedItems]; n[idx] = { ...n[idx], description: e.target.value }; setEditedItems(n);
-                              }} className="h-7 text-xs" />
-                            </TableCell>
-                            <TableCell>
-                              <select
-                                value={item.itemType || "other"}
-                                onChange={(e) => {
-                                  const n = [...editedItems]; n[idx] = { ...n[idx], itemType: e.target.value }; setEditedItems(n);
-                                }}
-                                className="h-7 text-xs border rounded px-1 w-full bg-background"
-                              >
-                                <option value="employment_cost">Employment Cost</option>
-                                <option value="service_fee">Service Fee</option>
-                                <option value="visa_fee">Visa Fee</option>
-                                <option value="equipment_purchase">Equipment</option>
-                                <option value="deposit">Deposit</option>
-                                <option value="deposit_refund">Deposit Refund</option>
-                                <option value="other">Other</option>
-                              </select>
-                            </TableCell>
-                            <TableCell>
-                              <Input type="number" value={item.quantity} onChange={(e) => {
-                                const n = [...editedItems]; n[idx] = { ...n[idx], quantity: e.target.value }; setEditedItems(n);
-                              }} className="h-7 text-xs text-right" />
-                            </TableCell>
-                            <TableCell>
-                              <Input type="number" step="0.01" value={item.amount} onChange={(e) => {
-                                const n = [...editedItems]; n[idx] = { ...n[idx], amount: e.target.value }; setEditedItems(n);
-                              }} className="h-7 text-xs text-right font-medium" />
-                            </TableCell>
-                            <TableCell>
-                              <div className="text-xs" title={item.matchReason || ""}>
-                                <div className="flex items-center gap-1 truncate max-w-[140px]">
-                                  {item.employeeName || "—"}
-                                  {item.relatedEmployeeId && matchConf >= 85 && <span className="text-emerald-600 ml-0.5" title="High confidence match">●</span>}
-                                  {item.relatedEmployeeId && matchConf >= 50 && matchConf < 85 && <span className="text-amber-500 ml-0.5" title="Medium confidence - please verify">●</span>}
-                                  {item.relatedEmployeeId && matchConf < 50 && <span className="text-red-500 ml-0.5" title="Low confidence - needs manual check">●</span>}
-                                </div>
-                                {item.matchReason && <p className="text-[10px] text-muted-foreground truncate">{item.matchReason}</p>}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Input value={item.relatedCountryCode || ""} onChange={(e) => {
-                                const n = [...editedItems]; n[idx] = { ...n[idx], relatedCountryCode: e.target.value }; setEditedItems(n);
-                              }} className="h-7 text-xs" placeholder="—" />
-                            </TableCell>
-                            <TableCell><ConfidenceBadge score={item.confidence || 0} /></TableCell>
-                            <TableCell>
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setEditedItems(editedItems.filter((_, i) => i !== idx))}>
-                                <X className="w-3 h-3" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              )}
+              <LineItemsEditor items={editedItems} onChange={setEditedItems} t={t} showConfidence />
 
               {/* Allocation Suggestions */}
               {editedAllocations.length > 0 && (
@@ -841,16 +390,9 @@ function AIUploadDrawer({
                         {editedAllocations.map((alloc, idx) => (
                           <TableRow key={idx} className={alloc.enabled ? "" : "opacity-50"}>
                             <TableCell>
-                              <input
-                                type="checkbox"
-                                checked={alloc.enabled}
-                                onChange={(e) => {
-                                  const n = [...editedAllocations];
-                                  n[idx] = { ...n[idx], enabled: e.target.checked };
-                                  setEditedAllocations(n);
-                                }}
-                                className="h-4 w-4 rounded border-gray-300"
-                              />
+                              <input type="checkbox" checked={alloc.enabled}
+                                onChange={(e) => { const n = [...editedAllocations]; n[idx] = { ...n[idx], enabled: e.target.checked }; setEditedAllocations(n); }}
+                                className="h-4 w-4 rounded border-gray-300" />
                             </TableCell>
                             <TableCell className="text-xs">ID: {alloc.employeeId}</TableCell>
                             <TableCell className="text-xs">ID: {alloc.invoiceId}</TableCell>
@@ -868,12 +410,12 @@ function AIUploadDrawer({
                 </div>
               )}
 
-              {/* Notes from AI */}
+              {/* AI Notes */}
               {cv?.notes?.length > 0 && (
                 <div className="p-3 rounded-lg bg-muted/50 border space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">{t("vendorBills.review.aiNotes")}</p>
                   {cv.notes.map((n: string, i: number) => (
-                    <p key={i} className="text-xs text-muted-foreground">• {n}</p>
+                    <p key={i} className="text-xs text-muted-foreground">{n}</p>
                   ))}
                 </div>
               )}
@@ -891,199 +433,334 @@ function AIUploadDrawer({
                 </Button>
               </div>
             </div>
-          );
-        })()}
-        </div>{/* end scrollable area */}
+          )}
+        </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/* ========== Shared Bill Form Fields ========== */
+function BillFormFields({ bill, onChange, vendors, t }: { bill: any; onChange: (b: any) => void; vendors: any[]; t: (key: string) => string }) {
+  const set = (key: string, val: any) => onChange({ ...bill, [key]: val });
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-xs">{t("vendorBills.detail.vendor")} *</Label>
+          <Select value={bill.vendorId?.toString() || ""} onValueChange={(v) => set("vendorId", v)}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={t("vendorBills.createBill.selectVendor")} /></SelectTrigger>
+            <SelectContent>
+              {vendors.map((v: any) => (
+                <SelectItem key={v.id} value={v.id.toString()}>{v.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">{t("vendorBills.table.billNumberHeader")} *</Label>
+          <Input value={bill.billNumber || ""} onChange={(e) => set("billNumber", e.target.value)} className="h-8 text-sm" />
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <Label className="text-xs">{t("vendorBills.createBill.billType")}</Label>
+          <Select value={bill.billType || "operational"} onValueChange={(v) => set("billType", v)}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="operational">{t("vendorBills.billType.operational")}</SelectItem>
+              <SelectItem value="deposit">{t("vendorBills.billType.deposit")}</SelectItem>
+              <SelectItem value="deposit_refund">{t("vendorBills.billType.deposit_refund")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">{t("vendorBills.filters.allCategories")}</Label>
+          <Select value={bill.category || "other"} onValueChange={(v) => set("category", v)}>
+            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {categoryKeys.map((c) => (
+                <SelectItem key={c} value={c}>{t(`vendorBills.category.${c}`)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">{t("vendorBills.details.serviceMonthLabel")}</Label>
+          <Input type="month" value={bill.billMonth || ""} onChange={(e) => set("billMonth", e.target.value)} className="h-8 text-sm" />
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <Label className="text-xs">{t("vendorBills.details.billDateLabel")}</Label>
+          <DatePicker value={bill.billDate || ""} onChange={(d: string) => set("billDate", d)} placeholder={t("vendorBills.details.billDatePlaceholder")} />
+        </div>
+        <div>
+          <Label className="text-xs">{t("vendorBills.details.dueDateLabel")}</Label>
+          <DatePicker value={bill.dueDate || ""} onChange={(d: string) => set("dueDate", d)} placeholder={t("vendorBills.details.dueDatePlaceholder")} />
+        </div>
+        <div>
+          <Label className="text-xs">{t("vendorBills.details.currencyLabel")}</Label>
+          <CurrencySelect value={bill.currency || "USD"} onValueChange={(v) => set("currency", v)} />
+        </div>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <Label className="text-xs">{t("vendorBills.details.subtotalLabel")}</Label>
+          <Input type="number" step="0.01" value={bill.subtotal || ""} onChange={(e) => set("subtotal", e.target.value)} className="h-8 text-sm" />
+        </div>
+        <div>
+          <Label className="text-xs">{t("vendorBills.details.taxLabel")}</Label>
+          <Input type="number" step="0.01" value={bill.tax || "0"} onChange={(e) => set("tax", e.target.value)} className="h-8 text-sm" />
+        </div>
+        <div>
+          <Label className="text-xs">{t("vendorBills.details.totalAmountLabel")} *</Label>
+          <Input type="number" step="0.01" value={bill.totalAmount || ""} onChange={(e) => set("totalAmount", e.target.value)} className="h-8 text-sm font-medium" />
+        </div>
+      </div>
+      <div>
+        <Label className="text-xs">{t("vendorBills.details.descriptionLabel")}</Label>
+        <Textarea value={bill.description || ""} onChange={(e) => set("description", e.target.value)} rows={2} className="text-sm" />
+      </div>
+    </div>
+  );
+}
+
+/* ========== Shared Line Items Editor ========== */
+function LineItemsEditor({ items, onChange, t, showConfidence = false }: { items: LineItem[]; onChange: (items: LineItem[]) => void; t: (key: string) => string; showConfidence?: boolean }) {
+  function addItem() {
+    onChange([...items, { description: "", quantity: "1", unitPrice: "0", amount: "0", itemType: "other" }]);
+  }
+  function removeItem(idx: number) {
+    onChange(items.filter((_, i) => i !== idx));
+  }
+  function updateItem(idx: number, field: string, value: string) {
+    const n = [...items];
+    n[idx] = { ...n[idx], [field]: value };
+    // Auto-calc amount from qty * unitPrice
+    if (field === "quantity" || field === "unitPrice") {
+      const qty = parseFloat(field === "quantity" ? value : n[idx].quantity) || 0;
+      const up = parseFloat(field === "unitPrice" ? value : n[idx].unitPrice) || 0;
+      n[idx].amount = (qty * up).toFixed(2);
+    }
+    onChange(n);
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <Label className="text-sm font-medium flex items-center gap-2">
+          <FileText className="w-4 h-4" /> {t("vendorBills.createBill.lineItemsTitle")} ({items.length})
+        </Label>
+        <Button variant="outline" size="sm" onClick={addItem} className="h-7 text-xs">
+          <Plus className="w-3 h-3 mr-1" /> {t("vendorBills.createBill.addLineItem")}
+        </Button>
+      </div>
+      {items.length > 0 && (
+        <div className="rounded-lg border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">{t("vendorBills.details.descriptionLabel")}</TableHead>
+                <TableHead className="text-xs w-28">{t("vendorBills.createBill.costType")}</TableHead>
+                <TableHead className="text-xs text-right w-16">{t("vendorBills.lineItems.quantityHeader")}</TableHead>
+                <TableHead className="text-xs text-right w-24">{t("vendorBills.lineItems.unitPriceHeader")}</TableHead>
+                <TableHead className="text-xs text-right w-24">{t("vendorBills.lineItems.amountHeader")}</TableHead>
+                {showConfidence && <TableHead className="text-xs w-36">{t("vendorBills.lineItems.employeeHeader")}</TableHead>}
+                {showConfidence && <TableHead className="text-xs w-16">{t("vendorBills.lineItems.confidenceHeader")}</TableHead>}
+                <TableHead className="w-8"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.map((item, idx) => {
+                const matchConf = item.matchConfidence || 0;
+                const rowBg = showConfidence ? (matchConf >= 85 ? "bg-emerald-50/30" : matchConf >= 50 ? "bg-amber-50/50" : item.relatedEmployeeId ? "bg-red-50/30" : "") : "";
+                return (
+                  <TableRow key={idx} className={rowBg}>
+                    <TableCell>
+                      <Input value={item.description} onChange={(e) => updateItem(idx, "description", e.target.value)} className="h-7 text-xs" />
+                    </TableCell>
+                    <TableCell>
+                      <select value={item.itemType || "other"} onChange={(e) => updateItem(idx, "itemType", e.target.value)}
+                        className="h-7 text-xs border rounded px-1 w-full bg-background">
+                        {itemTypeKeys.map((k) => (
+                          <option key={k} value={k}>{t(`vendorBills.itemType.${k}`)}</option>
+                        ))}
+                      </select>
+                    </TableCell>
+                    <TableCell>
+                      <Input type="number" value={item.quantity} onChange={(e) => updateItem(idx, "quantity", e.target.value)} className="h-7 text-xs text-right" />
+                    </TableCell>
+                    <TableCell>
+                      <Input type="number" step="0.01" value={item.unitPrice} onChange={(e) => updateItem(idx, "unitPrice", e.target.value)} className="h-7 text-xs text-right" />
+                    </TableCell>
+                    <TableCell>
+                      <Input type="number" step="0.01" value={item.amount} onChange={(e) => updateItem(idx, "amount", e.target.value)} className="h-7 text-xs text-right font-medium" />
+                    </TableCell>
+                    {showConfidence && (
+                      <TableCell>
+                        <div className="text-xs" title={item.matchReason || ""}>
+                          <div className="flex items-center gap-1 truncate max-w-[140px]">
+                            {item.employeeName || "\u2014"}
+                            {item.relatedEmployeeId && matchConf >= 85 && <span className="text-emerald-600" title="High confidence">●</span>}
+                            {item.relatedEmployeeId && matchConf >= 50 && matchConf < 85 && <span className="text-amber-500" title="Medium confidence">●</span>}
+                            {item.relatedEmployeeId && matchConf < 50 && <span className="text-red-500" title="Low confidence">●</span>}
+                          </div>
+                          {item.matchReason && <p className="text-[10px] text-muted-foreground truncate">{item.matchReason}</p>}
+                        </div>
+                      </TableCell>
+                    )}
+                    {showConfidence && <TableCell><ConfidenceBadge score={item.confidence || 0} /></TableCell>}
+                    <TableCell>
+                      <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeItem(idx)}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
   );
 }
 
 /* ========== Vendor Bill List ========== */
 function VendorBillList() {
   const { t } = useI18n();
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [vendorFilter, setVendorFilter] = useState<string>("all");
   const [, setLocation] = useLocation();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [vendorFilter, setVendorFilter] = useState("all");
+  const [aiDrawerOpen, setAiDrawerOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [aiUploadOpen, setAiUploadOpen] = useState(false);
+
+  // Manual create state
+  const [newBill, setNewBill] = useState<any>({
+    vendorId: "", billNumber: "", category: "other", billType: "operational",
+    billDate: "", dueDate: "", billMonth: "", currency: "USD",
+    subtotal: "", tax: "0", totalAmount: "", description: "",
+  });
+  const [newItems, setNewItems] = useState<LineItem[]>([]);
 
   const { data, isLoading, refetch } = trpc.vendorBills.list.useQuery({
     search: search || undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
     category: categoryFilter !== "all" ? categoryFilter : undefined,
     vendorId: vendorFilter !== "all" ? parseInt(vendorFilter) : undefined,
-    limit: 100,
+    limit: 200,
   });
+  const vendorsQuery = trpc.vendors.list.useQuery({ limit: 500 });
+  const vendors = (vendorsQuery.data as any)?.data || vendorsQuery.data || [];
 
-  const { data: vendorsData, refetch: refetchVendors } = trpc.vendors.list.useQuery({ status: "active", limit: 200 });
-  const vendors = vendorsData?.data || [];
+  const bills = useMemo(() => {
+    const raw = (data as any)?.data || data || [];
+    return Array.isArray(raw) ? raw : [];
+  }, [data]);
+
+  const stats = useMemo(() => {
+    let total = 0, pending = 0, overdue = 0, totalAmount = 0;
+    bills.forEach((b: any) => {
+      total++;
+      if (b.status === "pending_approval" || b.status === "draft") pending++;
+      if (b.status === "overdue") overdue++;
+      totalAmount += parseFloat(b.totalAmount || "0");
+    });
+    return { total, pending, overdue, totalAmount };
+  }, [bills]);
+
   const createMutation = trpc.vendorBills.create.useMutation({
     onSuccess: () => {
       toast.success(t("vendorBills.toast.createdSuccess"));
       setCreateOpen(false);
+      setNewBill({ vendorId: "", billNumber: "", category: "other", billType: "operational", billDate: "", dueDate: "", billMonth: "", currency: "USD", subtotal: "", tax: "0", totalAmount: "", description: "" });
+      setNewItems([]);
       refetch();
-      setFormData(defaultForm);
     },
     onError: (err) => toast.error(err.message),
   });
 
-  const defaultForm = {
-    vendorId: 0, billNumber: "", billDate: "", dueDate: "", billMonth: "",
-    currency: "USD", subtotal: "", tax: "0", totalAmount: "",
-    status: "draft" as const, category: "other" as const, description: "", internalNotes: "",
-  };
-  const [formData, setFormData] = useState(defaultForm);
-  const [formErrors, setFormErrors] = useState<Record<string, boolean>>({});
+  function handleManualCreate() {
+    if (!newBill.vendorId) { toast.error(t("vendorBills.toast.selectVendor")); return; }
+    if (!newBill.billNumber) { toast.error(t("vendorBills.toast.billNumberRequired")); return; }
+    if (!newBill.totalAmount) { toast.error(t("vendorBills.toast.totalRequired")); return; }
 
-  function validateAndCreate() {
-    const errors: Record<string, boolean> = {};
-    if (!formData.vendorId) errors.vendorId = true;
-    if (!formData.billNumber.trim()) errors.billNumber = true;
-    if (!formData.billDate) errors.billDate = true;
-    if (!formData.totalAmount) errors.totalAmount = true;
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
-      toast.error("Please fill in all required fields");
-      return;
-    }
-    setFormErrors({});
-    const sub = formData.subtotal || formData.totalAmount;
     createMutation.mutate({
-      ...formData,
-      subtotal: sub,
-      dueDate: formData.dueDate || undefined,
-      billMonth: formData.billMonth || undefined,
+      vendorId: parseInt(newBill.vendorId),
+      billNumber: newBill.billNumber,
+      category: newBill.category,
+      billType: newBill.billType || "operational",
+      billDate: newBill.billDate || new Date().toISOString().slice(0, 10),
+      dueDate: newBill.dueDate || undefined,
+      billMonth: newBill.billMonth || undefined,
+      currency: newBill.currency,
+      subtotal: newBill.subtotal || newBill.totalAmount,
+      tax: newBill.tax || "0",
+      totalAmount: newBill.totalAmount,
+      description: newBill.description || "",
+      items: newItems.length > 0 ? newItems.map((item) => ({
+        description: item.description,
+        quantity: item.quantity || "1",
+        unitPrice: item.unitPrice || item.amount,
+        amount: item.amount,
+        itemType: (item.itemType || "other") as "employment_cost" | "service_fee" | "visa_fee" | "equipment_purchase" | "deposit" | "deposit_refund" | "other",
+      })) : undefined,
     });
   }
 
-  // Summary stats
-  const stats = useMemo(() => {
-    if (!data) return { total: 0, paid: 0, pending: 0, overdue: 0 };
-    const bills = data.data || [];
-    return {
-      total: data.total,
-      paid: bills.filter((b) => b.status === "paid").length,
-      pending: bills.filter((b) => ["draft", "pending_approval", "approved"].includes(b.status)).length,
-      overdue: bills.filter((b) => b.status === "overdue").length,
-    };
-  }, [data]);
+  function handleExportCSV() {
+    const headers = ["Bill #", "Vendor", "Category", "Status", "Bill Date", "Due Date", "Currency", "Total", "Paid"];
+    const rows = bills.map((b: any) => [
+      b.billNumber, b.vendor?.name || "", b.category, b.status,
+      safeDate(b.billDate), safeDate(b.dueDate), b.currency,
+      b.totalAmount, b.paidAmount || "0",
+    ]);
+    const csv = [headers, ...rows].map((r) => r.map((c: any) => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `vendor-bills-${new Date().toISOString().substring(0, 10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }
 
   return (
-    <Layout breadcrumb={["GEA", "Vendor Bills"]}>
+    <Layout breadcrumb={["GEA", t("vendorBills.title")]}>
       <div className="p-6 space-y-6 page-enter">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{t("vendorBills.title")}</h1>
-            <p className="text-sm text-muted-foreground mt-1">{t("vendorBills.description")}</p>
           </div>
-          <div className="flex items-center gap-2">
-            {/* AI Upload Button - Primary CTA */}
-            <Button
-              variant="default"
-              onClick={() => setAiUploadOpen(true)}
-              className="gap-2"
-            >
-              <Sparkles className="w-4 h-4" />
-              Upload & AI Parse
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={bills.length === 0}>
+              <Download className="w-4 h-4 mr-1" /> {t("vendorBills.actions.export")}
             </Button>
-
-            {/* Manual Create Button */}
-            <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormErrors({}); }}>
-              <DialogTrigger asChild>
-                <Button variant="outline"><Plus className="w-4 h-4 mr-2" />{t("vendorBills.actions.manualEntry")}</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>{t("vendorBills.createBill.manualTitle")}</DialogTitle>
-                </DialogHeader>
-                <div className="grid grid-cols-2 gap-4 py-4">
-                  <div className="col-span-2">
-                    <Label className={formErrors.vendorId ? "text-destructive" : ""}>{t("vendorBills.review.vendorLabel")}</Label>
-                    <Select value={formData.vendorId ? String(formData.vendorId) : ""} onValueChange={(v) => {
-                      const vid = parseInt(v);
-                      const vendor = vendors.find((vn) => vn.id === vid);
-                      setFormData({ ...formData, vendorId: vid, currency: vendor?.currency || formData.currency });
-                    }}>
-                      <SelectTrigger className={formErrors.vendorId ? "border-destructive" : ""}><SelectValue placeholder="Select vendor" /></SelectTrigger>
-                      <SelectContent>
-                        {vendors.map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.name} ({v.vendorCode})</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className={formErrors.billNumber ? "text-destructive" : ""}>{t("vendorBills.details.billNumberLabel")} *</Label>
-                    <Input value={formData.billNumber} onChange={(e) => setFormData({ ...formData, billNumber: e.target.value })} placeholder="Vendor's invoice number" className={formErrors.billNumber ? "border-destructive" : ""} />
-                  </div>
-                  <div>
-                    <Label>{t("vendorBills.details.categoryLabel")}</Label>
-                    <Select value={formData.category} onValueChange={(v: any) => setFormData({ ...formData, category: v })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(categoryLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label className={formErrors.billDate ? "text-destructive" : ""}>{t("vendorBills.details.billDateLabel")}</Label>
-                    <DatePicker value={formData.billDate} onChange={(date) => setFormData({ ...formData, billDate: date })} placeholder="Select bill date" className={formErrors.billDate ? "border-destructive" : ""} />
-                  </div>
-                  <div>
-                    <Label>{t("vendorBills.details.dueDateLabel")}</Label>
-                    <DatePicker value={formData.dueDate} onChange={(date) => setFormData({ ...formData, dueDate: date })} placeholder="Select due date" />
-                  </div>
-                  <div>
-                    <Label>{t("vendorBills.details.serviceMonthLabel")}</Label>
-                    <MonthPicker value={formData.billMonth} onChange={(month) => setFormData({ ...formData, billMonth: month })} placeholder="Select service month" />
-                  </div>
-                  <div>
-                    <Label>{t("vendorBills.details.currencyLabel")}</Label>
-                    <CurrencySelect value={formData.currency} onValueChange={(v) => setFormData({ ...formData, currency: v })} />
-                  </div>
-                  <div>
-                    <Label className={formErrors.totalAmount ? "text-destructive" : ""}>{t("vendorBills.details.totalAmountLabel")}</Label>
-                    <Input type="number" step="0.01" value={formData.totalAmount} onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value, subtotal: e.target.value })} placeholder="0.00" className={formErrors.totalAmount ? "border-destructive" : ""} />
-                  </div>
-                  <div>
-                    <Label>{t("vendorBills.details.taxLabel")}</Label>
-                    <Input type="number" step="0.01" value={formData.tax} onChange={(e) => setFormData({ ...formData, tax: e.target.value })} placeholder="0.00" />
-                  </div>
-                  <div className="col-span-2">
-                    <Label>{t("vendorBills.details.descriptionLabel")}</Label>
-                    <Textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={2} placeholder="Optional description..." />
-                  </div>
-                  <div className="col-span-2">
-                    <Label>{t("vendorBills.details.internalNotes")}</Label>
-                    <Textarea value={formData.internalNotes} onChange={(e) => setFormData({ ...formData, internalNotes: e.target.value })} rows={2} placeholder="Internal notes..." />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
-                  <Button onClick={validateAndCreate} disabled={createMutation.isPending}>
-                    {createMutation.isPending ? "Creating..." : "Create Bill"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <Button variant="outline" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="w-4 h-4 mr-1" /> {t("vendorBills.actions.createBill")}
+            </Button>
+            <Button size="sm" onClick={() => setAiDrawerOpen(true)}>
+              <Upload className="w-4 h-4 mr-1" /> {t("vendorBills.actions.analyzeWithAI")}
+            </Button>
           </div>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-4 gap-4">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "Total Bills", value: stats.total, icon: FileStack, color: "text-foreground" },
-            { label: t("vendorBills.table.paidHeader"), value: stats.paid, icon: CheckCircle2, color: "text-emerald-600" },
-            { label: "Pending", value: stats.pending, icon: Clock, color: "text-amber-600" },
-            { label: "Overdue", value: stats.overdue, icon: AlertTriangle, color: "text-red-600" },
-          ].map((s) => (
-            <Card key={s.label}>
+            { label: t("vendorBills.stats.totalBills"), value: stats.total, icon: FileStack, color: "text-foreground" },
+            { label: t("vendorBills.stats.totalAmount"), value: formatAmount(stats.totalAmount), icon: DollarSign, color: "text-blue-600" },
+            { label: t("vendorBills.stats.pending"), value: stats.pending, icon: Clock, color: "text-amber-600" },
+            { label: t("vendorBills.stats.overdue"), value: stats.overdue, icon: AlertTriangle, color: "text-red-600" },
+          ].map((s, i) => (
+            <Card key={i}>
               <CardContent className="p-4 flex items-center gap-3">
                 <s.icon className={`w-5 h-5 ${s.color}`} />
                 <div>
                   <p className="text-xs text-muted-foreground">{s.label}</p>
-                  <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                  <p className="text-lg font-bold">{s.value}</p>
                 </div>
               </CardContent>
             </Card>
@@ -1091,264 +768,261 @@ function VendorBillList() {
         </div>
 
         {/* Filters */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-wrap gap-3">
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Search bills..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+            <Input placeholder={t("vendorBills.filters.searchPlaceholder")} value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[150px]"><SelectValue placeholder={t("vendorBills.table.statusHeader")} /></SelectTrigger>
+            <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder={t("vendorBills.filters.allStatuses")} /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("vendorBills.filters.allStatuses")}</SelectItem>
-              {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+              {statusKeys.map((s) => <SelectItem key={s} value={s}>{t(`vendorBills.status.${s}`)}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-            <SelectTrigger className="w-[180px]"><SelectValue placeholder={t("vendorBills.details.categoryLabel")} /></SelectTrigger>
+            <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder={t("vendorBills.filters.allCategories")} /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("vendorBills.filters.allCategories")}</SelectItem>
-              {Object.entries(categoryLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+              {categoryKeys.map((c) => <SelectItem key={c} value={c}>{t(`vendorBills.category.${c}`)}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={vendorFilter} onValueChange={setVendorFilter}>
-            <SelectTrigger className="w-[180px]"><SelectValue placeholder={t("vendorBills.table.vendorHeader")} /></SelectTrigger>
+            <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder={t("vendorBills.filters.allVendors")} /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("vendorBills.filters.allVendors")}</SelectItem>
-              {vendors.map((v) => <SelectItem key={v.id} value={String(v.id)}>{v.name}</SelectItem>)}
+              {vendors.map((v: any) => <SelectItem key={v.id} value={v.id.toString()}>{v.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
 
-        {/* Bills Table */}
-        <Card>
-          <CardContent className="p-0">
+        {/* Table */}
+        {isLoading ? (
+          <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+        ) : bills.length === 0 ? (
+          <div className="text-center py-16 border rounded-lg">
+            <FileStack className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-30" />
+            <p className="text-muted-foreground">{t("vendorBills.empty.title")}</p>
+            <p className="text-sm text-muted-foreground mt-1">{t("vendorBills.empty.prompt")}</p>
+          </div>
+        ) : (
+          <div className="rounded-lg border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t("vendorBills.details.billNumberLabel")}</TableHead>
-                  <TableHead>{t("vendorBills.table.vendorHeader")}</TableHead>
-                  <TableHead>{t("vendorBills.details.categoryLabel")}</TableHead>
-                  <TableHead>{t("common.date")}</TableHead>
-                  <TableHead>{t("vendorBills.details.serviceMonthLabel")}</TableHead>
-                  <TableHead className="text-right">{t("vendorBills.lineItems.amountHeader")}</TableHead>
-                  <TableHead>{t("vendorBills.table.statusHeader")}</TableHead>
+                  <TableHead className="text-xs">{t("vendorBills.table.billNumberHeader")}</TableHead>
+                  <TableHead className="text-xs">{t("vendorBills.table.vendorHeader")}</TableHead>
+                  <TableHead className="text-xs">{t("vendorBills.table.statusHeader")}</TableHead>
+                  <TableHead className="text-xs">{t("vendorBills.table.billDateHeader")}</TableHead>
+                  <TableHead className="text-xs">{t("vendorBills.table.dueDateHeader")}</TableHead>
+                  <TableHead className="text-xs text-right">{t("vendorBills.table.totalHeader")}</TableHead>
+                  <TableHead className="text-xs text-right">{t("vendorBills.table.paidHeader")}</TableHead>
+                  <TableHead className="text-xs text-right">{t("vendorBills.table.balanceHeader")}</TableHead>
                   <TableHead className="w-8"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
-                        <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
-                      ))}
+                {bills.map((bill: any) => {
+                  const total = parseFloat(bill.totalAmount || "0");
+                  const paid = parseFloat(bill.paidAmount || "0");
+                  const balance = total - paid;
+                  return (
+                    <TableRow key={bill.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/vendor-bills/${bill.id}`)}>
+                      <TableCell className="font-medium text-sm">{bill.billNumber}</TableCell>
+                      <TableCell className="text-sm">{bill.vendor?.name || "\u2014"}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-xs ${statusColorMap[bill.status] || ""}`}>
+                          {t(`vendorBills.status.${bill.status}`)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{formatDate(bill.billDate)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{formatDate(bill.dueDate)}</TableCell>
+                      <TableCell className="text-sm text-right font-medium">{bill.currency} {formatAmount(total)}</TableCell>
+                      <TableCell className="text-sm text-right">{formatAmount(paid)}</TableCell>
+                      <TableCell className={`text-sm text-right font-medium ${balance > 0 ? "text-red-600" : "text-emerald-600"}`}>
+                        {formatAmount(balance)}
+                      </TableCell>
+                      <TableCell><ChevronRight className="w-4 h-4 text-muted-foreground" /></TableCell>
                     </TableRow>
-                  ))
-                ) : data && data.data && data.data.length > 0 ? (
-                  data.data.map((bill) => {
-                    return (
-                      <TableRow
-                        key={bill.id}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => setLocation(`/vendor-bills/${bill.id}`)}
-                      >
-                        <TableCell className="font-medium">{bill.billNumber}</TableCell>
-                        <TableCell>{vendors.find((v) => v.id === bill.vendorId)?.name || "—"}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Badge variant="outline" className="text-xs">{categoryLabels[bill.category] || bill.category}</Badge>
-                            {bill.billType && bill.billType !== 'operational' && (
-                              <Badge variant="outline" className={`text-xs ${bill.billType === 'deposit' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
-                                {bill.billType === 'deposit' ? 'DEP' : 'REF'}
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm">{formatDate(bill.billDate)}</TableCell>
-                        <TableCell className="text-sm">{bill.billMonth ? formatMonth(bill.billMonth) : "—"}</TableCell>
-                        <TableCell className="text-right font-mono font-medium">
-                          {bill.currency} {formatAmount(bill.totalAmount)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={statusColors[bill.status] || ""}>
-                            {statusLabels[bill.status] || bill.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell><ChevronRight className="w-4 h-4 text-muted-foreground" /></TableCell>
-                      </TableRow>
-                    );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
-                      <div className="space-y-3">
-                        <FileStack className="w-10 h-10 mx-auto opacity-30" />
-                        <div>{t("vendorBills.empty.simple")}</div>
-                        <Button variant="outline" size="sm" onClick={() => setAiUploadOpen(true)} className="gap-2">
-                          <Sparkles className="w-3.5 h-3.5" />Upload your first bill
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )}
+                  );
+                })}
               </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={5} className="text-xs font-medium">{t("common.total")}</TableCell>
+                  <TableCell className="text-right text-xs font-bold">{formatAmount(bills.reduce((s: number, b: any) => s + parseFloat(b.totalAmount || "0"), 0))}</TableCell>
+                  <TableCell className="text-right text-xs font-bold">{formatAmount(bills.reduce((s: number, b: any) => s + parseFloat(b.paidAmount || "0"), 0))}</TableCell>
+                  <TableCell className="text-right text-xs font-bold">{formatAmount(bills.reduce((s: number, b: any) => s + parseFloat(b.totalAmount || "0") - parseFloat(b.paidAmount || "0"), 0))}</TableCell>
+                  <TableCell></TableCell>
+                </TableRow>
+              </TableFooter>
             </Table>
-          </CardContent>
-        </Card>
+          </div>
+        )}
 
-        {/* AI Upload Dialog */}
-        <AIUploadDrawer
-          open={aiUploadOpen}
-          onOpenChange={setAiUploadOpen}
-          vendors={vendors}
-          onBillCreated={() => refetch()}
-          onVendorAutoCreated={() => refetchVendors()}
-        />
+        {/* Manual Create Dialog */}
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{t("vendorBills.actions.createBill")}</DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-6">
+              <BillFormFields bill={newBill} onChange={setNewBill} vendors={vendors} t={t} />
+              <LineItemsEditor items={newItems} onChange={setNewItems} t={t} />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
+              <Button onClick={handleManualCreate} disabled={createMutation.isPending}>
+                {createMutation.isPending ? t("vendorBills.actions.creating") : t("vendorBills.actions.createBill")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* AI Upload Drawer */}
+        <AIUploadDrawer open={aiDrawerOpen} onOpenChange={setAiDrawerOpen} onCreated={refetch} />
       </div>
     </Layout>
   );
 }
 
 /* ========== Vendor Bill Detail ========== */
-function VendorBillDetail({ id }: { id: number }) {
+function VendorBillDetail() {
   const { t } = useI18n();
   const [, setLocation] = useLocation();
+  const [, params] = useRoute("/vendor-bills/:id");
+  const billId = params?.id ? parseInt(params.id) : 0;
+
   const [editOpen, setEditOpen] = useState(false);
   const [allocOpen, setAllocOpen] = useState(false);
-  const [allocForm, setAllocForm] = useState({ invoiceId: "", employeeId: "", amount: "", description: "" });
+  const [allocEmployeeId, setAllocEmployeeId] = useState("");
+  const [allocInvoiceId, setAllocInvoiceId] = useState("");
+  const [allocAmount, setAllocAmount] = useState("");
+  const [allocNote, setAllocNote] = useState("");
 
-  const { data: bill, isLoading, refetch } = trpc.vendorBills.get.useQuery({ id });
-
-  // Cost Allocation queries (only for client_related vendors)
-  const allocQuery = trpc.allocations.listByBill.useQuery({ vendorBillId: id }, { enabled: !!bill });
-  const summaryQuery = trpc.allocations.billSummary.useQuery({ vendorBillId: id }, { enabled: !!bill });
-  const invoicesQuery = trpc.invoices.list.useQuery({ limit: 200 }, { enabled: allocOpen });
-  // Filter invoices for allocation based on vendor bill type
-  // - Regular (operational) bills: exclude deposit, credit_note, deposit_refund
-  // - Deposit bills: only show deposit invoices (without applied credit notes)
-  const filteredInvoices = useMemo(() => {
-    const raw = (invoicesQuery.data as any)?.data || [];
-    const billType = bill?.billType || 'operational';
-    return raw.filter((inv: any) => {
-      // Always exclude credit notes and deposit refunds
-      if (inv.invoiceType === 'credit_note' || inv.invoiceType === 'deposit_refund') return false;
-      // Only show paid or sent invoices (active invoices that can receive cost allocation)
-      if (!['paid', 'sent'].includes(inv.status)) return false;
-      
-      if (billType === 'deposit') {
-        // Deposit vendor bills can only be allocated to deposit invoices
-        if (inv.invoiceType !== 'deposit') return false;
-        // Exclude deposits that have been fully refunded via wallet
-        // (walletAppliedAmount >= total means the deposit funds have been redirected)
-        const walletApplied = parseFloat(inv.walletAppliedAmount || '0');
-        const total = parseFloat(inv.total || '0');
-        if (total > 0 && walletApplied >= total) return false;
-      } else {
-        // Operational vendor bills should not be allocated to deposits
-        if (inv.invoiceType === 'deposit') return false;
-      }
-      return true;
-    });
-  }, [invoicesQuery.data, bill?.billType]);
-  const employeesQuery = trpc.employees.list.useQuery({ limit: 500 }, { enabled: allocOpen });
-
-  // Employee monthly revenue query for allocation ceiling display
-  const allocBillMonth = bill?.billMonth;
-  const allocMonthStr = allocBillMonth ? (typeof allocBillMonth === 'string' ? allocBillMonth.substring(0, 7) : new Date(allocBillMonth).toISOString().substring(0, 7)) : '';
-  const selectedEmpRevenueQuery = trpc.allocations.singleEmployeeRevenue.useQuery(
-    { employeeId: parseInt(allocForm.employeeId || '0'), serviceMonth: allocMonthStr },
-    { enabled: !!allocForm.employeeId && !!allocMonthStr && allocOpen }
+  const { data: bill, isLoading, refetch } = trpc.vendorBills.get.useQuery(
+    { id: billId },
+    { enabled: billId > 0 }
   );
 
-  const createAllocMutation = trpc.allocations.create.useMutation();
-  const deleteAllocMutation = trpc.allocations.delete.useMutation();
-  const utils = trpc.useUtils();
+  const [editBill, setEditBill] = useState<any>({});
 
-  const isClientRelated = bill?.vendor?.vendorType === "client_related";
-  const allocations = allocQuery.data || [];
-  const summary = summaryQuery.data;
+  // Allocation summary
+  const { data: allocSummary } = trpc.allocations.billSummary.useQuery(
+    { vendorBillId: billId },
+    { enabled: billId > 0 }
+  );
 
+  // Allocation list
+  const { data: allocations, refetch: refetchAllocs } = trpc.allocations.listByBill.useQuery(
+    { vendorBillId: billId },
+    { enabled: billId > 0 }
+  );
+
+  // Employees for allocation
+  const { data: employeesData } = trpc.employees.list.useQuery({ limit: 500 });
+  const employees = useMemo(() => {
+    const raw = (employeesData as any)?.data || employeesData || [];
+    return Array.isArray(raw) ? raw : [];
+  }, [employeesData]);
+
+  // Invoices for allocation
+  const { data: invoicesData } = trpc.invoices.list.useQuery({ limit: 500 });
+  const invoices = useMemo(() => {
+    const raw = (invoicesData as any)?.data || invoicesData || [];
+    return Array.isArray(raw) ? raw : [];
+  }, [invoicesData]);
+
+  // Employee monthly revenue (for selected employee)
+  const { data: empRevenue } = trpc.allocations.singleEmployeeRevenue.useQuery(
+    {
+      employeeId: allocEmployeeId ? parseInt(allocEmployeeId) : 0,
+      serviceMonth: bill?.billMonth || safeMonth(bill?.billDate) || "",
+    },
+    { enabled: !!allocEmployeeId && allocEmployeeId !== "" && billId > 0 }
+  );
+
+  // Mutations
   const updateMutation = trpc.vendorBills.update.useMutation({
-    onSuccess: () => { toast.success("Bill updated"); setEditOpen(false); refetch(); },
+    onSuccess: () => { toast.success(t("vendorBills.toast.updated")); setEditOpen(false); refetch(); },
     onError: (err) => toast.error(err.message),
   });
 
-  const [editData, setEditData] = useState<any>({});
+  const statusMutation = trpc.vendorBills.update.useMutation({
+    onSuccess: () => { refetch(); },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const createAllocMutation = trpc.allocations.create.useMutation({
+    onSuccess: () => {
+      toast.success(t("vendorBills.toast.allocationCreated"));
+      setAllocOpen(false);
+      setAllocEmployeeId(""); setAllocInvoiceId(""); setAllocAmount(""); setAllocNote("");
+      refetchAllocs(); refetch();
+    },
+    onError: (err) => toast.error(err.message || t("vendorBills.toast.allocationFailed")),
+  });
+
+  const deleteAllocMutation = trpc.allocations.delete.useMutation({
+    onSuccess: () => { toast.success(t("vendorBills.toast.allocationDeleted")); refetchAllocs(); refetch(); },
+    onError: (err) => toast.error(err.message || t("vendorBills.toast.deleteFailed")),
+  });
 
   function openEdit() {
     if (!bill) return;
-    setEditData({
+    setEditBill({
       billNumber: bill.billNumber,
       category: bill.category,
+      billType: (bill as any).billType || "operational",
       billDate: safeDate(bill.billDate),
       dueDate: safeDate(bill.dueDate),
-      paidDate: safeDate(bill.paidDate),
-      billMonth: safeMonth(bill.billMonth),
+      billMonth: bill.billMonth || "",
       currency: bill.currency,
       subtotal: bill.subtotal?.toString() || "",
       tax: bill.tax?.toString() || "0",
       totalAmount: bill.totalAmount?.toString() || "",
-      paidAmount: bill.paidAmount?.toString() || "0",
-      status: bill.status,
       description: bill.description || "",
-      internalNotes: bill.internalNotes || "",
     });
     setEditOpen(true);
   }
 
-  async function handleCreateAlloc() {
-    if (!allocForm.employeeId || !allocForm.invoiceId || !allocForm.amount) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
-    try {
-      const result = await createAllocMutation.mutateAsync({
-        vendorBillId: id,
-        invoiceId: parseInt(allocForm.invoiceId),
-        employeeId: parseInt(allocForm.employeeId),
-        allocatedAmount: allocForm.amount,
-        description: allocForm.description || undefined,
-      });
-      // Show warnings if any
-      const warnings = (result as any)?.warnings;
-      if (warnings?.employeeRevenueExceeded) {
-        toast.warning(`Allocation created, but total allocated (${formatAmount(warnings.employeeAllocatedTotal)}) exceeds employee monthly revenue (${formatAmount(warnings.employeeRevenue)})`);
-      } else if (warnings?.billOverAllocated) {
-        toast.warning(`Allocation created, but bill is now over-allocated by ${formatAmount(warnings.billOverAmount)}`);
-      } else {
-        toast.success("Allocation created");
-      }
-      setAllocOpen(false);
-      setAllocForm({ invoiceId: "", employeeId: "", amount: "", description: "" });
-      allocQuery.refetch();
-      summaryQuery.refetch();
-      selectedEmpRevenueQuery.refetch();
-      refetch();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to create allocation");
-    }
+  function handleSaveEdit() {
+    updateMutation.mutate({
+      id: billId,
+      billNumber: editBill.billNumber,
+      category: editBill.category,
+      billType: editBill.billType,
+      billDate: editBill.billDate || undefined,
+      dueDate: editBill.dueDate || undefined,
+      billMonth: editBill.billMonth || undefined,
+      currency: editBill.currency,
+      subtotal: editBill.subtotal,
+      tax: editBill.tax || "0",
+      totalAmount: editBill.totalAmount,
+      description: editBill.description,
+    });
   }
 
-  async function handleDeleteAlloc(allocId: number) {
-    try {
-      await deleteAllocMutation.mutateAsync({ id: allocId });
-      toast.success("Allocation deleted");
-      allocQuery.refetch();
-      summaryQuery.refetch();
-      refetch();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to delete allocation");
+  function handleCreateAlloc() {
+    if (!allocEmployeeId || !allocInvoiceId || !allocAmount) {
+      toast.error(t("vendorBills.toast.fillRequired"));
+      return;
     }
+    createAllocMutation.mutate({
+      vendorBillId: billId,
+      invoiceId: parseInt(allocInvoiceId),
+      employeeId: parseInt(allocEmployeeId),
+      allocatedAmount: allocAmount,
+      description: allocNote || "",
+    });
   }
 
   if (isLoading) {
     return (
-      <Layout breadcrumb={["GEA", "Vendor Bills", "Loading..."]}>
+      <Layout breadcrumb={["GEA", t("vendorBills.title"), "..."]}>
         <div className="p-6 space-y-4">
           <Skeleton className="h-8 w-48" />
-          <div className="grid grid-cols-3 gap-4">
-            <Skeleton className="h-32" /><Skeleton className="h-32" /><Skeleton className="h-32" />
-          </div>
+          <Skeleton className="h-48 w-full" />
         </div>
       </Layout>
     );
@@ -1356,476 +1030,349 @@ function VendorBillDetail({ id }: { id: number }) {
 
   if (!bill) {
     return (
-      <Layout breadcrumb={["GEA", "Vendor Bills", "Not Found"]}>
-        <div className="p-6 text-center py-20">
-          <XCircle className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+      <Layout breadcrumb={["GEA", t("vendorBills.title")]}>
+        <div className="p-6 text-center py-16">
+          <FileStack className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-30" />
           <p className="text-muted-foreground">{t("vendorBills.detail.notFound")}</p>
-          <Button variant="link" onClick={() => setLocation("/vendor-bills")}>← {t("vendorBills.actions.backToList")}</Button>
+          <Button variant="link" onClick={() => setLocation("/vendor-bills")} className="mt-2">
+            <ArrowLeft className="w-4 h-4 mr-1" /> {t("vendorBills.detail.backToList")}
+          </Button>
         </div>
       </Layout>
     );
   }
 
+  const totalAmt = parseFloat(bill.totalAmount?.toString() || "0");
+  const paidAmt = parseFloat((bill as any).paidAmount?.toString() || "0");
+  const allocatedAmt = parseFloat((allocSummary as any)?.allocatedTotal?.toString() || "0");
+  const unallocatedAmt = totalAmt - allocatedAmt;
+  const allocs = Array.isArray(allocations) ? allocations : (allocations as any)?.data || [];
+
+  // Revenue info for selected employee
+  const revTotal = empRevenue ? parseFloat((empRevenue as any)?.totalRevenue?.toString() || "0") : 0;
+  const allocAmtNum = parseFloat(allocAmount || "0");
+  const exceedsRevenue = allocEmployeeId && revTotal > 0 && allocAmtNum > revTotal;
+
   return (
-    <Layout breadcrumb={["GEA", "Vendor Bills", bill.billNumber]}>
+    <Layout breadcrumb={["GEA", t("vendorBills.title"), bill.billNumber || `#${billId}`]}>
       <div className="p-6 space-y-6 page-enter">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => setLocation("/vendor-bills")}>
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </Button>
             <div>
               <h1 className="text-xl font-bold">{bill.billNumber}</h1>
-              <p className="text-sm text-muted-foreground">{bill.vendor?.name || "Unknown Vendor"}</p>
+              <p className="text-sm text-muted-foreground">{(bill as any).vendor?.name || ""}</p>
             </div>
-            <Badge variant="outline" className={statusColors[bill.status] || ""}>
-              {statusLabels[bill.status] || bill.status}
+            <Badge variant="outline" className={statusColorMap[bill.status] || ""}>
+              {t(`vendorBills.status.${bill.status}`)}
             </Badge>
-            <Badge variant="outline" className="text-xs">{categoryLabels[bill.category] || bill.category}</Badge>
-            {bill.billType && bill.billType !== 'operational' && (
-              <Badge variant="outline" className={`text-xs ${bill.billType === 'deposit' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}>
-                {bill.billType === 'deposit' ? 'Deposit' : 'Deposit Refund'}
-              </Badge>
-            )}
           </div>
-          <div className="flex items-center gap-2">
-            {/* Approval workflow buttons */}
+          <div className="flex gap-2">
             {bill.status === "draft" && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-amber-600 border-amber-300 hover:bg-amber-50"
-                onClick={() => {
-                  updateMutation.mutate({ id, status: "pending_approval" });
-                }}
-                disabled={updateMutation.isPending}
-              >
-                <Upload className="w-4 h-4 mr-1" />Submit for Approval
+              <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: billId, status: "pending_approval" })}>
+                {t("vendorBills.actions.submitApproval")}
               </Button>
             )}
             {bill.status === "pending_approval" && (
               <>
-                <Button
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                  onClick={() => {
-                    updateMutation.mutate({ id, status: "approved" });
-                  }}
-                  disabled={updateMutation.isPending}
-                >
-                  <CheckCircle2 className="w-4 h-4 mr-1" />Approve
+                <Button size="sm" variant="outline" className="text-red-600" onClick={() => statusMutation.mutate({ id: billId, status: "draft" })}>
+                  {t("vendorBills.actions.reject")}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-red-600 border-red-300 hover:bg-red-50"
-                  onClick={() => {
-                    updateMutation.mutate({ id, status: "draft" });
-                  }}
-                  disabled={updateMutation.isPending}
-                >
-                  <XCircle className="w-4 h-4 mr-1" />Reject
+                <Button size="sm" onClick={() => statusMutation.mutate({ id: billId, status: "approved" })}>
+                  <Check className="w-4 h-4 mr-1" /> {t("vendorBills.actions.approve")}
                 </Button>
               </>
             )}
-            {bill.status === "approved" && (
-              <Button
-                size="sm"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={() => {
-                  updateMutation.mutate({ id, status: "paid", paidDate: new Date().toISOString().split("T")[0], paidAmount: bill.totalAmount?.toString() || "0" });
-                }}
-                disabled={updateMutation.isPending}
-              >
-                <DollarSign className="w-4 h-4 mr-1" />Mark as Paid
+            {(bill.status === "approved" || bill.status === "partially_paid") && (
+              <Button size="sm" onClick={() => statusMutation.mutate({ id: billId, status: "paid" })}>
+                <DollarSign className="w-4 h-4 mr-1" /> {t("vendorBills.actions.markPaid")}
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={openEdit}>
-              <Pencil className="w-4 h-4 mr-2" />Edit
+            <Button size="sm" variant="outline" onClick={openEdit}>
+              <Pencil className="w-4 h-4 mr-1" /> {t("common.edit")}
             </Button>
           </div>
         </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Amount */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <DollarSign className="w-4 h-4" />Amount
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex justify-between font-semibold"><span>{t("vendorBills.table.totalHeader")}</span><span className="font-mono">{bill.currency} {formatAmount(bill.totalAmount)}</span></div>
-              {bill.paidAmount && parseFloat(bill.paidAmount.toString()) > 0 && (
-                <div className="flex justify-between text-emerald-600"><span className="text-sm">{t("vendorBills.table.paidHeader")}</span><span className="font-mono">{bill.currency} {formatAmount(bill.paidAmount)}</span></div>
-              )}
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">{t("vendorBills.detail.amount")}</p>
+              <p className="text-lg font-bold">{bill.currency} {formatAmount(totalAmt)}</p>
             </CardContent>
           </Card>
-
-          {/* Dates */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Calendar className="w-4 h-4" />Dates
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div><div className="text-xs text-muted-foreground">{t("vendorBills.table.billDateHeader")}</div><div className="font-medium">{formatDate(bill.billDate)}</div></div>
-              <div><div className="text-xs text-muted-foreground">{t("vendorBills.details.dueDateLabel")}</div><div className="font-medium">{bill.dueDate ? formatDate(bill.dueDate) : "—"}</div></div>
-              <div><div className="text-xs text-muted-foreground">{t("vendorBills.payment.dateLabel")}</div><div className="font-medium">{bill.paidDate ? formatDate(bill.paidDate) : "—"}</div></div>
-              <div><div className="text-xs text-muted-foreground">{t("vendorBills.details.serviceMonthLabel")}</div><div className="font-medium">{bill.billMonth ? formatMonth(bill.billMonth) : "—"}</div></div>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">{t("vendorBills.table.paidHeader")}</p>
+              <p className="text-lg font-bold text-emerald-600">{formatAmount(paidAmt)}</p>
             </CardContent>
           </Card>
-
-          {/* Vendor Info */}
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                <Building2 className="w-4 h-4" />Vendor
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div><div className="text-xs text-muted-foreground">{t("common.name")}</div><div className="font-medium">{bill.vendor?.name || "—"}</div></div>
-              <div><div className="text-xs text-muted-foreground">{t("common.code")}</div><div className="font-medium">{bill.vendor?.vendorCode || "—"}</div></div>
-              <div><div className="text-xs text-muted-foreground">{t("common.country")}</div><div className="font-medium">{countryName(bill.vendor?.country) || "—"}</div></div>
-              {bill.vendor && (
-                <Button variant="link" className="p-0 h-auto text-xs" onClick={() => setLocation(`/vendors/${bill.vendorId}`)}>
-                  View Vendor Details →
-                </Button>
-              )}
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">{t("vendorBills.detail.allocated")}</p>
+              <p className="text-lg font-bold text-blue-600">{formatAmount(allocatedAmt)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs text-muted-foreground">{t("vendorBills.allocations.unallocated")}</p>
+              <p className={`text-lg font-bold ${unallocatedAmt > 0 ? "text-amber-600" : "text-emerald-600"}`}>{formatAmount(unallocatedAmt)}</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Description & Notes */}
-        {(bill.description || bill.internalNotes) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Bill Info */}
+        <Card>
+          <CardHeader><CardTitle className="text-sm">{t("vendorBills.detail.dates")}</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-xs text-muted-foreground">{t("vendorBills.details.billDateLabel")}</p>
+                <p>{formatDate(bill.billDate) || "\u2014"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{t("vendorBills.details.dueDateLabel")}</p>
+                <p>{formatDate(bill.dueDate) || "\u2014"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{t("vendorBills.details.serviceMonthLabel")}</p>
+                <p>{bill.billMonth || "\u2014"}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{t("vendorBills.filters.allCategories")}</p>
+                <p>{t(`vendorBills.category.${bill.category}`)}</p>
+              </div>
+            </div>
             {bill.description && (
-              <Card>
-                <CardHeader className="pb-3"><CardTitle className="text-sm font-medium text-muted-foreground">{t("vendorBills.details.descriptionLabel")}</CardTitle></CardHeader>
-                <CardContent><p className="text-sm whitespace-pre-wrap">{bill.description}</p></CardContent>
-              </Card>
+              <div className="mt-3 pt-3 border-t">
+                <p className="text-xs text-muted-foreground">{t("vendorBills.details.descriptionLabel")}</p>
+                <p className="text-sm mt-1">{bill.description}</p>
+              </div>
             )}
-            {bill.internalNotes && (
-              <Card>
-                <CardHeader className="pb-3"><CardTitle className="text-sm font-medium text-muted-foreground">{t("vendorBills.details.internalNotes")}</CardTitle></CardHeader>
-                <CardContent><p className="text-sm whitespace-pre-wrap">{bill.internalNotes}</p></CardContent>
-              </Card>
-            )}
-          </div>
-        )}
+          </CardContent>
+        </Card>
 
-        {/* Line Items */}
-        {bill.items && bill.items.length > 0 && (
+        {/* Attachment */}
+        {(bill as any).receiptFileUrl && (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">{t("vendorBills.lineItems.title")}</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t("vendorBills.details.descriptionLabel")}</TableHead>
-                    <TableHead>Cost Type</TableHead>
-                    <TableHead className="text-right">{t("vendorBills.lineItems.quantityHeader")}</TableHead>
-                    <TableHead className="text-right">{t("vendorBills.lineItems.amountHeader")}</TableHead>
-                    <TableHead>{t("vendorBills.lineItems.employeeHeader")}</TableHead>
-                    <TableHead className="min-w-[120px]">{t("common.country")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {bill.items.map((item) => {
-                    const typeLabels: Record<string, string> = {
-                      employment_cost: "Employment Cost",
-                      service_fee: "Service Fee",
-                      visa_fee: "Visa Fee",
-                      equipment_purchase: "Equipment",
-                      deposit: "Deposit",
-                      deposit_refund: "Deposit Refund",
-                      other: "Other",
-                    };
-                    return (
-                    <TableRow key={item.id}>
-                      <TableCell>{item.description}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-xs">
-                          {typeLabels[(item as any).itemType] || "Other"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">{item.quantity}</TableCell>
-                      <TableCell className="text-right font-mono">{formatAmount(item.amount)}</TableCell>
-                      <TableCell>{(item as any).relatedEmployeeId || item.relatedCustomerId || "—"}</TableCell>
-                      <TableCell>{item.relatedCountryCode || "—"}</TableCell>
-                    </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+            <CardContent className="p-4">
+              <a href={(bill as any).receiptFileUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm text-primary hover:underline">
+                <FileText className="w-4 h-4" /> {t("vendorBills.detail.viewAttachment")}
+              </a>
             </CardContent>
           </Card>
         )}
 
-        {/* Cost Allocation Section (only for client_related vendors) */}
-        {isClientRelated && (
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-medium">{t("vendorBills.allocations.costAllocation")}</CardTitle>
-                <p className="text-xs text-muted-foreground mt-1">{t("vendorBills.allocations.linkHint")}</p>
-              </div>
-              <Button size="sm" onClick={() => setAllocOpen(true)}>
-                <Plus className="w-4 h-4 mr-1" />New Allocation
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Allocation Summary */}
-              {summary && (
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="p-3 rounded-lg bg-muted/50">
-                    <p className="text-xs text-muted-foreground">{t("vendorBills.allocations.billTotal")}</p>
-                    <p className="text-lg font-bold font-mono">{bill.currency} {formatAmount(summary.totalAmount)}</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-muted/50">
-                    <p className="text-xs text-muted-foreground">{t("vendorBills.allocations.allocated")}</p>
-                    <p className="text-lg font-bold font-mono text-primary">{bill.currency} {formatAmount(summary.allocatedTotal)}</p>
-                  </div>
-                  <div className="p-3 rounded-lg bg-muted/50">
-                    <p className="text-xs text-muted-foreground">{t("vendorBills.allocations.unallocatedLabel")}</p>
-                    <p className={`text-lg font-bold font-mono ${summary.unallocatedAmount > 0 ? "text-amber-500" : "text-emerald-500"}`}>
-                      {bill.currency} {formatAmount(summary.unallocatedAmount)}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Allocations Table */}
-              {allocations.length > 0 ? (
+        {/* Line Items */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">{t("vendorBills.detail.lineItems")} ({(bill as any).items?.length || 0})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(bill as any).items?.length > 0 ? (
+              <div className="rounded-lg border overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>{t("vendorBills.lineItems.employeeHeader")}</TableHead>
-                      <TableHead>{t("common.invoice")}</TableHead>
-                      <TableHead className="text-right">{t("vendorBills.lineItems.amountHeader")}</TableHead>
-                      <TableHead>{t("common.note")}</TableHead>
-                      <TableHead className="w-10"></TableHead>
+                      <TableHead className="text-xs">{t("vendorBills.details.descriptionLabel")}</TableHead>
+                      <TableHead className="text-xs">{t("vendorBills.createBill.costType")}</TableHead>
+                      <TableHead className="text-xs text-right">{t("vendorBills.lineItems.quantityHeader")}</TableHead>
+                      <TableHead className="text-xs text-right">{t("vendorBills.lineItems.unitPriceHeader")}</TableHead>
+                      <TableHead className="text-xs text-right">{t("vendorBills.lineItems.amountHeader")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {allocations.map((alloc: any) => (
-                      <TableRow key={alloc.id}>
+                    {(bill as any).items.map((item: any, idx: number) => (
+                      <TableRow key={idx}>
+                        <TableCell className="text-sm">{item.description}</TableCell>
                         <TableCell>
-                          <div>
-                            <p className="font-medium text-sm">
-                              {alloc.employee ? `${alloc.employee.firstName} ${alloc.employee.lastName}` : "\u2014"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{countryName(alloc.employee?.country) || ""}</p>
-                          </div>
+                          <Badge variant="outline" className="text-xs">{t(`vendorBills.itemType.${item.itemType || "other"}`)}</Badge>
                         </TableCell>
+                        <TableCell className="text-sm text-right">{item.quantity}</TableCell>
+                        <TableCell className="text-sm text-right">{formatAmount(parseFloat(item.unitPrice || "0"))}</TableCell>
+                        <TableCell className="text-sm text-right font-medium">{formatAmount(parseFloat(item.amount || "0"))}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">{t("vendorBills.detail.noLineItems")}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Cost Allocations */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-sm">{t("vendorBills.detail.costAllocations")}</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setAllocOpen(true)}>
+              <Plus className="w-4 h-4 mr-1" /> {t("vendorBills.actions.newAllocation")}
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {allocs.length > 0 ? (
+              <div className="rounded-lg border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">{t("vendorBills.lineItems.employeeHeader")}</TableHead>
+                      <TableHead className="text-xs">{t("vendorBills.review.invoiceHeader")}</TableHead>
+                      <TableHead className="text-xs text-right">{t("vendorBills.lineItems.amountHeader")}</TableHead>
+                      <TableHead className="text-xs">{t("vendorBills.allocations.noteLabel")}</TableHead>
+                      <TableHead className="w-8"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {allocs.map((a: any) => (
+                      <TableRow key={a.id}>
+                        <TableCell className="text-sm">{a.employee?.fullName || `ID: ${a.employeeId}`}</TableCell>
+                        <TableCell className="text-sm">{a.invoice?.invoiceNumber || `ID: ${a.invoiceId}`}</TableCell>
+                        <TableCell className="text-sm text-right font-medium">{formatAmount(parseFloat(a.allocatedAmount || "0"))}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground truncate max-w-[200px]">{a.description || "\u2014"}</TableCell>
                         <TableCell>
-                          <div>
-                            <p className="font-medium text-sm">{alloc.invoice?.invoiceNumber || "\u2014"}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {alloc.invoice ? `${bill.currency} ${formatAmount(alloc.invoice.total)}` : ""}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right font-mono font-medium">
-                          {bill.currency} {formatAmount(alloc.allocatedAmount)}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {alloc.description || "\u2014"}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => handleDeleteAlloc(alloc.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteAllocMutation.mutate({ id: a.id })}>
+                            <Trash2 className="w-3 h-3" />
                           </Button>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-6">
-                  No allocations yet. Click "New Allocation" to link this bill to invoices.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">{t("vendorBills.allocations.noAllocations")}</p>
+            )}
+          </CardContent>
+        </Card>
 
-        {/* Operational cost notice */}
-        {!isClientRelated && bill?.vendor?.vendorType === "operational" && (
-          <Card>
-            <CardContent className="py-4">
-              <div className="flex items-center gap-2 text-amber-600">
-                <AlertTriangle className="w-4 h-4" />
-                <span className="text-sm">{t("vendorBills.allocations.operationalHint")}</span>
+        {/* Edit Dialog */}
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>{t("common.edit")}</DialogTitle></DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">{t("vendorBills.table.billNumberHeader")}</Label>
+                  <Input value={editBill.billNumber || ""} onChange={(e) => setEditBill({ ...editBill, billNumber: e.target.value })} className="h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">{t("vendorBills.createBill.billType")}</Label>
+                  <Select value={editBill.billType || "operational"} onValueChange={(v) => setEditBill({ ...editBill, billType: v })}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="operational">{t("vendorBills.billType.operational")}</SelectItem>
+                      <SelectItem value="deposit">{t("vendorBills.billType.deposit")}</SelectItem>
+                      <SelectItem value="deposit_refund">{t("vendorBills.billType.deposit_refund")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="text-xs text-muted-foreground">
-          Created: {formatDate(bill.createdAt)} · Updated: {formatDate(bill.updatedAt)}
-        </div>
-
-        {/* Create Allocation Dialog */}
-        <Dialog open={allocOpen} onOpenChange={setAllocOpen}>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{t("vendorBills.allocations.createTitle")}</DialogTitle>
-              <DialogDescription>{t("vendorBills.allocations.createDescription")}</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>{t("vendorBills.lineItems.employeeHeader")} *</Label>
-                <Select value={allocForm.employeeId} onValueChange={(v) => setAllocForm({ ...allocForm, employeeId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select an employee" /></SelectTrigger>
-                  <SelectContent>
-                    {((employeesQuery.data as any)?.data || []).map((e: any) => (
-                      <SelectItem key={e.id} value={String(e.id)}>
-                        {e.firstName} {e.lastName} — {countryName(e.country)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {/* Employee monthly revenue hint */}
-                {allocForm.employeeId && allocMonthStr && selectedEmpRevenueQuery.data && (() => {
-                  const rev = selectedEmpRevenueQuery.data;
-                  const amount = parseFloat(allocForm.amount || '0');
-                  const isOver = rev.total > 0 && amount > rev.total;
-                  const getBreakdownAmount = (type: string) => {
-                    const item = (rev.breakdown || []).find((b: any) => b.itemType === type);
-                    return item ? item.amount : 0;
-                  };
-                  return (
-                    <div className={`text-xs p-2 rounded ${isOver ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-blue-50 text-blue-700 border border-blue-200'}`}>
-                      <p>Monthly revenue ({allocMonthStr}): <strong>{bill?.currency} {formatAmount(rev.total)}</strong></p>
-                      <p className="text-[10px]">Service fee: {formatAmount(getBreakdownAmount('eor_service_fee'))} | Employment cost: {formatAmount(getBreakdownAmount('employment_cost'))} | Other: {formatAmount(rev.total - getBreakdownAmount('eor_service_fee') - getBreakdownAmount('employment_cost'))}</p>
-                      {isOver && <p className="font-medium mt-1">Warning: Allocation amount exceeds employee monthly revenue!</p>}
-                    </div>
-                  );
-                })()}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs">{t("vendorBills.details.billDateLabel")}</Label>
+                  <DatePicker value={editBill.billDate || ""} onChange={(d: string) => setEditBill({ ...editBill, billDate: d })} placeholder="" />
+                </div>
+                <div>
+                  <Label className="text-xs">{t("vendorBills.details.dueDateLabel")}</Label>
+                  <DatePicker value={editBill.dueDate || ""} onChange={(d: string) => setEditBill({ ...editBill, dueDate: d })} placeholder="" />
+                </div>
+                <div>
+                  <Label className="text-xs">{t("vendorBills.details.serviceMonthLabel")}</Label>
+                  <Input type="month" value={editBill.billMonth || ""} onChange={(e) => setEditBill({ ...editBill, billMonth: e.target.value })} className="h-8 text-sm" />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>{t("common.invoice")} *</Label>
-                <Select value={allocForm.invoiceId} onValueChange={(v) => setAllocForm({ ...allocForm, invoiceId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select an invoice" /></SelectTrigger>
-                  <SelectContent>
-                    {filteredInvoices.map((inv: any) => (
-                      <SelectItem key={inv.id} value={String(inv.id)}>
-                        {inv.invoiceNumber} — {inv.currency} {formatAmount(inv.total)} ({statusLabels[inv.status] || inv.status})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs">{t("vendorBills.details.subtotalLabel")}</Label>
+                  <Input type="number" step="0.01" value={editBill.subtotal || ""} onChange={(e) => setEditBill({ ...editBill, subtotal: e.target.value })} className="h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">{t("vendorBills.details.taxLabel")}</Label>
+                  <Input type="number" step="0.01" value={editBill.tax || "0"} onChange={(e) => setEditBill({ ...editBill, tax: e.target.value })} className="h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">{t("vendorBills.details.totalAmountLabel")} *</Label>
+                  <Input type="number" step="0.01" value={editBill.totalAmount || ""} onChange={(e) => setEditBill({ ...editBill, totalAmount: e.target.value })} className="h-8 text-sm font-medium" />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Amount ({bill.currency}) *</Label>
-                <Input type="number" step="0.01" min="0" placeholder="0.00" value={allocForm.amount} onChange={(e) => setAllocForm({ ...allocForm, amount: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t("vendorBills.details.descriptionLabel")}</Label>
-                <Input placeholder="Optional note..." value={allocForm.description} onChange={(e) => setAllocForm({ ...allocForm, description: e.target.value })} />
+              <div>
+                <Label className="text-xs">{t("vendorBills.details.descriptionLabel")}</Label>
+                <Textarea value={editBill.description || ""} onChange={(e) => setEditBill({ ...editBill, description: e.target.value })} rows={2} className="text-sm" />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setAllocOpen(false)}>{t("common.cancel")}</Button>
-              <Button onClick={handleCreateAlloc} disabled={createAllocMutation.isPending}>
-                {createAllocMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Create Allocation
+              <Button variant="outline" onClick={() => setEditOpen(false)}>{t("common.cancel")}</Button>
+              <Button onClick={handleSaveEdit} disabled={updateMutation.isPending}>
+                {updateMutation.isPending ? t("vendorBills.actions.saving") : t("vendorBills.actions.saveChanges")}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
-        {/* Edit Dialog */}
-        <Dialog open={editOpen} onOpenChange={setEditOpen}>
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{t("vendorBills.edit.title")}</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-2 gap-4 py-4">
+        {/* Allocation Dialog */}
+        <Dialog open={allocOpen} onOpenChange={setAllocOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader><DialogTitle>{t("vendorBills.actions.createAllocation")}</DialogTitle></DialogHeader>
+            <div className="py-4 space-y-4">
               <div>
-                <Label>{t("vendorBills.details.billNumberLabel")}</Label>
-                <Input value={editData.billNumber || ""} onChange={(e) => setEditData({ ...editData, billNumber: e.target.value })} />
+                <Label className="text-xs">{t("vendorBills.allocations.selectEmployee")}</Label>
+                <Select value={allocEmployeeId} onValueChange={setAllocEmployeeId}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={t("vendorBills.allocations.selectEmployee")} /></SelectTrigger>
+                  <SelectContent>
+                    {employees.map((emp: any) => (
+                      <SelectItem key={emp.id} value={emp.id.toString()}>
+                        {emp.fullName || emp.firstName + " " + emp.lastName} ({emp.employeeCode || emp.id})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {allocEmployeeId && empRevenue && (
+                  <div className="mt-1 p-2 rounded bg-muted/50 text-xs">
+                    <span className="text-muted-foreground">{t("vendorBills.allocations.revenueHint")}: </span>
+                    <span className="font-medium">{formatAmount(revTotal)}</span>
+                    {(empRevenue as any)?.breakdown?.map((b: any, i: number) => (
+                      <span key={i} className="ml-2 text-muted-foreground">({b.itemType}: {formatAmount(parseFloat(b.total || "0"))})</span>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
-                <Label>{t("vendorBills.details.categoryLabel")}</Label>
-                <Select value={editData.category || "other"} onValueChange={(v) => setEditData({ ...editData, category: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                <Label className="text-xs">{t("vendorBills.allocations.selectInvoice")}</Label>
+                <Select value={allocInvoiceId} onValueChange={setAllocInvoiceId}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={t("vendorBills.allocations.selectInvoice")} /></SelectTrigger>
                   <SelectContent>
-                    {Object.entries(categoryLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                    {invoices.map((inv: any) => (
+                      <SelectItem key={inv.id} value={inv.id.toString()}>
+                        {inv.invoiceNumber} - {inv.currency} {formatAmount(parseFloat(inv.totalAmount || "0"))}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <Label>{t("vendorBills.table.billDateHeader")}</Label>
-                <DatePicker value={editData.billDate || ""} onChange={(date) => setEditData({ ...editData, billDate: date })} placeholder="Select bill date" />
+                <Label className="text-xs">{t("vendorBills.allocations.amountLabel")}</Label>
+                <Input type="number" step="0.01" value={allocAmount} onChange={(e) => setAllocAmount(e.target.value)} className="h-8 text-sm" />
+                {exceedsRevenue && (
+                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" /> {t("vendorBills.allocations.revenueExceeded")}
+                  </p>
+                )}
               </div>
               <div>
-                <Label>{t("vendorBills.details.dueDateLabel")}</Label>
-                <DatePicker value={editData.dueDate || ""} onChange={(date) => setEditData({ ...editData, dueDate: date })} placeholder="Select due date" />
-              </div>
-              <div>
-                <Label>{t("vendorBills.payment.dateLabel")}</Label>
-                <DatePicker value={editData.paidDate || ""} onChange={(date) => setEditData({ ...editData, paidDate: date })} placeholder="Select paid date" />
-              </div>
-              <div>
-                <Label>{t("vendorBills.details.serviceMonthLabel")}</Label>
-                <MonthPicker value={editData.billMonth || ""} onChange={(month) => setEditData({ ...editData, billMonth: month })} placeholder="Select service month" />
-              </div>
-              <div>
-                <Label>{t("vendorBills.details.currencyLabel")}</Label>
-                <CurrencySelect value={editData.currency || "USD"} onValueChange={(v) => setEditData({ ...editData, currency: v })} />
-              </div>
-              <div>
-                <Label>{t("vendorBills.table.statusHeader")}</Label>
-                <Select value={editData.status || "draft"} onValueChange={(v) => setEditData({ ...editData, status: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>{t("vendorBills.details.totalAmountLabel")}</Label>
-                <Input type="number" step="0.01" value={editData.totalAmount || ""} onChange={(e) => setEditData({ ...editData, totalAmount: e.target.value, subtotal: e.target.value })} />
-              </div>
-              <div>
-                <Label>{t("vendorBills.details.taxLabel")}</Label>
-                <Input type="number" step="0.01" value={editData.tax || "0"} onChange={(e) => setEditData({ ...editData, tax: e.target.value })} />
-              </div>
-              <div>
-                <Label>{t("vendorBills.payment.paidAmountLabel")}</Label>
-                <Input type="number" step="0.01" value={editData.paidAmount || "0"} onChange={(e) => setEditData({ ...editData, paidAmount: e.target.value })} />
-              </div>
-              <div className="col-span-2">
-                <Label>{t("vendorBills.details.descriptionLabel")}</Label>
-                <Textarea value={editData.description || ""} onChange={(e) => setEditData({ ...editData, description: e.target.value })} rows={2} />
-              </div>
-              <div className="col-span-2">
-                <Label>{t("vendorBills.details.internalNotes")}</Label>
-                <Textarea value={editData.internalNotes || ""} onChange={(e) => setEditData({ ...editData, internalNotes: e.target.value })} rows={2} />
+                <Label className="text-xs">{t("vendorBills.allocations.noteLabel")}</Label>
+                <Input value={allocNote} onChange={(e) => setAllocNote(e.target.value)} className="h-8 text-sm" />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setEditOpen(false)}>{t("common.cancel")}</Button>
-              <Button onClick={() => {
-                const payload: any = { id, ...editData };
-                if (!payload.dueDate) payload.dueDate = null;
-                if (!payload.paidDate) payload.paidDate = null;
-                if (!payload.billMonth) payload.billMonth = null;
-                updateMutation.mutate(payload);
-              }} disabled={updateMutation.isPending}>
-                {updateMutation.isPending ? "Saving..." : "Save Changes"}
+              <Button variant="outline" onClick={() => setAllocOpen(false)}>{t("common.cancel")}</Button>
+              <Button onClick={handleCreateAlloc} disabled={createAllocMutation.isPending}>
+                {createAllocMutation.isPending ? t("vendorBills.actions.creating") : t("vendorBills.actions.createAllocation")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1835,11 +1382,8 @@ function VendorBillDetail({ id }: { id: number }) {
   );
 }
 
-/* ========== Main Component ========== */
+/* ========== Main Page Router ========== */
 export default function VendorBills() {
-  const [match, params] = useRoute("/vendor-bills/:id");
-  if (match && params?.id) {
-    return <VendorBillDetail id={parseInt(params.id)} />;
-  }
-  return <VendorBillList />;
+  const [isDetail] = useRoute("/vendor-bills/:id");
+  return isDetail ? <VendorBillDetail /> : <VendorBillList />;
 }
