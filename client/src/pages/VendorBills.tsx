@@ -5,7 +5,7 @@
  */
 import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
-import { DatePicker } from "@/components/DatePicker";
+import { DatePicker, MonthPicker } from "@/components/DatePicker";
 import { formatDate, formatAmount, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
@@ -114,6 +114,7 @@ function AIUploadDrawer({ open, onOpenChange, onCreated }: { open: boolean; onOp
   const vendorsQuery = trpc.vendors.list.useQuery({ limit: 500 });
   const vendors = (vendorsQuery.data as any)?.data || vendorsQuery.data || [];
 
+  const uploadMutation = trpc.pdfParsing.uploadFile.useMutation();
   const parseMutation = trpc.pdfParsing.parseMultiFile.useMutation();
   const applyMutation = trpc.pdfParsing.applyMultiFileParse.useMutation();
 
@@ -132,23 +133,34 @@ function AIUploadDrawer({ open, onOpenChange, onCreated }: { open: boolean; onOp
 
     setStep("parsing");
     try {
-      const formData = new FormData();
-      pendingFiles.forEach((f) => formData.append("files", f));
-      formData.append("serviceMonth", serviceMonth);
+      // Step 1: Upload all files to OSS via tRPC (base64)
+      const uploadedFiles: Array<{ fileUrl: string; fileKey: string; fileName: string; fileType: "invoice" | "payment_receipt" | "statement" | "other" }> = [];
+      for (const pf of pendingFiles) {
+        const reader = new FileReader();
+        const base64 = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const result = reader.result as string;
+            resolve(result.split(",")[1]);
+          };
+          reader.onerror = reject;
+          reader.readAsDataURL(pf);
+        });
+        const uploadResult = await uploadMutation.mutateAsync({
+          fileName: pf.name,
+          fileBase64: base64,
+          contentType: pf.type || "application/pdf",
+        });
+        uploadedFiles.push({
+          fileUrl: uploadResult.url,
+          fileKey: uploadResult.key,
+          fileName: pf.name,
+          fileType: "invoice",
+        });
+      }
 
-      const res = await fetch("/api/upload-vendor-docs", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("Upload failed");
-      const { fileKeys, fileTypes: detectedTypes } = await res.json();
-
-      const filesPayload = (fileKeys as string[]).map((key: string, idx: number) => ({
-        fileUrl: key,
-        fileKey: key,
-        fileName: pendingFiles[idx]?.name || `file-${idx}`,
-        fileType: (detectedTypes?.[idx] || "invoice") as "invoice" | "payment_receipt" | "statement" | "other",
-      }));
-
+      // Step 2: Call multi-file AI parse
       const result = await parseMutation.mutateAsync({
-        files: filesPayload,
+        files: uploadedFiles,
         serviceMonth,
       });
 
@@ -243,8 +255,8 @@ function AIUploadDrawer({ open, onOpenChange, onCreated }: { open: boolean; onOp
           bankReference: editedPayment.bankReference || "",
           bankFee: editedPayment.bankFee || "0",
         } : undefined,
-        receiptFileUrl: parsedResult?.fileKeys?.[0] || undefined,
-        receiptFileKey: parsedResult?.fileKeys?.[0] || undefined,
+        receiptFileUrl: parsedResult?.files?.[0]?.fileUrl || undefined,
+        receiptFileKey: parsedResult?.files?.[0]?.fileKey || undefined,
       });
 
       toast.success(t("vendorBills.toast.createdSuccess"));
@@ -277,7 +289,7 @@ function AIUploadDrawer({ open, onOpenChange, onCreated }: { open: boolean; onOp
             <div className="space-y-4">
               <div>
                 <Label>{t("vendorBills.details.serviceMonthLabel")}</Label>
-                <Input type="month" value={serviceMonth} onChange={(e) => setServiceMonth(e.target.value)} className="mt-1" />
+                <MonthPicker value={serviceMonth} onChange={(v: string) => setServiceMonth(v)} placeholder={t("vendorBills.details.serviceMonthPlaceholder")} className="mt-1" />
               </div>
               <div className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
                 onClick={() => document.getElementById("ai-file-input")?.click()}>
@@ -487,7 +499,7 @@ function BillFormFields({ bill, onChange, vendors, t }: { bill: any; onChange: (
         </div>
         <div>
           <Label className="text-xs">{t("vendorBills.details.serviceMonthLabel")}</Label>
-          <Input type="month" value={bill.billMonth || ""} onChange={(e) => set("billMonth", e.target.value)} className="h-8 text-sm" />
+          <MonthPicker value={bill.billMonth || ""} onChange={(v: string) => set("billMonth", v)} placeholder={t("vendorBills.details.serviceMonthPlaceholder")} className="h-8 text-sm" />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-3">
@@ -860,24 +872,24 @@ function VendorBillList() {
           </div>
         )}
 
-        {/* Manual Create Dialog */}
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{t("vendorBills.actions.createBill")}</DialogTitle>
-            </DialogHeader>
-            <div className="py-4 space-y-6">
+        {/* Manual Create Drawer */}
+        <Sheet open={createOpen} onOpenChange={setCreateOpen}>
+          <SheetContent side="right" className="w-full sm:max-w-2xl overflow-y-auto">
+            <SheetHeader>
+              <SheetTitle>{t("vendorBills.actions.createBill")}</SheetTitle>
+            </SheetHeader>
+            <div className="py-6 space-y-6">
               <BillFormFields bill={newBill} onChange={setNewBill} vendors={vendors} t={t} />
               <LineItemsEditor items={newItems} onChange={setNewItems} t={t} />
             </div>
-            <DialogFooter>
+            <div className="flex justify-end gap-2 pt-4 border-t">
               <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
               <Button onClick={handleManualCreate} disabled={createMutation.isPending}>
                 {createMutation.isPending ? t("vendorBills.actions.creating") : t("vendorBills.actions.createBill")}
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </div>
+          </SheetContent>
+        </Sheet>
 
         {/* AI Upload Drawer */}
         <AIUploadDrawer open={aiDrawerOpen} onOpenChange={setAiDrawerOpen} onCreated={refetch} />
@@ -1231,8 +1243,8 @@ function VendorBillDetail() {
                   <TableBody>
                     {allocs.map((a: any) => (
                       <TableRow key={a.id}>
-                        <TableCell className="text-sm">{a.employee?.fullName || `ID: ${a.employeeId}`}</TableCell>
-                        <TableCell className="text-sm">{a.invoice?.invoiceNumber || `ID: ${a.invoiceId}`}</TableCell>
+                        <TableCell className="text-sm">{a.employeeName || t("vendorBills.allocations.unknownEmployee")}{a.employeeCode ? ` (${a.employeeCode})` : ""}</TableCell>
+                        <TableCell className="text-sm">{a.invoiceNumber || t("vendorBills.allocations.unknownInvoice")}{a.invoiceCurrency && a.invoiceTotal ? ` - ${a.invoiceCurrency} ${formatAmount(parseFloat(a.invoiceTotal))}` : ""}</TableCell>
                         <TableCell className="text-sm text-right font-medium">{formatAmount(parseFloat(a.allocatedAmount || "0"))}</TableCell>
                         <TableCell className="text-sm text-muted-foreground truncate max-w-[200px]">{a.description || "\u2014"}</TableCell>
                         <TableCell>
@@ -1284,7 +1296,7 @@ function VendorBillDetail() {
                 </div>
                 <div>
                   <Label className="text-xs">{t("vendorBills.details.serviceMonthLabel")}</Label>
-                  <Input type="month" value={editBill.billMonth || ""} onChange={(e) => setEditBill({ ...editBill, billMonth: e.target.value })} className="h-8 text-sm" />
+                  <MonthPicker value={editBill.billMonth || ""} onChange={(v: string) => setEditBill({ ...editBill, billMonth: v })} placeholder={t("vendorBills.details.serviceMonthPlaceholder")} className="h-8 text-sm" />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
