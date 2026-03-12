@@ -128,10 +128,14 @@ let _jsonGuideData: Map<string, ChapterData[]> | null = null;
 
 function loadJsonGuideData(): Map<string, ChapterData[]> {
   const result = new Map<string, ChapterData[]>();
-  const jsonPath = path.resolve(process.cwd(), "data/country_guide_data.json");
+  // Try seed-data first (Docker production), then data (development)
+  let jsonPath = path.resolve(process.cwd(), "seed-data/country_guide_data.json");
+  if (!fs.existsSync(jsonPath)) {
+    jsonPath = path.resolve(process.cwd(), "data/country_guide_data.json");
+  }
 
   if (!fs.existsSync(jsonPath)) {
-    console.warn(`[KnowledgeGenerator] country_guide_data.json not found at ${jsonPath}`);
+    console.warn(`[KnowledgeGenerator] country_guide_data.json not found`);
     return result;
   }
 

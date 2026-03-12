@@ -80,14 +80,22 @@ interface SeedData {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function readJsonFile(relativePath: string) {
-  try {
-    const path = join(process.cwd(), 'data', relativePath);
-    const content = await readFile(path, 'utf-8');
-    return JSON.parse(content);
-  } catch (e) {
-    console.warn(`[Seed] Could not read ${relativePath}. Skipping.`);
-    return null;
+  // In production Docker, seed data is at /app/seed-data (not affected by volume mount).
+  // In development, seed data is at ./data (relative to project root).
+  const candidates = [
+    join(process.cwd(), 'seed-data', relativePath),  // Docker production path
+    join(process.cwd(), 'data', relativePath),        // Development / fallback path
+  ];
+  for (const path of candidates) {
+    try {
+      const content = await readFile(path, 'utf-8');
+      return JSON.parse(content);
+    } catch {
+      // Try next candidate
+    }
   }
+  console.warn(`[Seed] Could not read ${relativePath} from any known path. Skipping.`);
+  return null;
 }
 
 function parseDates(obj: any, dateFields: string[]) {

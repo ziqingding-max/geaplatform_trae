@@ -62,14 +62,14 @@ COPY --from=builder /app/dist ./dist
 # 复制数据库迁移文件（用于 drizzle 初始化）
 COPY --from=builder /app/drizzle ./drizzle
 
-# 复制种子数据文件
-COPY --from=builder /app/data ./data
+# 复制种子数据文件到独立目录（不受 volume 挂载影响）
+COPY --from=builder /app/data /app/seed-data
 
 # 复制启动脚本
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
-# 创建数据目录（用于 SQLite 持久化）
+# 创建数据目录（用于 SQLite 持久化，会被 Docker volume 挂载）
 RUN mkdir -p /app/data && chown -R node:node /app/data
 
 # 设置环境变量
