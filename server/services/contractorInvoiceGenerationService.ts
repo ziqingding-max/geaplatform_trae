@@ -1,3 +1,17 @@
+/**
+ * Contractor Invoice Generation Service
+ * 
+ * Aligned with EOR payroll generation pattern:
+ * - Generates contractor invoices from LOCKED milestones and adjustments
+ * - Called by runAutoCreateContractorInvoices (5th 00:01 Beijing time)
+ * - Uses scan condition: status = 'locked' AND invoiceId IS NULL
+ * - Writes back invoiceId after creation (like EOR payrollRunId linkage)
+ * 
+ * Payment Types:
+ * 1. Monthly: 1 invoice per month (base rate + locked adjustments)
+ * 2. Semi-monthly: 2 invoices per month (1st-15th base, 16th-end base + adjustments)
+ * 3. Milestone: 1 invoice per locked milestone (+ locked adjustments)
+ */
 
 import { getDb } from "./db/connection";
 import {
@@ -9,106 +23,92 @@ import {
   InsertContractorInvoice,
   InsertContractorInvoiceItem,
 } from "../../drizzle/schema";
-import { eq, and, sql, isNull, or } from "drizzle-orm";
+import { eq, and, sql, isNull, or, inArray } from "drizzle-orm";
 
-/**
- * Service to generate invoices for Contractors.
- * Handles:
- * 1. Monthly fixed payments (auto-generated on cycle)
- * 2. Approved Milestones (auto-generated when approved)
- */
 export const ContractorInvoiceGenerationService = {
-  /**
-   * Main entry point to process all pending invoices.
-   * Recommended to run via Cron daily.
-   */
-  async processAll(targetDate: Date = new Date()): Promise<{ generated: number; errors: string[] }> {
-    const db = await getDb();
-    if (!db) return { generated: 0, errors: ["DB Connection Failed"] };
 
-    let generatedCount = 0;
+  /**
+   * Generate contractor invoices from locked data for a specific month.
+   * This is the primary entry point called by the cron job (5th 00:01).
+   * 
+   * @param effectiveMonth - The month to process in YYYY-MM-01 format
+   * @param year - Year number
+   * @param month - Month number (1-indexed)
+   * @returns { created: number, errors: string[] }
+   */
+  async generateFromLockedData(
+    effectiveMonth: string,
+    year: number,
+    month: number
+  ): Promise<{ created: number; errors: string[] }> {
+    const db = await getDb();
+    if (!db) return { created: 0, errors: ["DB Connection Failed"] };
+
+    let totalCreated = 0;
     const errors: string[] = [];
 
     // 1. Process Monthly Contractors
     try {
-      const monthlyCount = await this.processMonthlyInvoices(targetDate);
-      generatedCount += monthlyCount;
+      const monthlyCount = await this.processMonthlyFromLocked(effectiveMonth, year, month);
+      totalCreated += monthlyCount;
     } catch (e) {
       errors.push(`Monthly Invoice Error: ${e instanceof Error ? e.message : String(e)}`);
     }
 
     // 2. Process Semi-Monthly Contractors
     try {
-      const semiMonthlyCount = await this.processSemiMonthlyInvoices(targetDate);
-      generatedCount += semiMonthlyCount;
+      const semiMonthlyCount = await this.processSemiMonthlyFromLocked(effectiveMonth, year, month);
+      totalCreated += semiMonthlyCount;
     } catch (e) {
       errors.push(`Semi-Monthly Invoice Error: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    // 3. Process Approved Milestones
+    // 3. Process Milestone Contractors
     try {
-      const milestoneCount = await this.processMilestoneInvoices(targetDate);
-      generatedCount += milestoneCount;
+      const milestoneCount = await this.processMilestoneFromLocked(effectiveMonth, year, month);
+      totalCreated += milestoneCount;
     } catch (e) {
       errors.push(`Milestone Invoice Error: ${e instanceof Error ? e.message : String(e)}`);
     }
 
-    return { generated: generatedCount, errors };
+    return { created: totalCreated, errors };
   },
 
   /**
-   * Generate invoices for active contractors with 'semi_monthly' frequency.
-   * Cycles:
-   * 1. 1st - 15th (Run on 15th)
-   * 2. 16th - End of Month (Run on Last Day)
+   * Generate invoices for monthly contractors from locked data.
+   * Creates 1 invoice per contractor per month:
+   * - Base monthly rate as service_fee line item
+   * - All locked adjustments for the month as separate line items
    */
-  async processSemiMonthlyInvoices(targetDate: Date): Promise<number> {
+  async processMonthlyFromLocked(
+    effectiveMonth: string,
+    year: number,
+    month: number
+  ): Promise<number> {
     const db = await getDb();
     if (!db) return 0;
 
-    const d = targetDate.getDate();
-    const y = targetDate.getFullYear();
-    const m = targetDate.getMonth();
-    const lastDayOfMonth = new Date(y, m + 1, 0).getDate();
+    // Period: full month
+    const periodStart = `${year}-${String(month).padStart(2, "0")}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const periodEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    const invoiceDate = new Date().toISOString().split("T")[0];
 
-    let periodStart = "";
-    let periodEnd = "";
-    let isCycleRun = false;
-
-    // Check if today is a run date
-    if (d === 15) {
-      // First cycle
-      periodStart = new Date(Date.UTC(y, m, 1)).toISOString().split("T")[0];
-      periodEnd = new Date(Date.UTC(y, m, 15)).toISOString().split("T")[0];
-      isCycleRun = true;
-    } else if (d === lastDayOfMonth) {
-      // Second cycle
-      periodStart = new Date(Date.UTC(y, m, 16)).toISOString().split("T")[0];
-      periodEnd = new Date(Date.UTC(y, m + 1, 0)).toISOString().split("T")[0];
-      isCycleRun = true;
-    }
-
-    // If not a cycle run date, skip (unless manual override logic is added later)
-    if (!isCycleRun) return 0;
-
-    const invoiceDate = targetDate.toISOString().split("T")[0];
-
-    // 1. Find eligible contractors
+    // Find active monthly contractors
     const eligibleContractors = await db
       .select()
       .from(contractors)
       .where(
         and(
           eq(contractors.status, "active"),
-          eq(contractors.paymentFrequency, "semi_monthly"),
-          or(eq(contractors.rateType, "fixed_monthly"))
+          eq(contractors.paymentFrequency, "monthly")
         )
       );
 
     let count = 0;
 
     for (const contractor of eligibleContractors) {
-      // 2. Check existence
+      // Check for existing invoice for this period (prevent duplicates)
       const existing = await db
         .select()
         .from(contractorInvoices)
@@ -123,196 +123,49 @@ export const ContractorInvoiceGenerationService = {
 
       if (existing.length > 0) continue;
 
-      // 3. Create Invoice
-      const invoiceNumber = `CTR-INV-${y}${String(m + 1).padStart(2, "0")}-${d === 15 ? "1" : "2"}-${contractor.id}-${Math.floor(Math.random() * 1000)}`;
-      
-      let totalAmount = 0;
-      const currency = contractor.currency;
-      const lineItems: InsertContractorInvoiceItem[] = [];
-
-      // A. Half Monthly Rate
-      if (contractor.rateAmount) {
-        const amount = parseFloat(contractor.rateAmount);
-        totalAmount += amount;
-        lineItems.push({
-          invoiceId: 0,
-          description: `Semi-Monthly Service Fee - ${periodStart} to ${periodEnd}`,
-          quantity: "1",
-          unitPrice: amount.toFixed(2),
-          amount: amount.toFixed(2),
-          itemType: "service_fee",
-        });
-      }
-
-      // B. Adjustments (Only for Second Cycle / End of Month)
-      const adjustmentsToLink: number[] = [];
-      
-      // Only include adjustments if this is the second cycle (End of Month)
-      if (d === lastDayOfMonth) {
-        const pendingAdjustments = await db
-          .select()
-          .from(contractorAdjustments)
-          .where(
-            and(
-              eq(contractorAdjustments.contractorId, contractor.id),
-              eq(contractorAdjustments.status, "approved"),
-              isNull(contractorAdjustments.invoiceId)
-            )
-          );
-
-        for (const adj of pendingAdjustments) {
-          if (adj.currency !== currency) continue;
-          const amount = parseFloat(adj.amount);
-          const isDeduction = adj.type === "deduction";
-          const signedAmount = isDeduction ? -amount : amount;
-          totalAmount += signedAmount;
-          lineItems.push({
-            invoiceId: 0,
-            description: `${adj.type.toUpperCase()}: ${adj.description}`,
-            quantity: "1",
-            unitPrice: signedAmount.toFixed(2),
-            amount: signedAmount.toFixed(2),
-            itemType: isDeduction ? "adjustment" : (adj.type === "expense" ? "expense" : "adjustment"),
-            adjustmentId: adj.id,
-          });
-          adjustmentsToLink.push(adj.id);
-        }
-      }
-
-      if (lineItems.length === 0) continue;
-
-      // Insert
-      const invoiceData: InsertContractorInvoice = {
-        invoiceNumber,
-        contractorId: contractor.id,
-        customerId: contractor.customerId,
-        invoiceDate,
-        periodStart,
-        periodEnd,
-        currency,
-        totalAmount: totalAmount.toFixed(2),
-        status: "draft",
-      };
-
-      const result = await db.insert(contractorInvoices).values(invoiceData).returning();
-      const invoice = result[0];
-
-      if (lineItems.length > 0) {
-        const itemsWithId = lineItems.map(item => ({ ...item, invoiceId: invoice.id }));
-        await db.insert(contractorInvoiceItems).values(itemsWithId);
-      }
-
-      for (const adjId of adjustmentsToLink) {
-        await db.update(contractorAdjustments)
-          .set({ invoiceId: invoice.id, status: "invoiced" })
-          .where(eq(contractorAdjustments.id, adjId));
-      }
-
-      count++;
-    }
-
-    return count;
-  },
-
-  /**
-   * Generate invoices for active contractors with 'monthly' frequency.
-   * Generates one invoice per month containing:
-   * - Fixed Monthly Rate
-   * - Any approved, uninvoiced adjustments
-   */
-  async processMonthlyInvoices(targetDate: Date): Promise<number> {
-    const db = await getDb();
-    if (!db) return 0;
-
-    let count = 0;
-    const y = targetDate.getFullYear();
-    const m = targetDate.getMonth(); // 0-indexed
-    // Invoice Period: First to Last day of current month
-    const periodStart = new Date(Date.UTC(y, m, 1)).toISOString().split("T")[0];
-    const periodEnd = new Date(Date.UTC(y, m + 1, 0)).toISOString().split("T")[0];
-    const invoiceDate = targetDate.toISOString().split("T")[0]; // Issue date
-
-    // 1. Find eligible contractors
-    const eligibleContractors = await db
-      .select()
-      .from(contractors)
-      .where(
-        and(
-          eq(contractors.status, "active"),
-          eq(contractors.paymentFrequency, "monthly"),
-          // Only process if rateType is fixed_monthly (otherwise they might be hourly which needs timesheets)
-          or(eq(contractors.rateType, "fixed_monthly"))
-        )
-      );
-
-    for (const contractor of eligibleContractors) {
-      // 2. Check if invoice already exists for this period
-      const existing = await db
-        .select()
-        .from(contractorInvoices)
-        .where(
-          and(
-            eq(contractorInvoices.contractorId, contractor.id),
-            eq(contractorInvoices.periodStart, periodStart),
-            eq(contractorInvoices.periodEnd, periodEnd)
-          )
-        )
-        .limit(1);
-
-      if (existing.length > 0) continue; // Already generated
-
-      // 3. Create Invoice Logic
-      // Generate Invoice Number: CTR-INV-{Year}{Month}-{ContractorID}-{Random}
-      const invoiceNumber = `CTR-INV-${y}${String(m + 1).padStart(2, "0")}-${contractor.id}-${Math.floor(Math.random() * 1000)}`;
-
-      // Calculate Total
-      let totalAmount = 0;
-      const currency = contractor.currency;
-      const lineItems: InsertContractorInvoiceItem[] = [];
-
-      // A. Fixed Rate Item
-      if (contractor.rateAmount) {
-        const amount = parseFloat(contractor.rateAmount);
-        totalAmount += amount;
-        lineItems.push({
-          invoiceId: 0, // Placeholder
-          description: `Monthly Service Fee - ${periodStart} to ${periodEnd}`,
-          quantity: "1",
-          unitPrice: amount.toFixed(2),
-          amount: amount.toFixed(2),
-          itemType: "service_fee",
-        });
-      }
-
-      // B. Approved Adjustments (Bonus/Expense)
-      // Find adjustments that are approved, not invoiced
-      const pendingAdjustments = await db
+      // Get locked adjustments for this contractor and month
+      const lockedAdjustments = await db
         .select()
         .from(contractorAdjustments)
         .where(
           and(
             eq(contractorAdjustments.contractorId, contractor.id),
-            eq(contractorAdjustments.status, "approved"),
+            eq(contractorAdjustments.effectiveMonth, effectiveMonth),
+            eq(contractorAdjustments.status, "locked" as any),
             isNull(contractorAdjustments.invoiceId)
           )
         );
 
-      const adjustmentsToLink: number[] = [];
+      // Build line items
+      const lineItems: InsertContractorInvoiceItem[] = [];
+      let totalAmount = 0;
+      const currency = contractor.currency;
+      const adjustmentIdsToLink: number[] = [];
 
-      for (const adj of pendingAdjustments) {
-        // Simple currency check - skip if currency mismatch (should handle conversion in real app)
+      // A. Base monthly rate
+      if (contractor.rateAmount && contractor.rateType === "fixed_monthly") {
+        const amount = parseFloat(contractor.rateAmount);
+        totalAmount += amount;
+        lineItems.push({
+          invoiceId: 0,
+          description: `Monthly Consulting Fee - ${periodStart} to ${periodEnd}`,
+          quantity: "1",
+          unitPrice: amount.toFixed(2),
+          amount: amount.toFixed(2),
+          itemType: "service_fee",
+        });
+      }
+
+      // B. Locked adjustments
+      for (const adj of lockedAdjustments) {
         if (adj.currency !== currency) continue;
-
         const amount = parseFloat(adj.amount);
-        // type: bonus, expense, deduction
-        // Deduction should subtract
         const isDeduction = adj.type === "deduction";
         const signedAmount = isDeduction ? -amount : amount;
-
         totalAmount += signedAmount;
 
         lineItems.push({
-          invoiceId: 0, // Placeholder
+          invoiceId: 0,
           description: `${adj.type.toUpperCase()}: ${adj.description}`,
           quantity: "1",
           unitPrice: signedAmount.toFixed(2),
@@ -320,14 +173,15 @@ export const ContractorInvoiceGenerationService = {
           itemType: isDeduction ? "adjustment" : (adj.type === "expense" ? "expense" : "adjustment"),
           adjustmentId: adj.id,
         });
-        
-        adjustmentsToLink.push(adj.id);
+        adjustmentIdsToLink.push(adj.id);
       }
 
-      // If no items (e.g. no rate and no adjustments), skip
+      // Skip if no items
       if (lineItems.length === 0) continue;
 
-      // Insert Invoice
+      // Create invoice
+      const invoiceNumber = generateContractorInvoiceNumber(contractor.id, year, month, "M");
+
       const invoiceData: InsertContractorInvoice = {
         invoiceNumber,
         contractorId: contractor.id,
@@ -343,60 +197,227 @@ export const ContractorInvoiceGenerationService = {
       const result = await db.insert(contractorInvoices).values(invoiceData).returning();
       const invoice = result[0];
 
-      // Insert Items
-      if (lineItems.length > 0) {
-        const itemsWithId = lineItems.map(item => ({ ...item, invoiceId: invoice.id }));
-        await db.insert(contractorInvoiceItems).values(itemsWithId);
-      }
+      // Insert line items
+      const itemsWithId = lineItems.map(item => ({ ...item, invoiceId: invoice.id }));
+      await db.insert(contractorInvoiceItems).values(itemsWithId);
 
-      // Update Adjustments to link to invoice
-      for (const adjId of adjustmentsToLink) {
+      // Link adjustments back (write invoiceId)
+      for (const adjId of adjustmentIdsToLink) {
         await db.update(contractorAdjustments)
-          .set({ invoiceId: invoice.id, status: "invoiced" })
+          .set({ invoiceId: invoice.id })
           .where(eq(contractorAdjustments.id, adjId));
       }
 
       count++;
+      console.log(`[ContractorInvoice] Created monthly invoice ${invoiceNumber} for contractor #${contractor.id} (${totalAmount.toFixed(2)} ${currency})`);
     }
 
     return count;
   },
 
   /**
-   * Generate invoices for Approved Milestones.
-   * Creates one invoice per milestone (plus any pending adjustments).
+   * Generate invoices for semi-monthly contractors from locked data.
+   * Creates 2 invoices per contractor per month:
+   * - First half (1st-15th): base rate only
+   * - Second half (16th-end): base rate + locked adjustments
    */
-  async processMilestoneInvoices(targetDate: Date): Promise<number> {
+  async processSemiMonthlyFromLocked(
+    effectiveMonth: string,
+    year: number,
+    month: number
+  ): Promise<number> {
     const db = await getDb();
     if (!db) return 0;
 
-    let count = 0;
-    const invoiceDate = targetDate.toISOString().split("T")[0];
+    const lastDay = new Date(year, month, 0).getDate();
+    const invoiceDate = new Date().toISOString().split("T")[0];
 
-    // 1. Find Approved Milestones without Invoice
-    const approvedMilestones = await db
+    // Two periods
+    const periods = [
+      {
+        periodStart: `${year}-${String(month).padStart(2, "0")}-01`,
+        periodEnd: `${year}-${String(month).padStart(2, "0")}-15`,
+        suffix: "1H",
+        includeAdjustments: false,
+      },
+      {
+        periodStart: `${year}-${String(month).padStart(2, "0")}-16`,
+        periodEnd: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+        suffix: "2H",
+        includeAdjustments: true, // Adjustments only in second half
+      },
+    ];
+
+    // Find active semi-monthly contractors
+    const eligibleContractors = await db
+      .select()
+      .from(contractors)
+      .where(
+        and(
+          eq(contractors.status, "active"),
+          eq(contractors.paymentFrequency, "semi_monthly")
+        )
+      );
+
+    let count = 0;
+
+    for (const contractor of eligibleContractors) {
+      for (const period of periods) {
+        // Check for existing invoice
+        const existing = await db
+          .select()
+          .from(contractorInvoices)
+          .where(
+            and(
+              eq(contractorInvoices.contractorId, contractor.id),
+              eq(contractorInvoices.periodStart, period.periodStart),
+              eq(contractorInvoices.periodEnd, period.periodEnd)
+            )
+          )
+          .limit(1);
+
+        if (existing.length > 0) continue;
+
+        const lineItems: InsertContractorInvoiceItem[] = [];
+        let totalAmount = 0;
+        const currency = contractor.currency;
+        const adjustmentIdsToLink: number[] = [];
+
+        // A. Half monthly rate (rateAmount stores the semi-monthly amount)
+        if (contractor.rateAmount && contractor.rateType === "fixed_monthly") {
+          const amount = parseFloat(contractor.rateAmount);
+          totalAmount += amount;
+          lineItems.push({
+            invoiceId: 0,
+            description: `Semi-Monthly Consulting Fee - ${period.periodStart} to ${period.periodEnd}`,
+            quantity: "1",
+            unitPrice: amount.toFixed(2),
+            amount: amount.toFixed(2),
+            itemType: "service_fee",
+          });
+        }
+
+        // B. Locked adjustments (only for second half)
+        if (period.includeAdjustments) {
+          const lockedAdjustments = await db
+            .select()
+            .from(contractorAdjustments)
+            .where(
+              and(
+                eq(contractorAdjustments.contractorId, contractor.id),
+                eq(contractorAdjustments.effectiveMonth, effectiveMonth),
+                eq(contractorAdjustments.status, "locked" as any),
+                isNull(contractorAdjustments.invoiceId)
+              )
+            );
+
+          for (const adj of lockedAdjustments) {
+            if (adj.currency !== currency) continue;
+            const amount = parseFloat(adj.amount);
+            const isDeduction = adj.type === "deduction";
+            const signedAmount = isDeduction ? -amount : amount;
+            totalAmount += signedAmount;
+
+            lineItems.push({
+              invoiceId: 0,
+              description: `${adj.type.toUpperCase()}: ${adj.description}`,
+              quantity: "1",
+              unitPrice: signedAmount.toFixed(2),
+              amount: signedAmount.toFixed(2),
+              itemType: isDeduction ? "adjustment" : (adj.type === "expense" ? "expense" : "adjustment"),
+              adjustmentId: adj.id,
+            });
+            adjustmentIdsToLink.push(adj.id);
+          }
+        }
+
+        if (lineItems.length === 0) continue;
+
+        // Create invoice
+        const invoiceNumber = generateContractorInvoiceNumber(contractor.id, year, month, period.suffix);
+
+        const invoiceData: InsertContractorInvoice = {
+          invoiceNumber,
+          contractorId: contractor.id,
+          customerId: contractor.customerId,
+          invoiceDate,
+          periodStart: period.periodStart,
+          periodEnd: period.periodEnd,
+          currency,
+          totalAmount: totalAmount.toFixed(2),
+          status: "draft",
+        };
+
+        const result = await db.insert(contractorInvoices).values(invoiceData).returning();
+        const invoice = result[0];
+
+        const itemsWithId = lineItems.map(item => ({ ...item, invoiceId: invoice.id }));
+        await db.insert(contractorInvoiceItems).values(itemsWithId);
+
+        for (const adjId of adjustmentIdsToLink) {
+          await db.update(contractorAdjustments)
+            .set({ invoiceId: invoice.id })
+            .where(eq(contractorAdjustments.id, adjId));
+        }
+
+        count++;
+        console.log(`[ContractorInvoice] Created semi-monthly invoice ${invoiceNumber} for contractor #${contractor.id} (${totalAmount.toFixed(2)} ${currency})`);
+      }
+    }
+
+    return count;
+  },
+
+  /**
+   * Generate invoices for milestone contractors from locked data.
+   * Creates 1 invoice per locked milestone:
+   * - Milestone amount as the primary line item
+   * - Locked adjustments are attached to the first milestone invoice
+   */
+  async processMilestoneFromLocked(
+    effectiveMonth: string,
+    year: number,
+    month: number
+  ): Promise<number> {
+    const db = await getDb();
+    if (!db) return 0;
+
+    const invoiceDate = new Date().toISOString().split("T")[0];
+
+    // Find locked milestones without invoiceId
+    const lockedMilestones = await db
       .select()
       .from(contractorMilestones)
       .where(
         and(
-          eq(contractorMilestones.status, "approved"),
+          eq(contractorMilestones.effectiveMonth, effectiveMonth),
+          eq(contractorMilestones.status, "locked" as any),
           isNull(contractorMilestones.invoiceId)
         )
       );
 
-    for (const milestone of approvedMilestones) {
-      // Get Contractor
-      const contractorResult = await db.select().from(contractors).where(eq(contractors.id, milestone.contractorId)).limit(1);
+    let count = 0;
+
+    // Track which contractors have already had adjustments attached
+    const contractorsWithAdjAttached = new Set<number>();
+
+    for (const milestone of lockedMilestones) {
+      // Get contractor info
+      const contractorResult = await db
+        .select()
+        .from(contractors)
+        .where(eq(contractors.id, milestone.contractorId))
+        .limit(1);
+
       if (contractorResult.length === 0) continue;
       const contractor = contractorResult[0];
 
-      // Create Invoice Number
-      const invoiceNumber = `CTR-MIL-${milestone.id}-${Math.floor(Math.random() * 1000)}`;
-
       const lineItems: InsertContractorInvoiceItem[] = [];
       let totalAmount = parseFloat(milestone.amount);
+      const currency = milestone.currency;
+      const adjustmentIdsToLink: number[] = [];
 
-      // A. Milestone Item
+      // A. Milestone line item
       lineItems.push({
         invoiceId: 0,
         description: `Milestone: ${milestone.title}`,
@@ -407,50 +428,53 @@ export const ContractorInvoiceGenerationService = {
         milestoneId: milestone.id,
       });
 
-      // B. Sweep Pending Adjustments (Optional strategy: Attach to next invoice)
-      // Only attach if currency matches
-      const pendingAdjustments = await db
-        .select()
-        .from(contractorAdjustments)
-        .where(
-          and(
-            eq(contractorAdjustments.contractorId, contractor.id),
-            eq(contractorAdjustments.status, "approved"),
-            isNull(contractorAdjustments.invoiceId)
-          )
-        );
+      // B. Attach locked adjustments (only once per contractor per month)
+      if (!contractorsWithAdjAttached.has(contractor.id)) {
+        const lockedAdjustments = await db
+          .select()
+          .from(contractorAdjustments)
+          .where(
+            and(
+              eq(contractorAdjustments.contractorId, contractor.id),
+              eq(contractorAdjustments.effectiveMonth, effectiveMonth),
+              eq(contractorAdjustments.status, "locked" as any),
+              isNull(contractorAdjustments.invoiceId)
+            )
+          );
 
-      const adjustmentsToLink: number[] = [];
+        for (const adj of lockedAdjustments) {
+          if (adj.currency !== currency) continue;
+          const amount = parseFloat(adj.amount);
+          const isDeduction = adj.type === "deduction";
+          const signedAmount = isDeduction ? -amount : amount;
+          totalAmount += signedAmount;
 
-      for (const adj of pendingAdjustments) {
-        if (adj.currency !== milestone.currency) continue;
+          lineItems.push({
+            invoiceId: 0,
+            description: `${adj.type.toUpperCase()}: ${adj.description}`,
+            quantity: "1",
+            unitPrice: signedAmount.toFixed(2),
+            amount: signedAmount.toFixed(2),
+            itemType: isDeduction ? "adjustment" : (adj.type === "expense" ? "expense" : "adjustment"),
+            adjustmentId: adj.id,
+          });
+          adjustmentIdsToLink.push(adj.id);
+        }
 
-        const amount = parseFloat(adj.amount);
-        const isDeduction = adj.type === "deduction";
-        const signedAmount = isDeduction ? -amount : amount;
-
-        totalAmount += signedAmount;
-
-        lineItems.push({
-          invoiceId: 0,
-          description: `${adj.type.toUpperCase()}: ${adj.description}`,
-          quantity: "1",
-          unitPrice: signedAmount.toFixed(2),
-          amount: signedAmount.toFixed(2),
-          itemType: isDeduction ? "adjustment" : (adj.type === "expense" ? "expense" : "adjustment"),
-          adjustmentId: adj.id,
-        });
-        
-        adjustmentsToLink.push(adj.id);
+        contractorsWithAdjAttached.add(contractor.id);
       }
 
-      // Insert Invoice
+      // Create invoice
+      const invoiceNumber = generateContractorInvoiceNumber(
+        contractor.id, year, month, `MIL-${milestone.id}`
+      );
+
       const invoiceData: InsertContractorInvoice = {
         invoiceNumber,
         contractorId: contractor.id,
         customerId: contractor.customerId,
         invoiceDate,
-        currency: milestone.currency,
+        currency,
         totalAmount: totalAmount.toFixed(2),
         status: "draft",
       };
@@ -458,25 +482,57 @@ export const ContractorInvoiceGenerationService = {
       const result = await db.insert(contractorInvoices).values(invoiceData).returning();
       const invoice = result[0];
 
-      // Insert Items
       const itemsWithId = lineItems.map(item => ({ ...item, invoiceId: invoice.id }));
       await db.insert(contractorInvoiceItems).values(itemsWithId);
 
-      // Update Milestone
+      // Link milestone back
       await db.update(contractorMilestones)
         .set({ invoiceId: invoice.id })
         .where(eq(contractorMilestones.id, milestone.id));
 
-      // Update Adjustments
-      for (const adjId of adjustmentsToLink) {
+      // Link adjustments back
+      for (const adjId of adjustmentIdsToLink) {
         await db.update(contractorAdjustments)
-          .set({ invoiceId: invoice.id, status: "invoiced" })
+          .set({ invoiceId: invoice.id })
           .where(eq(contractorAdjustments.id, adjId));
       }
 
       count++;
+      console.log(`[ContractorInvoice] Created milestone invoice ${invoiceNumber} for contractor #${contractor.id} milestone #${milestone.id} (${totalAmount.toFixed(2)} ${currency})`);
     }
 
     return count;
-  }
+  },
+
+  /**
+   * Legacy entry point - kept for backward compatibility but now delegates to generateFromLockedData.
+   * Previously ran daily to sweep "approved" items; now only processes locked data.
+   * @deprecated Use generateFromLockedData instead
+   */
+  async processAll(targetDate: Date = new Date()): Promise<{ generated: number; errors: string[] }> {
+    const y = targetDate.getFullYear();
+    const m = targetDate.getMonth() + 1;
+    const effectiveMonth = `${y}-${String(m).padStart(2, "0")}-01`;
+    
+    const result = await this.generateFromLockedData(effectiveMonth, y, m);
+    return { generated: result.created, errors: result.errors };
+  },
 };
+
+/**
+ * Generate a deterministic, unique invoice number for contractor invoices.
+ * Format: CTR-INV-{YYYYMM}-{ContractorID}-{Suffix}
+ * 
+ * @param contractorId - The contractor's ID
+ * @param year - Invoice year
+ * @param month - Invoice month (1-indexed)
+ * @param suffix - Type suffix: "M" (monthly), "1H"/"2H" (semi-monthly), "MIL-{id}" (milestone)
+ */
+function generateContractorInvoiceNumber(
+  contractorId: number,
+  year: number,
+  month: number,
+  suffix: string
+): string {
+  return `CTR-INV-${year}${String(month).padStart(2, "0")}-${contractorId}-${suffix}`;
+}

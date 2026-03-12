@@ -151,38 +151,57 @@ export type ContractorInvoiceItem = typeof contractorInvoiceItems.$inferSelect;
 export type InsertContractorInvoiceItem = typeof contractorInvoiceItems.$inferInsert;
 
 // ── Milestones ──
+// Status workflow aligned with EOR adjustments/leave, with extra "pending" state:
+// pending (client creates, waiting for worker) → submitted (worker submits) →
+// client_approved/client_rejected → admin_approved/admin_rejected → locked
 export const contractorMilestones = sqliteTable(
   "contractor_milestones",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     contractorId: integer("contractorId").notNull(),
+    customerId: integer("customerId").notNull(), // Auto-filled from contractor
     title: text("title", { length: 255 }).notNull(),
     description: text("description"),
     amount: text("amount").notNull(),
     currency: text("currency", { length: 3 }).notNull(),
     
+    // Status workflow: pending → submitted → client_approved/client_rejected → admin_approved/admin_rejected → locked
     status: text("status", { enum: [
       "pending",
-      "in_progress",
       "submitted",
-      "approved",
-      "paid",
-      "cancelled",
+      "client_approved",
+      "client_rejected",
+      "admin_approved",
+      "admin_rejected",
+      "locked",
     ] }).default("pending").notNull(),
     
     dueDate: text("dueDate"),
-    completedAt: integer("completedAt", { mode: "timestamp" }),
-    approvedAt: integer("approvedAt", { mode: "timestamp" }),
-    approvedBy: integer("approvedBy"), // Admin user ID
+    completedAt: integer("completedAt", { mode: "timestamp_ms" }),
     
-    invoiceId: integer("invoiceId"), // Linked when invoiced
+    // Approval tracking (aligned with EOR adjustments)
+    submittedBy: integer("submittedBy"), // Worker user ID who submitted
+    clientApprovedBy: integer("clientApprovedBy"), // Portal contact ID
+    clientApprovedAt: integer("clientApprovedAt", { mode: "timestamp_ms" }),
+    clientRejectionReason: text("clientRejectionReason"),
+    adminApprovedBy: integer("adminApprovedBy"), // Admin user ID
+    adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp_ms" }),
+    adminRejectionReason: text("adminRejectionReason"),
     
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    // Target month
+    effectiveMonth: text("effectiveMonth"), // Which month this applies to (YYYY-MM-01), set when submitted
+    
+    // Link to contractor invoice when locked
+    invoiceId: integer("invoiceId"), // Linked to contractorInvoice when included
+    
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     cmContractorIdIdx: index("cm_contractor_id_idx").on(table.contractorId),
+    cmCustomerIdIdx: index("cm_customer_id_idx").on(table.customerId),
     cmStatusIdx: index("cm_status_idx").on(table.status),
+    cmEffectiveMonthIdx: index("cm_effective_month_idx").on(table.effectiveMonth),
   })
 );
 
@@ -190,28 +209,56 @@ export type ContractorMilestone = typeof contractorMilestones.$inferSelect;
 export type InsertContractorMilestone = typeof contractorMilestones.$inferInsert;
 
 // ── Adjustments (Bonuses, Expenses) ──
+// Status workflow aligned with EOR adjustments:
+// submitted → client_approved/client_rejected → admin_approved/admin_rejected → locked
 export const contractorAdjustments = sqliteTable(
   "contractor_adjustments",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     contractorId: integer("contractorId").notNull(),
+    customerId: integer("customerId").notNull(), // Auto-filled from contractor
     type: text("type", { enum: ["bonus", "expense", "deduction"] }).notNull(),
     description: text("description").notNull(),
     amount: text("amount").notNull(),
     currency: text("currency", { length: 3 }).notNull(),
-    date: text("date").notNull(),
     
-    status: text("status", { enum: ["pending", "approved", "rejected", "invoiced"] }).default("pending").notNull(),
+    // Receipt/attachment
     attachmentUrl: text("attachmentUrl"),
+    attachmentFileKey: text("attachmentFileKey", { length: 500 }),
     
-    invoiceId: integer("invoiceId"),
+    // Status workflow: submitted → client_approved/client_rejected → admin_approved/admin_rejected → locked
+    status: text("status", { enum: [
+      "submitted",
+      "client_approved",
+      "client_rejected",
+      "admin_approved",
+      "admin_rejected",
+      "locked",
+    ] }).default("submitted").notNull(),
+    submittedBy: integer("submittedBy"), // User ID who created this
     
-    createdAt: integer("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    // Approval tracking
+    clientApprovedBy: integer("clientApprovedBy"), // Portal contact ID who approved/rejected
+    clientApprovedAt: integer("clientApprovedAt", { mode: "timestamp_ms" }),
+    clientRejectionReason: text("clientRejectionReason"),
+    adminApprovedBy: integer("adminApprovedBy"), // Admin user ID who confirmed
+    adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp_ms" }),
+    adminRejectionReason: text("adminRejectionReason"),
+    
+    // Target month
+    effectiveMonth: text("effectiveMonth").notNull(), // Which month this applies to (YYYY-MM-01)
+    
+    // Link to contractor invoice when locked
+    invoiceId: integer("invoiceId"), // Linked to contractorInvoice when included
+    
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     caContractorIdIdx: index("ca_contractor_id_idx").on(table.contractorId),
+    caCustomerIdIdx: index("ca_customer_id_idx").on(table.customerId),
     caStatusIdx: index("ca_status_idx").on(table.status),
+    caEffectiveMonthIdx: index("ca_effective_month_idx").on(table.effectiveMonth),
   })
 );
 

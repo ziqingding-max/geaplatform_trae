@@ -27,6 +27,7 @@ import { notifyOwner } from "../_core/notification";
 import { notificationService } from "../services/notificationService";
 import { getExchangeRate } from "../services/exchangeRateService";
 import { walletService } from "../services/walletService";
+import { markContractorInvoicesPaidByClientInvoice } from "../db";
 
 const invoiceItemTypeEnum = z.enum([
   "eor_service_fee",
@@ -712,6 +713,35 @@ export const invoicesRouter = router({
               title: `Overpayment Credited to Wallet`,
               content: `An overpayment on invoice ${invoice.invoiceNumber} has been credited to the customer's wallet.\n\nOriginal Invoice: ${invoice.invoiceNumber}\nInvoice Total: ${invoice.currency} ${paymentResult.invoiceTotal}\nAmount Paid: ${invoice.currency} ${input.paidAmount}\nExcess Credited: ${invoice.currency} ${paymentResult.difference}`,
             }).catch((err) => console.warn("[Notification] Failed to notify about wallet credit:", err));
+          }
+        }
+      }
+
+      // ── AOR Payment Sync: When a monthly_aor client invoice is paid,
+      //    automatically mark associated contractor invoices as 'paid' ──
+      if (input.status === "paid") {
+        const paidInvoice = await getInvoiceById(input.id);
+        if (paidInvoice && paidInvoice.invoiceType === "monthly_aor") {
+          try {
+            const syncedCount = await markContractorInvoicesPaidByClientInvoice(input.id);
+            if (syncedCount > 0) {
+              console.log(`[AOR Sync] Marked ${syncedCount} contractor invoices as paid (client invoice #${input.id})`);
+              await logAuditAction({
+                userId: ctx.user.id,
+                userName: ctx.user.name || null,
+                action: "aor_payment_sync",
+                entityType: "invoice",
+                entityId: input.id,
+                changes: JSON.stringify({
+                  type: "contractor_invoices_paid",
+                  clientInvoiceId: input.id,
+                  contractorInvoicesSynced: syncedCount,
+                }),
+              });
+            }
+          } catch (err) {
+            console.error(`[AOR Sync] Failed to sync contractor invoice payment for client invoice #${input.id}:`, err);
+            // Don't throw - the client invoice payment succeeded, sync failure is logged but not blocking
           }
         }
       }

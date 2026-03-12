@@ -1,5 +1,5 @@
 
-import { eq, like, count, desc, and, or, getTableColumns, sql } from "drizzle-orm";
+import { eq, like, count, desc, and, or, getTableColumns, sql, isNull, inArray } from "drizzle-orm";
 import { 
   contractors, InsertContractor,
   customers,
@@ -126,7 +126,7 @@ export async function listContractorMilestones(contractorId: number) {
     approverName: users.name
   })
   .from(contractorMilestones)
-  .leftJoin(users, eq(contractorMilestones.approvedBy, users.id))
+  .leftJoin(users, eq(contractorMilestones.adminApprovedBy, users.id))
   .where(eq(contractorMilestones.contractorId, contractorId))
   .orderBy(desc(contractorMilestones.createdAt));
 }
@@ -333,4 +333,160 @@ export async function getContractorInvoiceById(id: number) {
     .where(eq(contractorInvoiceItems.invoiceId, id));
     
   return { ...result[0], items };
+}
+
+// ============================================================================
+// AOR AUTO-LOCK FUNCTIONS (Called by cronJobs.ts runAutoLock)
+// ============================================================================
+
+/**
+ * Lock all admin_approved contractor adjustments for a given effective month.
+ * Mirrors the EOR lockSubmittedAdjustments pattern.
+ * Only locks items where invoiceId IS NULL (not yet included in a contractor invoice).
+ * @param monthStr - Effective month in YYYY-MM-01 format
+ * @returns Number of adjustments locked
+ */
+export async function lockContractorAdjustments(monthStr: string): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const conditions = [
+    eq(contractorAdjustments.effectiveMonth, monthStr),
+    eq(contractorAdjustments.status, 'admin_approved' as any),
+    isNull(contractorAdjustments.invoiceId),
+  ];
+
+  const result = await db.update(contractorAdjustments)
+    .set({ status: 'locked' as any })
+    .where(and(...conditions));
+
+  return (result as any).changes || 0;
+}
+
+/**
+ * Lock all admin_approved contractor milestones for a given effective month.
+ * Mirrors the EOR lockSubmittedAdjustments pattern with AOR-specific milestone workflow.
+ * Only locks items where invoiceId IS NULL (not yet included in a contractor invoice).
+ * @param monthStr - Effective month in YYYY-MM-01 format
+ * @returns Number of milestones locked
+ */
+export async function lockContractorMilestones(monthStr: string): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const conditions = [
+    eq(contractorMilestones.effectiveMonth, monthStr),
+    eq(contractorMilestones.status, 'admin_approved' as any),
+    isNull(contractorMilestones.invoiceId),
+  ];
+
+  const result = await db.update(contractorMilestones)
+    .set({ status: 'locked' as any })
+    .where(and(...conditions));
+
+  return (result as any).changes || 0;
+}
+
+/**
+ * Get all locked contractor adjustments for a given month that haven't been invoiced yet.
+ * Used by the contractor invoice generation process.
+ * @param monthStr - Effective month in YYYY-MM-01 format
+ * @returns Array of locked, uninvoiced contractor adjustments
+ */
+export async function getLockedContractorAdjustments(monthStr: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db.select({
+    ...getTableColumns(contractorAdjustments),
+    contractorFirstName: contractors.firstName,
+    contractorLastName: contractors.lastName,
+    contractorCurrency: contractors.currency,
+    contractorPaymentFrequency: contractors.paymentFrequency,
+    customerId: contractors.customerId,
+  })
+  .from(contractorAdjustments)
+  .innerJoin(contractors, eq(contractorAdjustments.contractorId, contractors.id))
+  .where(
+    and(
+      eq(contractorAdjustments.effectiveMonth, monthStr),
+      eq(contractorAdjustments.status, 'locked' as any),
+      isNull(contractorAdjustments.invoiceId)
+    )
+  );
+}
+
+/**
+ * Get all locked contractor milestones for a given month that haven't been invoiced yet.
+ * Used by the contractor invoice generation process.
+ * @param monthStr - Effective month in YYYY-MM-01 format
+ * @returns Array of locked, uninvoiced contractor milestones
+ */
+export async function getLockedContractorMilestones(monthStr: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db.select({
+    ...getTableColumns(contractorMilestones),
+    contractorFirstName: contractors.firstName,
+    contractorLastName: contractors.lastName,
+    contractorCurrency: contractors.currency,
+    contractorPaymentFrequency: contractors.paymentFrequency,
+    customerId: contractors.customerId,
+  })
+  .from(contractorMilestones)
+  .innerJoin(contractors, eq(contractorMilestones.contractorId, contractors.id))
+  .where(
+    and(
+      eq(contractorMilestones.effectiveMonth, monthStr),
+      eq(contractorMilestones.status, 'locked' as any),
+      isNull(contractorMilestones.invoiceId)
+    )
+  );
+}
+
+/**
+ * Get all active contractors for a given payment frequency.
+ * Used by the contractor invoice auto-creation process.
+ * @param paymentFrequency - 'monthly' | 'semi_monthly' | 'milestone'
+ * @returns Array of active contractors with the specified payment frequency
+ */
+export async function getActiveContractorsByFrequency(paymentFrequency: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db.select({
+    ...getTableColumns(contractors),
+    customerName: customers.companyName,
+  })
+  .from(contractors)
+  .leftJoin(customers, eq(contractors.customerId, customers.id))
+  .where(
+    and(
+      eq(contractors.status, 'active'),
+      eq(contractors.paymentFrequency, paymentFrequency as any)
+    )
+  );
+}
+
+/**
+ * Update contractor invoices' status to 'paid' when the associated client invoice is paid.
+ * This is the AOR "collect first, pay later" business closure.
+ * @param clientInvoiceId - The client invoice ID that was just paid
+ * @returns Number of contractor invoices updated to 'paid'
+ */
+export async function markContractorInvoicesPaidByClientInvoice(clientInvoiceId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+
+  const result = await db.update(contractorInvoices)
+    .set({ status: 'paid' as any })
+    .where(
+      and(
+        eq(contractorInvoices.clientInvoiceId, clientInvoiceId),
+        eq(contractorInvoices.status, 'approved' as any)
+      )
+    );
+
+  return (result as any).changes || 0;
 }

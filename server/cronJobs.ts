@@ -32,6 +32,11 @@ import {
   lockSubmittedAdjustments,
   lockSubmittedLeaveRecords,
   lockSubmittedReimbursements,
+  lockContractorAdjustments,
+  lockContractorMilestones,
+  getLockedContractorAdjustments,
+  getLockedContractorMilestones,
+  getActiveContractorsByFrequency,
   getSubmittedAdjustmentsForPayroll,
   getSubmittedUnpaidLeaveForPayroll,
   updatePayrollRun,
@@ -223,7 +228,7 @@ export async function runEmployeeAutoActivation(): Promise<{ activated: number; 
  * Auto-lock all submitted adjustments and leave records for the previous month.
  * Runs on the 5th at 00:00 Beijing time (cutoff was 4th 23:59).
  */
-export async function runAutoLock(): Promise<{ adjustmentsLocked: number; leaveLocked: number; reimbursementsLocked: number }> {
+export async function runAutoLock(): Promise<{ adjustmentsLocked: number; leaveLocked: number; reimbursementsLocked: number; contractorAdjustmentsLocked: number; contractorMilestonesLocked: number }> {
   const today = new Date();
   const beijingOffset = 8 * 60;
   const beijingDate = new Date(today.getTime() + (beijingOffset - today.getTimezoneOffset()) * 60000);
@@ -255,15 +260,23 @@ export async function runAutoLock(): Promise<{ adjustmentsLocked: number; leaveL
   const reimbLocked = await lockSubmittedReimbursements(prevMonthDate);
   console.log(`[CronJob] Locked ${reimbLocked} reimbursements for ${prevMonthStr}`);
 
+  // ── AOR: Lock contractor adjustments (admin_approved → locked) ──
+  const ctrAdjLocked = await lockContractorAdjustments(prevMonthDate);
+  console.log(`[CronJob] Locked ${ctrAdjLocked} contractor adjustments for ${prevMonthStr}`);
+
+  // ── AOR: Lock contractor milestones (admin_approved → locked) ──
+  const ctrMilLocked = await lockContractorMilestones(prevMonthDate);
+  console.log(`[CronJob] Locked ${ctrMilLocked} contractor milestones for ${prevMonthStr}`);
+
   await logAuditAction({
     userName: "System",
     action: "auto_lock_monthly",
     entityType: "system",
     entityId: 0,
-    changes: { detail: `Auto-locked ${adjLocked} adjustments, ${leaveLocked} leave records, and ${reimbLocked} reimbursements for ${prevMonthStr}` },
+    changes: { detail: `Auto-locked for ${prevMonthStr}: EOR(${adjLocked} adj, ${leaveLocked} leave, ${reimbLocked} reimb) + AOR(${ctrAdjLocked} ctr_adj, ${ctrMilLocked} ctr_mil)` },
   });
 
-  return { adjustmentsLocked: adjLocked, leaveLocked, reimbursementsLocked: reimbLocked };
+  return { adjustmentsLocked: adjLocked, leaveLocked, reimbursementsLocked: reimbLocked, contractorAdjustmentsLocked: ctrAdjLocked, contractorMilestonesLocked: ctrMilLocked };
 }
 
 // ============================================================================
@@ -740,15 +753,59 @@ export async function runMonthlyLeaveAccrual(): Promise<{ processed: number; upd
 }
 
 // ============================================================================
-// CRON JOB: Daily Contractor Invoice Generation (01:00 Beijing)
+// CRON JOB: Auto-create Contractor Invoices (5th 00:01 Beijing, same as payroll)
 // ============================================================================
-export async function runContractorInvoiceGeneration() {
-  console.log("[CronJob] Running contractor invoice generation...");
-  const result = await ContractorInvoiceGenerationService.processAll();
-  console.log(`[CronJob] Contractor invoices: ${result.generated} generated. Errors: ${result.errors.length}`);
+
+/**
+ * Auto-create contractor invoices from locked milestones and adjustments.
+ * Runs on the 5th at 00:01 Beijing time (same time as payroll auto-creation).
+ * 
+ * Business Logic:
+ * - Monthly contractors: 1 invoice per month (base rate + locked adjustments)
+ * - Semi-monthly contractors: 2 invoices per month (1st-15th, 16th-end)
+ *   - Adjustments are only included in the second half invoice
+ * - Milestone contractors: 1 invoice per locked milestone (+ adjustments)
+ * 
+ * Alignment with EOR:
+ * - Uses same cron timing as runAutoCreatePayrollRuns
+ * - Uses same scan condition: status = 'locked' AND invoiceId IS NULL
+ * - Writes back invoiceId after creation (like EOR payrollRunId)
+ */
+export async function runAutoCreateContractorInvoices(): Promise<{ created: number; errors: string[] }> {
+  const today = new Date();
+  const beijingOffset = 8 * 60;
+  const beijingDate = new Date(today.getTime() + (beijingOffset - today.getTimezoneOffset()) * 60000);
+  const currentYear = beijingDate.getFullYear();
+  const currentMonth = beijingDate.getMonth() + 1;
+
+  // Calculate previous month (the month that was just locked)
+  let prevMonth = currentMonth - 1;
+  let prevYear = currentYear;
+  if (prevMonth < 1) {
+    prevMonth = 12;
+    prevYear--;
+  }
+
+  const prevMonthDate = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
+  const prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
+
+  console.log(`[CronJob] Auto-creating contractor invoices for ${prevMonthStr}`);
+
+  const result = await ContractorInvoiceGenerationService.generateFromLockedData(prevMonthDate, prevYear, prevMonth);
+
+  console.log(`[CronJob] Contractor invoice auto-creation complete: ${result.created} invoices created`);
   if (result.errors.length > 0) {
     console.error("[CronJob] Contractor invoice errors:", result.errors);
   }
+
+  await logAuditAction({
+    userName: "System",
+    action: "contractor_invoices_auto_created",
+    entityType: "system",
+    entityId: 0,
+    changes: { detail: `Auto-created ${result.created} contractor invoices for ${prevMonthStr}. Errors: ${result.errors.length}` },
+  });
+
   return result;
 }
 
@@ -780,6 +837,14 @@ export function scheduleCronJobs() {
       await runAutoCreatePayrollRuns();
     } catch (err) {
       console.error("[CronJob] Payroll auto-creation failed:", err);
+    }
+
+    // AOR: Auto-create contractor invoices (same timing, after payroll runs)
+    console.log("[CronJob] Running monthly contractor invoice auto-creation (Beijing 00:01 on 5th)...");
+    try {
+      await runAutoCreateContractorInvoices();
+    } catch (err) {
+      console.error("[CronJob] Contractor invoice auto-creation failed:", err);
     }
   }, { timezone: "Asia/Shanghai" });
 
@@ -828,22 +893,11 @@ export function scheduleCronJobs() {
     }
   }, { timezone: "Asia/Shanghai" });
 
-  // Daily at 01:00 Beijing time — Contractor Invoice Generation
-  cron.schedule("0 0 1 * * *", async () => {
-    console.log("[CronJob] Running daily contractor invoice generation (Beijing 01:00)...");
-    try {
-      await runContractorInvoiceGeneration();
-    } catch (err) {
-      console.error("[CronJob] Contractor invoice generation failed:", err);
-    }
-  }, { timezone: "Asia/Shanghai" });
-
   console.log("[CronJob] Scheduled: Employee auto-activation (daily 00:01 Beijing)");
   console.log("[CronJob] Scheduled: Leave status transition (daily 00:02 Beijing)");
   console.log("[CronJob] Scheduled: Overdue invoice detection (daily 00:03 Beijing)");
   console.log("[CronJob] Scheduled: Exchange rate auto-fetch (daily 00:05 Beijing)");
-  console.log("[CronJob] Scheduled: Contractor invoice generation (daily 01:00 Beijing)");
-  console.log("[CronJob] Scheduled: Auto-lock adjustments/leave (monthly 5th 00:00 Beijing)");
-  console.log("[CronJob] Scheduled: Payroll auto-creation (monthly 5th 00:01 Beijing)");
+  console.log("[CronJob] Scheduled: Auto-lock EOR+AOR (monthly 5th 00:00 Beijing)");
+  console.log("[CronJob] Scheduled: Payroll + Contractor Invoice auto-creation (monthly 5th 00:01 Beijing)");
   console.log("[CronJob] Scheduled: Monthly leave accrual (monthly 1st 00:10 Beijing)");
 }
