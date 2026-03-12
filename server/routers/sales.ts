@@ -22,7 +22,7 @@ import {
 } from "../db";
 import { storagePut, storageGet, storageDownload } from "../storage";
 import { quotations, salesDocuments, customerContracts, leadChangeLogs } from "../../drizzle/schema";
-import { desc, eq, and, or } from "drizzle-orm";
+import { desc, eq, and, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 /**
@@ -471,16 +471,10 @@ export const salesRouter = router({
       for (const doc of salesDocs) {
           // If docType is 'contract', convert to customer contract
           if (doc.docType === 'contract') {
-              await db.insert(customerContracts).values({
-                  customerId,
-                  contractName: doc.title || `MSA-${lead.companyName}`,
-                  contractType: "MSA",
-                  fileUrl: doc.fileUrl,
-                  fileKey: doc.fileKey,
-                  status: "signed",
-                  createdAt: new Date(),
-                  updatedAt: new Date()
-              });
+              // Use raw SQL to avoid Drizzle passing null for autoIncrement id
+              const contractName = doc.title || `MSA-${lead.companyName}`;
+              const now = Date.now();
+              await db.run(sql`INSERT INTO customer_contracts ("customerId", "contractName", "contractType", "fileUrl", "fileKey", "status", "createdAt", "updatedAt") VALUES (${customerId}, ${contractName}, ${'MSA'}, ${doc.fileUrl}, ${doc.fileKey}, ${'signed'}, ${now}, ${now})`);
           }
           // Also sync the document's customerId for future reference
           await db.update(salesDocuments)
@@ -735,16 +729,11 @@ export const salesRouter = router({
         const db = getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        // Create document record
-        const [doc] = await db.insert(salesDocuments).values({
-          leadId: input.leadId,
-          docType: input.docType,
-          title: input.fileName, // Using fileName as title
-          fileKey: fileKey,
-          fileUrl: url,
-          generatedBy: ctx.user.id,
-          createdAt: new Date(),
-        }).returning();
+        // Create document record — use raw SQL to avoid Drizzle passing null for autoIncrement id
+        const docNow = Date.now();
+        const insertResult = await db.run(sql`INSERT INTO sales_documents ("leadId", "docType", "title", "fileKey", "fileUrl", "generatedBy", "createdAt") VALUES (${input.leadId}, ${input.docType}, ${input.fileName}, ${fileKey}, ${url}, ${ctx.user.id}, ${docNow})`);
+        const docId = Number(insertResult.lastInsertRowid);
+        const doc = { id: docId, leadId: input.leadId, docType: input.docType, title: input.fileName, fileKey, fileUrl: url, generatedBy: ctx.user.id, createdAt: new Date(docNow) };
 
         await logAuditAction({
           userId: ctx.user.id, userName: ctx.user.name || null,
