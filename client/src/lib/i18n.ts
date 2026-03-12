@@ -244,6 +244,10 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "knowledge_base.topic.invoice": "Invoice",
     "knowledge_base.topic.onboarding": "Onboarding",
     "knowledge_base.topic.general": "General",
+    "knowledge_base.back_to_list": "Back to Knowledge Base",
+    "knowledge_base.published_at": "Published",
+    "knowledge_base.no_content": "No content available for this article.",
+    "knowledge_base.read_more": "Read more",
 
     // Settings
     "settings.title": "Settings",
@@ -2199,6 +2203,10 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "knowledge_base.topic.invoice": "发票",
     "knowledge_base.topic.onboarding": "入职",
     "knowledge_base.topic.general": "综合",
+    "knowledge_base.back_to_list": "返回知识库",
+    "knowledge_base.published_at": "发布时间",
+    "knowledge_base.no_content": "该文章暂无内容。",
+    "knowledge_base.read_more": "阅读全文",
 
     // Settings
     "settings.title": "设置",

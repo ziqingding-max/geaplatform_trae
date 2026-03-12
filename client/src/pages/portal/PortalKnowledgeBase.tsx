@@ -10,7 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Bell, BookOpen, Search, Sparkles, Mail, MessageSquareWarning } from "lucide-react";
+import { Bell, BookOpen, Search, Sparkles, Mail, MessageSquareWarning, ChevronDown, ChevronUp, ArrowLeft } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 type Topic = "payroll" | "compliance" | "leave" | "invoice" | "onboarding" | "general";
 
@@ -20,6 +22,7 @@ export default function PortalKnowledgeBase() {
   const { t, locale } = useI18n();
   const [search, setSearch] = useState("");
   const [topics, setTopics] = useState<Topic[]>(topicList);
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
 
   const { data, isLoading, refetch, isFetching } = portalTrpc.knowledgeBase.dashboard.useQuery({
     locale,
@@ -53,6 +56,11 @@ export default function PortalKnowledgeBase() {
     );
   }, [data?.items, search]);
 
+  const selectedItem = useMemo(() => {
+    if (selectedItemId === null) return null;
+    return (data?.items ?? []).find((item) => item.id === selectedItemId) || null;
+  }, [data?.items, selectedItemId]);
+
   const toggleTopic = (topic: Topic, checked: boolean) => {
     setTopics((prev) => {
       if (checked) {
@@ -65,6 +73,56 @@ export default function PortalKnowledgeBase() {
 
   const hasNoResults = !isLoading && filteredItems.length === 0;
 
+  // ─── Article Detail View ───
+  if (selectedItem) {
+    return (
+      <PortalLayout title={selectedItem.title}>
+        <div className="p-6 space-y-6 page-enter max-w-4xl mx-auto">
+          <Button variant="ghost" onClick={() => setSelectedItemId(null)} className="gap-2">
+            <ArrowLeft className="w-4 h-4" />
+            {t("knowledge_base.back_to_list")}
+          </Button>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2 mb-2">
+                {selectedItem.category === "alert" ? (
+                  <Bell className="w-4 h-4 text-amber-600" />
+                ) : (
+                  <BookOpen className="w-4 h-4 text-primary" />
+                )}
+                <Badge variant="secondary">{t(`knowledge_base.category.${selectedItem.category}`)}</Badge>
+                <Badge variant="outline">{t(`knowledge_base.topic.${selectedItem.topic}`)}</Badge>
+              </div>
+              <CardTitle className="text-xl">{selectedItem.title}</CardTitle>
+              {selectedItem.summary && (
+                <CardDescription className="text-sm mt-2">{selectedItem.summary}</CardDescription>
+              )}
+              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-3">
+                {selectedItem.publishedAt && (
+                  <span>{t("knowledge_base.published_at")}: {formatDate(selectedItem.publishedAt)}</span>
+                )}
+                <span>{t("knowledge_base.source")}: {selectedItem.sourceId ? `#${selectedItem.sourceId}` : "system"}</span>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {selectedItem.content ? (
+                <div className="prose prose-sm dark:prose-invert max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {selectedItem.content}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t("knowledge_base.no_content")}</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </PortalLayout>
+    );
+  }
+
+  // ─── List View ───
   return (
     <PortalLayout title={t("knowledge_base.title")}>
       <div className="p-6 space-y-6 page-enter max-w-6xl mx-auto">
@@ -212,7 +270,19 @@ export default function PortalKnowledgeBase() {
                   </Button>
                 </div>
                 {filteredItems.map((item) => (
-                  <div key={item.id} className="rounded-lg border p-3 space-y-2">
+                  <div
+                    key={item.id}
+                    className="rounded-lg border p-3 space-y-2 cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() => setSelectedItemId(item.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedItemId(item.id);
+                      }
+                    }}
+                  >
                     <div className="flex items-center gap-2">
                       {item.category === "alert" ? (
                         <Bell className="w-4 h-4 text-amber-600" />
@@ -222,8 +292,11 @@ export default function PortalKnowledgeBase() {
                       <Badge variant="secondary">{t(`knowledge_base.category.${item.category}`)}</Badge>
                       <Badge variant="outline">{t(`knowledge_base.topic.${item.topic}`)}</Badge>
                     </div>
-                    <h3 className="font-semibold">{item.title}</h3>
-                    <p className="text-sm text-muted-foreground">{item.summary || "-"}</p>
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold">{item.title}</h3>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2">{item.summary || "-"}</p>
                     <p className="text-xs text-muted-foreground">
                       {t("knowledge_base.source")}: {item.sourceId ? `#${item.sourceId}` : "system"}
                     </p>
