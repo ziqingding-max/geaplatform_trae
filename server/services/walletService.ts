@@ -5,6 +5,7 @@ import {
   walletTransactions,
   customerFrozenWallets,
   frozenWalletTransactions,
+  invoices,
   type WalletTransaction,
   type CustomerWallet,
   type FrozenWalletTransaction,
@@ -171,6 +172,13 @@ export class WalletService {
 
     if (balance <= 0) return "0";
 
+    // Look up the human-readable invoice number
+    let invoiceLabel = `#${invoiceId}`;
+    const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+    if (invoiceRecord.length > 0 && invoiceRecord[0].invoiceNumber) {
+      invoiceLabel = invoiceRecord[0].invoiceNumber;
+    }
+
     // Calculate deduction amount: min(balance, invoiceTotal)
     const deductionAmount = Math.min(balance, total).toFixed(2);
 
@@ -182,7 +190,7 @@ export class WalletService {
         direction: "debit",
         referenceId: invoiceId,
         referenceType: "invoice",
-        description: `Auto-deduction for invoice payment`,
+        description: `Auto-deduction for Invoice ${invoiceLabel}`,
       });
     }
 
@@ -195,6 +203,16 @@ export class WalletService {
   async refundDeduction(invoiceId: number, customerId: number, currency: string, amount: string) {
     if (parseFloat(amount) <= 0) return;
 
+    const db = getDb();
+    // Look up the human-readable invoice number
+    let invoiceLabel = `#${invoiceId}`;
+    if (db) {
+      const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+      if (invoiceRecord.length > 0 && invoiceRecord[0].invoiceNumber) {
+        invoiceLabel = invoiceRecord[0].invoiceNumber;
+      }
+    }
+
     const wallet = await this.getWallet(customerId, currency);
 
     await this.transact({
@@ -204,7 +222,7 @@ export class WalletService {
       direction: "credit",
       referenceId: invoiceId,
       referenceType: "invoice",
-        description: `Refund for rejected/voided invoice`,
+      description: `Refund for rejected/voided Invoice ${invoiceLabel}`,
     });
   }
 
@@ -368,6 +386,13 @@ export class WalletService {
       return { wallet: null, transaction: existingTx, skipped: true };
     }
 
+    // Look up the human-readable invoice number
+    let invoiceLabel = `#${invoiceId}`;
+    const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq(invoices.id, invoiceId)).limit(1);
+    if (invoiceRecord.length > 0 && invoiceRecord[0].invoiceNumber) {
+      invoiceLabel = invoiceRecord[0].invoiceNumber;
+    }
+
     const wallet = await this.getFrozenWallet(customerId, currency);
     return await this.frozenTransact({
       walletId: wallet.id,
@@ -376,7 +401,7 @@ export class WalletService {
       direction: "credit",
       referenceId: invoiceId,
       referenceType: "invoice",
-      description: `Deposit received from Invoice #${invoiceId}`,
+      description: `Deposit received from Invoice ${invoiceLabel}`,
       createdBy,
     });
   }
@@ -387,6 +412,16 @@ export class WalletService {
    * Accepts an optional external transaction object to avoid nested transactions.
    */
   async releaseDepositToCreditNote(customerId: number, currency: string, amount: string, creditNoteId: number, reason: string, createdBy?: number, externalTx?: any) {
+    // Look up the human-readable credit note number
+    const db = externalTx || getDb();
+    let cnLabel = `#${creditNoteId}`;
+    if (db) {
+      const cnRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq(invoices.id, creditNoteId)).limit(1);
+      if (cnRecord.length > 0 && cnRecord[0].invoiceNumber) {
+        cnLabel = cnRecord[0].invoiceNumber;
+      }
+    }
+
     const frozenWallet = await this.getFrozenWallet(customerId, currency, externalTx);
 
     return await this.frozenTransact({
@@ -396,7 +431,7 @@ export class WalletService {
       direction: "debit",
       referenceId: creditNoteId,
       referenceType: "credit_note",
-      description: `Deposit released to Credit Note #${creditNoteId}: ${reason}`,
+      description: `Deposit released to Credit Note ${cnLabel}: ${reason}`,
       createdBy,
     }, externalTx);
   }

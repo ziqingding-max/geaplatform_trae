@@ -2022,13 +2022,8 @@ function WalletTab({ customerId, currency }: { customerId: number; currency: str
                             {tx.type.replace(/_/g, " ")}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm max-w-[200px] truncate" title={tx.description || ""}>
+                        <TableCell className="text-sm max-w-[300px]" title={tx.description || ""}>
                           {tx.description}
-                          {tx.referenceId && (
-                            <span className="ml-1 text-xs text-muted-foreground">
-                              (Ref: {tx.referenceType} #{tx.referenceId})
-                            </span>
-                          )}
                         </TableCell>
                         <TableCell className={`text-sm text-right font-medium ${tx.direction === "credit" ? "text-emerald-600" : "text-red-600"}`}>
                           {tx.direction === "credit" ? "+" : "-"}{formatCurrency(currency, tx.amount)}
@@ -2207,13 +2202,8 @@ function WalletTab({ customerId, currency }: { customerId: number; currency: str
                             {tx.type.replace(/_/g, " ")}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm max-w-[200px] truncate" title={tx.description || ""}>
+                        <TableCell className="text-sm max-w-[300px]" title={tx.description || ""}>
                           {tx.description}
-                          {tx.referenceId && (
-                            <span className="ml-1 text-xs text-muted-foreground">
-                              (Ref: {tx.referenceType} #{tx.referenceId})
-                            </span>
-                          )}
                         </TableCell>
                         <TableCell className={`text-sm text-right font-medium ${tx.direction === "credit" ? "text-emerald-600" : "text-red-600"}`}>
                           {tx.direction === "credit" ? "+" : "-"}{formatCurrency(currency, tx.amount)}
