@@ -35,7 +35,7 @@ import {
   Loader2, Calendar, Sun, TreePalm, CheckCircle2, XCircle, Download,
   Briefcase, Target, DollarSign,
 } from "lucide-react";
-import CurrencySelect from "@/components/CurrencySelect";
+// CurrencySelect removed — currency is now locked from contractor record
 import { usePortalAuth } from "@/hooks/usePortalAuth";
 import { toast } from "sonner";
 import { exportToCsv } from "@/lib/csvExport";
@@ -91,10 +91,9 @@ const emptyForm: LeaveForm = {
 };
 
 // ── Milestones Sub-Tab Component ──
-function PortalMilestonesTab() {
+function PortalMilestonesTab({ showCreate, setShowCreate }: { showCreate: boolean; setShowCreate: (v: boolean) => void }) {
   const { t } = useI18n();
   const [statusFilter, setStatusFilter] = useState("active");
-  const [showCreate, setShowCreate] = useState(false);
   const [milestoneForm, setMilestoneForm] = useState({
     contractorId: "",
     title: "",
@@ -184,9 +183,6 @@ function PortalMilestonesTab() {
             <TabsTrigger value="history">{t("portal_milestones.tabs.history")}</TabsTrigger>
           </TabsList>
         </Tabs>
-        <Button onClick={() => setShowCreate(true)}>
-          <Plus className="w-4 h-4 mr-2" /> {t("portal_milestones.button.new")}
-        </Button>
       </div>
 
       <Card>
@@ -288,7 +284,10 @@ function PortalMilestonesTab() {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>{t("portal_milestones.form.contractor")} <span className="text-destructive">*</span></Label>
-              <Select value={milestoneForm.contractorId} onValueChange={(v) => setMilestoneForm((f) => ({ ...f, contractorId: v }))}>
+              <Select value={milestoneForm.contractorId} onValueChange={(v) => {
+                const selectedCon = contractorsList.find((c: any) => String(c.id) === v);
+                setMilestoneForm((f) => ({ ...f, contractorId: v, currency: selectedCon?.currency || f.currency }));
+              }}>
                 <SelectTrigger><SelectValue placeholder={t("portal_milestones.form.select_contractor")} /></SelectTrigger>
                 <SelectContent>
                   {contractorsList.map((c: any) => (
@@ -314,7 +313,7 @@ function PortalMilestonesTab() {
               </div>
               <div className="space-y-2">
                 <Label>{t("portal_milestones.form.currency")}</Label>
-                <CurrencySelect value={milestoneForm.currency} onValueChange={(v: string) => setMilestoneForm((f) => ({ ...f, currency: v }))} />
+                <Input value={milestoneForm.currency} readOnly disabled className="bg-muted" />
               </div>
             </div>
             <div className="space-y-2">
@@ -350,6 +349,7 @@ export default function PortalLeave() {
   const [form, setForm] = useState<LeaveForm>({ ...emptyForm });
   const [selectedBalanceEmp, setSelectedBalanceEmp] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("requests");
+  const [showMilestoneCreate, setShowMilestoneCreate] = useState(false);
 
   const utils = portalTrpc.useUtils();
 
@@ -463,7 +463,9 @@ export default function PortalLeave() {
           </div>
           <div className="flex gap-2">
             {activeTab === "milestones" ? (
-              <></>
+              <Button onClick={() => setShowMilestoneCreate(true)}>
+                <Plus className="w-4 h-4 mr-2" /> {t("portal_milestones.button.new")}
+              </Button>
             ) : (
             <>
             <Button
@@ -754,7 +756,7 @@ export default function PortalLeave() {
 
           {/* Milestones Tab */}
           <TabsContent value="milestones" className="space-y-4">
-            <PortalMilestonesTab />
+            <PortalMilestonesTab showCreate={showMilestoneCreate} setShowCreate={setShowMilestoneCreate} />
           </TabsContent>
         </Tabs>
       </div>

@@ -347,7 +347,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_adjustments.form.upload_receipt_button": "Upload Receipt",
     "portal_adjustments.form.uploading_receipt": "Uploading...",
     "portal_adjustments.form.view_receipt": "View receipt",
-    "portal_adjustments.header.description": "Salary and benefit adjustments for your employees",
+    "portal_adjustments.header.description": "Salary and benefit adjustments for your workers",
     "portal_adjustments.header.title": "Adjustments",
     "portal_adjustments.pagination.next": "Next",
     "portal_adjustments.pagination.page_info": "Page {page} of {totalPages}",
@@ -1985,7 +1985,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "nav.help_center": "帮助中心",
     "nav.operations": "运营",
     "nav.payroll": "薪资",
-    "nav.adjustments": "薪资调整",
+    "nav.adjustments": "调整项",
     "nav.leave": "休假与里程碑",
     "nav.reimbursements": "报销",
     "nav.finance": "财务",
@@ -2306,8 +2306,8 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_adjustments.form.upload_receipt_button": "上传收据",
     "portal_adjustments.form.uploading_receipt": "上传中...",
     "portal_adjustments.form.view_receipt": "查看收据",
-    "portal_adjustments.header.description": "您员工的薪资和福利调整",
-    "portal_adjustments.header.title": "薪资调整",
+    "portal_adjustments.header.description": "您的员工和承包商的调整项",
+    "portal_adjustments.header.title": "调整项",
     "portal_adjustments.pagination.next": "下一页",
     "portal_adjustments.pagination.page_info": "第 {page} 页，共 {totalPages} 页",
     "portal_adjustments.pagination.previous": "上一页",
@@ -6044,7 +6044,7 @@ const adminTranslations = {
 
     // Portal Adjustments
     "portal_adjustments.header.title": "Adjustments",
-    "portal_adjustments.header.description": "Salary and benefit adjustments for your employees",
+    "portal_adjustments.header.description": "Salary and benefit adjustments for your workers",
     "portal_adjustments.toast.create_success": "Adjustment created successfully",
     "portal_adjustments.toast.update_success": "Adjustment updated successfully",
     "portal_adjustments.toast.delete_success": "Adjustment deleted successfully",
@@ -7253,8 +7253,8 @@ const adminTranslations = {
     "adjustments.confirm.delete": "确定要删除此异动记录吗？",
 
     // Portal Adjustments
-    "portal_adjustments.header.title": "薪酬异动",
-    "portal_adjustments.header.description": "员工的薪资和福利异动",
+    "portal_adjustments.header.title": "调整项",
+    "portal_adjustments.header.description": "您的员工和承包商的调整项",
     "portal_adjustments.toast.create_success": "异动创建成功",
     "portal_adjustments.toast.update_success": "异动更新成功",
     "portal_adjustments.toast.delete_success": "异动删除成功",

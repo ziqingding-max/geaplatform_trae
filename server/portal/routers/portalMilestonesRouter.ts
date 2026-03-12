@@ -71,7 +71,7 @@ export const portalMilestonesRouter = portalRouter({
           status: contractorMilestones.status,
           dueDate: contractorMilestones.dueDate,
           completedAt: contractorMilestones.completedAt,
-          approvedAt: contractorMilestones.approvedAt,
+          clientApprovedAt: contractorMilestones.clientApprovedAt,
           createdAt: contractorMilestones.createdAt,
         })
         .from(contractorMilestones)
@@ -192,8 +192,9 @@ export const portalMilestonesRouter = portalRouter({
       await db
         .update(contractorMilestones)
         .set({
-          status: "approved",
-          approvedAt: new Date(),
+          status: "client_approved" as any,
+          clientApprovedBy: ctx.portalUser.id,
+          clientApprovedAt: new Date(),
         })
         .where(eq(contractorMilestones.id, input.id));
 
@@ -239,11 +240,14 @@ export const portalMilestonesRouter = portalRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Only submitted milestones can be rejected" });
       }
 
-      await db
+       await db
         .update(contractorMilestones)
-        .set({ status: "cancelled" })
+        .set({
+          status: "client_rejected" as any,
+          clientApprovedBy: ctx.portalUser.id,
+          clientApprovedAt: new Date(),
+        })
         .where(eq(contractorMilestones.id, input.id));
-
       return { success: true };
     }),
 });
