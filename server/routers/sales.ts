@@ -17,9 +17,11 @@ import {
   listEmployees,
   getDb,
   createCustomerPricing,
+  createLeadChangeLog,
+  listLeadChangeLogs,
 } from "../db";
 import { storagePut, storageGet, storageDownload } from "../storage";
-import { quotations, salesDocuments, customerContracts } from "../../drizzle/schema";
+import { quotations, salesDocuments, customerContracts, leadChangeLogs } from "../../drizzle/schema";
 import { desc, eq, and, or } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
@@ -121,6 +123,20 @@ export const salesRouter = router({
         status: "discovery",
       });
 
+       // Record creation change log
+      const leadId = Array.isArray(result) ? result[0]?.id : (result as any)?.id;
+      if (leadId) {
+        await createLeadChangeLog({
+          leadId,
+          userId: ctx.user.id,
+          userName: ctx.user.name || null,
+          changeType: "created",
+          fieldName: null,
+          oldValue: null,
+          newValue: null,
+          description: `Lead created for "${input.companyName}"`,
+        });
+      }
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -128,7 +144,6 @@ export const salesRouter = router({
         entityType: "sales_lead",
         changes: JSON.stringify(input),
       });
-
       return result;
     }),
 
@@ -270,6 +285,37 @@ export const salesRouter = router({
       }
 
       await updateSalesLead(input.id, updateData);
+
+      // Record change logs for each changed field
+      const fieldLabels: Record<string, string> = {
+        companyName: "Company Name", contactName: "Contact Name", contactEmail: "Contact Email",
+        contactPhone: "Contact Phone", country: "Country", industry: "Industry",
+        estimatedEmployees: "Estimated Employees", estimatedRevenue: "Estimated Revenue",
+        currency: "Currency", source: "Source", intendedServices: "Intended Services",
+        targetCountries: "Target Countries", status: "Status", lostReason: "Lost Reason",
+        assignedTo: "Assigned To", notes: "Notes", expectedCloseDate: "Expected Close Date",
+      };
+      for (const [key, newVal] of Object.entries(input.data)) {
+        if (newVal === undefined) continue;
+        const oldVal = (existing as any)[key];
+        const newValStr = newVal === null ? "" : String(newVal);
+        const oldValStr = oldVal === null || oldVal === undefined ? "" : String(oldVal);
+        if (newValStr !== oldValStr) {
+          const changeType = key === "status" ? "status_change" : "field_update";
+          await createLeadChangeLog({
+            leadId: input.id,
+            userId: ctx.user.id,
+            userName: ctx.user.name || null,
+            changeType,
+            fieldName: key,
+            oldValue: oldValStr || null,
+            newValue: newValStr || null,
+            description: key === "status"
+              ? `Status changed from "${oldValStr}" to "${newValStr}"`
+              : `${fieldLabels[key] || key} changed from "${oldValStr || '(empty)'}" to "${newValStr || '(empty)'}"`,
+          });
+        }
+      }
 
       await logAuditAction({
         userId: ctx.user.id,
@@ -417,7 +463,7 @@ export const salesRouter = router({
         convertedCustomerId: customerId,
       });
 
-      // 5. Sync Sales Documents (e.g. MSA) to Customer Contracts/Documents
+       // 5. Sync Sales Documents (e.g. MSA) to Customer Contracts/Documents
       const salesDocs = await db.query.salesDocuments.findMany({
           where: eq(salesDocuments.leadId, input.leadId)
       });
@@ -427,7 +473,7 @@ export const salesRouter = router({
           if (doc.docType === 'contract') {
               await db.insert(customerContracts).values({
                   customerId,
-                  contractName: doc.fileName,
+                  contractName: doc.title || `MSA-${lead.companyName}`,
                   contractType: "MSA",
                   fileUrl: doc.fileUrl,
                   fileKey: doc.fileKey,
@@ -436,9 +482,16 @@ export const salesRouter = router({
                   updatedAt: new Date()
               });
           }
-          // We can also sync other docs to a general customer_documents table if it existed,
-          // but for now requirement specifies MSA.
+          // Also sync the document's customerId for future reference
+          await db.update(salesDocuments)
+            .set({ customerId })
+            .where(eq(salesDocuments.id, doc.id));
       }
+
+      // 5b. Sync Quotations — link to the new customer
+      await db.update(quotations)
+        .set({ customerId })
+        .where(eq(quotations.leadId, input.leadId));
 
       // 6. Log the conversion activity
       await createSalesActivity({
@@ -448,7 +501,19 @@ export const salesRouter = router({
         createdBy: ctx.user.id,
       });
 
-      // 5. Audit log
+      // 7. Record change log
+      await createLeadChangeLog({
+        leadId: input.leadId,
+        userId: ctx.user.id,
+        userName: ctx.user.name || null,
+        changeType: "converted",
+        fieldName: "convertedCustomerId",
+        oldValue: null,
+        newValue: String(customerId),
+        description: `Lead converted to Customer (ID: ${customerId})`,
+      });
+
+      // 8. Audit log
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -457,7 +522,6 @@ export const salesRouter = router({
         entityId: input.leadId,
         changes: JSON.stringify({ customerId, companyName: lead.companyName }),
       });
-
       return { success: true, customerId };
     }),
 
@@ -524,15 +588,23 @@ export const salesRouter = router({
         });
       }
 
-      await updateSalesLead(input.leadId, { status: "closed_won" });
-
+       await updateSalesLead(input.leadId, { status: "closed_won" });
+      await createLeadChangeLog({
+        leadId: input.leadId,
+        userId: ctx.user.id,
+        userName: ctx.user.name || null,
+        changeType: "status_change",
+        fieldName: "status",
+        oldValue: lead.status,
+        newValue: "closed_won",
+        description: `Deal closed as won with ${onboardingEmployees.length} employee(s) at onboarding or later stage`,
+      });
       await createSalesActivity({
         leadId: input.leadId,
         activityType: "note",
         description: `Deal closed as won. ${onboardingEmployees.length} employee(s) confirmed at onboarding or later stage. Closed by ${ctx.user.name || "Unknown"}.`,
         createdBy: ctx.user.id,
       });
-
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -732,6 +804,14 @@ export const salesRouter = router({
   }),
 
   // ── List users for assignment dropdown ───────────────────────────────
+  // ── Change Logs sub-router ────────────────────────────────────────────
+  changeLogs: router({
+    list: userProcedure
+      .input(z.object({ leadId: z.number() }))
+      .query(async ({ input }) => {
+        return await listLeadChangeLogs(input.leadId);
+      }),
+  }),
   assignableUsers: userProcedure.query(async () => {
     const result = await listUsers({ pageSize: 1000 });
     return result.data.map((u) => ({

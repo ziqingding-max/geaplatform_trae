@@ -46,8 +46,17 @@ import {
   Briefcase, Plus, Search, ArrowLeft, Mail, Phone, Users, ChevronRight,
   Trash2, Pencil, ArrowRightLeft, ExternalLink, MessageSquare, PhoneCall,
   Upload, FileIcon, Calendar, Send, MoreHorizontal, ChevronsUpDown, X,
-  CheckCircle2, Info, FileText,
+  CheckCircle2, Info, FileText, History, ChevronDown, XCircle,
 } from "lucide-react";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Tabs, TabsContent, TabsList, TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -602,16 +611,31 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [documentOpen, setDocumentOpen] = useState(false);
+  const [statusConfirm, setStatusConfirm] = useState<{ targetStatus: string; isLost: boolean } | null>(null);
+  const [lostReasonInput, setLostReasonInput] = useState("");
 
   const { data: lead, isLoading, refetch } = trpc.sales.get.useQuery({ id: leadId });
   const { data: activities, refetch: refetchActivities } = trpc.sales.activities.list.useQuery({ leadId });
   const { data: documents, refetch: refetchDocuments } = trpc.sales.documents.list.useQuery({ leadId });
+  const { data: changeLogs, refetch: refetchChangeLogs } = trpc.sales.changeLogs.list.useQuery({ leadId });
   const { data: usersData } = trpc.sales.assignableUsers.useQuery();
   // Check if customer has employees at onboarding or later stages (for Close Won eligibility)
   const { data: onboardingStatus } = trpc.sales.checkOnboardingStatus.useQuery(
     { leadId },
     { enabled: !!lead && lead.status === "msa_signed" && !!lead.convertedCustomerId }
   );
+
+  const statusMutation = trpc.sales.update.useMutation({
+    onSuccess: () => {
+      toast.success(t("sales.toast.statusUpdated"));
+      setStatusConfirm(null);
+      setLostReasonInput("");
+      refetch();
+      refetchActivities();
+      refetchChangeLogs();
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const convertMutation = trpc.sales.convertToCustomer.useMutation({
     onSuccess: (result) => {
@@ -755,6 +779,69 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
           </div>
         )}
 
+        {/* Pipeline Progress Bar */}
+        {!isClosed && (
+          <Card>
+            <CardContent className="pt-6 pb-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-muted-foreground">{t("sales.pipelineProgress")}</p>
+                {!isMsaSigned && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive hover:text-destructive h-7 text-xs"
+                      onClick={() => setStatusConfirm({ targetStatus: "closed_lost", isLost: true })}
+                    >
+                      <XCircle className="w-3.5 h-3.5 mr-1" />{t("sales.markAsLost")}
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <TooltipProvider delayDuration={200}>
+                <div className="flex items-center gap-1">
+                  {PIPELINE_STATUSES.map((status, idx) => {
+                    const currentIdx = PIPELINE_STATUSES.indexOf(lead.status as any);
+                    const isCompleted = idx < currentIdx;
+                    const isCurrent = status === lead.status;
+                    const isNext = idx === currentIdx + 1;
+                    const isFuture = idx > currentIdx + 1;
+                    return (
+                      <Tooltip key={status}>
+                        <TooltipTrigger asChild>
+                          <button
+                            className={`flex-1 h-9 rounded-md text-xs font-medium transition-all border ${
+                              isCompleted
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                : isCurrent
+                                ? "bg-blue-600 text-white border-blue-600 ring-2 ring-blue-300"
+                                : isNext
+                                ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 cursor-pointer"
+                                : "bg-muted/50 text-muted-foreground border-muted"
+                            }`}
+                            disabled={!isNext}
+                            onClick={() => {
+                              if (isNext) {
+                                setStatusConfirm({ targetStatus: status, isLost: false });
+                              }
+                            }}
+                          >
+                            {isCompleted && <CheckCircle2 className="w-3.5 h-3.5 inline mr-1" />}
+                            {t(`sales.status.${status}`)}
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs">
+                          {isCompleted ? "Completed" : isCurrent ? "Current Stage" : isNext ? "Click to advance" : "Future stage"}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+                </div>
+              </TooltipProvider>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-3 gap-6">
           {/* Left: Lead Info */}
           <div className="col-span-2 space-y-6">
@@ -838,49 +925,102 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
             </Card>
           </div>
 
-          {/* Right: Activities */}
+          {/* Right: Activities & Change History */}
           <div className="space-y-6">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base">{t("sales.activities")}</CardTitle>
-                {!isClosed && (
-                  <Button variant="outline" size="sm" onClick={() => setActivityOpen(true)}>
-                    <Plus className="w-3.5 h-3.5 mr-1" />{t("sales.addActivity")}
-                  </Button>
-                )}
-              </CardHeader>
-              <CardContent>
-                {!activities || activities.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">{t("sales.noActivities")}</p>
-                ) : (
-                  <div className="space-y-3">
-                    {activities.map((act: any) => {
-                      const creator = usersData?.find((u: any) => u.id === act.createdBy);
-                      return (
-                        <div key={act.id} className="flex gap-3 pb-3 border-b last:border-0">
-                          <div className="mt-0.5 p-1.5 rounded-md bg-muted flex-shrink-0">
-                            {activityIcons[act.activityType] || activityIcons.other}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-xs">
-                                {t(`sales.activityType.${act.activityType}`)}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">
-                                {formatDateTime(act.activityDate)}
-                              </span>
-                            </div>
-                            <p className="text-sm mt-1 whitespace-pre-wrap">{act.description}</p>
-                            {creator && (
-                              <p className="text-xs text-muted-foreground mt-1">— {creator.name}</p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
+              <Tabs defaultValue="activities">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <TabsList className="h-8">
+                      <TabsTrigger value="activities" className="text-xs px-3 h-7">{t("sales.activities")}</TabsTrigger>
+                      <TabsTrigger value="changeLogs" className="text-xs px-3 h-7">
+                        <History className="w-3 h-3 mr-1" />{t("sales.changeLogs")}
+                      </TabsTrigger>
+                    </TabsList>
+                    {!isClosed && (
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setActivityOpen(true)}>
+                        <Plus className="w-3.5 h-3.5 mr-1" />{t("sales.addActivity")}
+                      </Button>
+                    )}
                   </div>
-                )}
-              </CardContent>
+                </CardHeader>
+                <CardContent className="pt-2">
+                  <TabsContent value="activities" className="mt-0">
+                    {!activities || activities.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">{t("sales.noActivities")}</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {activities.map((act: any) => {
+                          const creator = usersData?.find((u: any) => u.id === act.createdBy);
+                          return (
+                            <div key={act.id} className="flex gap-3 pb-3 border-b last:border-0">
+                              <div className="mt-0.5 p-1.5 rounded-md bg-muted flex-shrink-0">
+                                {activityIcons[act.activityType] || activityIcons.other}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-xs">
+                                    {t(`sales.activityType.${act.activityType}`)}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatDateTime(act.activityDate)}
+                                  </span>
+                                </div>
+                                <p className="text-sm mt-1 whitespace-pre-wrap">{act.description}</p>
+                                {creator && (
+                                  <p className="text-xs text-muted-foreground mt-1">— {creator.name}</p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </TabsContent>
+                  <TabsContent value="changeLogs" className="mt-0">
+                    {!changeLogs || changeLogs.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">{t("sales.noChangeLogs")}</p>
+                    ) : (
+                      <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                        {changeLogs.map((log: any) => (
+                          <div key={log.id} className="flex gap-3 pb-3 border-b last:border-0">
+                            <div className={`mt-0.5 p-1.5 rounded-md flex-shrink-0 ${
+                              log.changeType === "status_change" ? "bg-blue-50 text-blue-600" :
+                              log.changeType === "created" ? "bg-green-50 text-green-600" :
+                              log.changeType === "converted" ? "bg-emerald-50 text-emerald-600" :
+                              "bg-muted text-muted-foreground"
+                            }`}>
+                              {log.changeType === "status_change" ? <ArrowRightLeft className="w-3.5 h-3.5" /> :
+                               log.changeType === "created" ? <Plus className="w-3.5 h-3.5" /> :
+                               log.changeType === "converted" ? <CheckCircle2 className="w-3.5 h-3.5" /> :
+                               <Pencil className="w-3.5 h-3.5" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className={`text-[10px] ${
+                                  log.changeType === "status_change" ? "border-blue-200 text-blue-700" :
+                                  log.changeType === "created" ? "border-green-200 text-green-700" :
+                                  log.changeType === "converted" ? "border-emerald-200 text-emerald-700" :
+                                  ""
+                                }`}>
+                                  {t(`sales.changeType.${log.changeType}`)}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatDateTime(log.createdAt)}
+                                </span>
+                              </div>
+                              <p className="text-sm mt-1">{log.description}</p>
+                              {log.userName && (
+                                <p className="text-xs text-muted-foreground mt-0.5">— {log.userName}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </TabsContent>
+                </CardContent>
+              </Tabs>
             </Card>
           </div>
         </div>
@@ -892,7 +1032,7 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
             users={usersData || []}
             open={editOpen}
             onOpenChange={setEditOpen}
-            onSuccess={() => { refetch(); refetchActivities(); }}
+            onSuccess={() => { refetch(); refetchActivities(); refetchChangeLogs(); }}
           />
         )}
 
@@ -975,6 +1115,52 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
             onSuccess={() => refetchDocuments()}
           />
         )}
+
+        {/* Pipeline Status Change Confirmation */}
+        <AlertDialog open={!!statusConfirm} onOpenChange={(open) => { if (!open) { setStatusConfirm(null); setLostReasonInput(""); } }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("sales.confirmStatusChange")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {statusConfirm?.isLost
+                  ? t("sales.confirmLostDesc")
+                  : `${t("sales.confirmStatusChangeDesc")} "${statusConfirm ? t(`sales.status.${statusConfirm.targetStatus}`) : ""}"?`
+                }
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {statusConfirm?.isLost && (
+              <div className="space-y-2 px-1">
+                <Label>{t("sales.lostReason")}</Label>
+                <Textarea
+                  rows={2}
+                  value={lostReasonInput}
+                  onChange={(e) => setLostReasonInput(e.target.value)}
+                  placeholder="Why was this lead lost?"
+                />
+              </div>
+            )}
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (statusConfirm) {
+                    statusMutation.mutate({
+                      id: leadId,
+                      data: {
+                        status: statusConfirm.targetStatus as any,
+                        ...(statusConfirm.isLost && lostReasonInput ? { lostReason: lostReasonInput } : {}),
+                      },
+                    });
+                  }
+                }}
+                disabled={statusMutation.isPending}
+                className={statusConfirm?.isLost ? "bg-destructive hover:bg-destructive/90" : ""}
+              >
+                {statusMutation.isPending ? t("common.loading") : t("common.confirm")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </Layout>
   );
@@ -1015,8 +1201,6 @@ function EditLeadDialog({
     country: lead.country || "",
     industry: lead.industry || "",
     source: lead.source || "",
-    status: lead.status as string,
-    lostReason: lead.lostReason || "",
     assignedTo: lead.assignedTo as number | null,
     estimatedEmployees: lead.estimatedEmployees as number | undefined,
     estimatedRevenue: lead.estimatedRevenue || "",
@@ -1054,8 +1238,6 @@ function EditLeadDialog({
         country: formData.country.trim() === "" ? undefined : formData.country,
         industry: formData.industry.trim() === "" ? undefined : formData.industry,
         source: formData.source.trim() === "" ? undefined : formData.source,
-        status: formData.status as any,
-        lostReason: formData.status === "closed_lost" ? formData.lostReason : undefined,
         assignedTo: formData.assignedTo,
         estimatedEmployees: formData.estimatedEmployees,
         estimatedRevenue: formData.estimatedRevenue.trim() === "" ? undefined : formData.estimatedRevenue,
@@ -1066,9 +1248,6 @@ function EditLeadDialog({
       },
     });
   }
-
-  // Determine which statuses are selectable based on current status
-  const selectableStatuses = STATUS_LIST.filter(s => s !== "closed_won"); // closed_won is triggered separately
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1081,23 +1260,16 @@ function EditLeadDialog({
               <Input value={formData.companyName} onChange={(e) => setFormData({ ...formData, companyName: e.target.value })} />
             </div>
             <div className="space-y-2">
-              <Label>{t("common.status")}</Label>
-              <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v })}>
+              <Label>{t("sales.source")}</Label>
+              <Select value={formData.source || "none"} onValueChange={(v) => setFormData({ ...formData, source: v === "none" ? "" : v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {selectableStatuses.map(s => (
-                    <SelectItem key={s} value={s}>{t(`sales.status.${s}`)}</SelectItem>
-                  ))}
+                  <SelectItem value="none">—</SelectItem>
+                  {LEAD_SOURCES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           </div>
-          {formData.status === "closed_lost" && (
-            <div className="space-y-2">
-              <Label>{t("sales.lostReason")}</Label>
-              <Textarea rows={2} value={formData.lostReason} onChange={(e) => setFormData({ ...formData, lostReason: e.target.value })} placeholder="Why was this lead lost?" />
-            </div>
-          )}
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>{t("sales.contactName")}</Label>
@@ -1112,7 +1284,7 @@ function EditLeadDialog({
               <Input value={formData.contactPhone} onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })} />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>{t("common.country")}</Label>
               <CountrySelect value={formData.country} onValueChange={(v) => setFormData({ ...formData, country: v })} scope="all" />
@@ -1120,16 +1292,6 @@ function EditLeadDialog({
             <div className="space-y-2">
               <Label>Industry</Label>
               <Input value={formData.industry} onChange={(e) => setFormData({ ...formData, industry: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>{t("sales.source")}</Label>
-              <Select value={formData.source || "none"} onValueChange={(v) => setFormData({ ...formData, source: v === "none" ? "" : v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">—</SelectItem>
-                  {LEAD_SOURCES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">

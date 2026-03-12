@@ -7,9 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +18,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Download, Edit, FileText, Loader2, Search } from "lucide-react";
+import { Plus, Download, Edit, FileText, Loader2, Search, ChevronDown } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatDateTime, formatCurrency } from "@/lib/format";
 import { Link } from "wouter";
 import { toast } from "sonner";
@@ -151,24 +153,51 @@ export default function Quotations() {
                         {q.validUntil ? formatDateTime(q.validUntil) : "—"}
                       </TableCell>
                       <TableCell>
-                        <Select 
-                            value={q.status} 
-                            onValueChange={(v) => handleStatusChange(q.id, v)}
-                            disabled={q.status === "expired" || q.status === "accepted" || q.status === "rejected"}
-                        >
-                            <SelectTrigger className="h-8 w-[140px]">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="draft" disabled={q.status !== 'draft'}>{t("quotations.status.draft")}</SelectItem>
-                                <SelectItem value="sent">{t("quotations.status.sent")}</SelectItem>
-                                <SelectItem value="accepted">{t("quotations.status.accepted")}</SelectItem>
-                                <SelectItem value="rejected">{t("quotations.status.rejected")}</SelectItem>
-                                {q.status === "expired" && (
-                                    <SelectItem value="expired">{t("quotations.status.expired")}</SelectItem>
-                                )}
-                            </SelectContent>
-                        </Select>
+                        {(() => {
+                          const isTerminal = q.status === "expired" || q.status === "accepted" || q.status === "rejected";
+                          const statusColorMap: Record<string, string> = {
+                            draft: "bg-slate-100 text-slate-700 border-slate-200",
+                            sent: "bg-blue-100 text-blue-700 border-blue-200",
+                            accepted: "bg-green-100 text-green-700 border-green-200",
+                            rejected: "bg-red-100 text-red-700 border-red-200",
+                            expired: "bg-orange-100 text-orange-700 border-orange-200",
+                          };
+                          const nextActions: { value: string; label: string }[] = [];
+                          if (q.status === "draft") {
+                            nextActions.push({ value: "sent", label: t("quotations.status.sent") });
+                          }
+                          if (q.status === "sent" || q.status === "draft") {
+                            nextActions.push({ value: "accepted", label: t("quotations.status.accepted") });
+                            nextActions.push({ value: "rejected", label: t("quotations.status.rejected") });
+                          }
+                          if (isTerminal || nextActions.length === 0) {
+                            return (
+                              <Badge variant="outline" className={`text-xs ${statusColorMap[q.status] || ""}`}>
+                                {t(`quotations.status.${q.status}`)}
+                              </Badge>
+                            );
+                          }
+                          return (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border cursor-pointer hover:opacity-80 transition-opacity ${statusColorMap[q.status] || ""}`}>
+                                  {t(`quotations.status.${q.status}`)}
+                                  <ChevronDown className="w-3 h-3" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                {nextActions.map((action) => (
+                                  <DropdownMenuItem key={action.value} onClick={() => handleStatusChange(q.id, action.value)}>
+                                    <Badge variant="outline" className={`text-[10px] mr-2 ${statusColorMap[action.value] || ""}`}>
+                                      {action.label}
+                                    </Badge>
+                                    {action.label}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">

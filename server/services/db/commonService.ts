@@ -8,7 +8,8 @@ import {
   leaveTypes, InsertLeaveType,
   salesLeads, InsertSalesLead,
   salesActivities, InsertSalesActivity,
-  billingEntities, InsertBillingEntity
+  billingEntities, InsertBillingEntity,
+  leadChangeLogs, InsertLeadChangeLog
 } from "../../../drizzle/schema";
 import { getDb } from "./connection";
 import { customers, employees } from "../../../drizzle/schema";
@@ -296,6 +297,19 @@ export async function listSalesActivities(leadId: number) {
   const db = await getDb();
   if (!db) return [];
   return await db.select().from(salesActivities).where(eq(salesActivities.leadId, leadId)).orderBy(desc(salesActivities.activityDate));
+}
+
+// LEAD CHANGE LOGS
+export async function createLeadChangeLog(data: InsertLeadChangeLog) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(leadChangeLogs).values(data);
+}
+
+export async function listLeadChangeLogs(leadId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(leadChangeLogs).where(eq(leadChangeLogs.leadId, leadId)).orderBy(desc(leadChangeLogs.createdAt));
 }
 
 export async function deleteSalesActivity(id: number) {

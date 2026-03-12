@@ -51,6 +51,7 @@ import {
   workerUsers,
   customerWallets,
   walletTransactions,
+  leadChangeLogs,
 } from "./schema";
 
 // ============================================================================
@@ -323,11 +324,19 @@ export const salesLeadsRelations = relations(salesLeads, ({ one, many }) => ({
   activities: many(salesActivities),
   quotations: many(quotations),
   documents: many(salesDocuments),
+  changeLogs: many(leadChangeLogs),
 }));
 
 export const salesActivitiesRelations = relations(salesActivities, ({ one }) => ({
   lead: one(salesLeads, {
     fields: [salesActivities.leadId],
+    references: [salesLeads.id],
+  }),
+}));
+
+export const leadChangeLogsRelations = relations(leadChangeLogs, ({ one }) => ({
+  lead: one(salesLeads, {
+    fields: [leadChangeLogs.leadId],
     references: [salesLeads.id],
   }),
 }));

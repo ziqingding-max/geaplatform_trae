@@ -1951,7 +1951,34 @@ export type FrozenWalletTransaction = typeof frozenWalletTransactions.$inferSele
 export type InsertFrozenWalletTransaction = typeof frozenWalletTransactions.$inferInsert;
 
 // ============================================================================
-// 20. AOR SERVICES & WORKER PORTAL
+// 20. LEAD CHANGE LOGS
+// ============================================================================
+
+export const leadChangeLogs = sqliteTable(
+  "lead_change_logs",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    leadId: integer("leadId").notNull(),
+    userId: integer("userId"),
+    userName: text("userName", { length: 255 }),
+    changeType: text("changeType", { length: 50 }).notNull(), // 'field_update' | 'status_change' | 'created' | 'converted' | 'deleted'
+    fieldName: text("fieldName", { length: 100 }), // which field changed
+    oldValue: text("oldValue"),
+    newValue: text("newValue"),
+    description: text("description"), // human-readable summary
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+  },
+  (table) => ({
+    lclLeadIdIdx: index("lcl_lead_id_idx").on(table.leadId),
+    lclCreatedAtIdx: index("lcl_created_at_idx").on(table.createdAt),
+  })
+);
+
+export type LeadChangeLog = typeof leadChangeLogs.$inferSelect;
+export type InsertLeadChangeLog = typeof leadChangeLogs.$inferInsert;
+
+// ============================================================================
+// 21. AOR SERVICES & WORKER PORTAL
 // ============================================================================
 
 export {
