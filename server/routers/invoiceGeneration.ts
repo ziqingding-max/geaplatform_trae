@@ -28,7 +28,8 @@ export const invoiceGenerationRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const payrollDate = new Date(input.payrollMonth);
-      const result = await generateInvoicesFromPayroll(payrollDate);
+      const monthLabel = payrollDate.toLocaleDateString("en", { month: "short", year: "numeric" });
+      const result = await generateInvoicesFromPayroll(payrollDate, monthLabel);
 
       if (result.success) {
         await logAuditAction({

@@ -586,7 +586,8 @@ export async function regenerateInvoices(
   }
 
   // 4. Regenerate
-  const result = await generateInvoicesFromPayroll(payrollMonth);
+  const monthLabel = payrollMonth.toLocaleDateString("en", { month: "short", year: "numeric" });
+  const result = await generateInvoicesFromPayroll(payrollMonth, monthLabel);
 
   // 5. Restore saved external notes on newly generated invoices
   if (result.success && result.invoiceIds && result.invoiceIds.length > 0) {
@@ -639,7 +640,8 @@ export async function regenerateSingleInvoice(
 
   // 3. Regenerate for that month
   const payrollMonth = new Date(invoice.invoiceMonth);
-  const result = await generateInvoicesFromPayroll(payrollMonth);
+  const monthLabel = payrollMonth.toLocaleDateString("en", { month: "short", year: "numeric" });
+  const result = await generateInvoicesFromPayroll(payrollMonth, monthLabel);
 
   // 4. Restore saved external notes on the newly generated invoice
   if (result.success && result.invoiceIds && result.invoiceIds.length > 0 && savedNotes) {
