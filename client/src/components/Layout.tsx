@@ -101,6 +101,7 @@ function useNavGroups(user: any) {
       icon: Layers,
       items: [
         { label: t("nav.payroll"), icon: DollarSign, href: "/payroll" },
+        { label: "Contractor Invoices", icon: FileStack, href: "/admin/contractor-invoices" },
         { label: t("nav.adjustments"), icon: ArrowUpDown, href: "/adjustments" },
         { label: t("nav.reimbursements"), icon: Receipt, href: "/reimbursements" },
         { label: "Leave & Milestones", icon: CalendarDays, href: "/leave" },
@@ -111,7 +112,6 @@ function useNavGroups(user: any) {
       icon: PieChart,
       items: [
         { label: t("nav.invoices"), icon: Receipt, href: "/invoices" },
-        { label: "Contractor Invoices", icon: FileStack, href: "/admin/contractor-invoices" },
         { label: "Release Tasks", icon: CheckCircle, href: "/admin/release-tasks" },
       ].filter(() => hasRole(["admin", "finance_manager"])),
     },
