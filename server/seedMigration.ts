@@ -19,7 +19,7 @@ import {
   billingEntities, countriesConfig, leaveTypes, publicHolidays,
   countryGuideChapters, countrySocialInsuranceItems, aiProviderConfigs
 } from '../drizzle/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, notInArray } from 'drizzle-orm';
 import { socialInsuranceRules } from './seed/data/socialInsuranceRules';
 // @ts-ignore
 import seedData from '../data/seed-migration-data.json';
@@ -129,6 +129,14 @@ async function seedSystemData(db: any) {
       count++;
     }
     console.log(`[Seed] Processed ${count} countries`);
+
+    // Clean up any test/orphan countries not in baseline data
+    const validCodes = countries.map((c: any) => c.countryCode || c.code);
+    const deleted = await db.delete(countriesConfig)
+      .where(notInArray(countriesConfig.countryCode, validCodes));
+    if (deleted.changes > 0) {
+      console.log(`[Seed] Removed ${deleted.changes} orphan/test countries not in baseline`);
+    }
   }
 
   // 1b. Leave Types
