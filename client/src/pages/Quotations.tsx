@@ -131,20 +131,22 @@ export default function Quotations() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{t("quotations.table.number")}</TableHead>
-                    <TableHead>{t("quotations.table.customer")}</TableHead>
-                    <TableHead>{t("quotations.table.total")}</TableHead>
-                    <TableHead>{t("quotations.table.validUntil")}</TableHead>
-                    <TableHead>{t("quotations.table.status")}</TableHead>
-                    <TableHead className="text-right">{t("quotations.table.actions")}</TableHead>
+                    <TableHead className="w-[160px]">{t("quotations.table.number")}</TableHead>
+                    <TableHead className="min-w-[140px]">{t("quotations.table.customer")}</TableHead>
+                    <TableHead className="w-[120px]">{t("quotations.table.total")}</TableHead>
+                    <TableHead className="w-[120px]">{t("quotations.table.validUntil")}</TableHead>
+                    <TableHead className="w-[130px]">{t("quotations.table.status")}</TableHead>
+                    <TableHead className="text-right w-[100px]">{t("quotations.table.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.items.map((q) => (
                     <TableRow key={q.id}>
-                      <TableCell className="font-medium">{q.quotationNumber}</TableCell>
-                      <TableCell>
-                        {q.customer?.companyName || q.salesLead?.companyName || "—"}
+                      <TableCell className="font-medium font-mono text-sm">{q.quotationNumber}</TableCell>
+                      <TableCell className="max-w-[200px]">
+                        <span className="truncate block" title={q.customer?.companyName || q.salesLead?.companyName || "—"}>
+                          {q.customer?.companyName || q.salesLead?.companyName || "—"}
+                        </span>
                       </TableCell>
                       <TableCell>
                         {formatCurrency(q.currency || "USD", q.totalMonthly)}

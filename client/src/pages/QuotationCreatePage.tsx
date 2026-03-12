@@ -354,29 +354,25 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
               
               {items.map((item, index) => (
                   <Card key={index} className="overflow-hidden">
-                    <CardContent className="p-4 space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div className="grid grid-cols-12 gap-4 flex-1">
-                            <div className="col-span-3 space-y-2">
-                                <Label className="text-xs">{t("quotations.items.country")}</Label>
+                    <CardContent className="p-0">
+                      {/* Header row: item number + delete button */}
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border/50">
+                        <span className="text-xs font-medium text-muted-foreground">Item #{index + 1}</span>
+                        <Button variant="ghost" size="sm" className="text-destructive h-7 px-2 text-xs" onClick={() => handleRemoveItem(index)} disabled={items.length === 1}>
+                            <Trash2 className="w-3.5 h-3.5 mr-1" />
+                            {t("common.delete")}
+                        </Button>
+                      </div>
+
+                      <div className="p-4 space-y-4">
+                        {/* Row 1: Country + Service Type + Headcount */}
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">{t("quotations.items.country")}</Label>
                                 <CountrySelect value={item.countryCode} onValueChange={(v) => handleCountryChange(index, v)} />
-                                {item.countryCode === "CN" && (
-                                   <div className="pt-2">
-                                      <Label className="text-xs mb-1.5 block">{t("quotations.create.city_region")}</Label>
-                                      <Select value={item.regionCode} onValueChange={(v) => updateItem(index, "regionCode", v)}>
-                                          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder={t("quotations.create.select_city")} /></SelectTrigger>
-                                          <SelectContent>
-                                              <SelectItem value="CN-BJ">Beijing</SelectItem>
-                                              <SelectItem value="CN-SH">Shanghai</SelectItem>
-                                              <SelectItem value="CN-SZ">Shenzhen</SelectItem>
-                                              <SelectItem value="CN-GZ">Guangzhou</SelectItem>
-                                          </SelectContent>
-                                      </Select>
-                                   </div>
-                                )}
                             </div>
-                            <div className="col-span-2 space-y-2">
-                                <Label className="text-xs">{t("quotations.items.serviceType")}</Label>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">{t("quotations.items.serviceType")}</Label>
                                 <Select value={item.serviceType} onValueChange={(v) => handleServiceTypeChange(index, v as any)}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
@@ -386,54 +382,75 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                                     </SelectContent>
                                 </Select>
                             </div>
-                            <div className="col-span-2 space-y-2">
-                                <Label className="text-xs">{item.serviceType === "aor" ? t("quotations.create.contractor_rate") : t("quotations.items.salary")}</Label>
-                                <div className="relative">
-                                  <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">{item.currency || "$"}</span>
-                                  <Input type="number" className="pl-12" value={item.salary} onChange={(e) => updateItem(index, "salary", parseFloat(e.target.value))} />
-                                </div>
-                            </div>
-                            <div className="col-span-2 space-y-2">
-                                <Label className="text-xs">{t("quotations.items.fee")}</Label>
-                                <div className="relative">
-                                  <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">$</span>
-                                  <Input type="number" className="pl-12" value={item.serviceFee} onChange={(e) => updateItem(index, "serviceFee", parseFloat(e.target.value))} />
-                                </div>
-                            </div>
-                            {item.serviceType === "visa_eor" && (
-                              <div className="col-span-2 space-y-2">
-                                  <Label className="text-xs">One Time Fee</Label>
-                                  <div className="relative">
-                                    <span className="absolute left-2 top-2.5 text-xs text-muted-foreground">$</span>
-                                    <Input type="number" className="pl-12" value={item.oneTimeFee || 0} onChange={(e) => updateItem(index, "oneTimeFee", parseFloat(e.target.value))} />
-                                  </div>
-                              </div>
-                            )}
-                            <div className="col-span-2 space-y-2">
-                                <Label className="text-xs">{t("quotations.items.headcount")}</Label>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">{t("quotations.items.headcount")}</Label>
                                 <Input type="number" min={1} value={item.headcount} onChange={(e) => updateItem(index, "headcount", parseInt(e.target.value))} />
                             </div>
                         </div>
-                        <Button variant="ghost" size="icon" className="text-destructive ml-2 mt-6" onClick={() => handleRemoveItem(index)} disabled={items.length === 1}>
-                            <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      
-                      {/* Region selector moved inside country column above for better layout */}
 
-                      {/* AOR: show total without employer cost; EOR/Visa EOR: show employer cost + total */}
-                      {item.serviceType === "aor" && item.totalMonthly !== undefined && (
-                          <div className="bg-muted/50 p-3 rounded text-sm flex justify-between items-center text-muted-foreground border border-border/50">
-                              <span className="text-xs">{t("quotations.create.aor_no_employer_cost")}</span>
-                              <span className="font-medium text-foreground">{t("quotations.create.total_monthly")}: <span className="font-mono text-primary">{formatCurrency("USD", item.totalMonthly || 0)}</span></span>
+                        {/* China region selector */}
+                        {item.countryCode === "CN" && (
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">{t("quotations.create.city_region")}</Label>
+                                <Select value={item.regionCode} onValueChange={(v) => updateItem(index, "regionCode", v)}>
+                                    <SelectTrigger><SelectValue placeholder={t("quotations.create.select_city")} /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="CN-BJ">Beijing</SelectItem>
+                                        <SelectItem value="CN-SH">Shanghai</SelectItem>
+                                        <SelectItem value="CN-SZ">Shenzhen</SelectItem>
+                                        <SelectItem value="CN-GZ">Guangzhou</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                           </div>
-                      )}
-                      {item.serviceType !== "aor" && item.employerCost !== undefined && (
-                          <div className="bg-muted/50 p-3 rounded text-sm flex justify-between items-center text-muted-foreground border border-border/50">
-                              <span>{t("quotations.create.employer_cost")}: <span className="font-mono text-foreground">{formatCurrency(item.currency, item.employerCost)}</span></span>
-                              <span className="font-medium text-foreground">{t("quotations.create.total_monthly")}: <span className="font-mono text-primary">{formatCurrency("USD", item.totalMonthly || 0)}</span></span>
-                          </div>
-                      )}
+                        )}
+
+                        {/* Row 2: Salary/Rate + Service Fee + One Time Fee (if visa_eor) */}
+                        <div className={`grid gap-4 ${item.serviceType === "visa_eor" ? "grid-cols-3" : "grid-cols-2"}`}>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground truncate block" title={item.serviceType === "aor" ? t("quotations.create.contractor_rate") : t("quotations.items.salary")}>
+                                  {item.serviceType === "aor" ? t("quotations.create.contractor_rate") : t("quotations.items.salary")}
+                                </Label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-medium">{item.currency || "USD"}</span>
+                                  <Input type="number" className="pl-14" value={item.salary} onChange={(e) => updateItem(index, "salary", parseFloat(e.target.value))} />
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground truncate block" title={t("quotations.items.fee")}>
+                                  {t("quotations.items.fee")}
+                                </Label>
+                                <div className="relative">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-medium">USD</span>
+                                  <Input type="number" className="pl-14" value={item.serviceFee} onChange={(e) => updateItem(index, "serviceFee", parseFloat(e.target.value))} />
+                                </div>
+                            </div>
+                            {item.serviceType === "visa_eor" && (
+                              <div className="space-y-1.5">
+                                  <Label className="text-xs text-muted-foreground">One Time Fee</Label>
+                                  <div className="relative">
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-medium">USD</span>
+                                    <Input type="number" className="pl-14" value={item.oneTimeFee || 0} onChange={(e) => updateItem(index, "oneTimeFee", parseFloat(e.target.value))} />
+                                  </div>
+                              </div>
+                            )}
+                        </div>
+
+                        {/* Cost preview row */}
+                        {item.serviceType === "aor" && item.totalMonthly !== undefined && (
+                            <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded-lg text-sm flex justify-between items-center border border-green-200/50 dark:border-green-800/30">
+                                <span className="text-xs text-muted-foreground">{t("quotations.create.aor_no_employer_cost")}</span>
+                                <span className="font-semibold text-green-700 dark:text-green-400">{t("quotations.create.total_monthly")}: <span className="font-mono">{formatCurrency("USD", item.totalMonthly || 0)}</span></span>
+                            </div>
+                        )}
+                        {item.serviceType !== "aor" && item.employerCost !== undefined && (
+                            <div className="bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg text-sm flex justify-between items-center border border-blue-200/50 dark:border-blue-800/30">
+                                <span className="text-muted-foreground">{t("quotations.create.employer_cost")}: <span className="font-mono font-medium text-foreground">{formatCurrency(item.currency, item.employerCost)}</span></span>
+                                <span className="font-semibold text-blue-700 dark:text-blue-400">{t("quotations.create.total_monthly")}: <span className="font-mono">{formatCurrency("USD", item.totalMonthly || 0)}</span></span>
+                            </div>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
               ))}
