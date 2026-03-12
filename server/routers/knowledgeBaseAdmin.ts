@@ -325,6 +325,35 @@ export const knowledgeBaseAdminRouter = router({
       return { success: true, created: drafts.length };
     }),
 
+  generateFromInternalData: adminProcedure
+    .input(
+      z.object({
+        types: z.array(
+          z.enum([
+            "countryOverview",
+            "socialInsurance",
+            "publicHolidays",
+            "leaveEntitlements",
+            "hiringGuide",
+            "compensationGuide",
+            "terminationGuide",
+            "workingConditions",
+          ])
+        ).optional(),
+        countryCodes: z.array(z.string()).optional(),
+        dryRun: z.boolean().default(false),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { generateKnowledgeFromInternalData } = await import("../services/knowledgeInternalGeneratorService");
+      const result = await generateKnowledgeFromInternalData({
+        types: input.types as any,
+        countryCodes: input.countryCodes,
+        dryRun: input.dryRun,
+      });
+      return result;
+    }),
+
   reviewItem: adminProcedure
     .input(z.object({ id: z.number(), action: z.enum(["publish", "reject"]), note: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {

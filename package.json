@@ -10,7 +10,8 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
-    "seed:prod": "tsx scripts/seed-production.ts"
+    "seed:prod": "tsx scripts/seed-production.ts",
+    "seed:knowledge": "tsx server/scripts/seedKnowledgeFromInternalData.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
