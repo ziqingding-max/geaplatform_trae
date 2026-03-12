@@ -270,13 +270,13 @@ export const portalAdjustmentsRouter = portalRouter({
           contractorId: input.workerId,
           customerId: cid,
           type: aorType,
-          description: input.description || "Adjustment",
+          description: input.description && input.description.trim() ? input.description.trim() : "Adjustment",
           amount: input.amount,
           currency,
           effectiveMonth: normalizedMonth,
-          attachmentUrl: input.receiptFileUrl || null,
-          attachmentFileKey: input.receiptFileKey || null,
-          status: "submitted" as any,
+          attachmentUrl: input.receiptFileUrl && input.receiptFileUrl.trim() ? input.receiptFileUrl.trim() : null,
+          attachmentFileKey: input.receiptFileKey && input.receiptFileKey.trim() ? input.receiptFileKey.trim() : null,
+          status: "submitted",
         });
       }
 

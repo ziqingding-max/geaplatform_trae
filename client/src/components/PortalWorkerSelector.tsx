@@ -49,7 +49,7 @@ export default function PortalWorkerSelector({
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Fetch employees and contractors from portal endpoints
-  const { data: empData } = portalTrpc.employees.list.useQuery({ page: 1, pageSize: 500 });
+  const { data: empData } = portalTrpc.employees.list.useQuery({ page: 1, pageSize: 100 });
   const { data: conData } = portalTrpc.contractors.list.useQuery({ page: 1, pageSize: 500 });
 
   const employees = Array.isArray(empData?.items) ? empData.items : [];
@@ -188,7 +188,7 @@ export default function PortalWorkerSelector({
                 setSearchTerm(e.target.value);
                 setIsOpen(true);
               }}
-              onFocus={() => setIsOpen(true)}
+              onClick={() => setIsOpen(true)}
               disabled={disabled}
             />
           </div>
