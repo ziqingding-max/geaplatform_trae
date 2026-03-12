@@ -243,8 +243,12 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "knowledge_base.topic.leave": "Leave",
     "knowledge_base.topic.invoice": "Invoice",
     "knowledge_base.topic.onboarding": "Onboarding",
-    "knowledge_base.topic.general": "General",
-
+     "knowledge_base.topic.general": "General",
+    "knowledge_base.back_to_list": "Back to Knowledge Base",
+    "knowledge_base.published_at": "Published",
+    "knowledge_base.no_content": "No content available for this article.",
+    "knowledge_base.pagination.showing": "Showing",
+    "knowledge_base.pagination.of": "of",
     // Settings
     "settings.title": "Settings",
     "settings.subtitle": "Manage your company profile, leave policies, and team access",
@@ -2199,7 +2203,11 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "knowledge_base.topic.invoice": "发票",
     "knowledge_base.topic.onboarding": "入职",
     "knowledge_base.topic.general": "综合",
-
+    "knowledge_base.back_to_list": "返回知识库",
+    "knowledge_base.published_at": "发布时间",
+    "knowledge_base.no_content": "该文章暂无内容。",
+    "knowledge_base.pagination.showing": "显示",
+    "knowledge_base.pagination.of": "共",
     // Settings
     "settings.title": "设置",
     "settings.subtitle": "管理公司信息、休假政策和团队权限",
