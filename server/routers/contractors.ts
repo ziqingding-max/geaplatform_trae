@@ -230,8 +230,14 @@ export const contractorsRouter = router({
         dueDate: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        // Auto-fill customerId from contractor (required by schema)
+        const contractor = await getContractorById(input.contractorId);
+        if (!contractor) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Contractor not found" });
+        }
         const result = await createContractorMilestone({
           ...input,
+          customerId: contractor.customerId,
           status: "pending",
         });
         
@@ -303,9 +309,16 @@ export const contractorsRouter = router({
         attachmentUrl: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
+        // Auto-fill customerId from contractor (required by schema)
+        const contractor = await getContractorById(input.contractorId);
+        if (!contractor) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Contractor not found" });
+        }
         const result = await createContractorAdjustment({
           ...input,
-          status: "pending",
+          customerId: contractor.customerId,
+          effectiveMonth: input.date.substring(0, 7) + "-01", // Derive from date: YYYY-MM-01
+          status: "submitted" as any,
         });
         return result;
       }),
