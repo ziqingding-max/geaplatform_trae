@@ -1,13 +1,14 @@
 /**
  * Portal Adjustments Page
  *
- * View, create, edit and delete salary/benefit adjustments for employees.
+ * View, create, edit and delete salary/benefit adjustments for workers (employees & contractors).
+ * Supports both EOR (employees) and AOR (contractors) with unified worker selector.
  * Adjustments can only be edited/deleted when in 'submitted' status (before monthly lock).
  */
 import { useState, useMemo } from "react";
 import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -29,17 +30,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   ArrowUpDown, ChevronLeft, ChevronRight, Plus, Pencil, Trash2,
-  Upload, Loader2, Receipt, FileText, ExternalLink, CheckCircle2, XCircle, Download,
+  Upload, Loader2, Receipt, ExternalLink, CheckCircle2, XCircle, Download,
 } from "lucide-react";
 import { usePortalAuth } from "@/hooks/usePortalAuth";
 import { toast } from "sonner";
 import { exportToCsv } from "@/lib/csvExport";
 import { cn } from "@/lib/utils";
 import { MonthPicker } from "@/components/DatePicker";
-import CurrencySelect from "@/components/CurrencySelect";
 import PortalPayrollCycleIndicator from "@/components/PortalPayrollCycleIndicator";
+import PortalWorkerSelector from "@/components/PortalWorkerSelector";
 
 import { useI18n } from "@/lib/i18n";
+
 const statusColors: Record<string, string> = {
   draft: "bg-gray-100 text-gray-800 border-gray-200",
   submitted: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -73,11 +75,12 @@ const categoryOptions = [
 ];
 
 interface AdjustmentForm {
-  employeeId: number | null;
+  workerId: string; // "emp-123" or "con-456"
+  workerType: "employee" | "contractor" | "";
+  workerCurrency: string;
   adjustmentType: string;
   category: string;
   amount: string;
-  currency: string;
   effectiveMonth: string;
   description: string;
   receiptFileUrl: string;
@@ -85,11 +88,12 @@ interface AdjustmentForm {
 }
 
 const emptyForm: AdjustmentForm = {
-  employeeId: null,
+  workerId: "",
+  workerType: "",
+  workerCurrency: "USD",
   adjustmentType: "",
   category: "",
   amount: "",
-  currency: "USD",
   effectiveMonth: new Date().toISOString().slice(0, 7),
   description: "",
   receiptFileUrl: "",
@@ -106,8 +110,11 @@ export default function PortalAdjustments() {
   const pageSize = 20;
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingWorkerType, setEditingWorkerType] = useState<"employee" | "contractor">("employee");
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteWorkerType, setDeleteWorkerType] = useState<"employee" | "contractor">("employee");
   const [rejectId, setRejectId] = useState<number | null>(null);
+  const [rejectWorkerType, setRejectWorkerType] = useState<"employee" | "contractor">("employee");
   const [rejectReason, setRejectReason] = useState("");
   const [form, setForm] = useState<AdjustmentForm>({ ...emptyForm });
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
@@ -119,11 +126,6 @@ export default function PortalAdjustments() {
     page,
     pageSize,
   });
-
-  // Get employees for the selector
-  const { data: empData } = portalTrpc.employees.list.useQuery({ page: 1, pageSize: 100 });
-  // Defensive check: ensure items is always an array
-  const employees = Array.isArray(empData?.items) ? empData.items : [];
 
   const createMutation = portalTrpc.adjustments.create.useMutation({
     onSuccess: () => {
@@ -184,7 +186,6 @@ export default function PortalAdjustments() {
     },
   });
 
-  // Defensive check: ensure items is always an array
   const items = Array.isArray(data?.items) ? data.items : [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
@@ -210,16 +211,20 @@ export default function PortalAdjustments() {
   }
 
   function handleCreate() {
-    if (!form.employeeId || !form.adjustmentType || !form.amount || !form.effectiveMonth) {
+    if (!form.workerId || !form.workerType || !form.adjustmentType || !form.amount || !form.effectiveMonth) {
       toast.error(t("portal_adjustments.toast.required_fields_error"));
       return;
     }
+    // Extract numeric ID from "emp-123" or "con-456"
+    const numericId = parseInt(form.workerId.split("-")[1]);
+
     createMutation.mutate({
-      employeeId: form.employeeId,
+      workerType: form.workerType as "employee" | "contractor",
+      workerId: numericId,
       adjustmentType: form.adjustmentType as any,
       category: form.category ? (form.category as any) : undefined,
       amount: form.amount,
-      currency: form.currency,
+      currency: form.workerCurrency,
       effectiveMonth: form.effectiveMonth,
       description: form.description || undefined,
       receiptFileUrl: form.receiptFileUrl || undefined,
@@ -231,6 +236,7 @@ export default function PortalAdjustments() {
     if (!editingId) return;
     updateMutation.mutate({
       id: editingId,
+      workerType: editingWorkerType,
       amount: form.amount || undefined,
       description: form.description || undefined,
       receiptFileUrl: form.receiptFileUrl || undefined,
@@ -240,12 +246,14 @@ export default function PortalAdjustments() {
 
   function openEdit(adj: any) {
     setEditingId(adj.id);
+    setEditingWorkerType(adj.workerType || "employee");
     setForm({
-      employeeId: adj.employeeId,
+      workerId: "",
+      workerType: adj.workerType || "employee",
+      workerCurrency: adj.currency || "USD",
       adjustmentType: adj.adjustmentType,
       category: adj.category || "",
       amount: adj.amount,
-      currency: adj.currency,
       effectiveMonth: adj.effectiveMonth ? adj.effectiveMonth.slice(0, 7) : "",
       description: adj.description || "",
       receiptFileUrl: adj.receiptFileUrl || "",
@@ -272,15 +280,15 @@ export default function PortalAdjustments() {
               disabled={items.length === 0}
               onClick={() => {
                 exportToCsv(items, [
-                  { header: "Employee", accessor: (r: any) => r.employeeName || "" },
-                  { header: "Type", accessor: (r: any) => t(`adjustments.type.${r.adjustmentType}`) || r.adjustmentType || "" },
+                  { header: "Worker", accessor: (r: any) => `${r.employeeFirstName || r.workerFirstName || ""} ${r.employeeLastName || r.workerLastName || ""}`.trim() },
+                  { header: "Type", accessor: (r: any) => r.workerType === "contractor" ? "AOR" : "EOR" },
+                  { header: "Adjustment Type", accessor: (r: any) => t(`adjustments.type.${r.adjustmentType}`) || r.adjustmentType || "" },
                   { header: "Category", accessor: (r: any) => t(`adjustments.category.${r.category}`) || r.category || "" },
                   { header: "Effective Month", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth + "T00:00:00").toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", { year: "numeric", month: "short" }) : "" },
                   { header: "Amount", accessor: (r: any) => r.amount || 0 },
                   { header: "Currency", accessor: (r: any) => r.currency || "" },
                   { header: "Status", accessor: (r: any) => t(`portal_adjustments.status.${r.status}`) || r.status || "" },
-                  { header: "Description", accessor: (r: any) => r.description || "" },
-                ], `adjustments-${new Date().toISOString().slice(0, 10)}.csv`);
+                ], `adjustments-export-${new Date().toISOString().slice(0, 10)}.csv`);
               }}
             >
               <Download className="w-4 h-4 mr-1" /> {t("common.export") || "Export CSV"}
@@ -328,7 +336,7 @@ export default function PortalAdjustments() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{t("portal_adjustments.table.header.employee")}</TableHead>
+                    <TableHead>Worker</TableHead>
                     <TableHead>{t("portal_adjustments.table.header.type")}</TableHead>
                     <TableHead>{t("portal_adjustments.table.header.category")}</TableHead>
                     <TableHead>{t("portal_adjustments.table.header.effective_month")}</TableHead>
@@ -340,15 +348,24 @@ export default function PortalAdjustments() {
                 </TableHeader>
                 <TableBody>
                   {items.map((adj: any) => (
-                    <TableRow key={adj.id}>
+                    <TableRow key={`${adj.workerType || "emp"}-${adj.id}`}>
                       <TableCell className="font-medium">
-                        {adj.employeeFirstName} {adj.employeeLastName}
+                        <div className="flex items-center gap-2">
+                          <span>{adj.employeeFirstName || adj.workerFirstName} {adj.employeeLastName || adj.workerLastName}</span>
+                          <Badge variant="outline" className={cn("text-[10px] h-4 px-1",
+                            adj.workerType === "contractor"
+                              ? "bg-orange-50 text-orange-700 border-orange-200"
+                              : "bg-blue-50 text-blue-700 border-blue-200"
+                          )}>
+                            {adj.workerLabel || (adj.workerType === "contractor" ? "AOR" : "EOR")}
+                          </Badge>
+                        </div>
                       </TableCell>
                       <TableCell className="capitalize">
                         {t(`adjustments.type.${adj.adjustmentType}`) || adj.adjustmentType?.replace(/_/g, " ") || "-"}
                       </TableCell>
                       <TableCell className="capitalize text-sm">
-                        {t(`adjustments.category.${adj.category}`) || adj.category?.replace(/_/g, " ") || "-"}
+                        {adj.category ? (t(`adjustments.category.${adj.category}`) || adj.category?.replace(/_/g, " ")) : "-"}
                       </TableCell>
                       <TableCell>
                         {adj.effectiveMonth
@@ -392,7 +409,7 @@ export default function PortalAdjustments() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                                onClick={() => approveMutation.mutate({ id: adj.id })}
+                                onClick={() => approveMutation.mutate({ id: adj.id, workerType: adj.workerType || "employee" })}
                                 disabled={approveMutation.isPending}
                               >
                                 <CheckCircle2 className="w-4 h-4" />
@@ -401,7 +418,7 @@ export default function PortalAdjustments() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                onClick={() => { setRejectId(adj.id); setRejectReason(""); }}
+                                onClick={() => { setRejectId(adj.id); setRejectWorkerType(adj.workerType || "employee"); setRejectReason(""); }}
                               >
                                 <XCircle className="w-4 h-4" />
                               </Button>
@@ -412,7 +429,7 @@ export default function PortalAdjustments() {
                               <Button variant="ghost" size="sm" onClick={() => openEdit(adj)}>
                                 <Pencil className="w-4 h-4" />
                               </Button>
-                              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteId(adj.id)}>
+                              <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => { setDeleteId(adj.id); setDeleteWorkerType(adj.workerType || "employee"); }}>
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </>
@@ -455,27 +472,25 @@ export default function PortalAdjustments() {
             <DialogTitle>{editingId ? t("adjustments.dialog.title.edit") : t("portal_adjustments.button.new")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {/* Payroll Cycle Indicator — matches Admin experience */}
+            {/* Payroll Cycle Indicator */}
             <PortalPayrollCycleIndicator month={form.effectiveMonth || undefined} />
             {!editingId && (
               <>
-                <div className="space-y-2">
-                  <Label>{t("portal_adjustments.table.header.employee")} <span className="text-destructive">*</span></Label>
-                  <Select value={form.employeeId ? String(form.employeeId) : ""} onValueChange={(v) => {
-                    const empId = Number(v);
-                    const selectedEmp = employees.find((e: any) => e.id === empId);
-                    setForm((f) => ({ ...f, employeeId: empId, currency: selectedEmp?.salaryCurrency || f.currency }));
-                  }}>
-                    <SelectTrigger><SelectValue placeholder={t("leave.form.placeholder.employee")} /></SelectTrigger>
-                    <SelectContent>
-                      {employees.map((emp: any) => (
-                        <SelectItem key={emp.id} value={String(emp.id)}>
-                          {emp.firstName} {emp.lastName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Worker Selector — unified employee + contractor */}
+                <PortalWorkerSelector
+                  value={form.workerId}
+                  onValueChange={(value, worker) => {
+                    setForm((f) => ({
+                      ...f,
+                      workerId: value,
+                      workerType: worker?.type || "",
+                      workerCurrency: worker?.currency || "USD",
+                    }));
+                  }}
+                  label="Worker"
+                  required
+                />
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t("portal_adjustments.table.header.type")} <span className="text-destructive">*</span></Label>
@@ -488,18 +503,21 @@ export default function PortalAdjustments() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label>{t("portal_adjustments.table.header.category")}</Label>
-                    <Select value={form.category || "none"} onValueChange={(v) => setForm((f) => ({ ...f, category: v === "none" ? "" : v }))}>
-                      <SelectTrigger><SelectValue placeholder={t("adjustments.form.label.category")} /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">{t("adjustments.category.none")}</SelectItem>
-                        {categoryOptions.map((c) => (
-                          <SelectItem key={c} value={c}>{t("adjustments.category." + c)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {/* Only show category for EOR employees */}
+                  {form.workerType !== "contractor" && (
+                    <div className="space-y-2">
+                      <Label>{t("portal_adjustments.table.header.category")}</Label>
+                      <Select value={form.category || "none"} onValueChange={(v) => setForm((f) => ({ ...f, category: v === "none" ? "" : v }))}>
+                        <SelectTrigger><SelectValue placeholder={t("adjustments.form.label.category")} /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">{t("adjustments.category.none")}</SelectItem>
+                          {categoryOptions.map((c) => (
+                            <SelectItem key={c} value={c}>{t("adjustments.category." + c)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label>{t("portal_adjustments.table.header.effective_month")} <span className="text-destructive">*</span></Label>
@@ -518,7 +536,7 @@ export default function PortalAdjustments() {
               </div>
               <div className="space-y-2">
                 <Label>{t("portal_adjustments.form.currency_label")}</Label>
-                <Input value={form.currency} readOnly disabled className="bg-muted" />
+                <Input value={form.workerCurrency} readOnly disabled className="bg-muted" />
               </div>
             </div>
             <div className="space-y-2">
@@ -578,7 +596,7 @@ export default function PortalAdjustments() {
             <AlertDialogCancel>{t("common.cancel") || "Cancel"}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteId && deleteMutation.mutate({ id: deleteId })}
+              onClick={() => deleteId && deleteMutation.mutate({ id: deleteId, workerType: deleteWorkerType })}
             >
               {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               {t("common.delete") || "Delete"}
@@ -608,7 +626,7 @@ export default function PortalAdjustments() {
             <Button variant="outline" onClick={() => { setRejectId(null); setRejectReason(""); }}>{t("common.cancel") || "Cancel"}</Button>
             <Button
               variant="destructive"
-              onClick={() => rejectId && rejectMutation.mutate({ id: rejectId, reason: rejectReason || undefined })}
+              onClick={() => rejectId && rejectMutation.mutate({ id: rejectId, workerType: rejectWorkerType, reason: rejectReason || undefined })}
               disabled={rejectMutation.isPending}
             >
               {rejectMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

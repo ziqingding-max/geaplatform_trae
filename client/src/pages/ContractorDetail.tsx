@@ -453,7 +453,6 @@ export default function ContractorDetail() {
     title: "",
     description: "",
     amount: "",
-    currency: "USD",
     dueDate: "",
   });
 
@@ -462,9 +461,11 @@ export default function ContractorDetail() {
     type: "bonus" as "bonus" | "expense" | "deduction",
     description: "",
     amount: "",
-    currency: "USD",
     date: new Date().toISOString().split('T')[0],
   });
+
+  // Currency is locked from the contractor record
+  const contractorCurrency = contractor?.currency || "USD";
 
   if (isLoading) return <Layout>Loading...</Layout>;
   if (!contractor) return <Layout>Not Found</Layout>;
@@ -617,14 +618,14 @@ export default function ContractorDetail() {
                       </div>
                       <div className="space-y-2">
                         <Label>Currency</Label>
-                        <CurrencySelect value={milestoneForm.currency} onValueChange={v => setMilestoneForm({...milestoneForm, currency: v})} />
+                        <Input value={contractorCurrency} readOnly disabled className="bg-muted" />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Due Date</Label>
                       <Input type="date" value={milestoneForm.dueDate} onChange={e => setMilestoneForm({...milestoneForm, dueDate: e.target.value})} />
                     </div>
-                    <Button className="w-full" onClick={() => createMilestoneMutation.mutate({...milestoneForm, contractorId: id})} disabled={createMilestoneMutation.isPending}>
+                    <Button className="w-full" onClick={() => createMilestoneMutation.mutate({...milestoneForm, currency: contractorCurrency, contractorId: id})} disabled={createMilestoneMutation.isPending}>
                       {createMilestoneMutation.isPending ? "Creating..." : "Create Milestone"}
                     </Button>
                   </div>
@@ -702,14 +703,14 @@ export default function ContractorDetail() {
                       </div>
                       <div className="space-y-2">
                         <Label>Currency</Label>
-                        <CurrencySelect value={adjustmentForm.currency} onValueChange={v => setAdjustmentForm({...adjustmentForm, currency: v})} />
+                        <Input value={contractorCurrency} readOnly disabled className="bg-muted" />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label>Date</Label>
                       <Input type="date" value={adjustmentForm.date} onChange={e => setAdjustmentForm({...adjustmentForm, date: e.target.value})} />
                     </div>
-                    <Button className="w-full" onClick={() => createAdjustmentMutation.mutate({...adjustmentForm, contractorId: id})} disabled={createAdjustmentMutation.isPending}>
+                    <Button className="w-full" onClick={() => createAdjustmentMutation.mutate({...adjustmentForm, currency: contractorCurrency, contractorId: id})} disabled={createAdjustmentMutation.isPending}>
                       {createAdjustmentMutation.isPending ? "Creating..." : "Create Adjustment"}
                     </Button>
                   </div>

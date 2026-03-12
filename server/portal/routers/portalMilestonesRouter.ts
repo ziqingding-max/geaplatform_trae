@@ -117,25 +117,29 @@ export const portalMilestonesRouter = portalRouter({
 
       const customerId = ctx.portalUser.customerId;
 
-      // Verify contractor belongs to this customer
-      const contractor = await db
-        .select({ id: contractors.id })
+      // Verify contractor belongs to this customer and get its locked currency
+      const [con] = await db
+        .select({ id: contractors.id, currency: contractors.currency, customerId: contractors.customerId })
         .from(contractors)
         .where(and(eq(contractors.id, input.contractorId), eq(contractors.customerId, customerId)))
         .limit(1);
 
-      if (contractor.length === 0) {
+      if (!con) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Contractor not found" });
       }
+
+      // Currency is locked from the contractor record, ignore frontend value
+      const currency = con.currency || input.currency;
 
       const result = await db
         .insert(contractorMilestones)
         .values({
           contractorId: input.contractorId,
+          customerId: con.customerId,
           title: input.title,
           description: input.description || null,
           amount: input.amount,
-          currency: input.currency,
+          currency,
           dueDate: input.dueDate || null,
           status: "pending",
         })

@@ -235,8 +235,11 @@ export const contractorsRouter = router({
         if (!contractor) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Contractor not found" });
         }
+        // Currency is locked from the contractor record
+        const currency = contractor.currency || input.currency;
         const result = await createContractorMilestone({
           ...input,
+          currency,
           customerId: contractor.customerId,
           status: "pending",
         });
@@ -314,8 +317,11 @@ export const contractorsRouter = router({
         if (!contractor) {
           throw new TRPCError({ code: "NOT_FOUND", message: "Contractor not found" });
         }
+        // Currency is locked from the contractor record
+        const currency = contractor.currency || input.currency;
         const result = await createContractorAdjustment({
           ...input,
+          currency,
           customerId: contractor.customerId,
           effectiveMonth: input.date.substring(0, 7) + "-01", // Derive from date: YYYY-MM-01
           status: "submitted" as any,
