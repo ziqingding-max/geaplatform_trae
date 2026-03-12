@@ -27,6 +27,7 @@ import AuditLogs from "./pages/AuditLogs";
 import KnowledgeBaseAdmin from "./pages/KnowledgeBaseAdmin";
 import Vendors from "./pages/Vendors";
 import VendorBills from "./pages/VendorBills";
+import AnalyzeBill from "./pages/AnalyzeBill";
 import ContractorInvoices from "./pages/admin/ContractorInvoices";
 import ReleaseTasks from "./pages/admin/ReleaseTasks";
 import ProfitLossReport from "./pages/ProfitLossReport";
@@ -230,6 +231,7 @@ function AdminRouter() {
       <Route path="/vendors" component={Vendors} />
       <Route path="/vendors/:id" component={Vendors} />
       <Route path="/vendor-bills" component={VendorBills} />
+      <Route path="/vendor-bills/new" component={AnalyzeBill} />
       <Route path="/vendor-bills/:id" component={VendorBills} />
       <Route path="/admin/contractor-invoices" component={ContractorInvoices} />
       <Route path="/admin/release-tasks" component={ReleaseTasks} />

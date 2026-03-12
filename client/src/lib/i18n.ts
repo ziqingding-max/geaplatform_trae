@@ -5730,6 +5730,23 @@ const adminTranslations = {
     "vendorBills.detail.noLineItems": "No line items recorded.",
     "vendorBills.detail.viewAttachment": "View Attachment",
 
+    // AnalyzeBill page
+    "vendorBills.analyze.aiTitle": "AI Invoice Analysis",
+    "vendorBills.analyze.manualTitle": "Create Vendor Bill",
+    "vendorBills.analyze.aiSubtitle": "Upload invoice files for AI-powered parsing and auto-fill",
+    "vendorBills.analyze.manualSubtitle": "Manually enter vendor bill details",
+    "vendorBills.analyze.singleVendorWarningTitle": "One vendor per upload",
+    "vendorBills.analyze.singleVendorWarningDesc": "Please only upload files from the same vendor for the same billing period. The first file will be treated as the primary invoice; additional files are supporting attachments (e.g. payroll breakdown, tax receipts).",
+    "vendorBills.analyze.serviceMonthHint": "Which month does this bill cover?",
+    "vendorBills.analyze.uploadTitle": "Upload Invoice Files",
+    "vendorBills.analyze.filesSelected": "{count} file(s) selected",
+    "vendorBills.analyze.primaryFile": "Primary",
+    "vendorBills.analyze.attachment": "Attachment",
+    "vendorBills.analyze.noLineItems": "No line items yet. Click below to add one.",
+    "vendorBills.analyze.parsingHint": "This may take 30-60 seconds depending on document complexity.",
+    "vendorBills.createBill.noLineItems": "No line items yet. Click below to add one.",
+    "vendorBills.lineItems.totalLabel": "Total",
+
     // Vendors
     "vendors.create.create_button": "Create Vendor",
     "vendors.create.creating_button": "Creating...",
@@ -8482,6 +8499,23 @@ const adminTranslations = {
     "vendorBills.detail.backToList": "返回列表",
     "vendorBills.detail.noLineItems": "暂无行项目记录。",
     "vendorBills.detail.viewAttachment": "查看附件",
+
+    // AnalyzeBill page
+    "vendorBills.analyze.aiTitle": "AI 发票分析",
+    "vendorBills.analyze.manualTitle": "创建供应商账单",
+    "vendorBills.analyze.aiSubtitle": "上传发票文件，AI 自动解析并填充",
+    "vendorBills.analyze.manualSubtitle": "手动录入供应商账单信息",
+    "vendorBills.analyze.singleVendorWarningTitle": "每次仅限同一供应商",
+    "vendorBills.analyze.singleVendorWarningDesc": "请仅上传同一供应商同一账期的关联文件。第一个文件将作为主发票，其余文件作为辅助附件（如工资明细、社保凭证、税务回执等）。",
+    "vendorBills.analyze.serviceMonthHint": "该账单对应哪个服务月份？",
+    "vendorBills.analyze.uploadTitle": "上传发票文件",
+    "vendorBills.analyze.filesSelected": "已选择 {count} 个文件",
+    "vendorBills.analyze.primaryFile": "主文件",
+    "vendorBills.analyze.attachment": "附件",
+    "vendorBills.analyze.noLineItems": "暂无行项目，点击下方按钮添加。",
+    "vendorBills.analyze.parsingHint": "解析可能需要 30-60 秒，取决于文档复杂度。",
+    "vendorBills.createBill.noLineItems": "暂无行项目，点击下方按钮添加。",
+    "vendorBills.lineItems.totalLabel": "合计",
 
     // Vendors
     "vendors.create.create_button": "创建供应商",
