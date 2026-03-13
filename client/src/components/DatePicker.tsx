@@ -137,6 +137,7 @@ export function DatePicker({
           captionLayout="dropdown"
           fromYear={1940}
           toYear={2035}
+          classNames={{ today: "" }}
           startMonth={fromDate}
           endMonth={toDate}
           disabled={

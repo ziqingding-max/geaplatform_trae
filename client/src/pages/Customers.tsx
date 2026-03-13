@@ -281,6 +281,7 @@ function CustomerList() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-16">ID</TableHead>
                     <TableHead>{t("customers.table.header.company")}</TableHead>
                     <TableHead className="min-w-[120px]">{t("customers.table.header.country")}</TableHead>
                     <TableHead>{t("customers.form.primary_contact")}</TableHead>
@@ -292,6 +293,7 @@ function CustomerList() {
                 <TableBody>
                   {data?.data && data.data.length > 0 ? data.data.map((customer) => (
                     <TableRow key={customer.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/customers/${customer.id}?from_page=${page}`)}>
+                      <TableCell className="text-sm text-muted-foreground font-mono">{customer.id}</TableCell>
                       <TableCell>
                         <div className="font-medium text-sm">{customer.companyName}</div>
                         <div className="text-xs text-muted-foreground">{(customer as any).clientCode || customer.legalEntityName || ''}</div>
@@ -312,7 +314,7 @@ function CustomerList() {
                     </TableRow>
                   )) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12">
+                      <TableCell colSpan={7} className="text-center py-12">
                         <Building2 className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
                         <p className="text-sm text-muted-foreground">{t("customers.empty_state.no_customers")}</p>
                       </TableCell>

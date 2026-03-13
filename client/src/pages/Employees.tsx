@@ -668,6 +668,7 @@ function EmployeeList() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-16">ID</TableHead>
                   <TableHead>{t("employees.list.table.header.employee")}</TableHead>
                   <TableHead>{t("employees.create.form.customer")}</TableHead>
                   <TableHead className="min-w-[120px]">{t("employees.list.table.header.country")}</TableHead>
@@ -690,6 +691,7 @@ function EmployeeList() {
                 ) : data?.data && data.data.length > 0 ? (
                   data.data.map((emp) => (
                     <TableRow key={emp.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/people/${emp.id}?from_page=${page}`)}>
+                      <TableCell className="text-sm text-muted-foreground font-mono">{emp.id}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
@@ -722,7 +724,7 @@ function EmployeeList() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12">
+                    <TableCell colSpan={8} className="text-center py-12">
                       <Users className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
                       <p className="text-sm text-muted-foreground">{t("employees.list.empty.message")}</p>
                     </TableCell>

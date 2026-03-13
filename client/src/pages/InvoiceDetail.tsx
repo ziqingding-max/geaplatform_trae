@@ -511,7 +511,7 @@ export default function InvoiceDetail() {
                   <InfoRow icon={<CalendarDays className="w-3.5 h-3.5" />} label="Sent Date" value={invoice.sentDate ? formatDate(invoice.sentDate) : "—"} />
                   {isPaid && <InfoRow icon={<CheckCircle2 className="w-3.5 h-3.5" />} label="Paid Date" value={invoice.paidDate ? formatDate(invoice.paidDate) : "—"} />}
                   {invoice.exchangeRate && invoice.exchangeRate !== "1" && (
-                    <InfoRow icon={<TrendingUp className="w-3.5 h-3.5" />} label="Exchange Rate" value={`${invoice.exchangeRateWithMarkup || invoice.exchangeRate} (with markup)`} />
+                    <InfoRow icon={<TrendingUp className="w-3.5 h-3.5" />} label="Exchange Rate" value={`${parseFloat(invoice.exchangeRateWithMarkup || invoice.exchangeRate).toFixed(6)} (with markup)`} />
                   )}
                 </div>
               </CardContent>
