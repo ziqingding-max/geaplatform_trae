@@ -138,6 +138,7 @@ export function ContractorListContent() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-16">ID</TableHead>
                 <TableHead>{t("contractors.list.table.header.contractor")}</TableHead>
                 <TableHead>{t("employees.create.form.customer")}</TableHead>
                 <TableHead className="min-w-[120px]">{t("employees.list.table.header.country")}</TableHead>
@@ -158,6 +159,7 @@ export function ContractorListContent() {
               ) : data?.data && data.data.length > 0 ? (
                 data.data.map((con: any) => (
                   <TableRow key={con.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setLocation(`/contractors/${con.id}`)}>
+                    <TableCell className="text-sm text-muted-foreground font-mono">{con.id}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
@@ -183,7 +185,7 @@ export function ContractorListContent() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-12">
+                  <TableCell colSpan={6} className="text-center py-12">
                     <Briefcase className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
                     <p className="text-sm text-muted-foreground">{t("contractors.list.empty.message")}</p>
                   </TableCell>
