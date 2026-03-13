@@ -415,7 +415,15 @@ export default function Leave() {
                             <Label>{t("leave.form.label.startDate")} *</Label>
                             <DatePicker
                             value={formData.startDate}
-                            onChange={(v) => setFormData({ ...formData, startDate: v })}
+                            onChange={(v) => {
+                              const updates: any = { startDate: v };
+                              // Clear endDate if new startDate is after current endDate
+                              if (formData.endDate && v > formData.endDate) {
+                                updates.endDate = "";
+                                updates.days = "1";
+                              }
+                              setFormData({ ...formData, ...updates });
+                            }}
                             placeholder={t("leave.form.placeholder.startDate")}
                             />
                         </div>

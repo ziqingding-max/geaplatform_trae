@@ -83,11 +83,33 @@ export function DatePicker({
   // When 'value' changes externally, we update this state to jump the calendar to the new date
   const [currentMonth, setCurrentMonth] = React.useState<Date>(selectedDate || new Date());
 
+  // Sync currentMonth when selectedDate changes (including when value is set or cleared)
   React.useEffect(() => {
     if (selectedDate) {
       setCurrentMonth(selectedDate);
     }
   }, [selectedDate]);
+
+  // When minDate changes (e.g. startDate updated), reset calendar view to minDate's month
+  // so the end-date picker shows the relevant month instead of stale old month
+  React.useEffect(() => {
+    if (fromDate && !selectedDate) {
+      setCurrentMonth(fromDate);
+    }
+  }, [fromDate, selectedDate]);
+
+  // When the popover opens, ensure the calendar shows the most relevant month
+  React.useEffect(() => {
+    if (open) {
+      if (selectedDate) {
+        setCurrentMonth(selectedDate);
+      } else if (fromDate) {
+        setCurrentMonth(fromDate);
+      } else {
+        setCurrentMonth(new Date());
+      }
+    }
+  }, [open]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

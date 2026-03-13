@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { DatePicker, MonthPicker } from "@/components/DatePicker";
 
 /* ========== Constants ========== */
 
@@ -1217,25 +1218,26 @@ function EditDetailsDialog({ open, onOpenChange, invoice, customers, billingEnti
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Invoice Month</Label>
-              <Input type="month" value={form.invoiceMonth?.slice(0, 7) || ""} onChange={(e) => setForm(prev => ({ ...prev, invoiceMonth: e.target.value }))} />
+              <MonthPicker
+                value={form.invoiceMonth?.slice(0, 7) || ""}
+                onChange={(v) => setForm(prev => ({ ...prev, invoiceMonth: v }))}
+                placeholder="Select month"
+              />
             </div>
             <div className="space-y-2">
               <Label>Due Date</Label>
-              <Input type="date" value={form.dueDate?.slice(0, 10) || ""} onChange={(e) => setForm(prev => ({ ...prev, dueDate: e.target.value }))} />
+              <DatePicker
+                value={form.dueDate?.slice(0, 10) || ""}
+                onChange={(v) => setForm(prev => ({ ...prev, dueDate: v }))}
+                placeholder="Select due date"
+              />
             </div>
           </div>
-          {form.currency !== "USD" && (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Exchange Rate</Label>
-                <Input type="number" step="0.000001" value={form.exchangeRate} onChange={(e) => setForm(prev => ({ ...prev, exchangeRate: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Rate with Markup</Label>
-                <Input type="number" step="0.000001" value={form.exchangeRateWithMarkup} onChange={(e) => setForm(prev => ({ ...prev, exchangeRateWithMarkup: e.target.value }))} />
-              </div>
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label>Invoice Exchange Rate</Label>
+            <Input type="number" step="0.000001" value={form.exchangeRateWithMarkup} onChange={(e) => setForm(prev => ({ ...prev, exchangeRateWithMarkup: e.target.value }))} placeholder="1.000000" />
+            <p className="text-xs text-muted-foreground">The exchange rate applied to this invoice for foreign currency conversion.</p>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
