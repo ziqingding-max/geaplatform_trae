@@ -44,8 +44,8 @@ async function startServer() {
     await seedDefaultAdmin();
     // Seed migration data
     await seedMigration();
-    // Initialize scheduled cron jobs
-    scheduleCronJobs();
+    // Initialize scheduled cron jobs (reads config from DB, so must be awaited)
+    await scheduleCronJobs();
   });
 }
 

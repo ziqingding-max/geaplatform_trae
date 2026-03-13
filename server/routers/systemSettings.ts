@@ -2,7 +2,7 @@ import { z } from "zod";
 import { router } from "../_core/trpc";
 import { adminProcedure, userProcedure } from "../procedures";
 import { listSystemConfigs, getSystemConfig, setSystemConfig } from "../db";
-import { runEmployeeAutoActivation, runAutoCreatePayrollRuns } from "../cronJobs";
+import { runEmployeeAutoActivation, runAutoCreatePayrollRuns, rescheduleAllJobs, runJobByKey, CRON_JOB_DEFS } from "../cronJobs";
 import {
   getCurrentPayrollPeriod,
   getPayrollPeriodInfo,
@@ -124,5 +124,84 @@ export const systemSettingsRouter = router({
     .mutation(async () => {
       const result = await runAutoCreatePayrollRuns();
       return result;
+    }),
+
+  // ── Dynamic Cron Job Management ──
+
+  /**
+   * List all cron job definitions with their current config and last run info.
+   * Returns the full registry so the UI can render the Scheduled Jobs panel.
+   */
+  listCronJobs: adminProcedure.query(async () => {
+    const jobs = [];
+    for (const def of CRON_JOB_DEFS) {
+      const prefix = `cron_${def.key}`;
+      const enabledStr = await getSystemConfig(`${prefix}_enabled`);
+      const dayStr = await getSystemConfig(`${prefix}_day`);
+      const timeStr = await getSystemConfig(`${prefix}_time`);
+      const lastRun = await getSystemConfig(`${prefix}_last_run`);
+      const lastError = await getSystemConfig(`${prefix}_last_error`);
+
+      jobs.push({
+        key: def.key,
+        label: def.label,
+        description: def.description,
+        frequency: def.frequency,
+        enabled: enabledStr !== null ? enabledStr === "true" : def.defaultEnabled,
+        day: dayStr !== null ? parseInt(dayStr, 10) : def.defaultDay,
+        time: timeStr !== null ? timeStr : def.defaultTime,
+        defaultDay: def.defaultDay,
+        defaultTime: def.defaultTime,
+        defaultEnabled: def.defaultEnabled,
+        lastRun: lastRun || null,
+        lastError: lastError || null,
+      });
+    }
+    return jobs;
+  }),
+
+  /**
+   * Update a cron job's config (enabled, day, time) and reschedule.
+   */
+  updateCronJob: adminProcedure
+    .input(z.object({
+      key: z.string(),
+      enabled: z.boolean().optional(),
+      day: z.number().min(1).max(28).optional(),
+      time: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const prefix = `cron_${input.key}`;
+      if (input.enabled !== undefined) {
+        await setSystemConfig(`${prefix}_enabled`, String(input.enabled));
+      }
+      if (input.day !== undefined) {
+        await setSystemConfig(`${prefix}_day`, String(input.day));
+      }
+      if (input.time !== undefined) {
+        await setSystemConfig(`${prefix}_time`, input.time);
+      }
+      // Hot-reload: reschedule all jobs with new config
+      await rescheduleAllJobs();
+      return { success: true };
+    }),
+
+  /**
+   * Run a specific cron job immediately by key.
+   */
+  triggerCronJob: adminProcedure
+    .input(z.object({ key: z.string() }))
+    .mutation(async ({ input }) => {
+      const result = await runJobByKey(input.key);
+      return { success: true, result };
+    }),
+
+  /**
+   * Reschedule all cron jobs (e.g. after bulk config update).
+   */
+  rescheduleJobs: adminProcedure
+    .mutation(async () => {
+      await rescheduleAllJobs();
+      return { success: true };
     }),
 });

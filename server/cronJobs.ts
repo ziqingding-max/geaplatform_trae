@@ -39,6 +39,7 @@ import {
   getActiveContractorsByFrequency,
   getSubmittedAdjustmentsForPayroll,
   getSubmittedUnpaidLeaveForPayroll,
+  getSubmittedReimbursementsForPayroll,
   updatePayrollRun,
   getAllActiveLeaveRecordsForDate,
   getOnLeaveEmployeesWithExpiredLeave,
@@ -47,6 +48,7 @@ import {
   listLeaveBalances,
   updateLeaveBalance,
   getCustomerLeavePoliciesForCountry,
+  createAdjustment,
 } from "./db";
 import { notificationService } from "./services/notificationService";
 import { ContractorInvoiceGenerationService } from "./services/contractorInvoiceGenerationService";
@@ -138,7 +140,7 @@ export async function runEmployeeAutoActivation(): Promise<{ activated: number; 
   console.log(`[CronJob] Employee auto-activation check for ${todayStr}`);
 
   // Get mid-month cutoff from system config (default 15)
-  const midMonthCutoff = parseInt(await getSystemConfig("mid_month_cutoff_day") ?? "15", 10);
+  const midMonthCutoff = parseInt(await getSystemConfig("mid_month_activation_cutoff") ?? "15", 10);
 
   // Find employees ready for activation
   const readyEmployees = await getContractSignedEmployeesReadyForActivation(todayStr);
@@ -221,6 +223,49 @@ export async function runEmployeeAutoActivation(): Promise<{ activated: number; 
         });
       }
     } else {
+      // Employee activated after mid-month cutoff: create Sign-on Bonus for next month
+      const startDate = new Date(emp.startDate as any);
+      const baseSalary = parseFloat(emp.baseSalary?.toString() ?? "0");
+
+      if (baseSalary > 0) {
+        const { proRataAmount, totalWorkingDays, workedDays } = calculateProRata(
+          baseSalary, startDate, currentYear, currentMonth
+        );
+
+        if (proRataAmount > 0) {
+          // Calculate next month for effectiveMonth
+          let nextMonth = currentMonth + 1;
+          let nextYear = currentYear;
+          if (nextMonth > 12) {
+            nextMonth = 1;
+            nextYear++;
+          }
+          const effectiveMonth = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
+
+          await createAdjustment({
+            employeeId: emp.id,
+            customerId: emp.customerId,
+            adjustmentType: "bonus",
+            category: "other",
+            amount: String(proRataAmount),
+            currency: emp.salaryCurrency ?? "USD",
+            effectiveMonth,
+            status: "submitted",
+            description: `Sign-on bonus - pro-rata compensation for ${workedDays}/${totalWorkingDays} working days in ${currentYear}-${String(currentMonth).padStart(2, "0")} (started ${emp.startDate})`,
+          });
+
+          console.log(`[CronJob] Created Sign-on Bonus for ${emp.employeeCode}: ${proRataAmount} ${emp.salaryCurrency ?? "USD"} (${workedDays}/${totalWorkingDays} days, effectiveMonth: ${effectiveMonth})`);
+
+          await logAuditAction({
+            userName: "System",
+            action: "sign_on_bonus_created",
+            entityType: "adjustment",
+            entityId: emp.id,
+            changes: { detail: `Auto-created Sign-on Bonus for ${emp.employeeCode}: ${proRataAmount} (${workedDays}/${totalWorkingDays} working days in ${currentYear}-${String(currentMonth).padStart(2, "0")})` },
+          });
+        }
+      }
+
       console.log(`[CronJob] ${emp.employeeCode} activated after ${midMonthCutoff}th, will be in next month's payroll`);
     }
   }
@@ -385,6 +430,7 @@ export async function runAutoCreatePayrollRuns(): Promise<{ created: number; emp
     // Note: auto-fill for next month's payroll uses current month's locked data
     // because adjustments/leave are submitted for the month they apply to
     const lockedAdjustments = await getSubmittedAdjustmentsForPayroll(countryCode, prevMonthPayroll, ["locked"]);
+    const lockedReimbursements = await getSubmittedReimbursementsForPayroll(countryCode, prevMonthPayroll, ["locked"]);
     const lockedUnpaidLeave = await getSubmittedUnpaidLeaveForPayroll(countryCode, `${prevYear}-${String(prevMonth).padStart(2, "0")}`, ["locked"]);
 
     // Build adjustment aggregation maps
@@ -403,6 +449,16 @@ export async function runAutoCreatePayrollRuns(): Promise<{ created: number; emp
         case "deduction": agg.otherDeductions += amount; break;
         case "other": agg.otherDeductions += amount; break;
       }
+    }
+
+    // Aggregate standalone reimbursements from the reimbursements table
+    for (const reimb of lockedReimbursements) {
+      const empId = reimb.employeeId;
+      if (!adjByEmployee.has(empId)) {
+        adjByEmployee.set(empId, { bonus: 0, allowances: 0, reimbursements: 0, otherDeductions: 0 });
+      }
+      const agg = adjByEmployee.get(empId)!;
+      agg.reimbursements += parseFloat(String(reimb.amount ?? 0));
     }
 
     // Build unpaid leave aggregation map (days only, deduction calculated per employee)
@@ -478,6 +534,43 @@ export async function runAutoCreatePayrollRuns(): Promise<{ created: number; emp
       totalEmployerCost: String(totalEmployerCost),
     });
 
+    // Write back payrollRunId to all consumed locked data for traceability
+    try {
+      const { adjustments: adjTable, reimbursements: reimbTable, leaveRecords } = await import("../drizzle/schema");
+      const { and: drizzleAnd, eq: drizzleEq, isNull } = await import("drizzle-orm");
+
+      // Update locked adjustments that have no payrollRunId
+      await db.update(adjTable)
+        .set({ payrollRunId: runId })
+        .where(drizzleAnd(
+          drizzleEq(adjTable.status, "locked"),
+          drizzleEq(adjTable.effectiveMonth, prevMonthPayroll),
+          isNull(adjTable.payrollRunId)
+        ));
+
+      // Update locked reimbursements that have no payrollRunId
+      await db.update(reimbTable)
+        .set({ payrollRunId: runId })
+        .where(drizzleAnd(
+          drizzleEq(reimbTable.status, "locked"),
+          drizzleEq(reimbTable.effectiveMonth, prevMonthPayroll),
+          isNull(reimbTable.payrollRunId)
+        ));
+
+      // Update locked leave records that have no payrollRunId
+      const prevMonthPrefix = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
+      await db.update(leaveRecords)
+        .set({ payrollRunId: runId })
+        .where(drizzleAnd(
+          drizzleEq(leaveRecords.status, "locked"),
+          isNull(leaveRecords.payrollRunId)
+        ));
+
+      console.log(`[CronJob] Wrote back payrollRunId #${runId} to locked data for ${countryCode} ${prevMonthPayroll}`);
+    } catch (err) {
+      console.error(`[CronJob] Failed to write back payrollRunId for run #${runId}:`, err);
+    }
+
     console.log(`[CronJob] Filled ${eligibleEmployees.length} employees for ${countryCode} (gross: ${totalGross})`);
 
     await logAuditAction({
@@ -485,7 +578,7 @@ export async function runAutoCreatePayrollRuns(): Promise<{ created: number; emp
       action: "payroll_run_auto_created",
       entityType: "payroll_run",
       entityId: runId,
-      changes: { detail: `Auto-created draft payroll for ${countryCode} ${targetMonthStr} with ${eligibleEmployees.length} employees, aggregated locked adjustments/leave` },
+      changes: { detail: `Auto-created draft payroll for ${countryCode} ${targetMonthStr} with ${eligibleEmployees.length} employees, aggregated locked adjustments/leave/reimbursements` },
 
     });
   }
@@ -593,7 +686,11 @@ export async function runOverdueInvoiceDetection(): Promise<{ overdueCount: numb
   const { invoices } = await import("../drizzle/schema");
   const { eq, and, lt, isNotNull } = await import("drizzle-orm");
 
-   const todayStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+  // Use Beijing time (UTC+8) for consistency with other cron jobs
+  const now = new Date();
+  const beijingOffset = 8 * 60; // UTC+8
+  const beijingDate = new Date(now.getTime() + (beijingOffset - now.getTimezoneOffset()) * 60000);
+  const todayStr = beijingDate.toISOString().split("T")[0]; // YYYY-MM-DD in Beijing time
   // Find all sent invoices with dueDate < today
   const overdueInvoices = await db
     .select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber, dueDate: invoices.dueDate, customerId: invoices.customerId })
@@ -835,95 +932,202 @@ export async function runAutoCreateContractorInvoices(): Promise<{ created: numb
   return result;
 }
 
-export function scheduleCronJobs() {
-  // Daily at 00:01 Beijing time — employee auto-activation
-  cron.schedule("0 1 0 * * *", async () => {
-    console.log("[CronJob] Running daily employee auto-activation (Beijing 00:01)...");
-    try {
-      await runEmployeeAutoActivation();
-    } catch (err) {
-      console.error("[CronJob] Employee auto-activation failed:", err);
-    }
-  }, { timezone: "Asia/Shanghai" });
+// ============================================================================
+// DYNAMIC CRON SCHEDULER
+// All schedules are read from system_config and can be changed via Settings UI.
+// ============================================================================
 
-  // Monthly 5th at 00:00 Beijing time — auto-lock previous month's submitted data
-  cron.schedule("0 0 0 5 * *", async () => {
-    console.log("[CronJob] Running monthly auto-lock (Beijing 00:00 on 5th)...");
-    try {
-      await runAutoLock();
-    } catch (err) {
-      console.error("[CronJob] Auto-lock failed:", err);
-    }
-  }, { timezone: "Asia/Shanghai" });
+/** Registry of cron job definitions. */
+export interface CronJobDef {
+  key: string;                   // unique identifier, e.g. "employee_activation"
+  label: string;                 // human-readable name
+  description: string;           // short description
+  frequency: "daily" | "monthly"; // daily = every day; monthly = specific day of month
+  defaultDay: number;            // default day-of-month (only for monthly, 1-28)
+  defaultTime: string;           // default HH:mm (Beijing time)
+  defaultEnabled: boolean;
+  runner: () => Promise<any>;    // the async function to execute
+}
 
-  // Monthly 5th at 00:01 Beijing time — auto-create payroll runs with locked data
-  cron.schedule("0 1 0 5 * *", async () => {
-    console.log("[CronJob] Running monthly payroll auto-creation (Beijing 00:01 on 5th)...");
-    try {
-      await runAutoCreatePayrollRuns();
-    } catch (err) {
-      console.error("[CronJob] Payroll auto-creation failed:", err);
-    }
-
-    // AOR: Auto-create contractor invoices (same timing, after payroll runs)
-    console.log("[CronJob] Running monthly contractor invoice auto-creation (Beijing 00:01 on 5th)...");
-    try {
-      await runAutoCreateContractorInvoices();
-    } catch (err) {
-      console.error("[CronJob] Contractor invoice auto-creation failed:", err);
-    }
-  }, { timezone: "Asia/Shanghai" });
-
-  // Daily at 00:02 Beijing time — leave status auto-transition
-  cron.schedule("0 2 0 * * *", async () => {
-    console.log("[CronJob] Running daily leave status transition (Beijing 00:02)...");
-    try {
-      await runLeaveStatusTransition();
-    } catch (err) {
-      console.error("[CronJob] Leave status transition failed:", err);
-    }
-  }, { timezone: "Asia/Shanghai" });
-
-  // Daily at 00:03 Beijing time — overdue invoice auto-detection
-  cron.schedule("0 3 0 * * *", async () => {
-    console.log("[CronJob] Running daily overdue invoice detection (Beijing 00:03)...");
-    try {
-      await runOverdueInvoiceDetection();
-    } catch (err) {
-      console.error("[CronJob] Overdue invoice detection failed:", err);
-    }
-  }, { timezone: "Asia/Shanghai" });
-
-  // Daily at 00:05 Beijing time (17:05 CET previous day, after ECB publishes at 16:00 CET)
-  // ECB rates are published around 16:00 CET, so 00:05 Beijing = 17:05 CET gives buffer
-  cron.schedule("0 5 0 * * *", async () => {
-    console.log("[CronJob] Running daily exchange rate fetch (Beijing 00:05)...");
-    try {
+export const CRON_JOB_DEFS: CronJobDef[] = [
+  {
+    key: "employee_activation",
+    label: "Employee Auto-Activation",
+    description: "Transitions contract_signed employees to active when startDate arrives, with payroll auto-fill",
+    frequency: "daily",
+    defaultDay: 1,
+    defaultTime: "00:01",
+    defaultEnabled: true,
+    runner: runEmployeeAutoActivation,
+  },
+  {
+    key: "auto_lock",
+    label: "Auto-Lock Data (EOR+AOR)",
+    description: "Locks previous month's admin_approved adjustments, leave records, reimbursements, and contractor data",
+    frequency: "monthly",
+    defaultDay: 5,
+    defaultTime: "00:00",
+    defaultEnabled: true,
+    runner: runAutoLock,
+  },
+  {
+    key: "payroll_create",
+    label: "Auto-Create Payroll Runs & Contractor Invoices",
+    description: "Creates draft payroll runs for all countries with active employees, and generates contractor invoices",
+    frequency: "monthly",
+    defaultDay: 5,
+    defaultTime: "00:01",
+    defaultEnabled: true,
+    runner: async () => {
+      const payrollResult = await runAutoCreatePayrollRuns();
+      const contractorResult = await runAutoCreateContractorInvoices();
+      return { ...payrollResult, contractorInvoicesCreated: contractorResult.created, contractorErrors: contractorResult.errors.length };
+    },
+  },
+  {
+    key: "leave_transition",
+    label: "Leave Status Transition",
+    description: "Auto-transitions employees between active and on_leave based on leave record dates",
+    frequency: "daily",
+    defaultDay: 1,
+    defaultTime: "00:02",
+    defaultEnabled: true,
+    runner: runLeaveStatusTransition,
+  },
+  {
+    key: "overdue_invoice",
+    label: "Overdue Invoice Detection",
+    description: "Marks sent invoices as overdue when their due date has passed",
+    frequency: "daily",
+    defaultDay: 1,
+    defaultTime: "00:03",
+    defaultEnabled: true,
+    runner: runOverdueInvoiceDetection,
+  },
+  {
+    key: "exchange_rate",
+    label: "Exchange Rate Fetch",
+    description: "Fetches latest exchange rates from ExchangeRate-API (primary) with Frankfurter/ECB fallback. Covers 166 currencies.",
+    frequency: "daily",
+    defaultDay: 1,
+    defaultTime: "00:05",
+    defaultEnabled: true,
+    runner: async () => {
       const result = await fetchAndStoreExchangeRates();
-      console.log(`[CronJob] Exchange rates: ${result.ratesStored} stored, date: ${result.date}`);
-      if (result.errors.length > 0) {
-        console.warn("[CronJob] Exchange rate fetch warnings:", result.errors);
+      return { ratesStored: result.ratesStored, date: result.date, errors: result.errors.length };
+    },
+  },
+  {
+    key: "leave_accrual",
+    label: "Monthly Leave Accrual",
+    description: "Accrues annual leave entitlement for employees who joined in the current year (1/12 per month)",
+    frequency: "monthly",
+    defaultDay: 1,
+    defaultTime: "00:10",
+    defaultEnabled: true,
+    runner: runMonthlyLeaveAccrual,
+  },
+];
+
+/** Map of active ScheduledTask instances, keyed by job key. */
+const activeTasks = new Map<string, ReturnType<typeof cron.schedule>>();
+
+/**
+ * Build a node-cron expression from frequency, day, and time.
+ * node-cron uses: second minute hour dayOfMonth month dayOfWeek
+ */
+function buildCronExpression(frequency: "daily" | "monthly", day: number, time: string): string {
+  const [hour, minute] = time.split(":").map(Number);
+  if (frequency === "daily") {
+    return `0 ${minute} ${hour} * * *`;
+  }
+  // monthly
+  return `0 ${minute} ${hour} ${day} * *`;
+}
+
+/**
+ * Read a cron job's config from system_config.
+ * Returns { enabled, day, time } with fallback to defaults.
+ */
+async function getCronJobConfig(def: CronJobDef): Promise<{ enabled: boolean; day: number; time: string }> {
+  const prefix = `cron_${def.key}`;
+  const enabledStr = await getSystemConfig(`${prefix}_enabled`);
+  const dayStr = await getSystemConfig(`${prefix}_day`);
+  const timeStr = await getSystemConfig(`${prefix}_time`);
+
+  return {
+    enabled: enabledStr !== null ? enabledStr === "true" : def.defaultEnabled,
+    day: dayStr !== null ? parseInt(dayStr, 10) : def.defaultDay,
+    time: timeStr !== null ? timeStr : def.defaultTime,
+  };
+}
+
+/**
+ * Schedule (or reschedule) all cron jobs based on system_config.
+ * Stops any previously scheduled tasks before re-registering.
+ */
+export async function scheduleCronJobs() {
+  // Stop all existing tasks
+  for (const [key, task] of activeTasks.entries()) {
+    task.stop();
+    console.log(`[CronJob] Stopped existing task: ${key}`);
+  }
+  activeTasks.clear();
+
+  for (const def of CRON_JOB_DEFS) {
+    const config = await getCronJobConfig(def);
+
+    if (!config.enabled) {
+      console.log(`[CronJob] DISABLED: ${def.label}`);
+      continue;
+    }
+
+    const cronExpr = buildCronExpression(def.frequency, config.day, config.time);
+    const task = cron.schedule(cronExpr, async () => {
+      console.log(`[CronJob] Running ${def.label} ...`);
+      try {
+        const result = await def.runner();
+        console.log(`[CronJob] ${def.label} completed:`, result);
+        // Store last run timestamp
+        const { setSystemConfig } = await import("./db");
+        await setSystemConfig(`cron_${def.key}_last_run`, new Date().toISOString());
+      } catch (err) {
+        console.error(`[CronJob] ${def.label} failed:`, err);
+        const { setSystemConfig } = await import("./db");
+        await setSystemConfig(`cron_${def.key}_last_error`, String(err));
       }
-    } catch (err) {
-      console.error("[CronJob] Exchange rate fetch failed:", err);
-    }
-  }, { timezone: "Asia/Shanghai" });
+    }, { timezone: "Asia/Shanghai" });
 
-  // Monthly 1st at 00:10 Beijing time — leave accrual for new employees
-  cron.schedule("0 10 0 1 * *", async () => {
-    console.log("[CronJob] Running monthly leave accrual (Beijing 00:10 on 1st)...");
-    try {
-      await runMonthlyLeaveAccrual();
-    } catch (err) {
-      console.error("[CronJob] Monthly leave accrual failed:", err);
-    }
-  }, { timezone: "Asia/Shanghai" });
+    activeTasks.set(def.key, task);
 
-  console.log("[CronJob] Scheduled: Employee auto-activation (daily 00:01 Beijing)");
-  console.log("[CronJob] Scheduled: Leave status transition (daily 00:02 Beijing)");
-  console.log("[CronJob] Scheduled: Overdue invoice detection (daily 00:03 Beijing)");
-  console.log("[CronJob] Scheduled: Exchange rate auto-fetch (daily 00:05 Beijing)");
-  console.log("[CronJob] Scheduled: Auto-lock EOR+AOR (monthly 5th 00:00 Beijing)");
-  console.log("[CronJob] Scheduled: Payroll + Contractor Invoice auto-creation (monthly 5th 00:01 Beijing)");
-  console.log("[CronJob] Scheduled: Monthly leave accrual (monthly 1st 00:10 Beijing)");
+    const scheduleDesc = def.frequency === "daily"
+      ? `daily at ${config.time} Beijing`
+      : `monthly ${config.day}th at ${config.time} Beijing`;
+    console.log(`[CronJob] Scheduled: ${def.label} (${scheduleDesc}) [${cronExpr}]`);
+  }
+
+  console.log(`[CronJob] Total scheduled: ${activeTasks.size}/${CRON_JOB_DEFS.length} jobs`);
+}
+
+/**
+ * Reschedule all cron jobs. Called after Settings save to hot-reload schedules.
+ */
+export async function rescheduleAllJobs() {
+  console.log("[CronJob] Rescheduling all jobs (config changed)...");
+  await scheduleCronJobs();
+}
+
+/**
+ * Run a specific cron job immediately by key.
+ * Used by the manual "Run Now" buttons in Settings.
+ */
+export async function runJobByKey(key: string): Promise<any> {
+  const def = CRON_JOB_DEFS.find(d => d.key === key);
+  if (!def) throw new Error(`Unknown cron job key: ${key}`);
+  console.log(`[CronJob] Manual trigger: ${def.label}`);
+  const result = await def.runner();
+  // Store last run timestamp
+  const { setSystemConfig } = await import("./db");
+  await setSystemConfig(`cron_${def.key}_last_run`, new Date().toISOString());
+  return result;
 }
