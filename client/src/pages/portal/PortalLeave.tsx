@@ -460,12 +460,14 @@ export default function PortalLeave() {
   const totalPages = Math.ceil(total / pageSize);
 
   // Auto-calculate days when dates change — uses business days (weekdays only)
+  // If half-day is checked, subtract 0.5 from the total (matching Admin behavior)
   function updateDates(field: "startDate" | "endDate", value: string) {
     const newForm = { ...form, [field]: value };
     if (newForm.startDate && newForm.endDate) {
-      const days = calcBusinessDays(newForm.startDate, newForm.endDate);
+      let days = calcBusinessDays(newForm.startDate, newForm.endDate);
+      if (newForm.isHalfDay && days >= 1) days = days - 0.5;
       if (days > 0) {
-        newForm.days = String(days);
+        newForm.days = String(Math.max(days, 0.5));
       }
     }
     setForm(newForm);
@@ -481,9 +483,8 @@ export default function PortalLeave() {
       leaveTypeId: form.leaveTypeId,
       startDate: form.startDate,
       endDate: form.endDate,
-      days: form.days,
+      days: form.days, // Already includes half-day deduction (calculated on frontend, matching Admin)
       reason: form.reason || undefined,
-      isHalfDay: form.isHalfDay, // Bug 13: pass half-day flag
     });
   }
 
@@ -783,17 +784,24 @@ export default function PortalLeave() {
                 type="checkbox"
                 id="isHalfDay"
                 checked={form.isHalfDay}
-                onChange={(e) => setForm((f) => ({ ...f, isHalfDay: e.target.checked }))}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setForm((f) => {
+                    const updated = { ...f, isHalfDay: checked };
+                    // Recalculate days when half-day toggled (matching Admin behavior)
+                    if (f.startDate && f.endDate) {
+                      let days = calcBusinessDays(f.startDate, f.endDate);
+                      if (checked && days >= 1) days = days - 0.5;
+                      updated.days = String(Math.max(days, 0.5));
+                    }
+                    return updated;
+                  });
+                }}
                 className="h-4 w-4 rounded border-gray-300"
               />
               <Label htmlFor="isHalfDay" className="text-sm font-normal cursor-pointer">
                 {t("portal_leave.create_dialog.half_day_label")}
               </Label>
-              {form.isHalfDay && form.days && (
-                <span className="text-xs text-muted-foreground ml-2">
-                  ({t("portal_leave.create_dialog.actual_days")}: {(parseFloat(form.days) - 0.5).toFixed(1)})
-                </span>
-              )}
             </div>
             <div className="space-y-2">
               <Label>{t("portal_leave.table_headers.reason")}</Label>
