@@ -463,10 +463,11 @@ export async function deleteLeaveRecord(id: number) {
   await db.delete(leaveRecords).where(eq(leaveRecords.id, id));
 }
 
-export async function lockSubmittedLeaveRecords(monthStr: string, countryCode?: string) {
+export async function lockSubmittedLeaveRecords(monthStr: string, countryCode?: string, payrollRunId?: number) {
   const db = await getDb();
   if (!db) return 0;
   // Lock admin_approved leave records for the given country+month
+  // Optionally link them to a payroll run for rollback tracking
   const monthPrefix = monthStr.length === 7 ? monthStr : monthStr.substring(0, 7);
   const startOfMonth = `${monthPrefix}-01`;
   const endOfMonth = `${monthPrefix}-31`;
@@ -484,7 +485,12 @@ export async function lockSubmittedLeaveRecords(monthStr: string, countryCode?: 
     conditions.push(or(...empIds.map(id => eq(leaveRecords.employeeId, id))));
   }
 
-  const result = await db.update(leaveRecords).set({ status: 'locked' as any }).where(and(...conditions));
+  const setData: any = { status: 'locked' };
+  if (payrollRunId !== undefined) {
+    setData.payrollRunId = payrollRunId;
+  }
+
+  const result = await db.update(leaveRecords).set(setData).where(and(...conditions));
   return (result as any).changes || 0;
 }
 

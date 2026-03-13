@@ -382,6 +382,7 @@ export async function getSubmittedAdjustmentsForPayroll(countryCodeOrEmployeeId:
       currency: adjustments.currency,
       status: adjustments.status,
       effectiveMonth: adjustments.effectiveMonth,
+      payrollRunId: adjustments.payrollRunId,
       createdAt: adjustments.createdAt,
     }).from(adjustments)
       .innerJoin(employees, eq(adjustments.employeeId, employees.id))
@@ -401,10 +402,11 @@ export async function getSubmittedAdjustmentsForPayroll(countryCodeOrEmployeeId:
   }
 }
 
-export async function lockSubmittedAdjustments(monthStr: string, countryCode?: string) {
+export async function lockSubmittedAdjustments(monthStr: string, countryCode?: string, payrollRunId?: number) {
   const db = await getDb();
   if (!db) return 0;
   // Lock admin_approved adjustments for the given country+month by setting status to 'locked'
+  // Optionally link them to a payroll run for rollback tracking
   const conditions = [
     eq(adjustments.effectiveMonth, monthStr),
     eq(adjustments.status, 'admin_approved')
@@ -418,7 +420,12 @@ export async function lockSubmittedAdjustments(monthStr: string, countryCode?: s
     conditions.push(inArray(adjustments.employeeId, empIds));
   }
 
-  const result = await db.update(adjustments).set({ status: 'locked' as any }).where(and(...conditions));
+  const setData: any = { status: 'locked' };
+  if (payrollRunId !== undefined) {
+    setData.payrollRunId = payrollRunId;
+  }
+
+  const result = await db.update(adjustments).set(setData).where(and(...conditions));
   return (result as any).changes || 0;
 }
 
@@ -829,6 +836,7 @@ export async function getSubmittedReimbursementsForPayroll(
       currency: reimbursements.currency,
       status: reimbursements.status,
       effectiveMonth: reimbursements.effectiveMonth,
+      payrollRunId: reimbursements.payrollRunId,
       createdAt: reimbursements.createdAt,
     }).from(reimbursements)
       .innerJoin(employees, eq(reimbursements.employeeId, employees.id))
@@ -857,7 +865,7 @@ export async function getSubmittedReimbursementsForPayroll(
  * @param countryCode - Optional country code to scope the lock
  * @returns Number of records locked
  */
-export async function lockSubmittedReimbursements(monthStr: string, countryCode?: string) {
+export async function lockSubmittedReimbursements(monthStr: string, countryCode?: string, payrollRunId?: number) {
   const db = await getDb();
   if (!db) return 0;
 
@@ -874,7 +882,12 @@ export async function lockSubmittedReimbursements(monthStr: string, countryCode?
     conditions.push(inArray(reimbursements.employeeId, empIds));
   }
 
-  const result = await db.update(reimbursements).set({ status: 'locked' as any }).where(and(...conditions));
+  const setData: any = { status: 'locked' };
+  if (payrollRunId !== undefined) {
+    setData.payrollRunId = payrollRunId;
+  }
+
+  const result = await db.update(reimbursements).set(setData).where(and(...conditions));
   return (result as any).changes || 0;
 }
 
