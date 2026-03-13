@@ -151,5 +151,39 @@ export const DEFAULT_RULES: Record<string, NotificationConfig> = {
         inAppMessage: "新国家 {{countryName}} 已激活，请在设置中配置假期政策。"
       }
     }
+  },
+  employee_termination_request: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["admin:operations_manager", "admin:customer_manager"],
+    templates: {
+      en: {
+        emailSubject: "Employee Termination Request: {{employeeName}} ({{employeeCode}})",
+        emailBody: "<p>Dear Admin,</p><p>Customer <strong>{{customerName}}</strong> has requested termination for employee <strong>{{employeeName}}</strong> ({{employeeCode}}).</p><p><strong>Requested Last Working Day:</strong> {{requestedEndDate}}</p><p><strong>Reason:</strong> {{reason}}</p><p><strong>Requested By:</strong> {{requestedBy}}</p><p>Please review and process this request in the Admin panel.</p><p>Best regards,<br>GEA System</p>",
+        inAppMessage: "Termination request: {{employeeName}} ({{employeeCode}}) from {{customerName}}. Last day: {{requestedEndDate}}."
+      },
+      zh: {
+        emailSubject: "员工终止申请：{{employeeName}} ({{employeeCode}})",
+        emailBody: "<p>管理员您好，</p><p>客户 <strong>{{customerName}}</strong> 为员工 <strong>{{employeeName}}</strong> ({{employeeCode}}) 提交了终止申请。</p><p><strong>申请的最后工作日：</strong>{{requestedEndDate}}</p><p><strong>原因：</strong>{{reason}}</p><p><strong>申请人：</strong>{{requestedBy}}</p><p>请在管理后台审核并处理此申请。</p><p>祝好，<br>GEA 系统</p>",
+        inAppMessage: "终止申请：{{customerName}} 的 {{employeeName}} ({{employeeCode}})，最后工作日：{{requestedEndDate}}。"
+      }
+    }
+  },
+  contractor_termination_request: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["admin:operations_manager", "admin:customer_manager"],
+    templates: {
+      en: {
+        emailSubject: "Contractor Termination Request: {{contractorName}} ({{contractorCode}})",
+        emailBody: "<p>Dear Admin,</p><p>Customer <strong>{{customerName}}</strong> has requested termination for contractor <strong>{{contractorName}}</strong> ({{contractorCode}}).</p><p><strong>Requested End Date:</strong> {{requestedEndDate}}</p><p><strong>Reason:</strong> {{reason}}</p><p><strong>Requested By:</strong> {{requestedBy}}</p><p>Please review and process this request in the Admin panel.</p><p>Best regards,<br>GEA System</p>",
+        inAppMessage: "Termination request: {{contractorName}} ({{contractorCode}}) from {{customerName}}. End date: {{requestedEndDate}}."
+      },
+      zh: {
+        emailSubject: "承包商终止申请：{{contractorName}} ({{contractorCode}})",
+        emailBody: "<p>管理员您好，</p><p>客户 <strong>{{customerName}}</strong> 为承包商 <strong>{{contractorName}}</strong> ({{contractorCode}}) 提交了终止申请。</p><p><strong>申请的结束日期：</strong>{{requestedEndDate}}</p><p><strong>原因：</strong>{{reason}}</p><p><strong>申请人：</strong>{{requestedBy}}</p><p>请在管理后台审核并处理此申请。</p><p>祝好，<br>GEA 系统</p>",
+        inAppMessage: "终止申请：{{customerName}} 的 {{contractorName}} ({{contractorCode}})，结束日期：{{requestedEndDate}}。"
+      }
+    }
   }
 };

@@ -20,8 +20,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/DatePicker";
 import {
   ArrowLeft,
   User,
@@ -72,7 +74,7 @@ const docTypeLabels: Record<string, string> = {
 };
 
 export default function PortalEmployeeDetail() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const employeeId = parseInt(params.id || "0", 10);
@@ -81,6 +83,19 @@ export default function PortalEmployeeDetail() {
     { id: employeeId },
     { enabled: !!employeeId }
   );
+
+  // Termination request state
+  const [terminateRequestOpen, setTerminateRequestOpen] = useState(false);
+  const [terminateEndDate, setTerminateEndDate] = useState("");
+  const [terminateReason, setTerminateReason] = useState("");
+
+  const requestTerminationMutation = portalTrpc.employees.requestTermination.useMutation({
+    onSuccess: () => {
+      toast.success(t("portal.termination.dialog.success"));
+      setTerminateRequestOpen(false);
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   // Document upload state
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -179,6 +194,19 @@ export default function PortalEmployeeDetail() {
               </p>
             </div>
           </div>
+          {employee.status === "active" && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setTerminateEndDate("");
+                setTerminateReason("");
+                setTerminateRequestOpen(true);
+              }}
+            >
+              {t("portal.termination.requestButton")}
+            </Button>
+          )}
         </div>
 
         {/* Profile + Details */}
@@ -567,6 +595,55 @@ export default function PortalEmployeeDetail() {
                 </div>
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+        {/* Request Termination Dialog */}
+        <Dialog open={terminateRequestOpen} onOpenChange={setTerminateRequestOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("portal.termination.dialog.title.employee")}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                {t("portal.termination.dialog.description")}
+              </p>
+              <div className="space-y-2">
+                <Label>{t("portal.termination.dialog.endDate")}</Label>
+                <DatePicker
+                  value={terminateEndDate}
+                  onChange={(d) => setTerminateEndDate(d || "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("portal.termination.dialog.reason")}</Label>
+                <Textarea
+                  value={terminateReason}
+                  onChange={(e) => setTerminateReason(e.target.value)}
+                  placeholder={t("portal.termination.dialog.reasonPlaceholder")}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTerminateRequestOpen(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={!terminateEndDate || requestTerminationMutation.isPending}
+                onClick={() => {
+                  requestTerminationMutation.mutate({
+                    employeeId,
+                    endDate: terminateEndDate,
+                    reason: terminateReason || undefined,
+                  });
+                }}
+              >
+                {requestTerminationMutation.isPending
+                  ? t("portal.termination.dialog.submitting")
+                  : t("portal.termination.dialog.submit")}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

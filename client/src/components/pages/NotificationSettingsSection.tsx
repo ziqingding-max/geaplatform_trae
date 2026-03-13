@@ -46,7 +46,10 @@ const EVENT_LABELS: Record<string, Record<"en" | "zh", string>> = {
   new_employee_request: { en: "New Employee Request", zh: "新员工入职申请" },
   worker_invite: { en: "Worker Invite", zh: "员工邀请" },
   worker_invoice_ready: { en: "Worker Invoice Ready", zh: "员工发票已生成" },
-  worker_payment_sent: { en: "Worker Payment Sent", zh: "员工付款已发送" }
+  worker_payment_sent: { en: "Worker Payment Sent", zh: "员工付款已发送" },
+  leave_policy_country_activated: { en: "Leave Policy Country Activated", zh: "国家假期政策已激活" },
+  employee_termination_request: { en: "Employee Termination Request", zh: "员工终止申请" },
+  contractor_termination_request: { en: "Contractor Termination Request", zh: "承包商终止申请" }
 };
 
 const EVENT_DESCRIPTIONS: Record<string, Record<"en" | "zh", string>> = {
@@ -77,6 +80,18 @@ const EVENT_DESCRIPTIONS: Record<string, Record<"en" | "zh", string>> = {
   worker_payment_sent: {
     en: "Triggered when a payment is sent to a worker.",
     zh: "当向员工发送付款时触发。"
+  },
+  leave_policy_country_activated: {
+    en: "Triggered when a new country's leave policy is auto-initialized.",
+    zh: "当新国家的假期政策自动初始化时触发。"
+  },
+  employee_termination_request: {
+    en: "Triggered when a portal client requests employee termination.",
+    zh: "当客户门户提交员工终止申请时触发。"
+  },
+  contractor_termination_request: {
+    en: "Triggered when a portal client requests contractor termination.",
+    zh: "当客户门户提交承包商终止申请时触发。"
   }
 };
 
@@ -154,7 +169,9 @@ function NotificationSettingsContent() {
     [locale === "zh" ? "财务" : "Finance"]: ["invoice_sent", "invoice_overdue"],
     [locale === "zh" ? "薪资" : "Payroll"]: ["payroll_draft_created"],
     [locale === "zh" ? "入职" : "Onboarding"]: ["new_employee_request"],
-    [locale === "zh" ? "员工门户" : "Worker Portal"]: ["worker_invite", "worker_invoice_ready", "worker_payment_sent"]
+    [locale === "zh" ? "员工门户" : "Worker Portal"]: ["worker_invite", "worker_invoice_ready", "worker_payment_sent"],
+    [locale === "zh" ? "离职" : "Offboarding"]: ["employee_termination_request", "contractor_termination_request"],
+    [locale === "zh" ? "假期" : "Leave"]: ["leave_policy_country_activated"]
   };
 
   return (

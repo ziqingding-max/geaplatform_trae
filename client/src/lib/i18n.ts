@@ -1968,6 +1968,18 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_onboarding.invite_flow.step3.info": "The worker will receive a unique link to complete their profile, upload documents, and provide bank details.",
     "portal_onboarding.invite_flow.summary.title": "Pre-filled Information Summary",
 
+    // Offboarding / Termination - Portal
+    "portal.termination.requestButton": "Request Termination",
+    "portal.termination.dialog.title.employee": "Request Employee Termination",
+    "portal.termination.dialog.title.contractor": "Request Contractor Termination",
+    "portal.termination.dialog.description": "Submit a termination request to the admin. They will review and process it.",
+    "portal.termination.dialog.endDate": "Requested End Date (required)",
+    "portal.termination.dialog.reason": "Reason (optional)",
+    "portal.termination.dialog.reasonPlaceholder": "Enter reason for termination...",
+    "portal.termination.dialog.submit": "Submit Request",
+    "portal.termination.dialog.submitting": "Submitting...",
+    "portal.termination.dialog.success": "Termination request submitted",
+
   },
   zh: {
     // Navigation
@@ -3909,6 +3921,18 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "portal_onboarding.invite_flow.step2.description": "这些字段需要雇主才知道的信息。它们将在人员完成自助入职时自动预填。",
     "portal_onboarding.invite_flow.step3.info": "人员将收到一个唯一链接来完善个人资料、上传文件并提供银行信息。",
     "portal_onboarding.invite_flow.summary.title": "预填信息摘要",
+
+    // Offboarding / Termination - Portal
+    "portal.termination.requestButton": "请求终止",
+    "portal.termination.dialog.title.employee": "请求终止员工",
+    "portal.termination.dialog.title.contractor": "请求终止承包商",
+    "portal.termination.dialog.description": "向管理员提交终止请求，管理员将审核并处理。",
+    "portal.termination.dialog.endDate": "期望结束日期 (必填)",
+    "portal.termination.dialog.reason": "原因 (可选)",
+    "portal.termination.dialog.reasonPlaceholder": "请输入终止原因...",
+    "portal.termination.dialog.submit": "提交申请",
+    "portal.termination.dialog.submitting": "提交中...",
+    "portal.termination.dialog.success": "终止申请已提交",
 
   },
 };
@@ -6360,6 +6384,25 @@ const adminTranslations = {
     "notifications.toast.updated": "Notification settings updated",
     "notifications.toast.error.update_failed": "Failed to update settings",
     "notifications.help.recipients": "Notifications will be sent to all users matching these roles.",
+
+    // Offboarding / Termination - Admin
+    "offboarding.dialog.title": "Start Offboarding",
+    "offboarding.dialog.description": "Set the employee's last working day to begin the offboarding process.",
+    "offboarding.dialog.endDate": "Last Working Day (required)",
+    "offboarding.dialog.confirm": "Confirm Start Offboarding",
+    "offboarding.dialog.success": "Offboarding started",
+    "terminate.dialog.title": "Terminate Employee",
+    "terminate.dialog.title.contractor": "Terminate Contractor",
+    "terminate.dialog.description": "Set the termination date and optionally provide a reason.",
+    "terminate.dialog.description.contractor": "Set the termination date and optionally provide a reason for this contractor.",
+    "terminate.dialog.endDate": "Termination Date",
+    "terminate.dialog.reason": "Reason (optional)",
+    "terminate.dialog.reasonPlaceholder": "Enter reason for termination...",
+    "terminate.dialog.confirm": "Confirm Terminate",
+    "terminate.dialog.success": "Employee terminated",
+    "terminate.dialog.success.contractor": "Contractor terminated",
+    "common.processing": "Processing...",
+    "notifications.group.offboarding": "Offboarding",
   },
   zh: {
     // Navigation
@@ -8723,6 +8766,25 @@ const adminTranslations = {
     "notifications.toast.updated": "通知设置已更新",
     "notifications.toast.error.update_failed": "更新设置失败",
     "notifications.help.recipients": "通知将发送给所有匹配这些角色的用户。",
+
+    // Offboarding / Termination - Admin
+    "offboarding.dialog.title": "开始离职",
+    "offboarding.dialog.description": "设置员工的最后工作日以开始离职流程。",
+    "offboarding.dialog.endDate": "最后工作日 (必填)",
+    "offboarding.dialog.confirm": "确认开始离职",
+    "offboarding.dialog.success": "已开始离职流程",
+    "terminate.dialog.title": "终止员工",
+    "terminate.dialog.title.contractor": "终止承包商",
+    "terminate.dialog.description": "设置终止日期并可选择提供原因。",
+    "terminate.dialog.description.contractor": "设置承包商的终止日期并可选择提供原因。",
+    "terminate.dialog.endDate": "终止日期",
+    "terminate.dialog.reason": "终止原因 (可选)",
+    "terminate.dialog.reasonPlaceholder": "请输入终止原因...",
+    "terminate.dialog.confirm": "确认终止",
+    "terminate.dialog.success": "员工已终止",
+    "terminate.dialog.success.contractor": "承包商已终止",
+    "common.processing": "处理中...",
+    "notifications.group.offboarding": "离职",
   },
 };
 

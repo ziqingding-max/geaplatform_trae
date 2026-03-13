@@ -175,6 +175,17 @@ export const contractorsRouter = router({
         updateData.bankDetails = JSON.parse(input.data.bankDetails);
       }
 
+      // Validation: transitioning to terminated requires endDate
+      if (input.data.status === "terminated") {
+        const existing = await getContractorById(input.id);
+        const effectiveEndDate = input.data.endDate || existing?.endDate;
+        if (!effectiveEndDate) {
+          // Auto-set endDate to today for immediate termination
+          const today = new Date();
+          updateData.endDate = today.toISOString().split('T')[0];
+        }
+      }
+
       await updateContractor(input.id, updateData);
 
       await logAuditAction({
@@ -189,15 +200,21 @@ export const contractorsRouter = router({
     }),
 
   terminate: customerManagerProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({
+      id: z.number(),
+      endDate: z.string().optional(),
+      reason: z.string().optional(),
+    }))
     .mutation(async ({ input, ctx }) => {
-      await updateContractor(input.id, { status: "terminated", endDate: new Date().toISOString().split('T')[0] });
+      const endDate = input.endDate || new Date().toISOString().split('T')[0];
+      await updateContractor(input.id, { status: "terminated", endDate });
       
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
         action: "terminate",
         entityType: "contractor",
         entityId: input.id,
+        changes: JSON.stringify({ endDate, reason: input.reason || null }),
       });
       return { success: true };
     }),

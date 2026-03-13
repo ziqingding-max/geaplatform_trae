@@ -21,6 +21,7 @@ import cron from "node-cron";
 import { fetchAndStoreExchangeRates } from "./services/exchangeRateFetchService";
 import {
   getContractSignedEmployeesReadyForActivation,
+  getOffboardingEmployeesReadyForTermination,
   updateEmployee,
   getCountriesWithActiveEmployees,
   getEmployeesForPayrollMonth,
@@ -91,8 +92,31 @@ function getWorkingDaysFromDate(year: number, month: number, startDay: number, w
 }
 
 /**
- * Calculate pro-rata salary for an employee starting mid-month.
- * Returns the fraction of the full monthly salary.
+ * Helper: count working days from day 1 up to (and including) endDay in a given month.
+ */
+function getWorkingDaysUntilDate(year: number, month: number, endDay: number, workingDaysPerWeek: number = 5): number {
+  let workingDays = 0;
+  for (let d = 1; d <= endDay; d++) {
+    const dayOfWeek = new Date(year, month - 1, d).getDay();
+    if (workingDaysPerWeek >= 6) {
+      if (dayOfWeek !== 0) workingDays++;
+    } else {
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) workingDays++;
+    }
+  }
+  return workingDays;
+}
+
+/**
+ * Calculate pro-rata salary for an employee.
+ * Supports both start-of-month (onboarding) and end-of-month (offboarding) pro-rata.
+ * 
+ * @param baseSalary - Monthly base salary
+ * @param startDate - Employee start date
+ * @param payrollYear - Payroll period year
+ * @param payrollMonth - Payroll period month (1-indexed)
+ * @param workingDaysPerWeek - Working days per week (default 5)
+ * @param endDate - Optional employee end date (last working day) for offboarding pro-rata
  */
 export function calculateProRata(
   baseSalary: number,
@@ -100,27 +124,67 @@ export function calculateProRata(
   payrollYear: number,
   payrollMonth: number,
   workingDaysPerWeek: number = 5,
+  endDate?: Date | null,
 ): { proRataAmount: number; totalWorkingDays: number; workedDays: number } {
   const totalWorkingDays = getWorkingDaysInMonth(payrollYear, payrollMonth, workingDaysPerWeek);
   
   const startYear = startDate.getFullYear();
   const startMonth = startDate.getMonth() + 1; // 1-indexed
   const startDay = startDate.getDate();
+
+  // Determine the effective first and last working day in this payroll month
+  let effectiveStartDay = 1;
+  let effectiveEndDay = new Date(payrollYear, payrollMonth, 0).getDate(); // last day of month
+
+  // If employee started in this month, adjust start day
+  const startedThisMonth = startYear === payrollYear && startMonth === payrollMonth;
+  // If employee started after this month, they shouldn't be in payroll
+  const startedAfterThisMonth = startYear > payrollYear || (startYear === payrollYear && startMonth > payrollMonth);
   
-  // If employee started before this month, they get full salary
-  if (startYear < payrollYear || (startYear === payrollYear && startMonth < payrollMonth)) {
+  if (startedAfterThisMonth) {
+    return { proRataAmount: 0, totalWorkingDays, workedDays: 0 };
+  }
+
+  if (startedThisMonth) {
+    effectiveStartDay = startDay;
+  }
+
+  // If employee has an endDate in this month, adjust end day (offboarding pro-rata)
+  if (endDate) {
+    const endYear = endDate.getFullYear();
+    const endMonth = endDate.getMonth() + 1;
+    const endDay = endDate.getDate();
+
+    // If endDate is before this month, employee shouldn't be in payroll
+    if (endYear < payrollYear || (endYear === payrollYear && endMonth < payrollMonth)) {
+      return { proRataAmount: 0, totalWorkingDays, workedDays: 0 };
+    }
+
+    // If endDate is in this month, cap the working days
+    if (endYear === payrollYear && endMonth === payrollMonth) {
+      effectiveEndDay = endDay;
+    }
+    // If endDate is after this month, no adjustment needed (full month)
+  }
+
+  // If started before this month and no endDate in this month, full salary
+  if (!startedThisMonth && effectiveEndDay === new Date(payrollYear, payrollMonth, 0).getDate()) {
     return { proRataAmount: baseSalary, totalWorkingDays, workedDays: totalWorkingDays };
   }
-  
-  // If employee starts in this month, calculate pro-rata
-  if (startYear === payrollYear && startMonth === payrollMonth) {
-    const workedDays = getWorkingDaysFromDate(payrollYear, payrollMonth, startDay, workingDaysPerWeek);
-    const proRataAmount = totalWorkingDays > 0 ? (baseSalary * workedDays) / totalWorkingDays : 0;
-    return { proRataAmount: Math.round(proRataAmount * 100) / 100, totalWorkingDays, workedDays };
+
+  // Calculate working days in the effective range
+  let workedDays = 0;
+  for (let d = effectiveStartDay; d <= effectiveEndDay; d++) {
+    const dayOfWeek = new Date(payrollYear, payrollMonth - 1, d).getDay();
+    if (workingDaysPerWeek >= 6) {
+      if (dayOfWeek !== 0) workedDays++;
+    } else {
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) workedDays++;
+    }
   }
-  
-  // Employee starts after this month - shouldn't be in payroll
-  return { proRataAmount: 0, totalWorkingDays, workedDays: 0 };
+
+  const proRataAmount = totalWorkingDays > 0 ? (baseSalary * workedDays) / totalWorkingDays : 0;
+  return { proRataAmount: Math.round(proRataAmount * 100) / 100, totalWorkingDays, workedDays };
 }
 
 // ============================================================================
@@ -480,10 +544,11 @@ export async function runAutoCreatePayrollRuns(): Promise<{ created: number; emp
     for (const emp of eligibleEmployees) {
       const baseSalary = parseFloat(emp.baseSalary?.toString() ?? "0");
       const startDate = new Date(emp.startDate as any);
+      const endDate = emp.endDate ? new Date(emp.endDate as any) : null;
       const workingDaysPerWeek = config.workingDaysPerWeek ?? 5;
 
       const { proRataAmount, totalWorkingDays, workedDays } = calculateProRata(
-        baseSalary, startDate, targetYear, targetMonth, workingDaysPerWeek
+        baseSalary, startDate, targetYear, targetMonth, workingDaysPerWeek, endDate
       );
 
       // Get aggregated adjustments and leave for this employee
@@ -515,7 +580,7 @@ export async function runAutoCreatePayrollRuns(): Promise<{ created: number; emp
         totalEmploymentCost: String(net),
         currency: emp.salaryCurrency ?? config.localCurrency,
         notes: workedDays < totalWorkingDays
-          ? `Pro-rata: ${workedDays}/${totalWorkingDays} working days (started ${emp.startDate})`
+          ? `Pro-rata: ${workedDays}/${totalWorkingDays} working days${emp.startDate && startDate.getFullYear() === targetYear && (startDate.getMonth() + 1) === targetMonth ? ` (started ${emp.startDate})` : ''}${endDate && endDate.getFullYear() === targetYear && (endDate.getMonth() + 1) === targetMonth ? ` (last day ${emp.endDate})` : ''}`
           : undefined,
       });
 
@@ -774,10 +839,12 @@ export async function runMonthlyLeaveAccrual(): Promise<{ processed: number; upd
 
   console.log(`[CronJob] Running monthly leave accrual for ${currentYear}-${String(currentMonth).padStart(2, "0")}`);
 
-  // Get all active AND on_leave employees (Bug fix: previously only active)
+  // Get all active, on_leave, AND offboarding employees
+  // Bug fix: offboarding employees must continue to accrue leave during their notice period (Hard Rule 2)
   const { data: activeEmployees } = await listEmployees({ status: "active", pageSize: 10000 });
   const { data: onLeaveEmployees } = await listEmployees({ status: "on_leave", pageSize: 10000 });
-  const allEligibleEmployees = [...activeEmployees, ...onLeaveEmployees];
+  const { data: offboardingEmployees } = await listEmployees({ status: "offboarding", pageSize: 10000 });
+  const allEligibleEmployees = [...activeEmployees, ...onLeaveEmployees, ...offboardingEmployees];
 
   // Filter to employees who started in the current year
   const newEmployees = allEligibleEmployees.filter(emp => {
@@ -786,7 +853,7 @@ export async function runMonthlyLeaveAccrual(): Promise<{ processed: number; upd
     return startDate.getFullYear() === currentYear;
   });
 
-  console.log(`[CronJob] Found ${newEmployees.length} employees who started in ${currentYear} (active: ${activeEmployees.length}, on_leave: ${onLeaveEmployees.length})`);
+  console.log(`[CronJob] Found ${newEmployees.length} employees who started in ${currentYear} (active: ${activeEmployees.length}, on_leave: ${onLeaveEmployees.length}, offboarding: ${offboardingEmployees.length})`);
 
   let processed = 0;
   let updated = 0;
@@ -933,6 +1000,53 @@ export async function runAutoCreateContractorInvoices(): Promise<{ created: numb
 }
 
 // ============================================================================
+// CRON JOB: Daily employee auto-termination (offboarding → terminated)
+// ============================================================================
+
+/**
+ * Auto-terminate offboarding employees whose endDate has passed.
+ * Symmetric counterpart to runEmployeeAutoActivation.
+ * 
+ * Logic:
+ * - Find employees with status='offboarding' AND endDate <= today
+ * - Transition them to 'terminated'
+ * - Trigger deposit refund billing (future: via billing service)
+ * - Record audit log
+ */
+export async function runEmployeeAutoTermination(): Promise<{ terminated: number }> {
+  const today = new Date();
+  const beijingOffset = 8 * 60;
+  const beijingDate = new Date(today.getTime() + (beijingOffset - today.getTimezoneOffset()) * 60000);
+  const todayStr = beijingDate.toISOString().split("T")[0];
+
+  console.log(`[CronJob] Employee auto-termination check for ${todayStr}`);
+
+  const readyEmployees = await getOffboardingEmployeesReadyForTermination(todayStr);
+
+  let terminated = 0;
+
+  for (const emp of readyEmployees) {
+    await updateEmployee(emp.id, { status: "terminated" });
+    terminated++;
+
+    console.log(`[CronJob] Auto-terminated employee ${emp.employeeCode} (${emp.firstName} ${emp.lastName}), endDate: ${emp.endDate}`);
+
+    await logAuditAction({
+      userName: "System",
+      action: "employee_auto_terminated",
+      entityType: "employee",
+      entityId: emp.id,
+      changes: { detail: `Auto-terminated: offboarding → terminated (endDate: ${emp.endDate})` },
+    });
+
+    // TODO: Trigger deposit refund billing when billing service is available
+  }
+
+  console.log(`[CronJob] Employee auto-termination complete: ${terminated} terminated`);
+  return { terminated };
+}
+
+// ============================================================================
 // DYNAMIC CRON SCHEDULER
 // All schedules are read from system_config and can be changed via Settings UI.
 // ============================================================================
@@ -959,6 +1073,16 @@ export const CRON_JOB_DEFS: CronJobDef[] = [
     defaultTime: "00:01",
     defaultEnabled: true,
     runner: runEmployeeAutoActivation,
+  },
+  {
+    key: "employee_termination",
+    label: "Employee Auto-Termination",
+    description: "Transitions offboarding employees to terminated when endDate arrives (symmetric to activation)",
+    frequency: "daily",
+    defaultDay: 1,
+    defaultTime: "00:01",
+    defaultEnabled: true,
+    runner: runEmployeeAutoTermination,
   },
   {
     key: "auto_lock",

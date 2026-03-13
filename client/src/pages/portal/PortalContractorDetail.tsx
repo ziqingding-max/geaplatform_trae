@@ -48,6 +48,10 @@ import { formatStatusLabel, formatDate, countryName } from "@/lib/format";
 import { portalPath } from "@/lib/portalBasePath";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/DatePicker";
 
 const statusColors: Record<string, string> = {
   active: "bg-green-100 text-green-800 border-green-200",
@@ -72,17 +76,28 @@ function InfoItem({ label, value, icon: Icon }: { label: string; value: string |
 }
 
 export default function PortalContractorDetail() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const contractorId = Number(params.id);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [terminateRequestOpen, setTerminateRequestOpen] = useState(false);
+  const [terminateEndDate, setTerminateEndDate] = useState("");
+  const [terminateReason, setTerminateReason] = useState("");
 
   const { data: contractor, isLoading } = portalTrpc.contractors.getById.useQuery(
     { id: contractorId },
     { enabled: !!contractorId }
   );
+
+  const requestTerminationMutation = portalTrpc.contractors.requestTermination.useMutation({
+    onSuccess: () => {
+      toast.success(t("portal.termination.dialog.success"));
+      setTerminateRequestOpen(false);
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const deleteMutation = portalTrpc.contractors.delete.useMutation({
     onSuccess: () => {
@@ -159,6 +174,19 @@ export default function PortalContractorDetail() {
             </div>
           </div>
           {/* Delete button for pending_review contractors */}
+          {contractor.status === "active" && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setTerminateEndDate("");
+                setTerminateReason("");
+                setTerminateRequestOpen(true);
+              }}
+            >
+              {t("portal.termination.requestButton")}
+            </Button>
+          )}
           {isPendingReview && (
             <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
               <AlertDialogTrigger asChild>
@@ -294,6 +322,55 @@ export default function PortalContractorDetail() {
             )}
           </div>
         </div>
+        {/* Request Termination Dialog */}
+        <Dialog open={terminateRequestOpen} onOpenChange={setTerminateRequestOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("portal.termination.dialog.title.contractor")}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                {t("portal.termination.dialog.description")}
+              </p>
+              <div className="space-y-2">
+                <Label>{t("portal.termination.dialog.endDate")}</Label>
+                <DatePicker
+                  value={terminateEndDate}
+                  onChange={(d) => setTerminateEndDate(d || "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{t("portal.termination.dialog.reason")}</Label>
+                <Textarea
+                  value={terminateReason}
+                  onChange={(e) => setTerminateReason(e.target.value)}
+                  placeholder={t("portal.termination.dialog.reasonPlaceholder")}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTerminateRequestOpen(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={!terminateEndDate || requestTerminationMutation.isPending}
+                onClick={() => {
+                  requestTerminationMutation.mutate({
+                    contractorId,
+                    endDate: terminateEndDate,
+                    reason: terminateReason || undefined,
+                  });
+                }}
+              >
+                {requestTerminationMutation.isPending
+                  ? t("portal.termination.dialog.submitting")
+                  : t("portal.termination.dialog.submit")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </PortalLayout>
   );
