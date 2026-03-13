@@ -223,7 +223,11 @@ export async function runEmployeeAutoActivation(): Promise<{ activated: number; 
         });
       }
     } else {
-      // Employee activated after mid-month cutoff: create Sign-on Bonus for next month
+      // Employee activated after mid-month cutoff: create Sign-on Bonus
+      // effectiveMonth = current month (the month they started), so that:
+      //   1. Next month's Job 2 (auto-lock) locks this adjustment as part of "previous month" data
+      //   2. Next month's Job 3 (auto-create payroll) picks it up into the next payroll run
+      // Example: Employee starts Apr 18 → effectiveMonth = Apr → locked on May 5 → paid in May payroll
       const startDate = new Date(emp.startDate as any);
       const baseSalary = parseFloat(emp.baseSalary?.toString() ?? "0");
 
@@ -233,14 +237,8 @@ export async function runEmployeeAutoActivation(): Promise<{ activated: number; 
         );
 
         if (proRataAmount > 0) {
-          // Calculate next month for effectiveMonth
-          let nextMonth = currentMonth + 1;
-          let nextYear = currentYear;
-          if (nextMonth > 12) {
-            nextMonth = 1;
-            nextYear++;
-          }
-          const effectiveMonth = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
+          // effectiveMonth = current month (the month the employee actually started)
+          const effectiveMonth = `${currentYear}-${String(currentMonth).padStart(2, "0")}-01`;
 
           await createAdjustment({
             employeeId: emp.id,
