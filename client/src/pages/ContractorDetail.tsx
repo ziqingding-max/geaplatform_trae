@@ -813,34 +813,32 @@ export default function ContractorDetail() {
         <Dialog open={terminateDialogOpen} onOpenChange={setTerminateDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>{t("contractors.actions.terminate") || "Terminate Contractor"}</DialogTitle>
+              <DialogTitle>{t("terminate.dialog.title.contractor")}</DialogTitle>
               <DialogDescription>
-                {locale === "zh"
-                  ? `确认终止承包商 ${contractor.firstName} ${contractor.lastName}。`
-                  : `Confirm termination for contractor ${contractor.firstName} ${contractor.lastName}.`}
+                {t("terminate.dialog.description.contractor")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>{locale === "zh" ? "终止日期" : "Termination Date"}</Label>
+                <Label>{t("terminate.dialog.endDate")}</Label>
                 <DatePicker
                   value={terminateEndDate}
                   onChange={(d) => setTerminateEndDate(d || new Date().toISOString().split('T')[0])}
                 />
               </div>
               <div className="space-y-2">
-                <Label>{locale === "zh" ? "终止原因 (可选)" : "Reason (optional)"}</Label>
+                <Label>{t("terminate.dialog.reason")}</Label>
                 <Textarea
                   value={terminateReason}
                   onChange={(e) => setTerminateReason(e.target.value)}
-                  placeholder={locale === "zh" ? "请输入终止原因..." : "Enter reason for termination..."}
+                  placeholder={t("terminate.dialog.reasonPlaceholder")}
                   rows={3}
                 />
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setTerminateDialogOpen(false)}>
-                {locale === "zh" ? "取消" : "Cancel"}
+                {t("common.cancel")}
               </Button>
               <Button
                 variant="destructive"
@@ -851,14 +849,14 @@ export default function ContractorDetail() {
                     {
                       onSuccess: () => {
                         setTerminateDialogOpen(false);
-                        toast.success(locale === "zh" ? "承包商已终止" : "Contractor terminated");
+                        toast.success(t("terminate.dialog.success.contractor"));
                         refetch();
                       },
                     }
                   );
                 }}
               >
-                {statusUpdateMutation.isPending ? (locale === "zh" ? "处理中..." : "Processing...") : (locale === "zh" ? "确认终止" : "Confirm Terminate")}
+                {statusUpdateMutation.isPending ? t("common.processing") : t("terminate.dialog.confirm")}
               </Button>
             </DialogFooter>
           </DialogContent>

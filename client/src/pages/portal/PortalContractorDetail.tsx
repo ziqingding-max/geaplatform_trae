@@ -93,7 +93,7 @@ export default function PortalContractorDetail() {
 
   const requestTerminationMutation = portalTrpc.contractors.requestTermination.useMutation({
     onSuccess: () => {
-      toast.success(locale === "zh" ? "终止申请已提交" : "Termination request submitted");
+      toast.success(t("portal.termination.dialog.success"));
       setTerminateRequestOpen(false);
     },
     onError: (err) => toast.error(err.message),
@@ -184,7 +184,7 @@ export default function PortalContractorDetail() {
                 setTerminateRequestOpen(true);
               }}
             >
-              {locale === "zh" ? "请求终止" : "Request Termination"}
+              {t("portal.termination.requestButton")}
             </Button>
           )}
           {isPendingReview && (
@@ -326,34 +326,32 @@ export default function PortalContractorDetail() {
         <Dialog open={terminateRequestOpen} onOpenChange={setTerminateRequestOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>{locale === "zh" ? "请求终止承包商" : "Request Contractor Termination"}</DialogTitle>
+              <DialogTitle>{t("portal.termination.dialog.title.contractor")}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <p className="text-sm text-muted-foreground">
-                {locale === "zh"
-                  ? `您正在为 ${contractor.firstName} ${contractor.lastName} 提交终止申请。管理员将审核您的申请。`
-                  : `You are submitting a termination request for ${contractor.firstName} ${contractor.lastName}. An administrator will review your request.`}
+                {t("portal.termination.dialog.description")}
               </p>
               <div className="space-y-2">
-                <Label>{locale === "zh" ? "期望结束日期 (必填)" : "Requested End Date (required)"}</Label>
+                <Label>{t("portal.termination.dialog.endDate")}</Label>
                 <DatePicker
                   value={terminateEndDate}
                   onChange={(d) => setTerminateEndDate(d || "")}
                 />
               </div>
               <div className="space-y-2">
-                <Label>{locale === "zh" ? "原因 (可选)" : "Reason (optional)"}</Label>
+                <Label>{t("portal.termination.dialog.reason")}</Label>
                 <Textarea
                   value={terminateReason}
                   onChange={(e) => setTerminateReason(e.target.value)}
-                  placeholder={locale === "zh" ? "请输入终止原因..." : "Enter reason for termination..."}
+                  placeholder={t("portal.termination.dialog.reasonPlaceholder")}
                   rows={3}
                 />
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setTerminateRequestOpen(false)}>
-                {locale === "zh" ? "取消" : "Cancel"}
+                {t("common.cancel")}
               </Button>
               <Button
                 variant="destructive"
@@ -367,8 +365,8 @@ export default function PortalContractorDetail() {
                 }}
               >
                 {requestTerminationMutation.isPending
-                  ? (locale === "zh" ? "提交中..." : "Submitting...")
-                  : (locale === "zh" ? "提交申请" : "Submit Request")}
+                  ? t("portal.termination.dialog.submitting")
+                  : t("portal.termination.dialog.submit")}
               </Button>
             </DialogFooter>
           </DialogContent>
