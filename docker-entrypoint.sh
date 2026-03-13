@@ -32,9 +32,13 @@ for sql_file in /app/drizzle/0*.sql; do
           try {
             await client.execute(stmt);
           } catch (err) {
-            // Ignore 'already exists' and 'duplicate column' errors for idempotent migrations
-            if (!err.message.includes('already exists') && !err.message.includes('duplicate column')) {
-              console.warn('[Migration] Warning:', err.message.substring(0, 100));
+            // Ignore known idempotent migration errors:
+            // - 'already exists': table/index already created
+            // - 'duplicate column': column already added
+            // - 'no such table': table already renamed/dropped in prior run
+            const msg = err.message;
+            if (!msg.includes('already exists') && !msg.includes('duplicate column') && !msg.includes('no such table')) {
+              console.warn('[Migration] Warning:', msg.substring(0, 150));
             }
           }
         }
