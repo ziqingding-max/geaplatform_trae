@@ -95,6 +95,42 @@ function calculateItemTotals(data: {
   };
 }
 
+/**
+ * Given a payroll month string (YYYY-MM-DD or Date), compute the PREVIOUS month
+ * in YYYY-MM-DD format.  N-month payroll run consumes (N-1)-month data.
+ */
+function getPrevMonth(payrollMonth: string | Date): string {
+  let y: number, m: number;
+  if (payrollMonth instanceof Date) {
+    y = payrollMonth.getUTCFullYear();
+    m = payrollMonth.getUTCMonth() + 1;
+  } else {
+    const parts = String(payrollMonth).split("-").map(Number);
+    y = parts[0];
+    m = parts[1];
+  }
+  let prevM = m - 1;
+  let prevY = y;
+  if (prevM < 1) {
+    prevM = 12;
+    prevY--;
+  }
+  return `${prevY}-${String(prevM).padStart(2, "0")}-01`;
+}
+
+/**
+ * Normalize a payroll month (Date | string) to YYYY-MM-DD string.
+ */
+function normalizePayrollMonth(payrollMonth: string | Date): string {
+  if (payrollMonth instanceof Date) {
+    const y = payrollMonth.getUTCFullYear();
+    const m = String(payrollMonth.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(payrollMonth.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  return String(payrollMonth);
+}
+
 export const payrollRouter = router({
   list: userProcedure
     .input(
@@ -208,25 +244,25 @@ export const payrollRouter = router({
 
       await updatePayrollRun(input.id, updateData);
 
-      // When payroll run is submitted (pending_approval), auto-lock related adjustments/leave
+      // When payroll run is submitted (pending_approval) or approved, auto-lock related adjustments/leave/reimbursements
+      // N-month payroll run locks (N-1)-month data
       if (input.data.status === "pending_approval" || input.data.status === "approved") {
         const run = await getPayrollRunById(input.id);
         if (run) {
-          const pm = run.payrollMonth instanceof Date
-            ? `${run.payrollMonth.getUTCFullYear()}-${String(run.payrollMonth.getUTCMonth() + 1).padStart(2, "0")}`
-            : String(run.payrollMonth).substring(0, 7);
-          const pmDate = `${pm}-01`;
+          const prevMonthDate = getPrevMonth(run.payrollMonth);
+          const prevMonthPrefix = prevMonthDate.substring(0, 7);
 
-          const adjLocked = await lockSubmittedAdjustments(pmDate, run.countryCode);
-          const leaveLocked = await lockSubmittedLeaveRecords(pm, run.countryCode);
+          const adjLocked = await lockSubmittedAdjustments(prevMonthDate, run.countryCode, input.id);
+          const leaveLocked = await lockSubmittedLeaveRecords(prevMonthPrefix, run.countryCode, input.id);
+          const reimbLocked = await lockSubmittedReimbursements(prevMonthDate, run.countryCode, input.id);
 
-          if (adjLocked > 0 || leaveLocked > 0) {
+          if (adjLocked > 0 || leaveLocked > 0 || reimbLocked > 0) {
             await logAuditAction({
               userId: ctx.user.id, userName: ctx.user.name || null,
               action: "payroll_submit_lock",
               entityType: "payroll_run",
               entityId: input.id,
-              changes: JSON.stringify({ adjustmentsLocked: adjLocked, leaveRecordsLocked: leaveLocked, month: pm, country: run.countryCode }),
+              changes: JSON.stringify({ adjustmentsLocked: adjLocked, leaveRecordsLocked: leaveLocked, reimbursementsLocked: reimbLocked, month: prevMonthPrefix, country: run.countryCode }),
             });
           }
         }
@@ -257,15 +293,13 @@ export const payrollRouter = router({
       const emp = await getEmployeeById(input.employeeId);
       if (!emp) throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
 
-      // Normalize payroll month
-      const pmDate = run.payrollMonth instanceof Date ? run.payrollMonth : new Date(run.payrollMonth as any);
-      const y = pmDate.getUTCFullYear();
-      const m = pmDate.getUTCMonth() + 1;
-      const payrollMonth = `${y}-${String(m).padStart(2, "0")}-01`;
+      // N-month payroll run consumes (N-1)-month data
+      const prevMonthStr = getPrevMonth(run.payrollMonth);
+      const prevMonthPrefix = prevMonthStr.substring(0, 7);
 
-      // Get submitted adjustments for this employee
-      const allAdj = await getSubmittedAdjustmentsForPayroll(run.countryCode, payrollMonth);
-      const empAdj = allAdj.filter(a => a.employeeId === input.employeeId);
+      // Get submitted/locked-unlinked adjustments for this employee (N-1 month)
+      const allAdj = await getSubmittedAdjustmentsForPayroll(run.countryCode, prevMonthStr, ['admin_approved', 'locked']);
+      const empAdj = allAdj.filter(a => a.employeeId === input.employeeId && (a.status === 'admin_approved' || !(a as any).payrollRunId));
 
       let totalBonus = 0, totalAllowances = 0, totalReimbursements = 0, totalDeductions = 0;
       const breakdown: any[] = [];
@@ -281,18 +315,18 @@ export const payrollRouter = router({
         breakdown.push({ id: adj.id, type: adj.adjustmentType, category: adj.category, amount: adj.amount });
       }
 
-      // Get submitted reimbursements for this employee (from standalone reimbursements table)
-      const allReimb = await getSubmittedReimbursementsForPayroll(run.countryCode, payrollMonth);
-      const empReimb = allReimb.filter(r => r.employeeId === input.employeeId);
+      // Get submitted/locked-unlinked reimbursements for this employee (N-1 month)
+      const allReimb = await getSubmittedReimbursementsForPayroll(run.countryCode, prevMonthStr, ['admin_approved', 'locked']);
+      const empReimb = allReimb.filter(r => r.employeeId === input.employeeId && (r.status === 'admin_approved' || !(r as any).payrollRunId));
       for (const reimb of empReimb) {
         const amount = parseFloat(reimb.amount?.toString() ?? "0");
         totalReimbursements += amount;
         breakdown.push({ id: reimb.id, type: 'reimbursement', category: reimb.category, amount: reimb.amount, source: 'reimbursement_table' });
       }
 
-      // Get submitted unpaid leave for this employee
-      const allLeave = await getSubmittedUnpaidLeaveForPayroll(run.countryCode, payrollMonth);
-      const empLeave = allLeave.filter(l => l.employeeId === input.employeeId);
+      // Get submitted/locked-unlinked unpaid leave for this employee (N-1 month)
+      const allLeave = await getSubmittedUnpaidLeaveForPayroll(run.countryCode, prevMonthPrefix, ['admin_approved', 'locked']);
+      const empLeave = allLeave.filter(l => l.employeeId === input.employeeId && (l.status === 'admin_approved' || !(l as any).payrollRunId));
       let totalUnpaidDays = 0;
       for (const lv of empLeave) {
         totalUnpaidDays += parseFloat(lv.days?.toString() ?? "0");
@@ -359,15 +393,12 @@ export const payrollRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: `Employee ${employee.firstName} ${employee.lastName} is already in this payroll run.` });
       }
 
-      // Normalize payroll month
-      const pmDate = payrollRun.payrollMonth instanceof Date ? payrollRun.payrollMonth : new Date(payrollRun.payrollMonth as any);
-      const y = pmDate.getUTCFullYear();
-      const m = String(pmDate.getUTCMonth() + 1).padStart(2, "0");
-      const d = String(pmDate.getUTCDate()).padStart(2, "0");
-      const payrollMonthStr = `${y}-${m}-${d}`;
+      // N-month payroll run consumes (N-1)-month data
+      const prevMonthStr = getPrevMonth(payrollRun.payrollMonth);
+      const prevMonthPrefix = prevMonthStr.substring(0, 7);
 
-      // 1. Fetch Adjustments
-      const allAdj = await getSubmittedAdjustmentsForPayroll(input.employeeId, payrollMonthStr);
+      // 1. Fetch Adjustments (admin_approved or locked-but-unlinked from N-1 month)
+      const allAdj = await getSubmittedAdjustmentsForPayroll(input.employeeId, prevMonthStr, ['admin_approved', 'locked']);
       let totalBonus = 0;
       let totalAllowances = 0;
       let totalReimbursements = 0;
@@ -376,6 +407,8 @@ export const payrollRouter = router({
       const lockedAdjustmentIds: number[] = [];
 
       for (const adj of allAdj) {
+        // Skip locked adjustments already linked to another payroll run
+        if (adj.status === 'locked' && (adj as any).payrollRunId) continue;
         const amount = parseFloat(adj.amount?.toString() ?? "0");
         switch (adj.adjustmentType) {
           case "bonus": totalBonus += amount; break;
@@ -394,8 +427,26 @@ export const payrollRouter = router({
         lockedAdjustmentIds.push(adj.id);
       }
 
-      // 2. Fetch Unpaid Leave
-      const allLeave = await getSubmittedUnpaidLeaveForPayroll(input.employeeId, payrollMonthStr);
+      // 2. Fetch standalone Reimbursements (N-1 month)
+      const allReimb = await getSubmittedReimbursementsForPayroll(input.employeeId, prevMonthStr, ['admin_approved', 'locked']);
+      const lockedReimbursementIds: number[] = [];
+      for (const reimb of allReimb) {
+        if (reimb.status === 'locked' && (reimb as any).payrollRunId) continue;
+        const amount = parseFloat(reimb.amount?.toString() ?? "0");
+        totalReimbursements += amount;
+        adjustmentsBreakdown.push({
+          id: reimb.id,
+          type: 'reimbursement',
+          category: reimb.category,
+          description: reimb.description,
+          amount: reimb.amount,
+          source: 'reimbursement_table',
+        });
+        lockedReimbursementIds.push(reimb.id);
+      }
+
+      // 3. Fetch Unpaid Leave (N-1 month)
+      const allLeave = await getSubmittedUnpaidLeaveForPayroll(input.employeeId, prevMonthPrefix, ['admin_approved', 'locked']);
       let totalUnpaidDays = 0;
       const lockedLeaveIds: number[] = [];
 
@@ -449,14 +500,19 @@ export const payrollRouter = router({
       // Recalculate payroll run totals
       await recalculatePayrollRunTotals(input.payrollRunId);
 
-      // Lock aggregated adjustments
+      // Lock aggregated adjustments (with payrollRunId)
       for (const adjId of lockedAdjustmentIds) {
         await updateAdjustment(adjId, { status: "locked", payrollRunId: input.payrollRunId } as any);
       }
 
-      // Lock aggregated leave records
+      // Lock aggregated reimbursements (with payrollRunId)
+      for (const reimbId of lockedReimbursementIds) {
+        await updateReimbursement(reimbId, { status: "locked", payrollRunId: input.payrollRunId } as any);
+      }
+
+      // Lock aggregated leave records (with payrollRunId)
       for (const leaveId of lockedLeaveIds) {
-        await updateLeaveRecord(leaveId, { status: "locked" } as any);
+        await updateLeaveRecord(leaveId, { status: "locked", payrollRunId: input.payrollRunId } as any);
       }
 
       await logAuditAction({
@@ -533,11 +589,48 @@ export const payrollRouter = router({
   deleteItem: operationsManagerProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
-      // Get item to know payrollRunId before deleting
+      // Get item to know payrollRunId and employeeId before deleting
       const existingItem = await getPayrollItemById(input.id);
       if (!existingItem) throw new TRPCError({ code: "NOT_FOUND", message: "Payroll item not found" });
 
       const payrollRunId = existingItem.payrollRunId;
+      const employeeId = existingItem.employeeId;
+
+      // Rollback: unlock associated adjustments, reimbursements, and leave records
+      // that were locked and linked to this payroll run for this employee
+      const { getDb } = await import("../db");
+      const db = getDb();
+      if (db) {
+        const { adjustments, reimbursements, leaveRecords } = await import("../../drizzle/schema");
+        const { and, eq } = await import("drizzle-orm");
+
+        // Unlock adjustments: locked + payrollRunId = this run + employeeId
+        await db.update(adjustments)
+          .set({ status: "admin_approved", payrollRunId: null } as any)
+          .where(and(
+            eq(adjustments.status, "locked"),
+            eq(adjustments.payrollRunId as any, payrollRunId),
+            eq(adjustments.employeeId, employeeId),
+          ));
+
+        // Unlock reimbursements: locked + payrollRunId = this run + employeeId
+        await db.update(reimbursements)
+          .set({ status: "admin_approved", payrollRunId: null } as any)
+          .where(and(
+            eq(reimbursements.status, "locked"),
+            eq(reimbursements.payrollRunId as any, payrollRunId),
+            eq(reimbursements.employeeId, employeeId),
+          ));
+
+        // Unlock leave records: locked + payrollRunId = this run + employeeId
+        await db.update(leaveRecords)
+          .set({ status: "admin_approved", payrollRunId: null } as any)
+          .where(and(
+            eq(leaveRecords.status, "locked"),
+            eq((leaveRecords as any).payrollRunId, payrollRunId),
+            eq(leaveRecords.employeeId, employeeId),
+          ));
+      }
 
       await deletePayrollItem(input.id);
 
@@ -549,6 +642,7 @@ export const payrollRouter = router({
         action: "delete",
         entityType: "payroll_item",
         entityId: input.id,
+        changes: JSON.stringify({ rolledBack: true, employeeId }),
       });
 
       return { success: true };
@@ -565,15 +659,9 @@ export const payrollRouter = router({
       const run = await getPayrollRunById(input.payrollRunId);
       if (!run) throw new TRPCError({ code: 'BAD_REQUEST', message: "Payroll run not found" });
 
-      let payrollMonth: string;
-      if (run.payrollMonth instanceof Date) {
-        const y = run.payrollMonth.getUTCFullYear();
-        const m = String(run.payrollMonth.getUTCMonth() + 1).padStart(2, "0");
-        const d = String(run.payrollMonth.getUTCDate()).padStart(2, "0");
-        payrollMonth = `${y}-${m}-${d}`;
-      } else {
-        payrollMonth = String(run.payrollMonth);
-      }
+      // N-month payroll run checks (N-1)-month pending data
+      const prevMonthDate = getPrevMonth(run.payrollMonth);
+      const prevMonthPrefix = prevMonthDate.substring(0, 7);
 
       // Count items still in submitted or client_approved (not yet admin_approved)
       const { getDb } = await import("../db");
@@ -582,36 +670,34 @@ export const payrollRouter = router({
       const { leaveRecords, adjustments, reimbursements } = await import("../../drizzle/schema");
       const { and, eq, inArray, sql, gte, lt } = await import("drizzle-orm");
 
-      // Leave records use endDate (YYYY-MM-DD), filter by month range
-      const monthStart = payrollMonth; // e.g. "2026-03"
-      const monthStartDate = `${monthStart}-01`;
-      // Calculate next month start
-      const [y, m] = monthStart.split("-").map(Number);
+      // Leave records use startDate (YYYY-MM-DD), filter by N-1 month range
+      const monthStartDate = prevMonthDate;
+      const [y, m] = prevMonthPrefix.split("-").map(Number);
       const nextMonth = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
 
-      // Count pending leaves (submitted or client_approved) for this month
+      // Count pending leaves (submitted or client_approved) for N-1 month
       const pendingLeaves = await db.select({ count: sql<number>`count(*)` })
         .from(leaveRecords)
         .where(and(
           inArray(leaveRecords.status, ["submitted", "client_approved"]),
-          gte(leaveRecords.endDate, monthStartDate),
-          lt(leaveRecords.endDate, nextMonth),
+          gte(leaveRecords.startDate, monthStartDate),
+          lt(leaveRecords.startDate, nextMonth),
         ));
 
-      // Count pending adjustments (submitted or client_approved) for this country + month
+      // Count pending adjustments (submitted or client_approved) for N-1 month
       const pendingAdjustments = await db.select({ count: sql<number>`count(*)` })
         .from(adjustments)
         .where(and(
           inArray(adjustments.status, ["submitted", "client_approved"]),
-          eq(adjustments.effectiveMonth, payrollMonth),
+          eq(adjustments.effectiveMonth, prevMonthDate),
         ));
 
-      // Count pending reimbursements (submitted or client_approved) for this month
+      // Count pending reimbursements (submitted or client_approved) for N-1 month
       const pendingReimbursements = await db.select({ count: sql<number>`count(*)` })
         .from(reimbursements)
         .where(and(
           inArray(reimbursements.status, ["submitted", "client_approved"]),
-          eq(reimbursements.effectiveMonth, payrollMonth),
+          eq(reimbursements.effectiveMonth, prevMonthDate),
         ));
 
       return {
@@ -634,18 +720,9 @@ export const payrollRouter = router({
       const run = await getPayrollRunById(input.payrollRunId);
       if (!run) throw new TRPCError({ code: 'BAD_REQUEST', message: "Payroll run not found" });
 
-      // payrollMonth may be a Date object from DB, normalize to YYYY-MM-DD string
-      // MUST use UTC methods because MySQL DATE '2026-02-01' becomes Date in UTC,
-      // but local timezone methods (getMonth/getDate) shift it to the previous day in non-UTC zones
-      let payrollMonth: string;
-      if (run.payrollMonth instanceof Date) {
-        const y = run.payrollMonth.getUTCFullYear();
-        const m = String(run.payrollMonth.getUTCMonth() + 1).padStart(2, "0");
-        const d = String(run.payrollMonth.getUTCDate()).padStart(2, "0");
-        payrollMonth = `${y}-${m}-${d}`;
-      } else {
-        payrollMonth = String(run.payrollMonth);
-      }
+      // N-month payroll run consumes (N-1)-month data
+      const prevMonthStr = getPrevMonth(run.payrollMonth);
+      const prevMonthPrefix = prevMonthStr.substring(0, 7);
 
       // Get all active employees in this country (across all customers)
       const activeEmployees = await getActiveEmployeesForPayroll(run.countryCode);
@@ -653,30 +730,32 @@ export const payrollRouter = router({
       const existingItems = await listPayrollItemsByRun(input.payrollRunId);
       const existingEmployeeIds = new Set(existingItems.map((i: any) => i.employeeId));
 
-      // Fetch submitted adjustments for this country + month
-      const allAdjustments = await getSubmittedAdjustmentsForPayroll(run.countryCode, payrollMonth);
+      // Fetch admin_approved + locked-but-unlinked adjustments for N-1 month
+      const allAdjustments = await getSubmittedAdjustmentsForPayroll(run.countryCode, prevMonthStr, ['admin_approved', 'locked']);
 
-      // Group adjustments by employeeId
+      // Group adjustments by employeeId (skip locked ones already linked to a payroll run)
       const adjByEmployee = new Map<number, typeof allAdjustments>();
       for (const adj of allAdjustments) {
+        if (adj.status === 'locked' && (adj as any).payrollRunId) continue;
         const list = adjByEmployee.get(adj.employeeId) ?? [];
         list.push(adj);
         adjByEmployee.set(adj.employeeId, list);
       }
 
-      // Fetch submitted reimbursements for this country + month (from standalone reimbursements table)
-      const allReimbursements = await getSubmittedReimbursementsForPayroll(run.countryCode, payrollMonth);
+      // Fetch admin_approved + locked-but-unlinked reimbursements for N-1 month
+      const allReimbursements = await getSubmittedReimbursementsForPayroll(run.countryCode, prevMonthStr, ['admin_approved', 'locked']);
 
-      // Group reimbursements by employeeId
+      // Group reimbursements by employeeId (skip locked ones already linked)
       const reimbByEmployee = new Map<number, typeof allReimbursements>();
       for (const reimb of allReimbursements) {
+        if (reimb.status === 'locked' && (reimb as any).payrollRunId) continue;
         const list = reimbByEmployee.get(reimb.employeeId) ?? [];
         list.push(reimb);
         reimbByEmployee.set(reimb.employeeId, list);
       }
 
-      // Fetch submitted unpaid leave for this country + month
-      const allUnpaidLeave = await getSubmittedUnpaidLeaveForPayroll(run.countryCode, payrollMonth);
+      // Fetch admin_approved + locked-but-unlinked unpaid leave for N-1 month
+      const allUnpaidLeave = await getSubmittedUnpaidLeaveForPayroll(run.countryCode, prevMonthPrefix, ['admin_approved', 'locked']);
 
       // Group unpaid leave by employeeId
       const leaveByEmployee = new Map<number, typeof allUnpaidLeave>();
@@ -799,19 +878,19 @@ export const payrollRouter = router({
       // Recalculate payroll run totals from ALL items (existing + new)
       await recalculatePayrollRunTotals(input.payrollRunId);
 
-      // Lock all aggregated adjustments
+      // Lock all aggregated adjustments (with payrollRunId)
       for (const adjId of lockedAdjustmentIds) {
         await updateAdjustment(adjId, { status: "locked", payrollRunId: input.payrollRunId } as any);
       }
 
-      // Lock all aggregated leave records
+      // Lock all aggregated leave records (with payrollRunId)
       for (const leaveId of lockedLeaveIds) {
-        await updateLeaveRecord(leaveId, { status: "locked" } as any);
+        await updateLeaveRecord(leaveId, { status: "locked", payrollRunId: input.payrollRunId } as any);
       }
 
-      // Lock all aggregated standalone reimbursements
+      // Lock all aggregated standalone reimbursements (with payrollRunId)
       for (const reimbId of lockedReimbursementIds) {
-        await updateReimbursement(reimbId, { status: "locked" } as any);
+        await updateReimbursement(reimbId, { status: "locked", payrollRunId: input.payrollRunId } as any);
       }
 
       await logAuditAction({

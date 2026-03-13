@@ -470,6 +470,7 @@ export const leaveRecords = sqliteTable(
     adminApprovedBy: integer("adminApprovedBy"), // Admin user ID who confirmed
     adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp_ms" }),
     adminRejectionReason: text("adminRejectionReason"),
+    payrollRunId: integer("payrollRunId"), // Linked to payroll when locked
     createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
     updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
@@ -477,6 +478,7 @@ export const leaveRecords = sqliteTable(
     lrEmployeeIdIdx: index("lr_employee_id_idx").on(table.employeeId),
     lrStatusIdx: index("lr_status_idx").on(table.status),
     lrStartDateIdx: index("lr_start_date_idx").on(table.startDate),
+    lrPayrollRunIdIdx: index("lr_payroll_run_id_idx").on(table.payrollRunId),
   })
 );
 

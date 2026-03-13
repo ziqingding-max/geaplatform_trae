@@ -141,6 +141,12 @@ const REQUIRED_COLUMNS: ColumnMigration[] = [
     column: "effectiveMonth",
     type: "TEXT",
   },
+  // ── leave_records (payroll lifecycle fix) ──
+  {
+    table: "leave_records",
+    column: "payrollRunId",
+    type: "INTEGER",
+  },
 ];
 
 /**

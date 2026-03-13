@@ -13,7 +13,7 @@
  * - Cross-month leave spanning multiple months: split into monthly portions
  */
 
-import { getSystemConfig } from "../db";
+import { getSystemConfig, findPayrollRunByCountryMonth } from "../db";
 import { hasAnyRole } from "../../shared/roles";
 
 // ── Types ──
@@ -99,21 +99,54 @@ export async function checkCutoffPassed(effectiveMonth: Date | string): Promise<
 
 /**
  * Enforce cutoff: throws an error if cutoff has passed and user is not operations_manager or admin.
- * @param effectiveMonth - The payroll month
+ * For admin/ops_manager users, also checks if the corresponding payroll run has been approved.
+ * Once a payroll run is approved, even admin users cannot modify the consumed data.
+ *
+ * @param effectiveMonth - The payroll month (the data month, not the payroll run month)
  * @param userRole - The current user's role
  * @param action - Description of the action being attempted (for error message)
+ * @param countryCode - Optional country code; if provided, checks payroll run approval status
  */
 export async function enforceCutoff(
   effectiveMonth: Date | string,
   userRole: string,
-  action: string = "modify"
+  action: string = "modify",
+  countryCode?: string
 ): Promise<void> {
   const { passed, cutoffDate } = await checkCutoffPassed(effectiveMonth);
+
+  // Client/portal users: blocked by cutoff date
   if (passed && !hasAnyRole(userRole, ["admin", "operations_manager"])) {
     const cutoffStr = cutoffDate.toISOString().replace("T", " ").substring(0, 16);
     throw new Error(
       `Cannot ${action}: payroll cutoff has passed (${cutoffStr} UTC). Only operations managers can modify after cutoff.`
     );
+  }
+
+  // Admin/ops_manager users: blocked only if the payroll run consuming this month's data is approved
+  // N-1 rule: data for month M is consumed by payroll run for month M+1
+  if (passed && hasAnyRole(userRole, ["admin", "operations_manager"]) && countryCode) {
+    // Calculate the payroll run month (M+1) that consumes this data month (M)
+    let year: number, month: number;
+    if (typeof effectiveMonth === "string") {
+      const parts = effectiveMonth.split("-");
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10);
+    } else {
+      year = effectiveMonth.getFullYear();
+      month = effectiveMonth.getMonth() + 1;
+    }
+    let runMonth = month + 1;
+    let runYear = year;
+    if (runMonth > 12) { runMonth = 1; runYear++; }
+    const runMonthStr = `${runYear}-${String(runMonth).padStart(2, "0")}-01`;
+
+    const payrollRun = await findPayrollRunByCountryMonth(countryCode, runMonthStr);
+    if (payrollRun && payrollRun.status === "approved") {
+      throw new Error(
+        `Cannot ${action}: the payroll run for ${runYear}-${String(runMonth).padStart(2, "0")} (${countryCode}) has been approved. Data for this month is locked.`
+      );
+    }
   }
 }
 

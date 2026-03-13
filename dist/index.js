@@ -351,31 +351,49 @@ var init_aor_schema = __esm({
       {
         id: integer2("id").primaryKey({ autoIncrement: true }),
         contractorId: integer2("contractorId").notNull(),
+        customerId: integer2("customerId").notNull(),
+        // Auto-filled from contractor
         title: text2("title", { length: 255 }).notNull(),
         description: text2("description"),
         amount: text2("amount").notNull(),
         currency: text2("currency", { length: 3 }).notNull(),
+        // Status workflow: pending → submitted → client_approved/client_rejected → admin_approved/admin_rejected → locked
         status: text2("status", { enum: [
           "pending",
-          "in_progress",
           "submitted",
-          "approved",
-          "paid",
-          "cancelled"
+          "client_approved",
+          "client_rejected",
+          "admin_approved",
+          "admin_rejected",
+          "locked"
         ] }).default("pending").notNull(),
         dueDate: text2("dueDate"),
-        completedAt: integer2("completedAt", { mode: "timestamp" }),
-        approvedAt: integer2("approvedAt", { mode: "timestamp" }),
-        approvedBy: integer2("approvedBy"),
+        completedAt: integer2("completedAt", { mode: "timestamp_ms" }),
+        // Approval tracking (aligned with EOR adjustments)
+        submittedBy: integer2("submittedBy"),
+        // Worker user ID who submitted
+        clientApprovedBy: integer2("clientApprovedBy"),
+        // Portal contact ID
+        clientApprovedAt: integer2("clientApprovedAt", { mode: "timestamp_ms" }),
+        clientRejectionReason: text2("clientRejectionReason"),
+        adminApprovedBy: integer2("adminApprovedBy"),
         // Admin user ID
+        adminApprovedAt: integer2("adminApprovedAt", { mode: "timestamp_ms" }),
+        adminRejectionReason: text2("adminRejectionReason"),
+        // Target month
+        effectiveMonth: text2("effectiveMonth"),
+        // Which month this applies to (YYYY-MM-01), set when submitted
+        // Link to contractor invoice when locked
         invoiceId: integer2("invoiceId"),
-        // Linked when invoiced
-        createdAt: integer2("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer2("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        // Linked to contractorInvoice when included
+        createdAt: integer2("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer2("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         cmContractorIdIdx: index2("cm_contractor_id_idx").on(table.contractorId),
-        cmStatusIdx: index2("cm_status_idx").on(table.status)
+        cmCustomerIdIdx: index2("cm_customer_id_idx").on(table.customerId),
+        cmStatusIdx: index2("cm_status_idx").on(table.status),
+        cmEffectiveMonthIdx: index2("cm_effective_month_idx").on(table.effectiveMonth)
       })
     );
     contractorAdjustments = sqliteTable2(
@@ -383,20 +401,49 @@ var init_aor_schema = __esm({
       {
         id: integer2("id").primaryKey({ autoIncrement: true }),
         contractorId: integer2("contractorId").notNull(),
+        customerId: integer2("customerId").notNull(),
+        // Auto-filled from contractor
         type: text2("type", { enum: ["bonus", "expense", "deduction"] }).notNull(),
         description: text2("description").notNull(),
         amount: text2("amount").notNull(),
         currency: text2("currency", { length: 3 }).notNull(),
-        date: text2("date").notNull(),
-        status: text2("status", { enum: ["pending", "approved", "rejected", "invoiced"] }).default("pending").notNull(),
+        // Receipt/attachment
         attachmentUrl: text2("attachmentUrl"),
+        attachmentFileKey: text2("attachmentFileKey", { length: 500 }),
+        // Status workflow: submitted → client_approved/client_rejected → admin_approved/admin_rejected → locked
+        status: text2("status", { enum: [
+          "submitted",
+          "client_approved",
+          "client_rejected",
+          "admin_approved",
+          "admin_rejected",
+          "locked"
+        ] }).default("submitted").notNull(),
+        submittedBy: integer2("submittedBy"),
+        // User ID who created this
+        // Approval tracking
+        clientApprovedBy: integer2("clientApprovedBy"),
+        // Portal contact ID who approved/rejected
+        clientApprovedAt: integer2("clientApprovedAt", { mode: "timestamp_ms" }),
+        clientRejectionReason: text2("clientRejectionReason"),
+        adminApprovedBy: integer2("adminApprovedBy"),
+        // Admin user ID who confirmed
+        adminApprovedAt: integer2("adminApprovedAt", { mode: "timestamp_ms" }),
+        adminRejectionReason: text2("adminRejectionReason"),
+        // Target month
+        effectiveMonth: text2("effectiveMonth").notNull(),
+        // Which month this applies to (YYYY-MM-01)
+        // Link to contractor invoice when locked
         invoiceId: integer2("invoiceId"),
-        createdAt: integer2("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer2("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        // Linked to contractorInvoice when included
+        createdAt: integer2("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer2("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         caContractorIdIdx: index2("ca_contractor_id_idx").on(table.contractorId),
-        caStatusIdx: index2("ca_status_idx").on(table.status)
+        caCustomerIdIdx: index2("ca_customer_id_idx").on(table.customerId),
+        caStatusIdx: index2("ca_status_idx").on(table.status),
+        caEffectiveMonthIdx: index2("ca_effective_month_idx").on(table.effectiveMonth)
       })
     );
     workerUsers = sqliteTable2(
@@ -484,6 +531,7 @@ __export(schema_exports, {
   knowledgeItems: () => knowledgeItems,
   knowledgeMarketingEvents: () => knowledgeMarketingEvents,
   knowledgeSources: () => knowledgeSources,
+  leadChangeLogs: () => leadChangeLogs,
   leaveBalances: () => leaveBalances,
   leaveRecords: () => leaveRecords,
   leaveTypes: () => leaveTypes,
@@ -515,7 +563,7 @@ import {
   uniqueIndex as uniqueIndex3,
   index as index3
 } from "drizzle-orm/sqlite-core";
-var users, countriesConfig, systemConfig, leaveTypes, publicHolidays, customers, customerContacts, customerPricing, customerContracts, customerLeavePolicies, employees, employeeContracts, leaveBalances, leaveRecords, adjustments, payrollRuns, payrollItems, invoices, invoiceItems, exchangeRates, auditLogs, systemSettings, employeeDocuments, billingEntities, creditNoteApplications, onboardingInvites, reimbursements, vendors, vendorBills, vendorBillItems, billInvoiceAllocations, salesLeads, salesActivities, knowledgeSources, knowledgeItems, knowledgeMarketingEvents, knowledgeFeedbackEvents, aiProviderConfigs, aiTaskPolicies, aiTaskExecutions, notifications, countrySocialInsuranceItems, countryGuideChapters, salaryBenchmarks, quotations, salesDocuments, customerWallets, walletTransactions, customerFrozenWallets, frozenWalletTransactions;
+var users, countriesConfig, systemConfig, leaveTypes, publicHolidays, customers, customerContacts, customerPricing, customerContracts, customerLeavePolicies, employees, employeeContracts, leaveBalances, leaveRecords, adjustments, payrollRuns, payrollItems, invoices, invoiceItems, exchangeRates, auditLogs, systemSettings, employeeDocuments, billingEntities, creditNoteApplications, onboardingInvites, reimbursements, vendors, vendorBills, vendorBillItems, billInvoiceAllocations, salesLeads, salesActivities, knowledgeSources, knowledgeItems, knowledgeMarketingEvents, knowledgeFeedbackEvents, aiProviderConfigs, aiTaskPolicies, aiTaskExecutions, notifications, countrySocialInsuranceItems, countryGuideChapters, salaryBenchmarks, quotations, salesDocuments, customerWallets, walletTransactions, customerFrozenWallets, frozenWalletTransactions, leadChangeLogs;
 var init_schema = __esm({
   "drizzle/schema.ts"() {
     "use strict";
@@ -534,13 +582,13 @@ var init_schema = __esm({
         language: text3("language", { length: 10 }).default("en").notNull(),
         isActive: integer3("isActive", { mode: "boolean" }).default(true).notNull(),
         inviteToken: text3("inviteToken", { length: 255 }),
-        inviteExpiresAt: integer3("inviteExpiresAt", { mode: "timestamp" }),
+        inviteExpiresAt: integer3("inviteExpiresAt", { mode: "timestamp_ms" }),
         resetToken: text3("resetToken", { length: 255 }),
-        resetExpiresAt: integer3("resetExpiresAt", { mode: "timestamp" }),
+        resetExpiresAt: integer3("resetExpiresAt", { mode: "timestamp_ms" }),
         mustChangePassword: integer3("mustChangePassword", { mode: "boolean" }).default(false).notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull(),
-        lastSignedIn: integer3("lastSignedIn", { mode: "timestamp" }).defaultNow().notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull(),
+        lastSignedIn: integer3("lastSignedIn", { mode: "timestamp_ms" }).defaultNow().notNull()
       },
       (table) => ({
         emailIdx: index3("email_idx").on(table.email),
@@ -579,8 +627,8 @@ var init_schema = __esm({
         // A country with any non-null service rate (EOR/AOR/Visa) is considered active
         isActive: integer3("isActive", { mode: "boolean" }).default(false).notNull(),
         notes: text3("notes"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         countryCodeIdx: uniqueIndex3("country_code_idx").on(table.countryCode)
@@ -593,8 +641,8 @@ var init_schema = __esm({
         configKey: text3("configKey", { length: 100 }).notNull().unique(),
         configValue: text3("configValue").notNull(),
         description: text3("description"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         configKeyIdx: uniqueIndex3("config_key_idx").on(table.configKey)
@@ -612,8 +660,8 @@ var init_schema = __esm({
         isPaid: integer3("isPaid", { mode: "boolean" }).default(true).notNull(),
         requiresApproval: integer3("requiresApproval", { mode: "boolean" }).default(true).notNull(),
         description: text3("description"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         countryCodeIdx: index3("lt_country_code_idx").on(table.countryCode)
@@ -634,8 +682,8 @@ var init_schema = __esm({
         // true = nationwide
         source: text3("source", { length: 50 }).default("nager_api"),
         // nager_api | manual
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         phCountryCodeIdx: index3("ph_country_code_idx").on(table.countryCode),
@@ -672,8 +720,8 @@ var init_schema = __esm({
         // Deposit = (baseSalary + estEmployerCost) × multiplier
         status: text3("status", { enum: ["active", "suspended", "terminated"] }).default("active").notNull(),
         notes: text3("notes"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         companyNameIdx: index3("company_name_idx").on(table.companyName),
@@ -698,14 +746,14 @@ var init_schema = __esm({
         // bcrypt hash
         portalRole: text3("portalRole", { enum: ["admin", "hr_manager", "finance", "viewer"] }).default("viewer"),
         inviteToken: text3("inviteToken", { length: 255 }),
-        inviteExpiresAt: integer3("inviteExpiresAt", { mode: "timestamp" }),
+        inviteExpiresAt: integer3("inviteExpiresAt", { mode: "timestamp_ms" }),
         resetToken: text3("resetToken", { length: 255 }),
-        resetExpiresAt: integer3("resetExpiresAt", { mode: "timestamp" }),
+        resetExpiresAt: integer3("resetExpiresAt", { mode: "timestamp_ms" }),
         isPortalActive: integer3("isPortalActive", { mode: "boolean" }).default(false).notNull(),
         // true after invite accepted
-        lastLoginAt: integer3("lastLoginAt", { mode: "timestamp" }),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        lastLoginAt: integer3("lastLoginAt", { mode: "timestamp_ms" }),
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         customerIdIdx: index3("cc_customer_id_idx").on(table.customerId),
@@ -733,8 +781,8 @@ var init_schema = __esm({
         // Traceability to source quotation
         sourceQuotationId: integer3("sourceQuotationId"),
         isActive: integer3("isActive", { mode: "boolean" }).default(true).notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         customerIdIdx: index3("cp_customer_id_idx").on(table.customerId),
@@ -754,8 +802,8 @@ var init_schema = __esm({
         effectiveDate: text3("effectiveDate"),
         expiryDate: text3("expiryDate"),
         status: text3("status", { enum: ["draft", "signed", "expired", "terminated"] }).default("draft").notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         cctrCustomerIdIdx: index3("cctr_customer_id_idx").on(table.customerId)
@@ -773,8 +821,8 @@ var init_schema = __esm({
         expiryRule: text3("expiryRule", { enum: ["year_end", "anniversary", "no_expiry"] }).default("year_end").notNull(),
         carryOverDays: integer3("carryOverDays").default(0).notNull(),
         // Max days that can carry over to next year (0 = no carry over)
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         clpCustomerIdIdx: index3("clp_customer_id_idx").on(table.customerId),
@@ -844,8 +892,8 @@ var init_schema = __esm({
         // Bank Details (Dynamic JSON based on country requirements)
         bankDetails: text3("bankDetails", { mode: "json" }),
         // Metadata
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         empCustomerIdIdx: index3("emp_customer_id_idx").on(table.customerId),
@@ -867,8 +915,8 @@ var init_schema = __esm({
         effectiveDate: text3("effectiveDate"),
         expiryDate: text3("expiryDate"),
         status: text3("status", { enum: ["draft", "signed", "expired", "terminated"] }).default("draft").notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         ecEmployeeIdIdx: index3("ec_employee_id_idx").on(table.employeeId)
@@ -886,8 +934,8 @@ var init_schema = __esm({
         remaining: integer3("remaining").notNull(),
         expiryDate: text3("expiryDate"),
         // When this leave balance expires (null = no expiry, carries over)
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         lbEmployeeIdIdx: index3("lb_employee_id_idx").on(table.employeeId),
@@ -920,19 +968,22 @@ var init_schema = __esm({
         // Approval tracking
         clientApprovedBy: integer3("clientApprovedBy"),
         // Portal contact ID who approved/rejected
-        clientApprovedAt: integer3("clientApprovedAt", { mode: "timestamp" }),
+        clientApprovedAt: integer3("clientApprovedAt", { mode: "timestamp_ms" }),
         clientRejectionReason: text3("clientRejectionReason"),
         adminApprovedBy: integer3("adminApprovedBy"),
         // Admin user ID who confirmed
-        adminApprovedAt: integer3("adminApprovedAt", { mode: "timestamp" }),
+        adminApprovedAt: integer3("adminApprovedAt", { mode: "timestamp_ms" }),
         adminRejectionReason: text3("adminRejectionReason"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        payrollRunId: integer3("payrollRunId"),
+        // Linked to payroll when locked
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         lrEmployeeIdIdx: index3("lr_employee_id_idx").on(table.employeeId),
         lrStatusIdx: index3("lr_status_idx").on(table.status),
-        lrStartDateIdx: index3("lr_start_date_idx").on(table.startDate)
+        lrStartDateIdx: index3("lr_start_date_idx").on(table.startDate),
+        lrPayrollRunIdIdx: index3("lr_payroll_run_id_idx").on(table.payrollRunId)
       })
     );
     adjustments = sqliteTable3(
@@ -983,16 +1034,16 @@ var init_schema = __esm({
         // User ID who created this
         // Approval tracking
         clientApprovedBy: integer3("clientApprovedBy"),
-        clientApprovedAt: integer3("clientApprovedAt", { mode: "timestamp" }),
+        clientApprovedAt: integer3("clientApprovedAt", { mode: "timestamp_ms" }),
         clientRejectionReason: text3("clientRejectionReason"),
         adminApprovedBy: integer3("adminApprovedBy"),
-        adminApprovedAt: integer3("adminApprovedAt", { mode: "timestamp" }),
+        adminApprovedAt: integer3("adminApprovedAt", { mode: "timestamp_ms" }),
         adminRejectionReason: text3("adminRejectionReason"),
         // Target month
         effectiveMonth: text3("effectiveMonth").notNull(),
         // Which payroll month this applies to (YYYY-MM-01)
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         adjEmployeeIdIdx: index3("adj_employee_id_idx").on(table.employeeId),
@@ -1025,15 +1076,15 @@ var init_schema = __esm({
         totalEmployerCost: text3("totalEmployerCost").default("0"),
         // Cross-approval: operations manager submits, another ops manager approves
         submittedBy: integer3("submittedBy"),
-        submittedAt: integer3("submittedAt", { mode: "timestamp" }),
+        submittedAt: integer3("submittedAt", { mode: "timestamp_ms" }),
         approvedBy: integer3("approvedBy"),
-        approvedAt: integer3("approvedAt", { mode: "timestamp" }),
+        approvedAt: integer3("approvedAt", { mode: "timestamp_ms" }),
         rejectedBy: integer3("rejectedBy"),
-        rejectedAt: integer3("rejectedAt", { mode: "timestamp" }),
+        rejectedAt: integer3("rejectedAt", { mode: "timestamp_ms" }),
         rejectionReason: text3("rejectionReason"),
         notes: text3("notes"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         prPayrollMonthIdx: index3("pr_payroll_month_idx").on(table.payrollMonth),
@@ -1066,8 +1117,8 @@ var init_schema = __esm({
         notes: text3("notes"),
         // JSON breakdown of adjustments included
         adjustmentsBreakdown: text3("adjustmentsBreakdown", { mode: "json" }),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         piPayrollRunIdIdx: index3("pi_payroll_run_id_idx").on(table.payrollRunId),
@@ -1121,8 +1172,8 @@ var init_schema = __esm({
           "applied"
         ] }).default("draft").notNull(),
         dueDate: text3("dueDate"),
-        sentDate: integer3("sentDate", { mode: "timestamp" }),
-        paidDate: integer3("paidDate", { mode: "timestamp" }),
+        sentDate: integer3("sentDate", { mode: "timestamp_ms" }),
+        paidDate: integer3("paidDate", { mode: "timestamp_ms" }),
         paidAmount: text3("paidAmount"),
         // Credit note application tracking
         creditApplied: text3("creditApplied").default("0"),
@@ -1138,8 +1189,8 @@ var init_schema = __esm({
         relatedInvoiceId: integer3("relatedInvoiceId"),
         notes: text3("notes"),
         internalNotes: text3("internalNotes"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         invCustomerIdIdx: index3("inv_customer_id_idx").on(table.customerId),
@@ -1192,8 +1243,8 @@ var init_schema = __esm({
         // Rate used for conversion
         exchangeRateWithMarkup: text3("exchangeRateWithMarkup"),
         // Rate with markup
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         iiInvoiceIdIdx: index3("ii_invoice_id_idx").on(table.invoiceId),
@@ -1213,8 +1264,8 @@ var init_schema = __esm({
         // e.g. 5.00 = 5%
         source: text3("source", { length: 100 }),
         effectiveDate: text3("effectiveDate").notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         erCurrencyPairIdx: uniqueIndex3("er_currency_pair_idx").on(
@@ -1236,7 +1287,7 @@ var init_schema = __esm({
         changes: text3("changes", { mode: "json" }),
         ipAddress: text3("ipAddress", { length: 50 }),
         userAgent: text3("userAgent"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull()
       },
       (table) => ({
         alUserIdIdx: index3("al_user_id_idx").on(table.userId),
@@ -1251,8 +1302,8 @@ var init_schema = __esm({
         key: text3("key", { length: 100 }).notNull().unique(),
         value: text3("value").notNull(),
         description: text3("description"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         ssKeyIdx: uniqueIndex3("ss_key_idx").on(table.key)
@@ -1279,9 +1330,9 @@ var init_schema = __esm({
         mimeType: text3("mimeType", { length: 100 }),
         fileSize: integer3("fileSize"),
         notes: text3("notes"),
-        uploadedAt: integer3("uploadedAt", { mode: "timestamp" }).defaultNow().notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        uploadedAt: integer3("uploadedAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         edEmployeeIdIdx: index3("ed_employee_id_idx").on(table.employeeId),
@@ -1320,8 +1371,8 @@ var init_schema = __esm({
         invoiceSequence: integer3("invoiceSequence").default(0).notNull(),
         // Last used invoice sequence number
         notes: text3("notes"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         beCountryIdx: index3("be_country_idx").on(table.country),
@@ -1340,11 +1391,11 @@ var init_schema = __esm({
         appliedAmount: text3("appliedAmount").notNull(),
         // Positive value representing the credit applied
         notes: text3("notes"),
-        appliedAt: integer3("appliedAt", { mode: "timestamp" }).defaultNow().notNull(),
+        appliedAt: integer3("appliedAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
         appliedBy: integer3("appliedBy"),
         // User who applied the credit
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         cnaCreditNoteIdx: index3("cna_credit_note_idx").on(table.creditNoteId),
@@ -1383,11 +1434,11 @@ var init_schema = __esm({
         // Completion links
         employeeId: integer3("employeeId"),
         contractorId: integer3("contractorId"),
-        expiresAt: integer3("expiresAt", { mode: "timestamp" }).notNull(),
-        completedAt: integer3("completedAt", { mode: "timestamp" }),
+        expiresAt: integer3("expiresAt", { mode: "timestamp_ms" }).notNull(),
+        completedAt: integer3("completedAt", { mode: "timestamp_ms" }),
         createdBy: integer3("createdBy"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         oiTokenIdx: uniqueIndex3("oi_token_idx").on(table.token),
@@ -1435,16 +1486,16 @@ var init_schema = __esm({
         // User/contact ID who created this
         // Approval tracking
         clientApprovedBy: integer3("clientApprovedBy"),
-        clientApprovedAt: integer3("clientApprovedAt", { mode: "timestamp" }),
+        clientApprovedAt: integer3("clientApprovedAt", { mode: "timestamp_ms" }),
         clientRejectionReason: text3("clientRejectionReason"),
         adminApprovedBy: integer3("adminApprovedBy"),
-        adminApprovedAt: integer3("adminApprovedAt", { mode: "timestamp" }),
+        adminApprovedAt: integer3("adminApprovedAt", { mode: "timestamp_ms" }),
         adminRejectionReason: text3("adminRejectionReason"),
         // Target month
         effectiveMonth: text3("effectiveMonth").notNull(),
         // Which payroll month this applies to (YYYY-MM-01)
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         reimbEmployeeIdIdx: index3("reimb_employee_id_idx").on(table.employeeId),
@@ -1481,8 +1532,8 @@ var init_schema = __esm({
         vendorType: text3("vendorType", { enum: ["client_related", "operational"] }).default("client_related").notNull(),
         status: text3("status", { enum: ["active", "inactive"] }).default("active").notNull(),
         notes: text3("notes"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         vdrNameIdx: index3("vdr_name_idx").on(table.name),
@@ -1560,11 +1611,11 @@ var init_schema = __esm({
         // totalAmount - allocatedAmount (operational cost)
         // Approval workflow
         submittedBy: integer3("submittedBy"),
-        submittedAt: integer3("submittedAt", { mode: "timestamp" }),
+        submittedAt: integer3("submittedAt", { mode: "timestamp_ms" }),
         approvedBy: integer3("approvedBy"),
-        approvedAt: integer3("approvedAt", { mode: "timestamp" }),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        approvedAt: integer3("approvedAt", { mode: "timestamp_ms" }),
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         vbVendorIdIdx: index3("vb_vendor_id_idx").on(table.vendorId),
@@ -1584,12 +1635,29 @@ var init_schema = __esm({
         quantity: text3("quantity").default("1").notNull(),
         unitPrice: text3("unitPrice").notNull(),
         amount: text3("amount").notNull(),
+        // Cost type classification (for matching against invoice revenue items)
+        itemType: text3("itemType", { enum: [
+          "employment_cost",
+          // Payroll, salary, social contributions paid to vendor
+          "service_fee",
+          // Vendor's own service/processing fee
+          "visa_fee",
+          // Visa/immigration related costs
+          "equipment_purchase",
+          // Equipment procurement costs
+          "deposit",
+          // Security deposit / guarantee
+          "deposit_refund",
+          // Deposit returned by vendor
+          "other"
+          // Miscellaneous / unclassified
+        ] }).default("other").notNull(),
         // Cost allocation fields (optional — for linking expenses to revenue)
         relatedCustomerId: integer3("relatedCustomerId"),
         relatedEmployeeId: integer3("relatedEmployeeId"),
         relatedCountryCode: text3("relatedCountryCode", { length: 3 }),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         vbiVendorBillIdIdx: index3("vbi_vendor_bill_id_idx").on(table.vendorBillId),
@@ -1616,8 +1684,8 @@ var init_schema = __esm({
         // Optional note about this allocation
         allocatedBy: integer3("allocatedBy"),
         // User who created this allocation
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         biaVendorBillIdIdx: index3("bia_vendor_bill_id_idx").on(table.vendorBillId),
@@ -1668,8 +1736,8 @@ var init_schema = __esm({
         // General notes / follow-up log
         expectedCloseDate: text3("expectedCloseDate"),
         // When the deal is expected to close
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         slStatusIdx: index3("sl_status_idx").on(table.status),
@@ -1692,10 +1760,10 @@ var init_schema = __esm({
           "other"
         ] }).notNull(),
         description: text3("description").notNull(),
-        activityDate: integer3("activityDate", { mode: "timestamp" }).defaultNow().notNull(),
+        activityDate: integer3("activityDate", { mode: "timestamp_ms" }).defaultNow().notNull(),
         createdBy: integer3("createdBy"),
         // User ID who logged this activity
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull()
       },
       (table) => ({
         saLeadIdIdx: index3("sa_lead_id_idx").on(table.leadId),
@@ -1715,11 +1783,11 @@ var init_schema = __esm({
         authorityScore: integer3("authorityScore").default(0).notNull(),
         authorityLevel: text3("authorityLevel", { enum: ["high", "medium", "low"] }).default("low").notNull(),
         authorityReason: text3("authorityReason"),
-        aiReviewedAt: integer3("aiReviewedAt", { mode: "timestamp" }),
-        lastFetchedAt: integer3("lastFetchedAt", { mode: "timestamp" }),
+        aiReviewedAt: integer3("aiReviewedAt", { mode: "timestamp_ms" }),
+        lastFetchedAt: integer3("lastFetchedAt", { mode: "timestamp_ms" }),
         updatedBy: integer3("updatedBy"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         kbSourceActiveIdx: index3("kb_source_active_idx").on(table.isActive),
@@ -1743,12 +1811,12 @@ var init_schema = __esm({
         metadata: text3("metadata", { mode: "json" }),
         aiConfidence: integer3("aiConfidence").default(0).notNull(),
         aiSummary: text3("aiSummary"),
-        publishedAt: integer3("publishedAt", { mode: "timestamp" }),
+        publishedAt: integer3("publishedAt", { mode: "timestamp_ms" }),
         reviewedBy: integer3("reviewedBy"),
-        reviewedAt: integer3("reviewedAt", { mode: "timestamp" }),
+        reviewedAt: integer3("reviewedAt", { mode: "timestamp_ms" }),
         reviewNote: text3("reviewNote"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         kbItemCustomerIdx: index3("kb_item_customer_idx").on(table.customerId),
@@ -1767,7 +1835,7 @@ var init_schema = __esm({
         cadence: text3("cadence", { enum: ["daily", "weekly", "monthly"] }).default("weekly").notNull(),
         topics: text3("topics", { mode: "json" }).notNull(),
         payload: text3("payload", { mode: "json" }).notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull()
       },
       (table) => ({
         kbEventCustomerIdx: index3("kb_event_customer_idx").on(table.customerId)
@@ -1785,7 +1853,7 @@ var init_schema = __esm({
         feedbackType: text3("feedbackType", { enum: ["no_results", "not_helpful"] }).default("not_helpful").notNull(),
         note: text3("note"),
         metadata: text3("metadata", { mode: "json" }),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull()
       },
       (table) => ({
         kbFeedbackCustomerIdx: index3("kb_feedback_customer_idx").on(table.customerId),
@@ -1804,8 +1872,8 @@ var init_schema = __esm({
         apiKeyEnv: text3("apiKeyEnv", { length: 100 }).notNull(),
         isEnabled: integer3("isEnabled", { mode: "boolean" }).default(true).notNull(),
         priority: integer3("priority").default(100).notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         aiProviderIdx: uniqueIndex3("ai_provider_idx").on(table.provider),
@@ -1823,8 +1891,8 @@ var init_schema = __esm({
         temperature: text3("temperature").default("0.30"),
         maxTokens: integer3("maxTokens").default(4096),
         isActive: integer3("isActive", { mode: "boolean" }).default(true).notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         aiTaskIdx: uniqueIndex3("ai_task_idx").on(table.task),
@@ -1845,7 +1913,7 @@ var init_schema = __esm({
         costEstimate: text3("costEstimate").default("0.0000").notNull(),
         success: integer3("success", { mode: "boolean" }).default(true).notNull(),
         errorClass: text3("errorClass", { length: 120 }),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull()
       },
       (table) => ({
         aiExecTaskIdx: index3("ai_exec_task_idx").on(table.taskType),
@@ -1874,8 +1942,8 @@ var init_schema = __esm({
         // Dynamic data for template rendering
         // Status
         isRead: integer3("isRead", { mode: "boolean" }).default(false).notNull(),
-        readAt: integer3("readAt", { mode: "timestamp" }),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull()
+        readAt: integer3("readAt", { mode: "timestamp_ms" }),
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull()
       },
       (table) => ({
         notifTargetIdx: index3("notif_target_idx").on(table.targetPortal, table.targetUserId, table.targetRole),
@@ -1962,8 +2030,8 @@ var init_schema = __esm({
         // Notes
         sortOrder: integer3("sortOrder").default(0).notNull(),
         isActive: integer3("isActive", { mode: "boolean" }).default(true).notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         csiCountryYearIdx: index3("csi_country_year_idx").on(table.countryCode, table.effectiveYear),
@@ -1992,8 +2060,8 @@ var init_schema = __esm({
         // Extra structured data
         effectiveFrom: text3("effectiveFrom"),
         effectiveTo: text3("effectiveTo"),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         cgcCountryIdx: index3("cgc_country_idx").on(table.countryCode),
@@ -2017,7 +2085,7 @@ var init_schema = __esm({
         currency: text3("currency", { length: 3 }).notNull(),
         dataYear: integer3("dataYear").notNull(),
         source: text3("source"),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().notNull()
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().notNull()
       },
       (table) => ({
         sbCountryIdx: index3("sb_country_idx").on(table.countryCode),
@@ -2047,12 +2115,12 @@ var init_schema = __esm({
         pdfUrl: text3("pdfUrl"),
         pdfKey: text3("pdfKey"),
         // Tracking
-        sentAt: integer3("sentAt", { mode: "timestamp" }),
+        sentAt: integer3("sentAt", { mode: "timestamp_ms" }),
         sentTo: text3("sentTo"),
         sentBy: integer3("sentBy"),
         createdBy: integer3("createdBy").notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull(),
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         qtNumberIdx: uniqueIndex3("qt_number_idx").on(table.quotationNumber),
@@ -2074,7 +2142,7 @@ var init_schema = __esm({
         fileUrl: text3("fileUrl").notNull(),
         fileKey: text3("fileKey", { length: 500 }).notNull(),
         generatedBy: integer3("generatedBy").notNull(),
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull()
       },
       (table) => ({
         sdLeadIdx: index3("sd_lead_idx").on(table.leadId),
@@ -2093,7 +2161,7 @@ var init_schema = __esm({
         // Decimal string
         version: integer3("version").default(0).notNull(),
         // Optimistic lock
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         cwCustomerCurrencyIdx: uniqueIndex3("cw_customer_currency_idx").on(table.customerId, table.currency)
@@ -2136,7 +2204,7 @@ var init_schema = __esm({
         internalNote: text3("internalNote"),
         createdBy: integer3("createdBy"),
         // User ID
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull()
       },
       (table) => ({
         wtWalletIdIdx: index3("wt_wallet_id_idx").on(table.walletId),
@@ -2155,7 +2223,7 @@ var init_schema = __esm({
         // Decimal string
         version: integer3("version").default(0).notNull(),
         // Optimistic lock
-        updatedAt: integer3("updatedAt", { mode: "timestamp" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+        updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
       },
       (table) => ({
         cfwCustomerCurrencyIdx: uniqueIndex3("cfw_customer_currency_idx").on(table.customerId, table.currency)
@@ -2192,12 +2260,34 @@ var init_schema = __esm({
         internalNote: text3("internalNote"),
         createdBy: integer3("createdBy"),
         // User ID
-        createdAt: integer3("createdAt", { mode: "timestamp" }).defaultNow().notNull()
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull()
       },
       (table) => ({
         fwtWalletIdIdx: index3("fwt_wallet_id_idx").on(table.walletId),
         fwtReferenceIdx: index3("fwt_reference_idx").on(table.referenceId, table.referenceType),
         fwtCreatedIdx: index3("fwt_created_idx").on(table.createdAt)
+      })
+    );
+    leadChangeLogs = sqliteTable3(
+      "lead_change_logs",
+      {
+        id: integer3("id").primaryKey({ autoIncrement: true }),
+        leadId: integer3("leadId").notNull(),
+        userId: integer3("userId"),
+        userName: text3("userName", { length: 255 }),
+        changeType: text3("changeType", { length: 50 }).notNull(),
+        // 'field_update' | 'status_change' | 'created' | 'converted' | 'deleted'
+        fieldName: text3("fieldName", { length: 100 }),
+        // which field changed
+        oldValue: text3("oldValue"),
+        newValue: text3("newValue"),
+        description: text3("description"),
+        // human-readable summary
+        createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull()
+      },
+      (table) => ({
+        lclLeadIdIdx: index3("lcl_lead_id_idx").on(table.leadId),
+        lclCreatedAtIdx: index3("lcl_created_at_idx").on(table.createdAt)
       })
     );
   }
@@ -2228,6 +2318,7 @@ __export(relations_exports, {
   employeesRelations: () => employeesRelations,
   invoiceItemsRelations: () => invoiceItemsRelations,
   invoicesRelations: () => invoicesRelations,
+  leadChangeLogsRelations: () => leadChangeLogsRelations,
   leaveBalancesRelations: () => leaveBalancesRelations,
   leaveRecordsRelations: () => leaveRecordsRelations,
   leaveTypesRelations: () => leaveTypesRelations,
@@ -2248,7 +2339,7 @@ __export(relations_exports, {
   workerUsersRelations: () => workerUsersRelations
 });
 import { relations } from "drizzle-orm";
-var countriesConfigRelations, leaveTypesRelations, publicHolidaysRelations, customersRelations, customerContactsRelations, customerPricingRelations, customerContractsRelations, customerLeavePoliciesRelations, employeesRelations, employeeContractsRelations, employeeDocumentsRelations, leaveBalancesRelations, leaveRecordsRelations, adjustmentsRelations, reimbursementsRelations, payrollRunsRelations, payrollItemsRelations, invoicesRelations, invoiceItemsRelations, creditNoteApplicationsRelations, vendorsRelations, vendorBillsRelations, vendorBillItemsRelations, billInvoiceAllocationsRelations, salesLeadsRelations, salesActivitiesRelations, onboardingInvitesRelations, countrySocialInsuranceItemsRelations, countryGuideChaptersRelations, salaryBenchmarksRelations, quotationsRelations, salesDocumentsRelations, contractorsRelations, contractorInvoicesRelations, contractorInvoiceItemsRelations, contractorMilestonesRelations, contractorAdjustmentsRelations, workerUsersRelations, customerWalletsRelations, walletTransactionsRelations;
+var countriesConfigRelations, leaveTypesRelations, publicHolidaysRelations, customersRelations, customerContactsRelations, customerPricingRelations, customerContractsRelations, customerLeavePoliciesRelations, employeesRelations, employeeContractsRelations, employeeDocumentsRelations, leaveBalancesRelations, leaveRecordsRelations, adjustmentsRelations, reimbursementsRelations, payrollRunsRelations, payrollItemsRelations, invoicesRelations, invoiceItemsRelations, creditNoteApplicationsRelations, vendorsRelations, vendorBillsRelations, vendorBillItemsRelations, billInvoiceAllocationsRelations, salesLeadsRelations, salesActivitiesRelations, leadChangeLogsRelations, onboardingInvitesRelations, countrySocialInsuranceItemsRelations, countryGuideChaptersRelations, salaryBenchmarksRelations, quotationsRelations, salesDocumentsRelations, contractorsRelations, contractorInvoicesRelations, contractorInvoiceItemsRelations, contractorMilestonesRelations, contractorAdjustmentsRelations, workerUsersRelations, customerWalletsRelations, walletTransactionsRelations;
 var init_relations = __esm({
   "drizzle/relations.ts"() {
     "use strict";
@@ -2464,11 +2555,18 @@ var init_relations = __esm({
       }),
       activities: many(salesActivities),
       quotations: many(quotations),
-      documents: many(salesDocuments)
+      documents: many(salesDocuments),
+      changeLogs: many(leadChangeLogs)
     }));
     salesActivitiesRelations = relations(salesActivities, ({ one }) => ({
       lead: one(salesLeads, {
         fields: [salesActivities.leadId],
+        references: [salesLeads.id]
+      })
+    }));
+    leadChangeLogsRelations = relations(leadChangeLogs, ({ one }) => ({
+      lead: one(salesLeads, {
+        fields: [leadChangeLogs.leadId],
         references: [salesLeads.id]
       })
     }));
@@ -2909,7 +3007,10 @@ async function listEmployees(params = {}) {
       startDate: employees.startDate,
       customerId: employees.customerId,
       customerName: customers.companyName,
-      clientCode: customers.clientCode
+      clientCode: customers.clientCode,
+      serviceType: employees.serviceType,
+      baseSalary: employees.baseSalary,
+      salaryCurrency: employees.salaryCurrency
     }).from(employees).leftJoin(customers, eq3(employees.customerId, customers.id)).where(where).limit(pageSize).offset(offset).orderBy(desc3(employees.createdAt)),
     db.select({ count: count3() }).from(employees).where(where)
   ]);
@@ -3043,18 +3144,19 @@ async function deleteLeaveBalance(id) {
   if (!db) return;
   await db.delete(leaveBalances).where(eq3(leaveBalances.id, id));
 }
-async function initializeLeaveBalancesForEmployee(employeeId) {
+async function initializeLeaveBalancesForEmployee(employeeId, options) {
   const db = await getDb();
   if (!db) return { added: 0 };
   const employee = await getEmployeeById(employeeId);
   if (!employee) return { added: 0 };
+  const annualLeaveStartsAtZero = options?.annualLeaveStartsAtZero ?? false;
   const year = (/* @__PURE__ */ new Date()).getFullYear();
-  const { leaveTypes: leaveTypes2, customerLeavePolicies: customerLeavePolicies2, leaveBalances: leaveBalances3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+  const { leaveTypes: leaveTypes2, customerLeavePolicies: customerLeavePolicies3, leaveBalances: leaveBalances3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
   const countryLeaveTypes = await db.select().from(leaveTypes2).where(eq3(leaveTypes2.countryCode, employee.country));
   if (countryLeaveTypes.length === 0) return { added: 0 };
-  const customerPolicies = await db.select().from(customerLeavePolicies2).where(and2(
-    eq3(customerLeavePolicies2.customerId, employee.customerId),
-    eq3(customerLeavePolicies2.countryCode, employee.country)
+  const customerPolicies = await db.select().from(customerLeavePolicies3).where(and2(
+    eq3(customerLeavePolicies3.customerId, employee.customerId),
+    eq3(customerLeavePolicies3.countryCode, employee.country)
   ));
   const policyMap = new Map(
     customerPolicies.map((p) => [p.leaveTypeId, p])
@@ -3068,7 +3170,14 @@ async function initializeLeaveBalancesForEmployee(employeeId) {
   for (const lt3 of countryLeaveTypes) {
     if (existingTypeIds.has(lt3.id)) continue;
     const policy = policyMap.get(lt3.id);
-    const totalEntitlement = policy ? policy.annualEntitlement : lt3.annualEntitlement || 0;
+    const baseEntitlement = policy ? policy.annualEntitlement : lt3.annualEntitlement || 0;
+    const isAnnualLeave = lt3.leaveTypeName.toLowerCase().includes("annual");
+    let totalEntitlement;
+    if (isAnnualLeave && annualLeaveStartsAtZero) {
+      totalEntitlement = 0;
+    } else {
+      totalEntitlement = baseEntitlement ?? 0;
+    }
     let expiryDate = null;
     const rule = policy?.expiryRule || "year_end";
     if (rule === "year_end") {
@@ -3076,21 +3185,23 @@ async function initializeLeaveBalancesForEmployee(employeeId) {
     } else if (rule === "no_expiry") {
       expiryDate = null;
     }
-    const previousYear = year - 1;
-    const previousBalance = await db.select().from(leaveBalances3).where(and2(
-      eq3(leaveBalances3.employeeId, employeeId),
-      eq3(leaveBalances3.leaveTypeId, lt3.id),
-      eq3(leaveBalances3.year, previousYear)
-    )).limit(1);
     let carryOverAmount = 0;
-    if (previousBalance.length > 0) {
-      const prevRemaining = previousBalance[0].remaining;
-      const maxCarryOver = policy?.carryOverDays ?? 0;
-      if (prevRemaining > 0 && maxCarryOver > 0) {
-        carryOverAmount = Math.min(prevRemaining, maxCarryOver);
+    if (!(isAnnualLeave && annualLeaveStartsAtZero)) {
+      const previousYear = year - 1;
+      const previousBalance = await db.select().from(leaveBalances3).where(and2(
+        eq3(leaveBalances3.employeeId, employeeId),
+        eq3(leaveBalances3.leaveTypeId, lt3.id),
+        eq3(leaveBalances3.year, previousYear)
+      )).limit(1);
+      if (previousBalance.length > 0) {
+        const prevRemaining = previousBalance[0].remaining;
+        const maxCarryOver = policy?.carryOverDays ?? 0;
+        if (prevRemaining > 0 && maxCarryOver > 0) {
+          carryOverAmount = Math.min(prevRemaining, maxCarryOver);
+        }
       }
     }
-    const finalEntitlement = (totalEntitlement ?? 0) + carryOverAmount;
+    const finalEntitlement = totalEntitlement + carryOverAmount;
     await db.insert(leaveBalances3).values({
       employeeId,
       leaveTypeId: lt3.id,
@@ -3165,7 +3276,7 @@ async function deleteLeaveRecord(id) {
   if (!db) return;
   await db.delete(leaveRecords).where(eq3(leaveRecords.id, id));
 }
-async function lockSubmittedLeaveRecords(monthStr, countryCode) {
+async function lockSubmittedLeaveRecords(monthStr, countryCode, payrollRunId) {
   const db = await getDb();
   if (!db) return 0;
   const monthPrefix = monthStr.length === 7 ? monthStr : monthStr.substring(0, 7);
@@ -3182,7 +3293,11 @@ async function lockSubmittedLeaveRecords(monthStr, countryCode) {
     if (empIds.length === 0) return 0;
     conditions.push(or(...empIds.map((id) => eq3(leaveRecords.employeeId, id))));
   }
-  const result = await db.update(leaveRecords).set({ status: "locked" }).where(and2(...conditions));
+  const setData = { status: "locked" };
+  if (payrollRunId !== void 0) {
+    setData.payrollRunId = payrollRunId;
+  }
+  const result = await db.update(leaveRecords).set(setData).where(and2(...conditions));
   return result.changes || 0;
 }
 async function getActiveLeaveRecordsForDate(employeeId, date) {
@@ -3271,7 +3386,7 @@ var init_employeeService = __esm({
 });
 
 // server/services/db/financeService.ts
-import { eq as eq4, like as like4, count as count4, desc as desc4, and as and3, inArray as inArray2 } from "drizzle-orm";
+import { eq as eq4, like as like4, count as count4, desc as desc4, and as and3, inArray as inArray2, sum, sql } from "drizzle-orm";
 async function createInvoice(data) {
   const db = await getDb();
   if (!db) return [];
@@ -3298,7 +3413,7 @@ async function listInvoices(filters = {}, limit = 50, offset = 0) {
   if (filters.invoiceType) conditions.push(eq4(invoices.invoiceType, filters.invoiceType));
   if (filters.invoiceMonth) conditions.push(eq4(invoices.invoiceMonth, filters.invoiceMonth));
   if (filters.excludeCreditNotes) {
-    const { ne: ne4, and: and50 } = await import("drizzle-orm");
+    const { ne: ne4, and: and53 } = await import("drizzle-orm");
     conditions.push(ne4(invoices.invoiceType, "credit_note"));
     conditions.push(ne4(invoices.invoiceType, "deposit_refund"));
   }
@@ -3385,7 +3500,25 @@ async function deleteInvoiceItem(id) {
   await db.delete(invoiceItems).where(eq4(invoiceItems.id, id));
 }
 async function getInvoiceProfitAnalysis(invoiceId) {
-  return null;
+  const db = await getDb();
+  if (!db) return null;
+  const inv = await db.select().from(invoices).where(eq4(invoices.id, invoiceId)).limit(1);
+  if (!inv[0]) return null;
+  const revenue = parseFloat(String(inv[0].total || "0"));
+  const costAllocated = parseFloat(String(inv[0].costAllocated || "0"));
+  const profit = revenue - costAllocated;
+  const margin = revenue > 0 ? profit / revenue * 100 : 0;
+  const allocations = await listDetailedAllocationsByInvoice(invoiceId);
+  return {
+    invoiceId,
+    invoiceNumber: inv[0].invoiceNumber,
+    revenue,
+    costAllocated,
+    profit: Math.round(profit * 100) / 100,
+    profitMargin: Math.round(margin * 100) / 100,
+    isLoss: profit < 0,
+    allocations
+  };
 }
 async function createPayrollRun(data) {
   const db = await getDb();
@@ -3452,7 +3585,18 @@ async function deletePayrollItem(id) {
 async function listPayrollItemsByEmployee(employeeId) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(payrollItems).where(eq4(payrollItems.employeeId, employeeId));
+  const items = await db.select({
+    item: payrollItems,
+    run: {
+      id: payrollRuns.id,
+      payrollMonth: payrollRuns.payrollMonth,
+      countryCode: payrollRuns.countryCode,
+      currency: payrollRuns.currency,
+      status: payrollRuns.status,
+      approvedAt: payrollRuns.approvedAt
+    }
+  }).from(payrollItems).innerJoin(payrollRuns, eq4(payrollItems.payrollRunId, payrollRuns.id)).where(eq4(payrollItems.employeeId, employeeId)).orderBy(desc4(payrollRuns.payrollMonth));
+  return items;
 }
 async function createAdjustment(data) {
   const db = await getDb();
@@ -3509,6 +3653,7 @@ async function getSubmittedAdjustmentsForPayroll(countryCodeOrEmployeeId, monthS
       currency: adjustments.currency,
       status: adjustments.status,
       effectiveMonth: adjustments.effectiveMonth,
+      payrollRunId: adjustments.payrollRunId,
       createdAt: adjustments.createdAt
     }).from(adjustments).innerJoin(employees2, eq4(adjustments.employeeId, employees2.id)).where(and3(
       eq4(employees2.country, countryCodeOrEmployeeId),
@@ -3524,7 +3669,7 @@ async function getSubmittedAdjustmentsForPayroll(countryCodeOrEmployeeId, monthS
     ));
   }
 }
-async function lockSubmittedAdjustments(monthStr, countryCode) {
+async function lockSubmittedAdjustments(monthStr, countryCode, payrollRunId) {
   const db = await getDb();
   if (!db) return 0;
   const conditions = [
@@ -3538,7 +3683,11 @@ async function lockSubmittedAdjustments(monthStr, countryCode) {
     if (empIds.length === 0) return 0;
     conditions.push(inArray2(adjustments.employeeId, empIds));
   }
-  const result = await db.update(adjustments).set({ status: "locked" }).where(and3(...conditions));
+  const setData = { status: "locked" };
+  if (payrollRunId !== void 0) {
+    setData.payrollRunId = payrollRunId;
+  }
+  const result = await db.update(adjustments).set(setData).where(and3(...conditions));
   return result.changes || 0;
 }
 async function createReimbursement(data) {
@@ -3623,7 +3772,21 @@ async function deleteVendor(id) {
   await db.delete(vendors).where(eq4(vendors.id, id));
 }
 async function getVendorProfitAnalysis(vendorId) {
-  return null;
+  const db = await getDb();
+  if (!db) return { totalBilled: 0, totalAllocated: 0, totalUnallocated: 0, billCount: 0 };
+  const bills = await db.select().from(vendorBills).where(eq4(vendorBills.vendorId, vendorId));
+  let totalBilled = 0;
+  let totalAllocated = 0;
+  for (const bill of bills) {
+    totalBilled += parseFloat(String(bill.totalAmount || "0"));
+    totalAllocated += parseFloat(String(bill.allocatedAmount || "0"));
+  }
+  return {
+    totalBilled: Math.round(totalBilled * 100) / 100,
+    totalAllocated: Math.round(totalAllocated * 100) / 100,
+    totalUnallocated: Math.round((totalBilled - totalAllocated) * 100) / 100,
+    billCount: bills.length
+  };
 }
 async function createVendorBill(data) {
   const db = await getDb();
@@ -3692,8 +3855,9 @@ async function listVendorBillItemsByBill(billId) {
 }
 async function createBillInvoiceAllocation(data) {
   const db = await getDb();
-  if (!db) return;
-  await db.insert(billInvoiceAllocations).values(data);
+  if (!db) return void 0;
+  const result = await db.insert(billInvoiceAllocations).values(data).returning({ id: billInvoiceAllocations.id });
+  return result[0]?.id;
 }
 async function getBillInvoiceAllocationById(id) {
   const db = await getDb();
@@ -3729,22 +3893,241 @@ async function deleteAllocationsByBill(billId) {
 async function getBillAllocatedTotal(billId) {
   const db = await getDb();
   if (!db) return 0;
-  return 0;
+  const result = await db.select({ total: sum(billInvoiceAllocations.allocatedAmount) }).from(billInvoiceAllocations).where(eq4(billInvoiceAllocations.vendorBillId, billId));
+  return parseFloat(String(result[0]?.total || "0"));
 }
 async function getInvoiceCostAllocatedTotal(invoiceId) {
   const db = await getDb();
   if (!db) return 0;
-  return 0;
+  const result = await db.select({ total: sum(billInvoiceAllocations.allocatedAmount) }).from(billInvoiceAllocations).where(eq4(billInvoiceAllocations.invoiceId, invoiceId));
+  return parseFloat(String(result[0]?.total || "0"));
 }
 async function recalcBillAllocation(billId) {
+  const db = await getDb();
+  if (!db) return;
+  const allocated = await getBillAllocatedTotal(billId);
+  const bill = await getVendorBillById(billId);
+  if (!bill) return;
+  const totalAmount = parseFloat(String(bill.totalAmount));
+  const unallocated = Math.max(0, totalAmount - allocated);
+  await db.update(vendorBills).set({
+    allocatedAmount: String(allocated),
+    unallocatedAmount: String(unallocated)
+  }).where(eq4(vendorBills.id, billId));
 }
 async function recalcInvoiceCostAllocation(invoiceId) {
+  const db = await getDb();
+  if (!db) return;
+  const costAllocated = await getInvoiceCostAllocatedTotal(invoiceId);
+  await db.update(invoices).set({
+    costAllocated: String(costAllocated)
+  }).where(eq4(invoices.id, invoiceId));
 }
 async function listDetailedAllocationsByBill(billId) {
-  return [];
+  const db = await getDb();
+  if (!db) return [];
+  const { employees: employees2, invoices: inv, vendorBillItems: vbi } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+  const rows = await db.select({
+    id: billInvoiceAllocations.id,
+    vendorBillId: billInvoiceAllocations.vendorBillId,
+    vendorBillItemId: billInvoiceAllocations.vendorBillItemId,
+    invoiceId: billInvoiceAllocations.invoiceId,
+    employeeId: billInvoiceAllocations.employeeId,
+    allocatedAmount: billInvoiceAllocations.allocatedAmount,
+    description: billInvoiceAllocations.description,
+    allocatedBy: billInvoiceAllocations.allocatedBy,
+    createdAt: billInvoiceAllocations.createdAt,
+    employeeName: sql`${employees2.firstName} || ' ' || ${employees2.lastName}`,
+    employeeCode: employees2.employeeCode,
+    invoiceNumber: inv.invoiceNumber,
+    invoiceTotal: inv.total,
+    invoiceCurrency: inv.currency
+  }).from(billInvoiceAllocations).leftJoin(employees2, eq4(billInvoiceAllocations.employeeId, employees2.id)).leftJoin(inv, eq4(billInvoiceAllocations.invoiceId, inv.id)).where(eq4(billInvoiceAllocations.vendorBillId, billId)).orderBy(desc4(billInvoiceAllocations.createdAt));
+  return rows;
 }
 async function listDetailedAllocationsByInvoice(invoiceId) {
-  return [];
+  const db = await getDb();
+  if (!db) return [];
+  const { employees: employees2, vendorBills: vb } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+  const rows = await db.select({
+    id: billInvoiceAllocations.id,
+    vendorBillId: billInvoiceAllocations.vendorBillId,
+    vendorBillItemId: billInvoiceAllocations.vendorBillItemId,
+    invoiceId: billInvoiceAllocations.invoiceId,
+    employeeId: billInvoiceAllocations.employeeId,
+    allocatedAmount: billInvoiceAllocations.allocatedAmount,
+    description: billInvoiceAllocations.description,
+    allocatedBy: billInvoiceAllocations.allocatedBy,
+    createdAt: billInvoiceAllocations.createdAt,
+    employeeName: sql`${employees2.firstName} || ' ' || ${employees2.lastName}`,
+    employeeCode: employees2.employeeCode,
+    billNumber: vb.billNumber,
+    billTotal: vb.totalAmount,
+    billCurrency: vb.currency,
+    vendorId: vb.vendorId
+  }).from(billInvoiceAllocations).leftJoin(employees2, eq4(billInvoiceAllocations.employeeId, employees2.id)).leftJoin(vb, eq4(billInvoiceAllocations.vendorBillId, vb.id)).where(eq4(billInvoiceAllocations.invoiceId, invoiceId)).orderBy(desc4(billInvoiceAllocations.createdAt));
+  return rows;
+}
+async function getSubmittedReimbursementsForPayroll(countryCodeOrEmployeeId, monthStr, statuses = ["admin_approved"]) {
+  const db = await getDb();
+  if (!db) return [];
+  if (typeof countryCodeOrEmployeeId === "string") {
+    const { employees: employees2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+    const results = await db.select({
+      id: reimbursements.id,
+      employeeId: reimbursements.employeeId,
+      customerId: reimbursements.customerId,
+      category: reimbursements.category,
+      description: reimbursements.description,
+      amount: reimbursements.amount,
+      currency: reimbursements.currency,
+      status: reimbursements.status,
+      effectiveMonth: reimbursements.effectiveMonth,
+      payrollRunId: reimbursements.payrollRunId,
+      createdAt: reimbursements.createdAt
+    }).from(reimbursements).innerJoin(employees2, eq4(reimbursements.employeeId, employees2.id)).where(and3(
+      eq4(employees2.country, countryCodeOrEmployeeId),
+      eq4(reimbursements.effectiveMonth, monthStr),
+      inArray2(reimbursements.status, statuses)
+    ));
+    return results;
+  } else {
+    return await db.select().from(reimbursements).where(and3(
+      eq4(reimbursements.employeeId, countryCodeOrEmployeeId),
+      eq4(reimbursements.effectiveMonth, monthStr),
+      inArray2(reimbursements.status, statuses)
+    ));
+  }
+}
+async function lockSubmittedReimbursements(monthStr, countryCode, payrollRunId) {
+  const db = await getDb();
+  if (!db) return 0;
+  const conditions = [
+    eq4(reimbursements.effectiveMonth, monthStr),
+    eq4(reimbursements.status, "admin_approved")
+  ];
+  if (countryCode) {
+    const { employees: employees2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+    const empRows = await db.select({ id: employees2.id }).from(employees2).where(eq4(employees2.country, countryCode));
+    const empIds = empRows.map((e) => e.id);
+    if (empIds.length === 0) return 0;
+    conditions.push(inArray2(reimbursements.employeeId, empIds));
+  }
+  const setData = { status: "locked" };
+  if (payrollRunId !== void 0) {
+    setData.payrollRunId = payrollRunId;
+  }
+  const result = await db.update(reimbursements).set(setData).where(and3(...conditions));
+  return result.changes || 0;
+}
+async function getEmployeeMonthlyRevenue(employeeId, serviceMonth) {
+  const db = await getDb();
+  if (!db) return { total: 0, breakdown: [] };
+  const { ne: ne4 } = await import("drizzle-orm");
+  const monthInvoices = await db.select({ id: invoices.id }).from(invoices).where(
+    and3(
+      sql`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth}`,
+      ne4(invoices.invoiceType, "credit_note"),
+      ne4(invoices.invoiceType, "deposit_refund")
+    )
+  );
+  if (monthInvoices.length === 0) return { total: 0, breakdown: [] };
+  const invoiceIds = monthInvoices.map((i) => i.id);
+  const items = await db.select({
+    itemType: invoiceItems.itemType,
+    amount: invoiceItems.amount,
+    invoiceId: invoiceItems.invoiceId
+  }).from(invoiceItems).where(
+    and3(
+      eq4(invoiceItems.employeeId, employeeId),
+      inArray2(invoiceItems.invoiceId, invoiceIds),
+      ne4(invoiceItems.itemType, "deposit")
+    )
+  );
+  const breakdownMap = {};
+  let total = 0;
+  for (const item of items) {
+    const amount = parseFloat(String(item.amount || "0"));
+    total += amount;
+    const type = item.itemType || "other";
+    breakdownMap[type] = (breakdownMap[type] || 0) + amount;
+  }
+  const breakdown = Object.entries(breakdownMap).map(([itemType, amount]) => ({
+    itemType,
+    amount: Math.round(amount * 100) / 100
+  }));
+  return {
+    total: Math.round(total * 100) / 100,
+    breakdown
+  };
+}
+async function getAllEmployeesMonthlyRevenue(serviceMonth) {
+  const db = await getDb();
+  if (!db) return [];
+  const { employees: employees2, customers: customers3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+  const { ne: ne4 } = await import("drizzle-orm");
+  const monthInvoices = await db.select({ id: invoices.id }).from(invoices).where(
+    and3(
+      sql`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth}`,
+      ne4(invoices.invoiceType, "credit_note"),
+      ne4(invoices.invoiceType, "deposit_refund")
+    )
+  );
+  if (monthInvoices.length === 0) return [];
+  const invoiceIds = monthInvoices.map((i) => i.id);
+  const items = await db.select({
+    employeeId: invoiceItems.employeeId,
+    itemType: invoiceItems.itemType,
+    amount: invoiceItems.amount
+  }).from(invoiceItems).where(
+    and3(
+      inArray2(invoiceItems.invoiceId, invoiceIds),
+      ne4(invoiceItems.itemType, "deposit")
+    )
+  );
+  const empMap = {};
+  for (const item of items) {
+    if (!item.employeeId) continue;
+    if (!empMap[item.employeeId]) {
+      empMap[item.employeeId] = { total: 0, breakdown: {} };
+    }
+    const amount = parseFloat(String(item.amount || "0"));
+    empMap[item.employeeId].total += amount;
+    const type = item.itemType || "other";
+    empMap[item.employeeId].breakdown[type] = (empMap[item.employeeId].breakdown[type] || 0) + amount;
+  }
+  const empIds = Object.keys(empMap).map(Number);
+  if (empIds.length === 0) return [];
+  const empRows = await db.select({
+    id: employees2.id,
+    employeeCode: employees2.employeeCode,
+    firstName: employees2.firstName,
+    lastName: employees2.lastName,
+    customerId: employees2.customerId,
+    country: employees2.country
+  }).from(employees2).where(inArray2(employees2.id, empIds));
+  const customerIds = Array.from(new Set(empRows.map((e) => e.customerId)));
+  const custRows = customerIds.length > 0 ? await db.select({ id: customers3.id, companyName: customers3.companyName }).from(customers3).where(inArray2(customers3.id, customerIds)) : [];
+  const custMap = {};
+  for (const c of custRows) {
+    custMap[c.id] = c.companyName;
+  }
+  return empRows.map((emp) => {
+    const data = empMap[emp.id];
+    return {
+      employeeId: emp.id,
+      employeeCode: emp.employeeCode,
+      employeeName: `${emp.firstName} ${emp.lastName}`,
+      customerId: emp.customerId,
+      customerName: custMap[emp.customerId] || "Unknown",
+      country: emp.country,
+      total: Math.round(data.total * 100) / 100,
+      breakdown: Object.entries(data.breakdown).map(([itemType, amount]) => ({
+        itemType,
+        amount: Math.round(amount * 100) / 100
+      }))
+    };
+  });
 }
 var init_financeService = __esm({
   "server/services/db/financeService.ts"() {
@@ -3755,7 +4138,7 @@ var init_financeService = __esm({
 });
 
 // server/services/db/commonService.ts
-import { eq as eq5, desc as desc5, count as count5, like as like5, sql, and as and4 } from "drizzle-orm";
+import { eq as eq5, desc as desc5, count as count5, like as like5, sql as sql2, and as and4 } from "drizzle-orm";
 async function listCountriesConfig() {
   const db = await getDb();
   if (!db) return [];
@@ -3948,7 +4331,7 @@ async function listSalesLeads(params = {}) {
   const conditions = [];
   if (search) conditions.push(like5(salesLeads.companyName, `%${search}%`));
   if (status) {
-    conditions.push(sql`trim(lower(${salesLeads.status})) = trim(lower(${status}))`);
+    conditions.push(sql2`trim(lower(${salesLeads.status})) = trim(lower(${status}))`);
   }
   if (assignedTo) conditions.push(eq5(salesLeads.assignedTo, assignedTo));
   const where = conditions.length > 0 ? and4(...conditions) : void 0;
@@ -3978,6 +4361,17 @@ async function listSalesActivities(leadId) {
   if (!db) return [];
   return await db.select().from(salesActivities).where(eq5(salesActivities.leadId, leadId)).orderBy(desc5(salesActivities.activityDate));
 }
+async function createLeadChangeLog(data) {
+  const db = await getDb();
+  if (!db) return;
+  const now = Date.now();
+  await db.run(sql2`INSERT INTO lead_change_logs ("leadId", "userId", "userName", "changeType", "fieldName", "oldValue", "newValue", "description", "createdAt") VALUES (${data.leadId}, ${data.userId ?? null}, ${data.userName ?? null}, ${data.changeType}, ${data.fieldName ?? null}, ${data.oldValue ?? null}, ${data.newValue ?? null}, ${data.description ?? null}, ${now})`);
+}
+async function listLeadChangeLogs(leadId) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(leadChangeLogs).where(eq5(leadChangeLogs.leadId, leadId)).orderBy(desc5(leadChangeLogs.createdAt));
+}
 async function deleteSalesActivity(id) {
   const db = await getDb();
   if (!db) return;
@@ -3993,7 +4387,7 @@ var init_commonService = __esm({
 });
 
 // server/services/db/contractorService.ts
-import { eq as eq6, like as like6, count as count6, desc as desc6, and as and5, or as or2, getTableColumns as getTableColumns2, sql as sql2 } from "drizzle-orm";
+import { eq as eq6, like as like6, count as count6, desc as desc6, and as and5, or as or2, getTableColumns as getTableColumns2, sql as sql3, isNull } from "drizzle-orm";
 function calculateNextPaymentDate(contractor) {
   if (contractor.status !== "active") return null;
   if (contractor.paymentFrequency === "fixed") return null;
@@ -4067,7 +4461,7 @@ async function listContractorMilestones(contractorId) {
   return await db.select({
     ...getTableColumns2(contractorMilestones),
     approverName: users.name
-  }).from(contractorMilestones).leftJoin(users, eq6(contractorMilestones.approvedBy, users.id)).where(eq6(contractorMilestones.contractorId, contractorId)).orderBy(desc6(contractorMilestones.createdAt));
+  }).from(contractorMilestones).leftJoin(users, eq6(contractorMilestones.adminApprovedBy, users.id)).where(eq6(contractorMilestones.contractorId, contractorId)).orderBy(desc6(contractorMilestones.createdAt));
 }
 async function listAllContractorMilestones(filters = {}) {
   const db = await getDb();
@@ -4183,7 +4577,7 @@ async function listAllContractorInvoices(filters = {}, limit = 50, offset = 0) {
       contractorId: contractorInvoices.contractorId,
       customerId: contractorInvoices.customerId,
       customerName: customers.companyName,
-      contractorName: sql2`${contractors.firstName} || ' ' || ${contractors.lastName}`,
+      contractorName: sql3`${contractors.firstName} || ' ' || ${contractors.lastName}`,
       status: contractorInvoices.status,
       periodStart: contractorInvoices.periodStart,
       periodEnd: contractorInvoices.periodEnd,
@@ -4207,6 +4601,88 @@ async function getContractorInvoiceById(id) {
   if (result.length === 0) return void 0;
   const items = await db.select().from(contractorInvoiceItems).where(eq6(contractorInvoiceItems.invoiceId, id));
   return { ...result[0], items };
+}
+async function lockContractorAdjustments(monthStr) {
+  const db = await getDb();
+  if (!db) return 0;
+  const conditions = [
+    eq6(contractorAdjustments.effectiveMonth, monthStr),
+    eq6(contractorAdjustments.status, "admin_approved"),
+    isNull(contractorAdjustments.invoiceId)
+  ];
+  const result = await db.update(contractorAdjustments).set({ status: "locked" }).where(and5(...conditions));
+  return result.changes || 0;
+}
+async function lockContractorMilestones(monthStr) {
+  const db = await getDb();
+  if (!db) return 0;
+  const conditions = [
+    eq6(contractorMilestones.effectiveMonth, monthStr),
+    eq6(contractorMilestones.status, "admin_approved"),
+    isNull(contractorMilestones.invoiceId)
+  ];
+  const result = await db.update(contractorMilestones).set({ status: "locked" }).where(and5(...conditions));
+  return result.changes || 0;
+}
+async function getLockedContractorAdjustments(monthStr) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select({
+    ...getTableColumns2(contractorAdjustments),
+    contractorFirstName: contractors.firstName,
+    contractorLastName: contractors.lastName,
+    contractorCurrency: contractors.currency,
+    contractorPaymentFrequency: contractors.paymentFrequency,
+    customerId: contractors.customerId
+  }).from(contractorAdjustments).innerJoin(contractors, eq6(contractorAdjustments.contractorId, contractors.id)).where(
+    and5(
+      eq6(contractorAdjustments.effectiveMonth, monthStr),
+      eq6(contractorAdjustments.status, "locked"),
+      isNull(contractorAdjustments.invoiceId)
+    )
+  );
+}
+async function getLockedContractorMilestones(monthStr) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select({
+    ...getTableColumns2(contractorMilestones),
+    contractorFirstName: contractors.firstName,
+    contractorLastName: contractors.lastName,
+    contractorCurrency: contractors.currency,
+    contractorPaymentFrequency: contractors.paymentFrequency,
+    customerId: contractors.customerId
+  }).from(contractorMilestones).innerJoin(contractors, eq6(contractorMilestones.contractorId, contractors.id)).where(
+    and5(
+      eq6(contractorMilestones.effectiveMonth, monthStr),
+      eq6(contractorMilestones.status, "locked"),
+      isNull(contractorMilestones.invoiceId)
+    )
+  );
+}
+async function getActiveContractorsByFrequency(paymentFrequency) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select({
+    ...getTableColumns2(contractors),
+    customerName: customers.companyName
+  }).from(contractors).leftJoin(customers, eq6(contractors.customerId, customers.id)).where(
+    and5(
+      eq6(contractors.status, "active"),
+      eq6(contractors.paymentFrequency, paymentFrequency)
+    )
+  );
+}
+async function markContractorInvoicesPaidByClientInvoice(clientInvoiceId) {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.update(contractorInvoices).set({ status: "paid" }).where(
+    and5(
+      eq6(contractorInvoices.clientInvoiceId, clientInvoiceId),
+      eq6(contractorInvoices.status, "approved")
+    )
+  );
+  return result.changes || 0;
 }
 var init_contractorService = __esm({
   "server/services/db/contractorService.ts"() {
@@ -4250,6 +4726,7 @@ __export(db_exports, {
   createEmployeeDocument: () => createEmployeeDocument,
   createInvoice: () => createInvoice,
   createInvoiceItem: () => createInvoiceItem,
+  createLeadChangeLog: () => createLeadChangeLog,
   createLeaveBalance: () => createLeaveBalance,
   createLeaveRecord: () => createLeaveRecord,
   createLeaveType: () => createLeaveType,
@@ -4288,10 +4765,12 @@ __export(db_exports, {
   deleteVendorBill: () => deleteVendorBill,
   deleteVendorBillItem: () => deleteVendorBillItem,
   findPayrollRunByCountryMonth: () => findPayrollRunByCountryMonth,
+  getActiveContractorsByFrequency: () => getActiveContractorsByFrequency,
   getActiveEmployeesForPayroll: () => getActiveEmployeesForPayroll,
   getActiveLeaveRecordsForDate: () => getActiveLeaveRecordsForDate,
   getAdjustmentById: () => getAdjustmentById,
   getAllActiveLeaveRecordsForDate: () => getAllActiveLeaveRecordsForDate,
+  getAllEmployeesMonthlyRevenue: () => getAllEmployeesMonthlyRevenue,
   getBillAllocatedTotal: () => getBillAllocatedTotal,
   getBillInvoiceAllocationById: () => getBillInvoiceAllocationById,
   getBillingEntityById: () => getBillingEntityById,
@@ -4309,6 +4788,7 @@ __export(db_exports, {
   getEmployeeCountByCountry: () => getEmployeeCountByCountry,
   getEmployeeCountByStatus: () => getEmployeeCountByStatus,
   getEmployeeDocumentById: () => getEmployeeDocumentById,
+  getEmployeeMonthlyRevenue: () => getEmployeeMonthlyRevenue,
   getEmployeesForPayrollMonth: () => getEmployeesForPayrollMonth,
   getInvoiceById: () => getInvoiceById,
   getInvoiceByNumber: () => getInvoiceByNumber,
@@ -4316,6 +4796,8 @@ __export(db_exports, {
   getInvoiceProfitAnalysis: () => getInvoiceProfitAnalysis,
   getLeaveRecordById: () => getLeaveRecordById,
   getLeaveTypeById: () => getLeaveTypeById,
+  getLockedContractorAdjustments: () => getLockedContractorAdjustments,
+  getLockedContractorMilestones: () => getLockedContractorMilestones,
   getOnLeaveEmployeesWithExpiredLeave: () => getOnLeaveEmployeesWithExpiredLeave,
   getPayrollItemById: () => getPayrollItemById,
   getPayrollRunById: () => getPayrollRunById,
@@ -4323,6 +4805,7 @@ __export(db_exports, {
   getRelatedInvoices: () => getRelatedInvoices,
   getSalesLeadById: () => getSalesLeadById,
   getSubmittedAdjustmentsForPayroll: () => getSubmittedAdjustmentsForPayroll,
+  getSubmittedReimbursementsForPayroll: () => getSubmittedReimbursementsForPayroll,
   getSubmittedUnpaidLeaveForPayroll: () => getSubmittedUnpaidLeaveForPayroll,
   getSystemConfig: () => getSystemConfig,
   getUserByEmail: () => getUserByEmail,
@@ -4360,6 +4843,7 @@ __export(db_exports, {
   listEmployees: () => listEmployees,
   listInvoiceItemsByInvoice: () => listInvoiceItemsByInvoice,
   listInvoices: () => listInvoices,
+  listLeadChangeLogs: () => listLeadChangeLogs,
   listLeaveBalances: () => listLeaveBalances,
   listLeaveRecords: () => listLeaveRecords,
   listLeaveTypesByCountry: () => listLeaveTypesByCountry,
@@ -4375,9 +4859,13 @@ __export(db_exports, {
   listVendorBillItemsByBill: () => listVendorBillItemsByBill,
   listVendorBills: () => listVendorBills,
   listVendors: () => listVendors,
+  lockContractorAdjustments: () => lockContractorAdjustments,
+  lockContractorMilestones: () => lockContractorMilestones,
   lockSubmittedAdjustments: () => lockSubmittedAdjustments,
   lockSubmittedLeaveRecords: () => lockSubmittedLeaveRecords,
+  lockSubmittedReimbursements: () => lockSubmittedReimbursements,
   logAuditAction: () => logAuditAction,
+  markContractorInvoicesPaidByClientInvoice: () => markContractorInvoicesPaidByClientInvoice,
   recalcBillAllocation: () => recalcBillAllocation,
   recalcInvoiceCostAllocation: () => recalcInvoiceCostAllocation,
   setSystemConfig: () => setSystemConfig,
@@ -4728,6 +5216,669 @@ var init_portalAuth = __esm({
     JWT_AUDIENCE2 = "gea-portal-client";
     BCRYPT_ROUNDS2 = 12;
     RESET_TOKEN_EXPIRY_HOURS = 1;
+  }
+});
+
+// server/services/knowledgeInternalGeneratorService.ts
+var knowledgeInternalGeneratorService_exports = {};
+__export(knowledgeInternalGeneratorService_exports, {
+  generateKnowledgeFromInternalData: () => generateKnowledgeFromInternalData
+});
+import * as fs2 from "fs";
+import * as path2 from "path";
+import { eq as eq30, and as and25, asc } from "drizzle-orm";
+async function loadCountryGuideChapters(db, countryCode) {
+  const dbChapters = await db.select().from(countryGuideChapters).where(
+    and25(
+      eq30(countryGuideChapters.countryCode, countryCode),
+      eq30(countryGuideChapters.status, "published")
+    )
+  ).orderBy(asc(countryGuideChapters.sortOrder));
+  if (dbChapters.length > 0) {
+    return new Map(
+      dbChapters.map((ch) => [
+        ch.chapterKey,
+        {
+          countryCode: ch.countryCode,
+          chapterKey: ch.chapterKey,
+          titleEn: ch.titleEn,
+          titleZh: ch.titleZh,
+          contentEn: ch.contentEn,
+          contentZh: ch.contentZh
+        }
+      ])
+    );
+  }
+  if (!_jsonGuideData) {
+    _jsonGuideData = loadJsonGuideData();
+  }
+  const jsonChapters = _jsonGuideData.get(countryCode) || [];
+  return new Map(
+    jsonChapters.map((ch) => [
+      ch.chapterKey,
+      {
+        countryCode: ch.countryCode,
+        chapterKey: ch.chapterKey,
+        titleEn: ch.titleEn,
+        titleZh: ch.titleZh,
+        contentEn: ch.contentEn,
+        contentZh: ch.contentZh
+      }
+    ])
+  );
+}
+function loadJsonGuideData() {
+  const result = /* @__PURE__ */ new Map();
+  let jsonPath = path2.resolve(process.cwd(), "seed-data/country_guide_data.json");
+  if (!fs2.existsSync(jsonPath)) {
+    jsonPath = path2.resolve(process.cwd(), "data/country_guide_data.json");
+  }
+  if (!fs2.existsSync(jsonPath)) {
+    console.warn(`[KnowledgeGenerator] country_guide_data.json not found`);
+    return result;
+  }
+  try {
+    const rawData = JSON.parse(fs2.readFileSync(jsonPath, "utf-8"));
+    for (const item of rawData) {
+      const list = result.get(item.countryCode) || [];
+      list.push(item);
+      result.set(item.countryCode, list);
+    }
+    console.log(`[KnowledgeGenerator] Loaded ${rawData.length} chapters from JSON for ${result.size} countries`);
+  } catch (err) {
+    console.error("[KnowledgeGenerator] Failed to load JSON guide data:", err);
+  }
+  return result;
+}
+function generateCountryOverviewArticle(countryCode, chapter, countryName) {
+  return [
+    {
+      title: `${countryName} Employment Guide: Country Overview`,
+      summary: `Comprehensive overview of ${countryName} for international employers, covering political system, economy, business culture, and key employment facts.`,
+      content: chapter.contentEn,
+      topic: "general",
+      language: "en",
+      category: "guide",
+      metadata: {
+        countryCode,
+        sourceType: "internal_country_guide",
+        chapterKey: "overview",
+        version: "2026-Q1"
+      }
+    },
+    {
+      title: `${countryName}\u96C7\u4F63\u6307\u5357\uFF1A\u56FD\u5BB6\u6982\u89C8`,
+      summary: `\u9762\u5411\u56FD\u9645\u96C7\u4E3B\u7684${countryName}\u7EFC\u5408\u6982\u89C8\uFF0C\u6DB5\u76D6\u653F\u6CBB\u4F53\u5236\u3001\u7ECF\u6D4E\u6982\u51B5\u3001\u5546\u4E1A\u6587\u5316\u53CA\u5173\u952E\u96C7\u4F63\u4FE1\u606F\u3002`,
+      content: chapter.contentZh,
+      topic: "general",
+      language: "zh",
+      category: "guide",
+      metadata: {
+        countryCode,
+        sourceType: "internal_country_guide",
+        chapterKey: "overview",
+        version: "2026-Q1"
+      }
+    }
+  ];
+}
+function generateHiringArticle(countryCode, chapter, countryName) {
+  return [
+    {
+      title: `Hiring in ${countryName}: Employment Contracts, Work Permits & Onboarding`,
+      summary: `Essential guide to hiring employees in ${countryName}, covering contract requirements, probation periods, work permits, and anti-discrimination laws.`,
+      content: chapter.contentEn,
+      topic: "onboarding",
+      language: "en",
+      category: "guide",
+      metadata: { countryCode, sourceType: "internal_country_guide", chapterKey: "hiring", version: "2026-Q1" }
+    },
+    {
+      title: `${countryName}\u62DB\u8058\u6307\u5357\uFF1A\u52B3\u52A8\u5408\u540C\u3001\u5DE5\u4F5C\u8BB8\u53EF\u4E0E\u5165\u804C\u6D41\u7A0B`,
+      summary: `\u5728${countryName}\u96C7\u4F63\u5458\u5DE5\u7684\u5FC5\u5907\u6307\u5357\uFF0C\u6DB5\u76D6\u5408\u540C\u8981\u6C42\u3001\u8BD5\u7528\u671F\u3001\u5DE5\u4F5C\u8BB8\u53EF\u53CA\u53CD\u6B67\u89C6\u6CD5\u5F8B\u3002`,
+      content: chapter.contentZh,
+      topic: "onboarding",
+      language: "zh",
+      category: "guide",
+      metadata: { countryCode, sourceType: "internal_country_guide", chapterKey: "hiring", version: "2026-Q1" }
+    }
+  ];
+}
+function generateCompensationArticle(countryCode, chapter, countryName) {
+  return [
+    {
+      title: `${countryName} Compensation Guide: Salary, Taxes & Employer Obligations`,
+      summary: `Detailed guide to compensation structures in ${countryName}, including minimum wage, income tax brackets, employer contributions, and mandatory bonuses.`,
+      content: chapter.contentEn,
+      topic: "payroll",
+      language: "en",
+      category: "guide",
+      metadata: { countryCode, sourceType: "internal_country_guide", chapterKey: "compensation", version: "2026-Q1" }
+    },
+    {
+      title: `${countryName}\u85AA\u916C\u6307\u5357\uFF1A\u5DE5\u8D44\u7ED3\u6784\u3001\u7A0E\u52A1\u4E0E\u96C7\u4E3B\u4E49\u52A1`,
+      summary: `${countryName}\u85AA\u916C\u7ED3\u6784\u8BE6\u7EC6\u6307\u5357\uFF0C\u5305\u62EC\u6700\u4F4E\u5DE5\u8D44\u3001\u4E2A\u4EBA\u6240\u5F97\u7A0E\u7A0E\u7387\u3001\u96C7\u4E3B\u7F34\u8D39\u53CA\u6CD5\u5B9A\u5956\u91D1\u3002`,
+      content: chapter.contentZh,
+      topic: "payroll",
+      language: "zh",
+      category: "guide",
+      metadata: { countryCode, sourceType: "internal_country_guide", chapterKey: "compensation", version: "2026-Q1" }
+    }
+  ];
+}
+function generateTerminationArticle(countryCode, chapter, countryName) {
+  return [
+    {
+      title: `Termination & Compliance in ${countryName}: Notice Periods, Severance & Legal Requirements`,
+      summary: `Guide to employee termination in ${countryName}, covering grounds for dismissal, notice periods, severance pay, unfair dismissal protections, and dispute resolution.`,
+      content: chapter.contentEn,
+      topic: "compliance",
+      language: "en",
+      category: "guide",
+      metadata: { countryCode, sourceType: "internal_country_guide", chapterKey: "termination", version: "2026-Q1" }
+    },
+    {
+      title: `${countryName}\u7EC8\u6B62\u4E0E\u5408\u89C4\u6307\u5357\uFF1A\u901A\u77E5\u671F\u3001\u9063\u6563\u8D39\u4E0E\u6CD5\u5F8B\u8981\u6C42`,
+      summary: `${countryName}\u5458\u5DE5\u7EC8\u6B62\u6307\u5357\uFF0C\u6DB5\u76D6\u89E3\u96C7\u7406\u7531\u3001\u901A\u77E5\u671F\u3001\u9063\u6563\u8D39\u3001\u4E0D\u5F53\u89E3\u96C7\u4FDD\u62A4\u53CA\u4E89\u8BAE\u89E3\u51B3\u673A\u5236\u3002`,
+      content: chapter.contentZh,
+      topic: "compliance",
+      language: "zh",
+      category: "guide",
+      metadata: { countryCode, sourceType: "internal_country_guide", chapterKey: "termination", version: "2026-Q1" }
+    }
+  ];
+}
+function generateWorkingConditionsArticle(countryCode, chapter, countryName) {
+  return [
+    {
+      title: `Working Conditions in ${countryName}: Hours, Overtime & Leave Policies`,
+      summary: `Comprehensive guide to working conditions in ${countryName}, covering standard hours, overtime regulations, annual leave, public holidays, and statutory leave types.`,
+      content: chapter.contentEn,
+      topic: "leave",
+      language: "en",
+      category: "guide",
+      metadata: { countryCode, sourceType: "internal_country_guide", chapterKey: "working-conditions", version: "2026-Q1" }
+    },
+    {
+      title: `${countryName}\u5DE5\u4F5C\u6761\u4EF6\u6307\u5357\uFF1A\u5DE5\u65F6\u3001\u52A0\u73ED\u4E0E\u5047\u671F\u653F\u7B56`,
+      summary: `${countryName}\u5DE5\u4F5C\u6761\u4EF6\u7EFC\u5408\u6307\u5357\uFF0C\u6DB5\u76D6\u6807\u51C6\u5DE5\u65F6\u3001\u52A0\u73ED\u89C4\u5B9A\u3001\u5E74\u5047\u3001\u6CD5\u5B9A\u8282\u5047\u65E5\u53CA\u5404\u7C7B\u6CD5\u5B9A\u5047\u671F\u3002`,
+      content: chapter.contentZh,
+      topic: "leave",
+      language: "zh",
+      category: "guide",
+      metadata: { countryCode, sourceType: "internal_country_guide", chapterKey: "working-conditions", version: "2026-Q1" }
+    }
+  ];
+}
+function generateSocialInsuranceArticle(countryCode, items, countryName) {
+  if (items.length === 0) return [];
+  let contentEn = `## Social Insurance & Employer Costs in ${countryName}
+
+`;
+  contentEn += `The following table summarizes the mandatory social insurance contributions for employers and employees in ${countryName}.
+
+`;
+  contentEn += `| Contribution Type | Category | Employer Rate | Employee Rate | Cap Type |
+`;
+  contentEn += `|------------------|----------|--------------|--------------|----------|
+`;
+  let totalEmployer = 0;
+  let totalEmployee = 0;
+  for (const item of items) {
+    const employerRate = parseFloat(item.rateEmployer) * 100;
+    const employeeRate = parseFloat(item.rateEmployee) * 100;
+    totalEmployer += employerRate;
+    totalEmployee += employeeRate;
+    contentEn += `| ${item.itemNameEn} | ${item.category.replace(/_/g, " ")} | ${employerRate.toFixed(2)}% | ${employeeRate.toFixed(2)}% | ${item.capType.replace(/_/g, " ")} |
+`;
+  }
+  contentEn += `| **Total** | | **${totalEmployer.toFixed(2)}%** | **${totalEmployee.toFixed(2)}%** | |
+
+`;
+  const itemsWithNotes = items.filter((i) => i.notes);
+  if (itemsWithNotes.length > 0) {
+    contentEn += `### Key Notes
+
+`;
+    for (const item of itemsWithNotes) {
+      contentEn += `- **${item.itemNameEn}**: ${item.notes}
+`;
+    }
+    contentEn += "\n";
+  }
+  const itemsWithRefs = items.filter((i) => i.legalReference);
+  if (itemsWithRefs.length > 0) {
+    contentEn += `### Legal References
+
+`;
+    for (const item of itemsWithRefs) {
+      contentEn += `- [${item.itemNameEn}](${item.legalReference})
+`;
+    }
+    contentEn += "\n";
+  }
+  contentEn += `> Data effective for year ${items[0]?.effectiveYear || 2025}. Rates may change annually. Always verify with local authorities.
+`;
+  let contentZh = `## ${countryName}\u793E\u4F1A\u4FDD\u9669\u4E0E\u96C7\u4E3B\u6210\u672C
+
+`;
+  contentZh += `\u4EE5\u4E0B\u8868\u683C\u6C47\u603B\u4E86${countryName}\u96C7\u4E3B\u548C\u96C7\u5458\u7684\u5F3A\u5236\u6027\u793E\u4F1A\u4FDD\u9669\u7F34\u8D39\u3002
+
+`;
+  contentZh += `| \u7F34\u8D39\u7C7B\u578B | \u7C7B\u522B | \u96C7\u4E3B\u8D39\u7387 | \u96C7\u5458\u8D39\u7387 | \u5C01\u9876\u7C7B\u578B |
+`;
+  contentZh += `|---------|------|---------|---------|--------|
+`;
+  const categoryZhMap = {
+    social_insurance: "\u793E\u4F1A\u4FDD\u9669",
+    health_insurance: "\u533B\u7597\u4FDD\u9669",
+    unemployment: "\u5931\u4E1A\u4FDD\u9669",
+    pension: "\u517B\u8001\u91D1",
+    work_injury: "\u5DE5\u4F24\u4FDD\u9669",
+    housing_fund: "\u4F4F\u623F\u516C\u79EF\u91D1",
+    trade_union: "\u5DE5\u4F1A",
+    other_mandatory: "\u5176\u4ED6\u5F3A\u5236"
+  };
+  const capTypeZhMap = {
+    none: "\u65E0\u4E0A\u9650",
+    fixed_amount: "\u56FA\u5B9A\u91D1\u989D",
+    salary_multiple: "\u5DE5\u8D44\u500D\u6570",
+    bracket: "\u5206\u7EA7\u8D39\u7387"
+  };
+  for (const item of items) {
+    const employerRate = parseFloat(item.rateEmployer) * 100;
+    const employeeRate = parseFloat(item.rateEmployee) * 100;
+    contentZh += `| ${item.itemNameZh} | ${categoryZhMap[item.category] || item.category} | ${employerRate.toFixed(2)}% | ${employeeRate.toFixed(2)}% | ${capTypeZhMap[item.capType] || item.capType} |
+`;
+  }
+  contentZh += `| **\u5408\u8BA1** | | **${totalEmployer.toFixed(2)}%** | **${totalEmployee.toFixed(2)}%** | |
+
+`;
+  if (itemsWithNotes.length > 0) {
+    contentZh += `### \u91CD\u8981\u8BF4\u660E
+
+`;
+    for (const item of itemsWithNotes) {
+      contentZh += `- **${item.itemNameZh}**\uFF1A${item.notes}
+`;
+    }
+    contentZh += "\n";
+  }
+  contentZh += `> \u6570\u636E\u9002\u7528\u4E8E${items[0]?.effectiveYear || 2025}\u5E74\u3002\u8D39\u7387\u53EF\u80FD\u6BCF\u5E74\u8C03\u6574\uFF0C\u8BF7\u4EE5\u5F53\u5730\u5B98\u65B9\u4FE1\u606F\u4E3A\u51C6\u3002
+`;
+  return [
+    {
+      title: `${countryName} Social Insurance & Employer Cost Breakdown`,
+      summary: `Complete breakdown of mandatory social insurance contributions in ${countryName}: employer pays ${totalEmployer.toFixed(1)}%, employee pays ${totalEmployee.toFixed(1)}%.`,
+      content: contentEn,
+      topic: "payroll",
+      language: "en",
+      category: "article",
+      metadata: {
+        countryCode,
+        sourceType: "internal_social_insurance",
+        totalEmployerRate: totalEmployer.toFixed(2),
+        totalEmployeeRate: totalEmployee.toFixed(2),
+        itemCount: items.length,
+        effectiveYear: items[0]?.effectiveYear || 2025
+      }
+    },
+    {
+      title: `${countryName}\u793E\u4F1A\u4FDD\u9669\u4E0E\u96C7\u4E3B\u6210\u672C\u660E\u7EC6`,
+      summary: `${countryName}\u5F3A\u5236\u6027\u793E\u4F1A\u4FDD\u9669\u7F34\u8D39\u5B8C\u6574\u660E\u7EC6\uFF1A\u96C7\u4E3B\u7F34\u8D39${totalEmployer.toFixed(1)}%\uFF0C\u96C7\u5458\u7F34\u8D39${totalEmployee.toFixed(1)}%\u3002`,
+      content: contentZh,
+      topic: "payroll",
+      language: "zh",
+      category: "article",
+      metadata: {
+        countryCode,
+        sourceType: "internal_social_insurance",
+        totalEmployerRate: totalEmployer.toFixed(2),
+        totalEmployeeRate: totalEmployee.toFixed(2),
+        itemCount: items.length,
+        effectiveYear: items[0]?.effectiveYear || 2025
+      }
+    }
+  ];
+}
+function generatePublicHolidaysArticle(countryCode, holidays, countryName) {
+  if (holidays.length === 0) return [];
+  const year = holidays[0]?.year || 2026;
+  let contentEn = `## ${countryName} Public Holidays ${year}
+
+`;
+  contentEn += `${countryName} observes **${holidays.length}** public holidays in ${year}. Employees are entitled to paid time off on these days.
+
+`;
+  contentEn += `| # | Date | Holiday | Local Name | Nationwide |
+`;
+  contentEn += `|---|------|---------|------------|------------|
+`;
+  const sorted = [...holidays].sort(
+    (a, b) => new Date(a.holidayDate).getTime() - new Date(b.holidayDate).getTime()
+  );
+  sorted.forEach((h, idx) => {
+    const date = new Date(h.holidayDate);
+    const dateStr = date.toISOString().split("T")[0];
+    contentEn += `| ${idx + 1} | ${dateStr} | ${h.holidayName} | ${h.localName || "-"} | ${h.isGlobal ? "Yes" : "Regional"} |
+`;
+  });
+  contentEn += `
+### Key Information for Employers
+
+`;
+  contentEn += `- Employees working on public holidays are typically entitled to overtime pay (usually 200-300% of regular pay, depending on local labor law).
+`;
+  contentEn += `- If a public holiday falls on a weekend, the substitute day policy varies by country.
+`;
+  contentEn += `- Some holidays marked as "Regional" may only apply to specific states or provinces.
+`;
+  let contentZh = `## ${countryName} ${year}\u5E74\u6CD5\u5B9A\u8282\u5047\u65E5
+
+`;
+  contentZh += `${countryName}\u5728${year}\u5E74\u5171\u6709**${holidays.length}**\u4E2A\u6CD5\u5B9A\u8282\u5047\u65E5\u3002\u5458\u5DE5\u5728\u8FD9\u4E9B\u65E5\u671F\u4EAB\u6709\u5E26\u85AA\u4F11\u5047\u6743\u5229\u3002
+
+`;
+  contentZh += `| # | \u65E5\u671F | \u8282\u5047\u65E5 | \u5F53\u5730\u540D\u79F0 | \u5168\u56FD\u6027 |
+`;
+  contentZh += `|---|------|-------|---------|-------|
+`;
+  sorted.forEach((h, idx) => {
+    const date = new Date(h.holidayDate);
+    const dateStr = date.toISOString().split("T")[0];
+    contentZh += `| ${idx + 1} | ${dateStr} | ${h.holidayName} | ${h.localName || "-"} | ${h.isGlobal ? "\u662F" : "\u5730\u533A\u6027"} |
+`;
+  });
+  contentZh += `
+### \u96C7\u4E3B\u987B\u77E5
+
+`;
+  contentZh += `- \u5728\u6CD5\u5B9A\u8282\u5047\u65E5\u5DE5\u4F5C\u7684\u5458\u5DE5\u901A\u5E38\u6709\u6743\u83B7\u5F97\u52A0\u73ED\u8D39\uFF08\u901A\u5E38\u4E3A\u6B63\u5E38\u5DE5\u8D44\u7684200-300%\uFF0C\u5177\u4F53\u53D6\u51B3\u4E8E\u5F53\u5730\u52B3\u52A8\u6CD5\uFF09\u3002
+`;
+  contentZh += `- \u5982\u679C\u6CD5\u5B9A\u8282\u5047\u65E5\u6070\u9022\u5468\u672B\uFF0C\u8865\u4F11\u653F\u7B56\u56E0\u56FD\u5BB6\u800C\u5F02\u3002
+`;
+  contentZh += `- \u6807\u8BB0\u4E3A"\u5730\u533A\u6027"\u7684\u8282\u5047\u65E5\u53EF\u80FD\u4EC5\u9002\u7528\u4E8E\u7279\u5B9A\u5DDE\u6216\u7701\u4EFD\u3002
+`;
+  return [
+    {
+      title: `${countryName} Public Holidays ${year}: Complete Calendar for Employers`,
+      summary: `Complete list of ${holidays.length} public holidays in ${countryName} for ${year}, with dates and employer obligations.`,
+      content: contentEn,
+      topic: "leave",
+      language: "en",
+      category: "article",
+      metadata: { countryCode, sourceType: "internal_public_holidays", year, holidayCount: holidays.length }
+    },
+    {
+      title: `${countryName} ${year}\u5E74\u6CD5\u5B9A\u8282\u5047\u65E5\u5B8C\u6574\u65E5\u5386`,
+      summary: `${countryName}${year}\u5E74${holidays.length}\u4E2A\u6CD5\u5B9A\u8282\u5047\u65E5\u5B8C\u6574\u5217\u8868\uFF0C\u542B\u65E5\u671F\u53CA\u96C7\u4E3B\u4E49\u52A1\u8BF4\u660E\u3002`,
+      content: contentZh,
+      topic: "leave",
+      language: "zh",
+      category: "article",
+      metadata: { countryCode, sourceType: "internal_public_holidays", year, holidayCount: holidays.length }
+    }
+  ];
+}
+function generateLeaveEntitlementsArticle(countryCode, leaves, countryName, countryConfig) {
+  if (leaves.length === 0) return [];
+  let contentEn = `## ${countryName} Leave Entitlements
+
+`;
+  contentEn += `Employees in ${countryName} are entitled to the following statutory leave types. `;
+  if (countryConfig.statutoryAnnualLeave) {
+    contentEn += `The statutory minimum annual leave is **${countryConfig.statutoryAnnualLeave} days** per year`;
+    if (countryConfig.workingDaysPerWeek) {
+      contentEn += ` based on a **${countryConfig.workingDaysPerWeek}-day** work week`;
+    }
+    contentEn += `.
+
+`;
+  } else {
+    contentEn += "\n\n";
+  }
+  contentEn += `| Leave Type | Annual Entitlement | Paid | Notes |
+`;
+  contentEn += `|-----------|-------------------|------|-------|
+`;
+  for (const leave of leaves) {
+    const days = leave.annualEntitlement ? `${leave.annualEntitlement} days` : "As needed";
+    contentEn += `| ${leave.leaveTypeName} | ${days} | ${leave.isPaid ? "Yes" : "No"} | ${leave.description || "-"} |
+`;
+  }
+  contentEn += `
+### Important Notes for Employers
+
+`;
+  contentEn += `- Leave entitlements are statutory minimums; employers may offer more generous policies.
+`;
+  contentEn += `- Unused annual leave may carry over to the next year depending on local regulations.
+`;
+  contentEn += `- Sick leave may require a medical certificate after a specified number of consecutive days.
+`;
+  contentEn += `- Maternity and paternity leave durations and pay rates are set by law and cannot be reduced.
+`;
+  const leaveTypeNameZh = {
+    "Annual Leave": "\u5E74\u5047",
+    "Sick Leave": "\u75C5\u5047",
+    "Unpaid Leave": "\u65E0\u85AA\u5047",
+    "Maternity Leave": "\u4EA7\u5047",
+    "Paternity Leave": "\u966A\u4EA7\u5047",
+    "Bereavement Leave": "\u4E27\u5047",
+    "Marriage Leave": "\u5A5A\u5047",
+    "Parental Leave": "\u80B2\u513F\u5047",
+    "Compassionate Leave": "\u6069\u6064\u5047",
+    "Study Leave": "\u5B66\u4E60\u5047",
+    "Personal Leave": "\u4E8B\u5047",
+    "Family Leave": "\u5BB6\u5EAD\u5047",
+    "Public Holiday Leave": "\u6CD5\u5B9A\u8282\u5047\u65E5",
+    "Casual Leave": "\u4E34\u65F6\u5047",
+    "Earned Leave": "\u7D2F\u79EF\u5047",
+    "Festival Leave": "\u8282\u65E5\u5047",
+    "Privilege Leave": "\u7279\u6743\u5047"
+  };
+  let contentZh = `## ${countryName}\u5047\u671F\u6743\u76CA
+
+`;
+  contentZh += `${countryName}\u7684\u5458\u5DE5\u4EAB\u6709\u4EE5\u4E0B\u6CD5\u5B9A\u5047\u671F\u7C7B\u578B\u3002`;
+  if (countryConfig.statutoryAnnualLeave) {
+    contentZh += `\u6CD5\u5B9A\u6700\u4F4E\u5E74\u5047\u4E3A\u6BCF\u5E74**${countryConfig.statutoryAnnualLeave}\u5929**`;
+    if (countryConfig.workingDaysPerWeek) {
+      contentZh += `\uFF08\u57FA\u4E8E\u6BCF\u5468**${countryConfig.workingDaysPerWeek}\u5929**\u5DE5\u4F5C\u5236\uFF09`;
+    }
+    contentZh += `\u3002
+
+`;
+  } else {
+    contentZh += "\n\n";
+  }
+  contentZh += `| \u5047\u671F\u7C7B\u578B | \u5E74\u5EA6\u5929\u6570 | \u5E26\u85AA | \u5907\u6CE8 |
+`;
+  contentZh += `|---------|---------|------|-----|
+`;
+  for (const leave of leaves) {
+    const days = leave.annualEntitlement ? `${leave.annualEntitlement}\u5929` : "\u6309\u9700";
+    const nameZh = leaveTypeNameZh[leave.leaveTypeName] || leave.leaveTypeName;
+    contentZh += `| ${nameZh} | ${days} | ${leave.isPaid ? "\u662F" : "\u5426"} | ${leave.description || "-"} |
+`;
+  }
+  contentZh += `
+### \u96C7\u4E3B\u987B\u77E5
+
+`;
+  contentZh += `- \u5047\u671F\u6743\u76CA\u4E3A\u6CD5\u5B9A\u6700\u4F4E\u6807\u51C6\uFF0C\u96C7\u4E3B\u53EF\u63D0\u4F9B\u66F4\u4F18\u539A\u7684\u653F\u7B56\u3002
+`;
+  contentZh += `- \u672A\u4F7F\u7528\u7684\u5E74\u5047\u662F\u5426\u53EF\u7ED3\u8F6C\u81F3\u4E0B\u4E00\u5E74\u53D6\u51B3\u4E8E\u5F53\u5730\u6CD5\u89C4\u3002
+`;
+  contentZh += `- \u8FDE\u7EED\u75C5\u5047\u8D85\u8FC7\u89C4\u5B9A\u5929\u6570\u540E\u53EF\u80FD\u9700\u8981\u63D0\u4F9B\u533B\u7597\u8BC1\u660E\u3002
+`;
+  contentZh += `- \u4EA7\u5047\u548C\u966A\u4EA7\u5047\u7684\u65F6\u957F\u53CA\u85AA\u8D44\u6807\u51C6\u7531\u6CD5\u5F8B\u89C4\u5B9A\uFF0C\u4E0D\u5F97\u51CF\u5C11\u3002
+`;
+  return [
+    {
+      title: `${countryName} Leave Entitlements: Annual, Sick, Maternity & More`,
+      summary: `Complete guide to statutory leave entitlements in ${countryName}, including ${leaves.length} leave types with days and pay status.`,
+      content: contentEn,
+      topic: "leave",
+      language: "en",
+      category: "article",
+      metadata: {
+        countryCode,
+        sourceType: "internal_leave_types",
+        leaveTypeCount: leaves.length,
+        statutoryAnnualLeave: countryConfig.statutoryAnnualLeave
+      }
+    },
+    {
+      title: `${countryName}\u5047\u671F\u6743\u76CA\u6307\u5357\uFF1A\u5E74\u5047\u3001\u75C5\u5047\u3001\u4EA7\u5047\u53CA\u66F4\u591A`,
+      summary: `${countryName}\u6CD5\u5B9A\u5047\u671F\u6743\u76CA\u5B8C\u6574\u6307\u5357\uFF0C\u6DB5\u76D6${leaves.length}\u79CD\u5047\u671F\u7C7B\u578B\u53CA\u5929\u6570\u3001\u85AA\u8D44\u6807\u51C6\u3002`,
+      content: contentZh,
+      topic: "leave",
+      language: "zh",
+      category: "article",
+      metadata: {
+        countryCode,
+        sourceType: "internal_leave_types",
+        leaveTypeCount: leaves.length,
+        statutoryAnnualLeave: countryConfig.statutoryAnnualLeave
+      }
+    }
+  ];
+}
+async function generateKnowledgeFromInternalData(options) {
+  const db = getDb();
+  if (!db) {
+    throw new Error("Database connection unavailable");
+  }
+  const result = {
+    totalGenerated: 0,
+    byType: {
+      countryOverview: 0,
+      socialInsurance: 0,
+      publicHolidays: 0,
+      leaveEntitlements: 0,
+      hiringGuide: 0,
+      compensationGuide: 0,
+      terminationGuide: 0,
+      workingConditions: 0
+    },
+    countries: [],
+    errors: []
+  };
+  const typesToGenerate = options?.types || [
+    "countryOverview",
+    "socialInsurance",
+    "publicHolidays",
+    "leaveEntitlements",
+    "hiringGuide",
+    "compensationGuide",
+    "terminationGuide",
+    "workingConditions"
+  ];
+  const allCountries = await db.select().from(countriesConfig).where(eq30(countriesConfig.isActive, true));
+  const targetCountries = options?.countryCodes?.length ? allCountries.filter((c) => options.countryCodes.includes(c.countryCode)) : allCountries;
+  console.log(`[KnowledgeGenerator] Processing ${targetCountries.length} countries, types: ${typesToGenerate.join(", ")}`);
+  const allArticles = [];
+  const processedCountries = /* @__PURE__ */ new Set();
+  for (const country of targetCountries) {
+    const cc = country.countryCode;
+    const countryName = country.countryName;
+    try {
+      const chapterMap = await loadCountryGuideChapters(db, cc);
+      if (typesToGenerate.includes("countryOverview") && chapterMap.has("overview")) {
+        const articles = generateCountryOverviewArticle(cc, chapterMap.get("overview"), countryName);
+        allArticles.push(...articles);
+        result.byType.countryOverview += articles.length;
+      }
+      if (typesToGenerate.includes("hiringGuide") && chapterMap.has("hiring")) {
+        const articles = generateHiringArticle(cc, chapterMap.get("hiring"), countryName);
+        allArticles.push(...articles);
+        result.byType.hiringGuide += articles.length;
+      }
+      if (typesToGenerate.includes("compensationGuide") && chapterMap.has("compensation")) {
+        const articles = generateCompensationArticle(cc, chapterMap.get("compensation"), countryName);
+        allArticles.push(...articles);
+        result.byType.compensationGuide += articles.length;
+      }
+      if (typesToGenerate.includes("terminationGuide") && chapterMap.has("termination")) {
+        const articles = generateTerminationArticle(cc, chapterMap.get("termination"), countryName);
+        allArticles.push(...articles);
+        result.byType.terminationGuide += articles.length;
+      }
+      if (typesToGenerate.includes("workingConditions") && chapterMap.has("working-conditions")) {
+        const articles = generateWorkingConditionsArticle(cc, chapterMap.get("working-conditions"), countryName);
+        allArticles.push(...articles);
+        result.byType.workingConditions += articles.length;
+      }
+      if (typesToGenerate.includes("socialInsurance")) {
+        const siItems = await db.select().from(countrySocialInsuranceItems).where(eq30(countrySocialInsuranceItems.countryCode, cc)).orderBy(asc(countrySocialInsuranceItems.sortOrder));
+        if (siItems.length > 0) {
+          const articles = generateSocialInsuranceArticle(cc, siItems, countryName);
+          allArticles.push(...articles);
+          result.byType.socialInsurance += articles.length;
+        }
+      }
+      if (typesToGenerate.includes("publicHolidays")) {
+        const holidays = await db.select().from(publicHolidays).where(eq30(publicHolidays.countryCode, cc)).orderBy(asc(publicHolidays.holidayDate));
+        if (holidays.length > 0) {
+          const articles = generatePublicHolidaysArticle(cc, holidays, countryName);
+          allArticles.push(...articles);
+          result.byType.publicHolidays += articles.length;
+        }
+      }
+      if (typesToGenerate.includes("leaveEntitlements")) {
+        const leaves = await db.select().from(leaveTypes).where(eq30(leaveTypes.countryCode, cc));
+        if (leaves.length > 0) {
+          const articles = generateLeaveEntitlementsArticle(cc, leaves, countryName, {
+            statutoryAnnualLeave: country.statutoryAnnualLeave,
+            workingDaysPerWeek: country.workingDaysPerWeek
+          });
+          allArticles.push(...articles);
+          result.byType.leaveEntitlements += articles.length;
+        }
+      }
+      processedCountries.add(cc);
+    } catch (error) {
+      result.errors.push(`${cc} (${countryName}): ${error?.message || "Unknown error"}`);
+      console.error(`[KnowledgeGenerator] Error processing ${cc}:`, error);
+    }
+  }
+  result.totalGenerated = allArticles.length;
+  result.countries = Array.from(processedCountries);
+  if (!options?.dryRun && allArticles.length > 0) {
+    const now = /* @__PURE__ */ new Date();
+    const batchSize = 50;
+    for (let i = 0; i < allArticles.length; i += batchSize) {
+      const batch = allArticles.slice(i, i + batchSize);
+      await db.insert(knowledgeItems).values(
+        batch.map((article) => ({
+          customerId: null,
+          sourceId: null,
+          title: article.title,
+          summary: article.summary,
+          content: article.content,
+          status: "published",
+          category: article.category,
+          topic: article.topic,
+          language: article.language,
+          aiConfidence: 95,
+          aiSummary: article.summary,
+          publishedAt: now,
+          metadata: article.metadata
+        }))
+      );
+    }
+    console.log(`[KnowledgeGenerator] Inserted ${allArticles.length} articles into knowledge_items`);
+  }
+  return result;
+}
+var _jsonGuideData;
+var init_knowledgeInternalGeneratorService = __esm({
+  "server/services/knowledgeInternalGeneratorService.ts"() {
+    "use strict";
+    init_db2();
+    init_schema();
+    _jsonGuideData = null;
   }
 });
 
@@ -5701,12 +6852,12 @@ var customersRouter = router({
     }),
     download: userProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
       const { getDb: getDb2 } = await Promise.resolve().then(() => (init_db2(), db_exports));
-      const { customerContracts: customerContracts2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const { eq: eq65 } = await import("drizzle-orm");
+      const { customerContracts: customerContracts3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { eq: eq67 } = await import("drizzle-orm");
       const db = await getDb2();
       if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       const contract = await db.query.customerContracts.findFirst({
-        where: eq65(customerContracts2.id, input.id)
+        where: eq67(customerContracts3.id, input.id)
       });
       if (!contract) throw new TRPCError4({ code: "NOT_FOUND", message: "Contract not found" });
       if (contract.fileKey) {
@@ -6419,9 +7570,784 @@ async function generateVisaServiceInvoice(employeeId) {
   }
 }
 
+// server/services/leaveAutoInitService.ts
+init_db2();
+init_db2();
+
+// server/services/notificationService.ts
+init_db2();
+init_schema();
+import { eq as eq13, and as and11, like as like8 } from "drizzle-orm";
+
+// server/services/invoicePdfService.ts
+init_db2();
+import PDFDocument from "pdfkit";
+import path from "path";
+import fs from "fs";
+import os from "os";
+var CJK_FONT_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663378930055/BicAsHhoridCdJUF.ttf";
+var CJK_FONT_CACHE_DIR = path.join(os.tmpdir(), ".font-cache");
+var CJK_FONT_CACHE_PATH = path.join(CJK_FONT_CACHE_DIR, "NotoSansSC-Regular.ttf");
+function hasCJK(text4) {
+  return /[^\x00-\x7F]/.test(text4);
+}
+async function ensureCJKFont() {
+  try {
+    if (fs.existsSync(CJK_FONT_CACHE_PATH)) {
+      return CJK_FONT_CACHE_PATH;
+    }
+    console.log("[InvoicePDF] Downloading CJK font...");
+    fs.mkdirSync(CJK_FONT_CACHE_DIR, { recursive: true });
+    const response = await fetch(CJK_FONT_URL);
+    if (!response.ok) {
+      console.warn("[InvoicePDF] Failed to download CJK font:", response.status);
+      return null;
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    fs.writeFileSync(CJK_FONT_CACHE_PATH, buffer);
+    console.log("[InvoicePDF] CJK font cached successfully");
+    return CJK_FONT_CACHE_PATH;
+  } catch (err) {
+    console.warn("[InvoicePDF] Failed to ensure CJK font:", err);
+    return null;
+  }
+}
+async function generateInvoicePdf(options) {
+  const invoice = await getInvoiceById(options.invoiceId);
+  if (!invoice) throw new Error("Invoice not found");
+  const customer = await getCustomerById(invoice.customerId);
+  const billingEntity = invoice.billingEntityId ? await getBillingEntityById(invoice.billingEntityId) : null;
+  const items = await listInvoiceItemsByInvoice(invoice.id);
+  let logoBuffer = null;
+  if (billingEntity && (billingEntity.logoFileKey || billingEntity.logoUrl)) {
+    try {
+      let logoUrl = billingEntity.logoUrl;
+      if (billingEntity.logoFileKey) {
+        const { url: signedUrl } = await storageGet(billingEntity.logoFileKey);
+        logoUrl = signedUrl;
+      }
+      if (logoUrl) {
+        const logoResponse = await fetch(logoUrl);
+        if (logoResponse.ok) {
+          logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
+        }
+      }
+    } catch (logoErr) {
+      console.warn("[InvoicePDF] Failed to fetch billing entity logo:", logoErr);
+    }
+  }
+  const cjkFontPath = await ensureCJKFont();
+  return new Promise((resolve2, reject) => {
+    const doc = new PDFDocument({
+      size: "A4",
+      margins: { top: 50, bottom: 50, left: 50, right: 50 }
+    });
+    if (cjkFontPath) {
+      doc.registerFont("NotoSansSC", cjkFontPath);
+    }
+    const buffers = [];
+    doc.on("data", (chunk) => buffers.push(chunk));
+    doc.on("end", () => resolve2(Buffer.concat(buffers)));
+    doc.on("error", reject);
+    const pageWidth = doc.page.width - 100;
+    const rightCol = 350;
+    function smartText(text4, x, y, opts, fontStyle) {
+      if (hasCJK(text4) && cjkFontPath) {
+        doc.font("NotoSansSC");
+      } else {
+        doc.font(fontStyle === "bold" ? "Helvetica-Bold" : "Helvetica");
+      }
+      doc.text(text4, x, y, opts);
+    }
+    let leftY = 50;
+    const rightStartY = 50;
+    if (logoBuffer) {
+      try {
+        doc.image(logoBuffer, 50, leftY, { width: 80, height: 40, fit: [80, 40] });
+        leftY += 48;
+      } catch (logoErr) {
+        console.warn("[InvoicePDF] Failed to render logo:", logoErr);
+      }
+    }
+    function textHeight(text4, fontSize, width) {
+      doc.fontSize(fontSize);
+      return doc.heightOfString(text4, { width }) + 2;
+    }
+    doc.fontSize(16).fillColor("#1a1a1a");
+    if (billingEntity) {
+      smartText(billingEntity.entityName, 50, leftY, { width: 280 }, "bold");
+      leftY += textHeight(billingEntity.entityName, 16, 280) + 2;
+      doc.fontSize(9).fillColor("#666666");
+      if (billingEntity.legalName && billingEntity.legalName !== billingEntity.entityName) {
+        smartText(billingEntity.legalName, 50, leftY, { width: 280 });
+        leftY += textHeight(billingEntity.legalName, 9, 280);
+      }
+      if (billingEntity.address) {
+        smartText(billingEntity.address, 50, leftY, { width: 280 });
+        leftY += textHeight(billingEntity.address, 9, 280);
+      }
+      const cityLine = [billingEntity.city, billingEntity.state, billingEntity.postalCode].filter(Boolean).join(", ");
+      if (cityLine) {
+        smartText(cityLine, 50, leftY, { width: 280 });
+        leftY += textHeight(cityLine, 9, 280);
+      }
+      if (billingEntity.country) {
+        smartText(billingEntity.country, 50, leftY, { width: 280 });
+        leftY += textHeight(billingEntity.country, 9, 280);
+      }
+      if (billingEntity.registrationNumber) {
+        const regText = `Reg: ${billingEntity.registrationNumber}`;
+        smartText(regText, 50, leftY, { width: 280 });
+        leftY += textHeight(regText, 9, 280);
+      }
+      if (billingEntity.taxId) {
+        const taxText = `Tax ID: ${billingEntity.taxId}`;
+        smartText(taxText, 50, leftY, { width: 280 });
+        leftY += textHeight(taxText, 9, 280);
+      }
+    } else {
+      smartText("GEA - Global Employment Advisors", 50, leftY, { width: 280 }, "bold");
+      leftY += 20;
+    }
+    let ry = rightStartY;
+    doc.fontSize(24).font("Helvetica-Bold").fillColor("#1a1a1a");
+    doc.text("INVOICE", rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
+    ry += 32;
+    doc.fontSize(10).font("Helvetica").fillColor("#333333");
+    doc.text(`Invoice #: ${invoice.invoiceNumber}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
+    ry += 14;
+    doc.text(`Date: ${safeFormatDate(invoice.createdAt)}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
+    ry += 14;
+    if (invoice.dueDate) {
+      doc.text(`Due Date: ${safeFormatDate(invoice.dueDate)}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
+      ry += 14;
+    }
+    if (invoice.invoiceMonth) {
+      const monthVal = String(invoice.invoiceMonth);
+      let monthStr;
+      if (/^\d{4}-\d{2}/.test(monthVal)) {
+        const [yearStr, monthNumStr] = monthVal.split("-");
+        const monthNames = [
+          "January",
+          "February",
+          "March",
+          "April",
+          "May",
+          "June",
+          "July",
+          "August",
+          "September",
+          "October",
+          "November",
+          "December"
+        ];
+        monthStr = `${monthNames[parseInt(monthNumStr, 10) - 1]} ${yearStr}`;
+      } else {
+        monthStr = new Date(monthVal).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+      }
+      doc.text(`Period: ${monthStr}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
+      ry += 14;
+    }
+    const typeLabel = invoice.invoiceType === "deposit" ? "Deposit Invoice" : invoice.invoiceType === "monthly_eor" ? "Monthly Invoice (EOR)" : invoice.invoiceType === "monthly_visa_eor" ? "Monthly Invoice (Visa EOR)" : invoice.invoiceType === "monthly_aor" ? "Monthly Invoice (AOR)" : invoice.invoiceType === "visa_service" ? "Visa Service Invoice" : invoice.invoiceType === "credit_note" ? "Credit Note" : invoice.invoiceType === "deposit_refund" ? "Deposit Refund" : invoice.invoiceType === "manual" ? "Invoice" : "Invoice";
+    doc.font("Helvetica-Bold").text(typeLabel, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
+    ry += 14;
+    let billToY = Math.max(leftY, ry) + 15;
+    doc.moveTo(50, billToY).lineTo(50 + pageWidth, billToY).lineWidth(0.5).strokeColor("#cccccc").stroke();
+    billToY += 15;
+    doc.fontSize(9).font("Helvetica-Bold").fillColor("#888888");
+    doc.text("BILL TO", 50, billToY);
+    billToY += 14;
+    doc.fontSize(10).fillColor("#1a1a1a");
+    smartText(customer?.companyName || `Customer #${invoice.customerId}`, 50, billToY, void 0, "bold");
+    billToY += 14;
+    doc.fontSize(9).fillColor("#666666");
+    if (customer?.legalEntityName) {
+      smartText(customer.legalEntityName, 50, billToY, { width: 280 });
+      billToY += textHeight(customer.legalEntityName, 9, 280);
+    }
+    if (customer?.address) {
+      smartText(customer.address, 50, billToY, { width: 280 });
+      billToY += textHeight(customer.address, 9, 280);
+    }
+    const custCityLine = [customer?.city, customer?.state, customer?.postalCode].filter(Boolean).join(", ");
+    if (custCityLine) {
+      smartText(custCityLine, 50, billToY, { width: 280 });
+      billToY += textHeight(custCityLine, 9, 280);
+    }
+    if (customer?.country) {
+      smartText(customer.country, 50, billToY, { width: 280 });
+      billToY += textHeight(customer.country, 9, 280);
+    }
+    if (customer?.primaryContactEmail) {
+      doc.font("Helvetica");
+      doc.text(customer.primaryContactEmail, 50, billToY, { width: 280 });
+      billToY += textHeight(customer.primaryContactEmail, 9, 280);
+    }
+    let tableY = billToY + 20;
+    doc.moveTo(50, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.5).strokeColor("#cccccc").stroke();
+    tableY += 8;
+    const cols = {
+      item: { x: 50, w: 175 },
+      curr: { x: 230, w: 40 },
+      qty: { x: 275, w: 40 },
+      rate: { x: 320, w: 75 },
+      tax: { x: 400, w: 50 },
+      amount: { x: 455, w: 90 }
+    };
+    doc.fontSize(8).font("Helvetica-Bold").fillColor("#888888");
+    doc.text("ITEM", cols.item.x, tableY, { width: cols.item.w });
+    doc.text("CURR", cols.curr.x, tableY, { width: cols.curr.w });
+    doc.text("QTY", cols.qty.x, tableY, { width: cols.qty.w, align: "right" });
+    doc.text("RATE", cols.rate.x, tableY, { width: cols.rate.w, align: "right" });
+    doc.text("TAX", cols.tax.x, tableY, { width: cols.tax.w, align: "right" });
+    doc.text("AMOUNT", cols.amount.x, tableY, { width: cols.amount.w, align: "right" });
+    tableY += 14;
+    doc.moveTo(50, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.3).strokeColor("#e0e0e0").stroke();
+    tableY += 6;
+    const currency = invoice.currency || "USD";
+    const itemTypeLabels = {
+      eor_service_fee: "EOR Service Fee",
+      visa_eor_service_fee: "Visa EOR Service Fee",
+      aor_service_fee: "AOR Service Fee",
+      employment_cost: "Employment Cost",
+      deposit: "Deposit",
+      equipment_procurement_fee: "Equipment Procurement",
+      one_time_onboarding_fee: "Onboarding Fee",
+      one_time_offboarding_fee: "Offboarding Fee",
+      administrative_setup_fee: "Admin Setup Fee",
+      contract_termination_fee: "Contract Termination",
+      payroll_processing_fee: "Payroll Processing",
+      tax_filing_compliance_fee: "Tax Filing & Compliance",
+      hr_advisory_service_fee: "HR Advisory",
+      legal_compliance_support_fee: "Legal & Compliance",
+      visa_immigration_service_fee: "Visa & Immigration",
+      relocation_support_fee: "Relocation Support",
+      custom_benefits_admin_fee: "Benefits Admin",
+      bank_transfer_fee: "Bank Transfer Fee",
+      consulting_fee: "Consulting Fee",
+      management_consulting_fee: "Mgmt Consulting"
+    };
+    for (const item of items) {
+      if (tableY > doc.page.height - 160) {
+        doc.addPage();
+        tableY = 50;
+      }
+      doc.fontSize(8).font("Helvetica-Bold").fillColor("#333333");
+      const typeText = itemTypeLabels[item.itemType] || item.itemType;
+      doc.text(typeText, cols.item.x, tableY, { width: cols.item.w });
+      doc.font("Helvetica").fillColor("#333333").fontSize(8);
+      doc.text(item.localCurrency || currency || "\u2014", cols.curr.x, tableY, { width: cols.curr.w });
+      doc.text(parseFloat(item.quantity?.toString() || "1").toString(), cols.qty.x, tableY, { width: cols.qty.w, align: "right" });
+      doc.text(formatNum(item.unitPrice), cols.rate.x, tableY, { width: cols.rate.w, align: "right" });
+      const vatRate = parseFloat(item.vatRate?.toString() || "0");
+      doc.text(vatRate > 0 ? `${vatRate}%` : "\u2014", cols.tax.x, tableY, { width: cols.tax.w, align: "right" });
+      doc.text(formatNum(item.localAmount || item.amount), cols.amount.x, tableY, { width: cols.amount.w, align: "right" });
+      tableY += 11;
+      doc.fontSize(7).fillColor("#888888");
+      const desc27 = item.description.length > 80 ? item.description.slice(0, 77) + "..." : item.description;
+      smartText(desc27, cols.item.x + 2, tableY, { width: cols.item.w + cols.curr.w + cols.qty.w - 2 });
+      tableY += 14;
+    }
+    tableY += 6;
+    doc.moveTo(50, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.5).strokeColor("#cccccc").stroke();
+    tableY += 10;
+    const totalsLabelX = 350;
+    const totalsValX = 435;
+    const totalsValW = 110;
+    doc.fontSize(9).font("Helvetica").fillColor("#888888");
+    doc.text("Invoice Currency", totalsLabelX, tableY, { width: 110 });
+    doc.font("Helvetica-Bold").fillColor("#333333");
+    doc.text(currency, totalsValX, tableY, { width: totalsValW, align: "right" });
+    tableY += 16;
+    const foreignCurrencies = new Set(
+      items.map((i) => i.localCurrency).filter((c) => c && c !== currency)
+    );
+    if (foreignCurrencies.size > 0 && invoice.exchangeRateWithMarkup) {
+      const foreignCcy = Array.from(foreignCurrencies)[0];
+      doc.fontSize(9).font("Helvetica").fillColor("#888888");
+      doc.text("Exchange Rate", totalsLabelX, tableY, { width: 110 });
+      doc.font("Helvetica").fillColor("#333333");
+      const rateStr = parseFloat(invoice.exchangeRateWithMarkup).toFixed(6);
+      doc.text(`1 ${foreignCcy} = ${rateStr} ${currency}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+      tableY += 16;
+    }
+    doc.fontSize(9).font("Helvetica").fillColor("#666666");
+    doc.text("Subtotal", totalsLabelX, tableY, { width: 110 });
+    doc.text(`${currency} ${formatNum(invoice.subtotal)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+    tableY += 14;
+    doc.text("Tax / VAT", totalsLabelX, tableY, { width: 110 });
+    doc.text(`${currency} ${formatNum(invoice.tax)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+    tableY += 14;
+    const walletAppliedAmt = parseFloat(invoice.walletAppliedAmount?.toString() || "0");
+    const hasDeductions = walletAppliedAmt > 0.01;
+    if (hasDeductions) {
+      tableY += 4;
+      doc.moveTo(totalsLabelX, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.3).strokeColor("#aaaaaa").stroke();
+      tableY += 8;
+      doc.fontSize(9).font("Helvetica-Bold").fillColor("#2563eb");
+      doc.text("INVOICE TOTAL", totalsLabelX, tableY, { width: 110 });
+      doc.text(`${currency} ${formatNum(invoice.total)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+      tableY += 14;
+      doc.fontSize(8).font("Helvetica").fillColor("#2563eb");
+      doc.text("Less: Wallet Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 2, lineBreak: false });
+      doc.text(`- ${currency} ${formatNum(walletAppliedAmt)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+      tableY += 12;
+      tableY += 2;
+    }
+    tableY += 4;
+    doc.moveTo(totalsLabelX, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.5).strokeColor("#333333").stroke();
+    tableY += 8;
+    const finalAmountDue = walletAppliedAmt > 0.01 ? parseFloat(invoice.amountDue?.toString() || (parseFloat(invoice.total?.toString() || "0") - walletAppliedAmt).toFixed(2)) : parseFloat(invoice.total?.toString() || "0");
+    const totalLabel = walletAppliedAmt > 0.01 ? "AMOUNT DUE" : "TOTAL DUE";
+    doc.fontSize(11).font("Helvetica-Bold").fillColor("#1a1a1a");
+    doc.text(totalLabel, totalsLabelX, tableY, { width: 110 });
+    doc.text(`${currency} ${formatNum(finalAmountDue.toFixed(2))}`, totalsValX, tableY, { width: totalsValW, align: "right" });
+    if (billingEntity && billingEntity.bankDetails) {
+      tableY += 35;
+      if (tableY > doc.page.height - 120) {
+        doc.addPage();
+        tableY = 50;
+      }
+      doc.moveTo(50, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.5).strokeColor("#cccccc").stroke();
+      tableY += 12;
+      doc.fontSize(9).font("Helvetica-Bold").fillColor("#888888");
+      doc.text("PAYMENT DETAILS", 50, tableY);
+      tableY += 14;
+      doc.fontSize(9).fillColor("#333333");
+      const bankLines = billingEntity.bankDetails.split("\n");
+      for (const line of bankLines) {
+        if (tableY > doc.page.height - 80) {
+          doc.addPage();
+          tableY = 50;
+        }
+        smartText(line.trim(), 50, tableY, { width: pageWidth });
+        tableY += 12;
+      }
+    }
+    if (invoice.notes) {
+      tableY += 20;
+      if (tableY > doc.page.height - 80) {
+        doc.addPage();
+        tableY = 50;
+      }
+      doc.fontSize(8).font("Helvetica-Bold").fillColor("#888888");
+      doc.text("NOTES", 50, tableY);
+      tableY += 12;
+      doc.fontSize(8).fillColor("#666666");
+      smartText(invoice.notes, 50, tableY, { width: pageWidth });
+    }
+    doc.end();
+  });
+}
+function safeFormatDate(val, locale = "en-GB", options) {
+  if (!val) return "N/A";
+  const d = val instanceof Date ? val : new Date(val);
+  if (isNaN(d.getTime())) return "N/A";
+  return d.toLocaleDateString(locale, options);
+}
+function formatNum(val) {
+  if (val === null || val === void 0) return "0.00";
+  const num = typeof val === "string" ? parseFloat(val) : Number(val);
+  if (isNaN(num)) return "0.00";
+  return num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// server/services/notificationConstants.ts
+var DEFAULT_RULES = {
+  invoice_sent: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["client:finance", "client:admin", "admin:finance_manager"],
+    templates: {
+      en: {
+        emailSubject: "Invoice #{{invoiceNumber}} from GEA",
+        emailBody: "<p>Dear {{contactName}},</p><p>Please find attached invoice #{{invoiceNumber}} for {{currency}} {{amount}}.</p><p>Due Date: {{dueDate}}</p><p>Best regards,<br>GEA Team</p>",
+        inAppMessage: "Invoice #{{invoiceNumber}} has been sent."
+      },
+      zh: {
+        emailSubject: "\u53D1\u7968 #{{invoiceNumber}} - GEA",
+        emailBody: "<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p><p>\u9644\u4EF6\u662F\u60A8\u7684\u53D1\u7968 #{{invoiceNumber}}\uFF0C\u91D1\u989D {{currency}} {{amount}}\u3002</p><p>\u5230\u671F\u65E5\uFF1A{{dueDate}}</p><p>\u795D\u597D\uFF0C<br>GEA \u56E2\u961F</p>",
+        inAppMessage: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u53D1\u9001\u3002"
+      }
+    }
+  },
+  invoice_overdue: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["client:finance", "client:admin", "admin:customer_manager"],
+    templates: {
+      en: {
+        emailSubject: "OVERDUE: Invoice #{{invoiceNumber}}",
+        emailBody: "<p>Dear {{contactName}},</p><p>This is a reminder that invoice #{{invoiceNumber}} was due on {{dueDate}}.</p><p>Please arrange payment immediately.</p>",
+        inAppMessage: "Invoice #{{invoiceNumber}} is overdue."
+      },
+      zh: {
+        emailSubject: "\u903E\u671F\u63D0\u9192\uFF1A\u53D1\u7968 #{{invoiceNumber}}",
+        emailBody: "<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p><p>\u6E29\u99A8\u63D0\u9192\uFF1A\u60A8\u7684\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u4E8E {{dueDate}} \u5230\u671F\u3002</p><p>\u8BF7\u5C3D\u5FEB\u5B89\u6392\u4ED8\u6B3E\u3002</p>",
+        inAppMessage: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u903E\u671F\u3002"
+      }
+    }
+  },
+  payroll_draft_created: {
+    enabled: true,
+    channels: ["in_app"],
+    recipients: ["admin:operations_manager"],
+    templates: {
+      en: {
+        emailSubject: "Payroll Draft Ready",
+        emailBody: "Payroll draft for {{period}} has been created.",
+        inAppMessage: "Payroll draft for {{period}} is ready for review."
+      },
+      zh: {
+        emailSubject: "\u5DE5\u8D44\u5355\u8349\u7A3F\u5DF2\u751F\u6210",
+        emailBody: "{{period}} \u7684\u5DE5\u8D44\u5355\u8349\u7A3F\u5DF2\u751F\u6210\u3002",
+        inAppMessage: "{{period}} \u7684\u5DE5\u8D44\u5355\u8349\u7A3F\u5DF2\u751F\u6210\uFF0C\u8BF7\u5BA1\u6838\u3002"
+      }
+    }
+  },
+  new_employee_request: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["admin:operations_manager"],
+    templates: {
+      en: {
+        emailSubject: "New Employee Onboarding Request",
+        emailBody: "Customer {{customerName}} has requested onboarding for {{employeeName}}.",
+        inAppMessage: "New onboarding request: {{employeeName}} from {{customerName}}."
+      },
+      zh: {
+        emailSubject: "\u65B0\u5458\u5DE5\u5165\u804C\u7533\u8BF7",
+        emailBody: "\u5BA2\u6237 {{customerName}} \u4E3A {{employeeName}} \u63D0\u4EA4\u4E86\u5165\u804C\u7533\u8BF7\u3002",
+        inAppMessage: "\u6536\u5230 {{customerName}} \u63D0\u4EA4\u7684 {{employeeName}} \u5165\u804C\u7533\u8BF7\u3002"
+      }
+    }
+  },
+  worker_invite: {
+    enabled: true,
+    channels: ["email"],
+    recipients: ["worker:user"],
+    // Special role for worker
+    templates: {
+      en: {
+        emailSubject: "Invitation to GEA Worker Portal",
+        emailBody: '<p>Dear {{workerName}},</p><p>You have been invited to the GEA Worker Portal.</p><p>Please click the link below to set up your account:</p><p><a href="{{inviteLink}}">Accept Invitation</a></p>',
+        inAppMessage: "Welcome to GEA Worker Portal!"
+      },
+      zh: {
+        emailSubject: "GEA \u5458\u5DE5\u95E8\u6237\u9080\u8BF7",
+        emailBody: '<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p><p>\u60A8\u5DF2\u88AB\u9080\u8BF7\u52A0\u5165 GEA \u5458\u5DE5\u95E8\u6237\u3002</p><p>\u8BF7\u70B9\u51FB\u4E0B\u65B9\u94FE\u63A5\u8BBE\u7F6E\u60A8\u7684\u8D26\u6237\uFF1A</p><p><a href="{{inviteLink}}">\u63A5\u53D7\u9080\u8BF7</a></p>',
+        inAppMessage: "\u6B22\u8FCE\u6765\u5230 GEA \u5458\u5DE5\u95E8\u6237\uFF01"
+      }
+    }
+  },
+  worker_invoice_ready: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["worker:user"],
+    templates: {
+      en: {
+        emailSubject: "Invoice #{{invoiceNumber}} Ready",
+        emailBody: "<p>Dear {{workerName}},</p><p>Your invoice #{{invoiceNumber}} for {{period}} is now ready.</p>",
+        inAppMessage: "Invoice #{{invoiceNumber}} is ready for review."
+      },
+      zh: {
+        emailSubject: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u751F\u6210",
+        emailBody: "<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p><p>\u60A8\u7684 {{period}} \u53D1\u7968 #{{invoiceNumber}} \u5DF2\u751F\u6210\u3002</p>",
+        inAppMessage: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u751F\u6210\uFF0C\u8BF7\u67E5\u770B\u3002"
+      }
+    }
+  },
+  worker_payment_sent: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["worker:user"],
+    templates: {
+      en: {
+        emailSubject: "Payment Sent: {{currency}} {{amount}}",
+        emailBody: "<p>Dear {{workerName}},</p><p>We have processed a payment of {{currency}} {{amount}} for invoice #{{invoiceNumber}}.</p>",
+        inAppMessage: "Payment of {{currency}} {{amount}} has been sent."
+      },
+      zh: {
+        emailSubject: "\u4ED8\u6B3E\u5DF2\u53D1\u9001\uFF1A{{currency}} {{amount}}",
+        emailBody: "<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p><p>\u6211\u4EEC\u5DF2\u5904\u7406\u53D1\u7968 #{{invoiceNumber}} \u7684\u4ED8\u6B3E\uFF0C\u91D1\u989D\u4E3A {{currency}} {{amount}}\u3002</p>",
+        inAppMessage: "\u6B3E\u9879 {{currency}} {{amount}} \u5DF2\u6C47\u51FA\u3002"
+      }
+    }
+  },
+  leave_policy_country_activated: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["client:admin", "client:hr"],
+    templates: {
+      en: {
+        emailSubject: "New Country Leave Policy Activated: {{countryName}}",
+        emailBody: "<p>Dear {{contactName}},</p><p>A new country <strong>{{countryName}}</strong> has been activated for leave policy management based on employee onboarding.</p><p>Statutory leave policies have been automatically initialized with default entitlements. Please review and customize the leave policies in your <strong>Settings > Leave Policies</strong> page to match your company's requirements.</p><p>Best regards,<br>GEA Team</p>",
+        inAppMessage: "New country {{countryName}} activated. Please configure leave policies in Settings."
+      },
+      zh: {
+        emailSubject: "\u65B0\u56FD\u5BB6\u5047\u671F\u653F\u7B56\u5DF2\u6FC0\u6D3B\uFF1A{{countryName}}",
+        emailBody: "<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p><p>\u57FA\u4E8E\u5458\u5DE5\u5165\u804C\uFF0C\u65B0\u56FD\u5BB6 <strong>{{countryName}}</strong> \u7684\u5047\u671F\u653F\u7B56\u7BA1\u7406\u5DF2\u6FC0\u6D3B\u3002</p><p>\u6CD5\u5B9A\u5047\u671F\u653F\u7B56\u5DF2\u6309\u9ED8\u8BA4\u6807\u51C6\u81EA\u52A8\u521D\u59CB\u5316\u3002\u8BF7\u524D\u5F80 <strong>\u8BBE\u7F6E > \u5047\u671F\u653F\u7B56</strong> \u9875\u9762\uFF0C\u6839\u636E\u8D35\u516C\u53F8\u7684\u8981\u6C42\u5BA1\u6838\u548C\u81EA\u5B9A\u4E49\u5047\u671F\u653F\u7B56\u3002</p><p>\u795D\u597D\uFF0C<br>GEA \u56E2\u961F</p>",
+        inAppMessage: "\u65B0\u56FD\u5BB6 {{countryName}} \u5DF2\u6FC0\u6D3B\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u914D\u7F6E\u5047\u671F\u653F\u7B56\u3002"
+      }
+    }
+  }
+};
+
+// server/services/notificationService.ts
+var notificationService = {
+  /**
+   * Main entry point to send notifications.
+   * Handles configuration lookup, recipient resolution, template rendering, and multi-channel delivery.
+   */
+  async send(event) {
+    const db = getDb();
+    if (!db) {
+      console.error("[Notification] DB connection failed");
+      return;
+    }
+    try {
+      const config = await this.getConfig(event.type);
+      if (!config || !config.enabled) {
+        console.log(`[Notification] Skipped ${event.type} (disabled or config missing)`);
+        return;
+      }
+      console.log(`[Notification] Processing ${event.type} for customer ${event.customerId || "N/A"}`);
+      const recipients = await this.resolveRecipients(config.recipients, event.customerId, event.data.workerId);
+      if (recipients.length === 0) {
+        console.warn(`[Notification] No recipients found for ${event.type}`);
+        return;
+      }
+      const attachments = [];
+      if ((event.type === "invoice_sent" || event.type === "invoice_overdue") && event.data.invoiceId) {
+        try {
+          const pdfBuffer = await generateInvoicePdf({ invoiceId: event.data.invoiceId });
+          attachments.push({
+            filename: `Invoice_${event.data.invoiceNumber || event.data.invoiceId}.pdf`,
+            content: pdfBuffer,
+            contentType: "application/pdf"
+          });
+        } catch (err) {
+          console.error(`[Notification] Failed to generate PDF for invoice ${event.data.invoiceId}`, err);
+        }
+      }
+      for (const recipient of recipients) {
+        const lang = recipient.language || "en";
+        const template = config.templates[lang] || config.templates.en;
+        const emailSubject = this.renderTemplate(template.emailSubject, event.data);
+        const emailBody = this.renderTemplate(template.emailBody, { ...event.data, contactName: recipient.name });
+        const inAppMessage = this.renderTemplate(template.inAppMessage, event.data);
+        if (config.channels.includes("in_app")) {
+          await db.insert(notifications).values({
+            targetPortal: recipient.portal,
+            targetUserId: recipient.id,
+            targetRole: recipient.role,
+            targetCustomerId: recipient.portal === "client" ? event.customerId : void 0,
+            type: event.type,
+            title: inAppMessage,
+            // Using the short message as title for now
+            data: JSON.stringify(event.data),
+            // Fix: data should be stringified JSON
+            isRead: false
+          });
+        }
+        if (config.channels.includes("email") && recipient.email) {
+          await this.sendRawEmail({
+            to: recipient.email,
+            subject: emailSubject,
+            html: emailBody,
+            attachments
+          });
+        }
+      }
+    } catch (err) {
+      console.error(`[Notification] Error processing ${event.type}:`, err);
+    }
+  },
+  // --- Helper Methods ---
+  async getConfig(type) {
+    const db = getDb();
+    if (!db) return null;
+    const setting = await db.query.systemSettings.findFirst({
+      where: eq13(systemSettings.key, "notification_rules")
+    });
+    if (setting && setting.value) {
+      try {
+        const rules = JSON.parse(setting.value);
+        if (rules[type]) {
+          return { ...DEFAULT_RULES[type], ...rules[type] };
+        }
+      } catch (e) {
+        console.error("[Notification] Failed to parse notification rules JSON", e);
+      }
+    }
+    return DEFAULT_RULES[type] || null;
+  },
+  async resolveRecipients(recipientRules, customerId, workerId) {
+    const db = getDb();
+    if (!db) return [];
+    const targets = [];
+    for (const rule of recipientRules) {
+      const [portal, role] = rule.split(":");
+      if (portal === "worker" && workerId) {
+        const worker = await db.query.workerUsers.findFirst({
+          where: eq13(workerUsers.id, workerId)
+        });
+        if (worker) {
+          targets.push({
+            id: worker.id,
+            email: worker.email,
+            name: worker.email,
+            // TODO: Join with contractors table to get name
+            role: "user",
+            portal: "worker",
+            language: "en"
+          });
+        }
+      } else if (portal === "admin") {
+        const adminUsers = await db.query.users.findMany({
+          where: and11(
+            eq13(users.isActive, true),
+            like8(users.role, `%${role}%`)
+            // Role is comma-separated string
+          )
+        });
+        targets.push(...adminUsers.map((u) => ({
+          id: u.id,
+          email: u.email || "",
+          name: u.name || "Admin",
+          role,
+          portal: "admin",
+          language: u.language || "en"
+        })));
+      } else if (portal === "client" && customerId) {
+        const contacts = await db.query.customerContacts.findMany({
+          where: and11(
+            eq13(customerContacts.customerId, customerId),
+            eq13(customerContacts.portalRole, role),
+            // portalRole is enum
+            eq13(customerContacts.hasPortalAccess, true)
+          )
+        });
+        if (role === "finance" && contacts.length === 0) {
+          const adminContacts = await db.query.customerContacts.findMany({
+            where: and11(
+              eq13(customerContacts.customerId, customerId),
+              eq13(customerContacts.portalRole, "admin"),
+              eq13(customerContacts.hasPortalAccess, true)
+            )
+          });
+          targets.push(...adminContacts.map((c) => ({
+            id: c.id,
+            email: c.email,
+            name: c.contactName,
+            role: "admin",
+            // Fallback role
+            portal: "client",
+            language: "en"
+            // Contacts don't have language field yet, default to en
+          })));
+        } else {
+          targets.push(...contacts.map((c) => ({
+            id: c.id,
+            email: c.email,
+            name: c.contactName,
+            role,
+            portal: "client",
+            language: "en"
+          })));
+        }
+      }
+    }
+    const uniqueTargets = /* @__PURE__ */ new Map();
+    for (const t4 of targets) {
+      if (t4.email) uniqueTargets.set(t4.email, t4);
+    }
+    return Array.from(uniqueTargets.values());
+  },
+  renderTemplate(template, data) {
+    return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+      return data[key] !== void 0 ? String(data[key]) : "";
+    });
+  },
+  // Temporary internal mailer until we refactor _core/notification.ts
+  async sendRawEmail(payload) {
+    const nodemailer2 = (await import("nodemailer")).default;
+    const { ENV: ENV2 } = await Promise.resolve().then(() => (init_env(), env_exports));
+    if (!ENV2.emailSmtpHost || !ENV2.emailSmtpUser) {
+      console.log(`[Dev Email] To: ${payload.to} | Subject: ${payload.subject}`);
+      return;
+    }
+    const transporter = nodemailer2.createTransport({
+      host: ENV2.emailSmtpHost,
+      port: Number(ENV2.emailSmtpPort) || 587,
+      secure: Number(ENV2.emailSmtpPort) === 465,
+      auth: {
+        user: ENV2.emailSmtpUser,
+        pass: ENV2.emailSmtpPass
+      }
+    });
+    await transporter.sendMail({
+      from: `GEA Notification <${ENV2.emailFrom}>`,
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.html,
+      attachments: payload.attachments
+    });
+  }
+};
+
+// server/services/leaveAutoInitService.ts
+init_schema();
+import { eq as eq14 } from "drizzle-orm";
+async function autoInitializeLeavePolicyForCountry(customerId, countryCode) {
+  const db = await getDb();
+  if (!db) return { initialized: false, count: 0 };
+  try {
+    const existingPolicies = await listCustomerLeavePolicies(customerId, countryCode);
+    if (existingPolicies.length > 0) {
+      return { initialized: false, count: 0 };
+    }
+    const statutoryTypes = await listLeaveTypesByCountry(countryCode);
+    if (statutoryTypes.length === 0) {
+      console.log(`[LeaveAutoInit] No statutory leave types found for country ${countryCode}, skipping.`);
+      return { initialized: false, count: 0 };
+    }
+    let created = 0;
+    for (const lt3 of statutoryTypes) {
+      await createCustomerLeavePolicy({
+        customerId,
+        countryCode,
+        leaveTypeId: lt3.id,
+        annualEntitlement: lt3.annualEntitlement ?? 0,
+        expiryRule: "year_end",
+        carryOverDays: 0
+      });
+      created++;
+    }
+    console.log(`[LeaveAutoInit] Initialized ${created} leave policies for customer ${customerId}, country ${countryCode}`);
+    const [countryInfo] = await db.select({ countryName: countriesConfig.countryName }).from(countriesConfig).where(eq14(countriesConfig.countryCode, countryCode)).limit(1);
+    const countryName = countryInfo?.countryName || countryCode;
+    notificationService.send({
+      type: "leave_policy_country_activated",
+      customerId,
+      data: {
+        countryName,
+        countryCode,
+        policyCount: created
+      }
+    }).catch((err) => {
+      console.error(`[LeaveAutoInit] Failed to send notification for customer ${customerId}:`, err);
+    });
+    return { initialized: true, count: created };
+  } catch (err) {
+    console.error(`[LeaveAutoInit] Error initializing leave policies for customer ${customerId}, country ${countryCode}:`, err);
+    return { initialized: false, count: 0 };
+  }
+}
+
 // server/routers/employees.ts
 init_schema();
-import { eq as eq13, desc as desc8, and as and11 } from "drizzle-orm";
+import { eq as eq15, desc as desc8, and as and13 } from "drizzle-orm";
 var employeesRouter = router({
   list: userProcedure.input(
     z4.object({
@@ -6540,9 +8466,9 @@ var employeesRouter = router({
     const insertId = result[0]?.insertId ?? result.insertId;
     if (insertId && input.country) {
       try {
-        await initializeLeaveBalancesForEmployee(insertId);
+        await autoInitializeLeavePolicyForCountry(input.customerId, input.country);
       } catch (e) {
-        console.error("Failed to initialize leave balances:", e);
+        console.error("Failed to auto-initialize leave policy:", e);
       }
     }
     await logAuditAction({
@@ -6707,19 +8633,19 @@ var employeesRouter = router({
         const db = await getDb2();
         if (db) {
           const { invoices: invoicesTable, invoiceItems: invoiceItemsTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-          const { eq: eq65, and: and50 } = await import("drizzle-orm");
+          const { eq: eq67, and: and53 } = await import("drizzle-orm");
           const existingVisaInvoices = await db.select().from(invoicesTable).where(
-            and50(
-              eq65(invoicesTable.invoiceType, "visa_service"),
-              eq65(invoicesTable.customerId, currentEmpForVisa.customerId)
+            and53(
+              eq67(invoicesTable.invoiceType, "visa_service"),
+              eq67(invoicesTable.customerId, currentEmpForVisa.customerId)
             )
           );
           let hasActiveBilledInvoice = false;
           for (const inv of existingVisaInvoices) {
             const items = await db.select().from(invoiceItemsTable).where(
-              and50(
-                eq65(invoiceItemsTable.invoiceId, inv.id),
-                eq65(invoiceItemsTable.employeeId, input.id)
+              and53(
+                eq67(invoiceItemsTable.invoiceId, inv.id),
+                eq67(invoiceItemsTable.employeeId, input.id)
               )
             );
             if (items.length > 0) {
@@ -6728,8 +8654,8 @@ var employeesRouter = router({
                 visaServiceResult = { invoiceId: null, message: "Visa service invoice already exists and is billed" };
                 break;
               } else if (inv.status === "draft" || inv.status === "cancelled") {
-                await db.delete(invoiceItemsTable).where(eq65(invoiceItemsTable.invoiceId, inv.id));
-                await db.delete(invoicesTable).where(eq65(invoicesTable.id, inv.id));
+                await db.delete(invoiceItemsTable).where(eq67(invoiceItemsTable.invoiceId, inv.id));
+                await db.delete(invoicesTable).where(eq67(invoicesTable.id, inv.id));
               }
             }
           }
@@ -6754,8 +8680,8 @@ var employeesRouter = router({
       try {
         const emp = await getEmployeeById(input.id);
         if (emp) {
-          const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
-          await initializeLeaveBalancesForEmployee(input.id);
+          await autoInitializeLeavePolicyForCountry(emp.customerId, emp.country);
+          await initializeLeaveBalancesForEmployee(input.id, { annualLeaveStartsAtZero: true });
           leaveBalancesInitialized = true;
         }
       } catch (err) {
@@ -6866,8 +8792,8 @@ var employeesRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError5({ code: "INTERNAL_SERVER_ERROR" });
       const { employeeContracts: employeeContracts2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const { eq: eq65 } = await import("drizzle-orm");
-      const contracts = await db.select().from(employeeContracts2).where(eq65(employeeContracts2.id, input.id));
+      const { eq: eq67 } = await import("drizzle-orm");
+      const contracts = await db.select().from(employeeContracts2).where(eq67(employeeContracts2.id, input.id));
       const contract = contracts[0];
       if (!contract || !contract.fileKey) {
         throw new TRPCError5({ code: "NOT_FOUND", message: "Contract file not found" });
@@ -7049,8 +8975,8 @@ var employeesRouter = router({
       const db = await getDb();
       if (!db) return [];
       const conditions = [];
-      if (input.customerId) conditions.push(eq13(onboardingInvites.customerId, input.customerId));
-      if (input.status) conditions.push(eq13(onboardingInvites.status, input.status));
+      if (input.customerId) conditions.push(eq15(onboardingInvites.customerId, input.customerId));
+      if (input.status) conditions.push(eq15(onboardingInvites.status, input.status));
       const invites = await db.select({
         id: onboardingInvites.id,
         customerId: onboardingInvites.customerId,
@@ -7062,13 +8988,13 @@ var employeesRouter = router({
         expiresAt: onboardingInvites.expiresAt,
         completedAt: onboardingInvites.completedAt,
         createdAt: onboardingInvites.createdAt
-      }).from(onboardingInvites).leftJoin(customers, eq13(onboardingInvites.customerId, customers.id)).where(conditions.length > 0 ? and11(...conditions) : void 0).orderBy(desc8(onboardingInvites.createdAt));
+      }).from(onboardingInvites).leftJoin(customers, eq15(onboardingInvites.customerId, customers.id)).where(conditions.length > 0 ? and13(...conditions) : void 0).orderBy(desc8(onboardingInvites.createdAt));
       return invites;
     }),
     delete: customerManagerProcedure.input(z4.object({ id: z4.number() })).mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError5({ code: "INTERNAL_SERVER_ERROR" });
-      await db.delete(onboardingInvites).where(eq13(onboardingInvites.id, input.id));
+      await db.delete(onboardingInvites).where(eq15(onboardingInvites.id, input.id));
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -7123,6 +9049,24 @@ function calculateItemTotals(data) {
     net: net2.toFixed(2),
     totalEmploymentCost: totalEmploymentCost.toFixed(2)
   };
+}
+function getPrevMonth(payrollMonth) {
+  let y, m;
+  if (payrollMonth instanceof Date) {
+    y = payrollMonth.getUTCFullYear();
+    m = payrollMonth.getUTCMonth() + 1;
+  } else {
+    const parts = String(payrollMonth).split("-").map(Number);
+    y = parts[0];
+    m = parts[1];
+  }
+  let prevM = m - 1;
+  let prevY = y;
+  if (prevM < 1) {
+    prevM = 12;
+    prevY--;
+  }
+  return `${prevY}-${String(prevM).padStart(2, "0")}-01`;
 }
 var payrollRouter = router({
   list: userProcedure.input(
@@ -7215,18 +9159,19 @@ var payrollRouter = router({
     if (input.data.status === "pending_approval" || input.data.status === "approved") {
       const run = await getPayrollRunById(input.id);
       if (run) {
-        const pm = run.payrollMonth instanceof Date ? `${run.payrollMonth.getUTCFullYear()}-${String(run.payrollMonth.getUTCMonth() + 1).padStart(2, "0")}` : String(run.payrollMonth).substring(0, 7);
-        const pmDate = `${pm}-01`;
-        const adjLocked = await lockSubmittedAdjustments(pmDate, run.countryCode);
-        const leaveLocked = await lockSubmittedLeaveRecords(pm, run.countryCode);
-        if (adjLocked > 0 || leaveLocked > 0) {
+        const prevMonthDate = getPrevMonth(run.payrollMonth);
+        const prevMonthPrefix = prevMonthDate.substring(0, 7);
+        const adjLocked = await lockSubmittedAdjustments(prevMonthDate, run.countryCode, input.id);
+        const leaveLocked = await lockSubmittedLeaveRecords(prevMonthPrefix, run.countryCode, input.id);
+        const reimbLocked = await lockSubmittedReimbursements(prevMonthDate, run.countryCode, input.id);
+        if (adjLocked > 0 || leaveLocked > 0 || reimbLocked > 0) {
           await logAuditAction({
             userId: ctx.user.id,
             userName: ctx.user.name || null,
             action: "payroll_submit_lock",
             entityType: "payroll_run",
             entityId: input.id,
-            changes: JSON.stringify({ adjustmentsLocked: adjLocked, leaveRecordsLocked: leaveLocked, month: pm, country: run.countryCode })
+            changes: JSON.stringify({ adjustmentsLocked: adjLocked, leaveRecordsLocked: leaveLocked, reimbursementsLocked: reimbLocked, month: prevMonthPrefix, country: run.countryCode })
           });
         }
       }
@@ -7251,12 +9196,10 @@ var payrollRouter = router({
     if (!run) throw new TRPCError6({ code: "NOT_FOUND", message: "Payroll run not found" });
     const emp = await getEmployeeById(input.employeeId);
     if (!emp) throw new TRPCError6({ code: "NOT_FOUND", message: "Employee not found" });
-    const pmDate = run.payrollMonth instanceof Date ? run.payrollMonth : new Date(run.payrollMonth);
-    const y = pmDate.getUTCFullYear();
-    const m = pmDate.getUTCMonth() + 1;
-    const payrollMonth = `${y}-${String(m).padStart(2, "0")}-01`;
-    const allAdj = await getSubmittedAdjustmentsForPayroll(run.countryCode, payrollMonth);
-    const empAdj = allAdj.filter((a) => a.employeeId === input.employeeId);
+    const prevMonthStr = getPrevMonth(run.payrollMonth);
+    const prevMonthPrefix = prevMonthStr.substring(0, 7);
+    const allAdj = await getSubmittedAdjustmentsForPayroll(run.countryCode, prevMonthStr, ["admin_approved", "locked"]);
+    const empAdj = allAdj.filter((a) => a.employeeId === input.employeeId && (a.status === "admin_approved" || !a.payrollRunId));
     let totalBonus = 0, totalAllowances = 0, totalReimbursements = 0, totalDeductions = 0;
     const breakdown = [];
     for (const adj of empAdj) {
@@ -7280,8 +9223,15 @@ var payrollRouter = router({
       }
       breakdown.push({ id: adj.id, type: adj.adjustmentType, category: adj.category, amount: adj.amount });
     }
-    const allLeave = await getSubmittedUnpaidLeaveForPayroll(run.countryCode, payrollMonth);
-    const empLeave = allLeave.filter((l) => l.employeeId === input.employeeId);
+    const allReimb = await getSubmittedReimbursementsForPayroll(run.countryCode, prevMonthStr, ["admin_approved", "locked"]);
+    const empReimb = allReimb.filter((r) => r.employeeId === input.employeeId && (r.status === "admin_approved" || !r.payrollRunId));
+    for (const reimb of empReimb) {
+      const amount = parseFloat(reimb.amount?.toString() ?? "0");
+      totalReimbursements += amount;
+      breakdown.push({ id: reimb.id, type: "reimbursement", category: reimb.category, amount: reimb.amount, source: "reimbursement_table" });
+    }
+    const allLeave = await getSubmittedUnpaidLeaveForPayroll(run.countryCode, prevMonthPrefix, ["admin_approved", "locked"]);
+    const empLeave = allLeave.filter((l) => l.employeeId === input.employeeId && (l.status === "admin_approved" || !l.payrollRunId));
     let totalUnpaidDays = 0;
     for (const lv of empLeave) {
       totalUnpaidDays += parseFloat(lv.days?.toString() ?? "0");
@@ -7334,12 +9284,9 @@ var payrollRouter = router({
     if (duplicate) {
       throw new TRPCError6({ code: "BAD_REQUEST", message: `Employee ${employee.firstName} ${employee.lastName} is already in this payroll run.` });
     }
-    const pmDate = payrollRun.payrollMonth instanceof Date ? payrollRun.payrollMonth : new Date(payrollRun.payrollMonth);
-    const y = pmDate.getUTCFullYear();
-    const m = String(pmDate.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(pmDate.getUTCDate()).padStart(2, "0");
-    const payrollMonthStr = `${y}-${m}-${d}`;
-    const allAdj = await getSubmittedAdjustmentsForPayroll(input.employeeId, payrollMonthStr);
+    const prevMonthStr = getPrevMonth(payrollRun.payrollMonth);
+    const prevMonthPrefix = prevMonthStr.substring(0, 7);
+    const allAdj = await getSubmittedAdjustmentsForPayroll(input.employeeId, prevMonthStr, ["admin_approved", "locked"]);
     let totalBonus = 0;
     let totalAllowances = 0;
     let totalReimbursements = 0;
@@ -7347,6 +9294,7 @@ var payrollRouter = router({
     const adjustmentsBreakdown = [];
     const lockedAdjustmentIds = [];
     for (const adj of allAdj) {
+      if (adj.status === "locked" && adj.payrollRunId) continue;
       const amount = parseFloat(adj.amount?.toString() ?? "0");
       switch (adj.adjustmentType) {
         case "bonus":
@@ -7374,7 +9322,23 @@ var payrollRouter = router({
       });
       lockedAdjustmentIds.push(adj.id);
     }
-    const allLeave = await getSubmittedUnpaidLeaveForPayroll(input.employeeId, payrollMonthStr);
+    const allReimb = await getSubmittedReimbursementsForPayroll(input.employeeId, prevMonthStr, ["admin_approved", "locked"]);
+    const lockedReimbursementIds = [];
+    for (const reimb of allReimb) {
+      if (reimb.status === "locked" && reimb.payrollRunId) continue;
+      const amount = parseFloat(reimb.amount?.toString() ?? "0");
+      totalReimbursements += amount;
+      adjustmentsBreakdown.push({
+        id: reimb.id,
+        type: "reimbursement",
+        category: reimb.category,
+        description: reimb.description,
+        amount: reimb.amount,
+        source: "reimbursement_table"
+      });
+      lockedReimbursementIds.push(reimb.id);
+    }
+    const allLeave = await getSubmittedUnpaidLeaveForPayroll(input.employeeId, prevMonthPrefix, ["admin_approved", "locked"]);
     let totalUnpaidDays = 0;
     const lockedLeaveIds = [];
     for (const lv of allLeave) {
@@ -7416,8 +9380,11 @@ var payrollRouter = router({
     for (const adjId of lockedAdjustmentIds) {
       await updateAdjustment(adjId, { status: "locked", payrollRunId: input.payrollRunId });
     }
+    for (const reimbId of lockedReimbursementIds) {
+      await updateReimbursement(reimbId, { status: "locked", payrollRunId: input.payrollRunId });
+    }
     for (const leaveId of lockedLeaveIds) {
-      await updateLeaveRecord(leaveId, { status: "locked" });
+      await updateLeaveRecord(leaveId, { status: "locked", payrollRunId: input.payrollRunId });
     }
     await logAuditAction({
       userId: ctx.user.id,
@@ -7481,6 +9448,28 @@ var payrollRouter = router({
     const existingItem = await getPayrollItemById(input.id);
     if (!existingItem) throw new TRPCError6({ code: "NOT_FOUND", message: "Payroll item not found" });
     const payrollRunId = existingItem.payrollRunId;
+    const employeeId = existingItem.employeeId;
+    const { getDb: getDb2 } = await Promise.resolve().then(() => (init_db2(), db_exports));
+    const db = getDb2();
+    if (db) {
+      const { adjustments: adjustments2, reimbursements: reimbursements2, leaveRecords: leaveRecords2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { and: and53, eq: eq67 } = await import("drizzle-orm");
+      await db.update(adjustments2).set({ status: "admin_approved", payrollRunId: null }).where(and53(
+        eq67(adjustments2.status, "locked"),
+        eq67(adjustments2.payrollRunId, payrollRunId),
+        eq67(adjustments2.employeeId, employeeId)
+      ));
+      await db.update(reimbursements2).set({ status: "admin_approved", payrollRunId: null }).where(and53(
+        eq67(reimbursements2.status, "locked"),
+        eq67(reimbursements2.payrollRunId, payrollRunId),
+        eq67(reimbursements2.employeeId, employeeId)
+      ));
+      await db.update(leaveRecords2).set({ status: "admin_approved", payrollRunId: null }).where(and53(
+        eq67(leaveRecords2.status, "locked"),
+        eq67(leaveRecords2.payrollRunId, payrollRunId),
+        eq67(leaveRecords2.employeeId, employeeId)
+      ));
+    }
     await deletePayrollItem(input.id);
     await recalculatePayrollRunTotals(payrollRunId);
     await logAuditAction({
@@ -7488,13 +9477,51 @@ var payrollRouter = router({
       userName: ctx.user.name || null,
       action: "delete",
       entityType: "payroll_item",
-      entityId: input.id
+      entityId: input.id,
+      changes: JSON.stringify({ rolledBack: true, employeeId })
     });
     return { success: true };
   }),
   /**
-   * Auto-fill payroll items based on all active employees in the country.
-   * Now integrates:
+   * Get counts of pending review items (client_approved but not yet admin_approved)
+   * for a given payroll run's country and month.
+   * Used by frontend to show a warning before auto-fill.
+   */
+  getPendingReviewCounts: operationsManagerProcedure.input(z5.object({ payrollRunId: z5.number() })).query(async ({ input }) => {
+    const run = await getPayrollRunById(input.payrollRunId);
+    if (!run) throw new TRPCError6({ code: "BAD_REQUEST", message: "Payroll run not found" });
+    const prevMonthDate = getPrevMonth(run.payrollMonth);
+    const prevMonthPrefix = prevMonthDate.substring(0, 7);
+    const { getDb: getDb2 } = await Promise.resolve().then(() => (init_db2(), db_exports));
+    const db = getDb2();
+    if (!db) throw new Error("Database not initialized");
+    const { leaveRecords: leaveRecords2, adjustments: adjustments2, reimbursements: reimbursements2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+    const { and: and53, eq: eq67, inArray: inArray19, sql: sql28, gte: gte5, lt: lt3 } = await import("drizzle-orm");
+    const monthStartDate = prevMonthDate;
+    const [y, m] = prevMonthPrefix.split("-").map(Number);
+    const nextMonth = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    const pendingLeaves = await db.select({ count: sql28`count(*)` }).from(leaveRecords2).where(and53(
+      inArray19(leaveRecords2.status, ["submitted", "client_approved"]),
+      gte5(leaveRecords2.startDate, monthStartDate),
+      lt3(leaveRecords2.startDate, nextMonth)
+    ));
+    const pendingAdjustments = await db.select({ count: sql28`count(*)` }).from(adjustments2).where(and53(
+      inArray19(adjustments2.status, ["submitted", "client_approved"]),
+      eq67(adjustments2.effectiveMonth, prevMonthDate)
+    ));
+    const pendingReimbursements = await db.select({ count: sql28`count(*)` }).from(reimbursements2).where(and53(
+      inArray19(reimbursements2.status, ["submitted", "client_approved"]),
+      eq67(reimbursements2.effectiveMonth, prevMonthDate)
+    ));
+    return {
+      pendingLeaves: Number(pendingLeaves[0]?.count ?? 0),
+      pendingAdjustments: Number(pendingAdjustments[0]?.count ?? 0),
+      pendingReimbursements: Number(pendingReimbursements[0]?.count ?? 0),
+      total: Number(pendingLeaves[0]?.count ?? 0) + Number(pendingAdjustments[0]?.count ?? 0) + Number(pendingReimbursements[0]?.count ?? 0)
+    };
+  }),
+  /**
+   * Auto-fill payroll items for all active employees in the payroll run's country.* Now integrates:
    * - Adjustments: aggregates submitted adjustments (bonus/allowance/reimbursement/deduction) per employee
    * - Leave: aggregates submitted unpaid leave deductions per employee
    * After auto-fill, linked adjustments and leave records are locked.
@@ -7502,26 +9529,28 @@ var payrollRouter = router({
   autoFill: operationsManagerProcedure.input(z5.object({ payrollRunId: z5.number() })).mutation(async ({ input, ctx }) => {
     const run = await getPayrollRunById(input.payrollRunId);
     if (!run) throw new TRPCError6({ code: "BAD_REQUEST", message: "Payroll run not found" });
-    let payrollMonth;
-    if (run.payrollMonth instanceof Date) {
-      const y = run.payrollMonth.getUTCFullYear();
-      const m = String(run.payrollMonth.getUTCMonth() + 1).padStart(2, "0");
-      const d = String(run.payrollMonth.getUTCDate()).padStart(2, "0");
-      payrollMonth = `${y}-${m}-${d}`;
-    } else {
-      payrollMonth = String(run.payrollMonth);
-    }
+    const prevMonthStr = getPrevMonth(run.payrollMonth);
+    const prevMonthPrefix = prevMonthStr.substring(0, 7);
     const activeEmployees = await getActiveEmployeesForPayroll(run.countryCode);
     const existingItems = await listPayrollItemsByRun(input.payrollRunId);
     const existingEmployeeIds = new Set(existingItems.map((i) => i.employeeId));
-    const allAdjustments = await getSubmittedAdjustmentsForPayroll(run.countryCode, payrollMonth);
+    const allAdjustments = await getSubmittedAdjustmentsForPayroll(run.countryCode, prevMonthStr, ["admin_approved", "locked"]);
     const adjByEmployee = /* @__PURE__ */ new Map();
     for (const adj of allAdjustments) {
+      if (adj.status === "locked" && adj.payrollRunId) continue;
       const list = adjByEmployee.get(adj.employeeId) ?? [];
       list.push(adj);
       adjByEmployee.set(adj.employeeId, list);
     }
-    const allUnpaidLeave = await getSubmittedUnpaidLeaveForPayroll(run.countryCode, payrollMonth);
+    const allReimbursements = await getSubmittedReimbursementsForPayroll(run.countryCode, prevMonthStr, ["admin_approved", "locked"]);
+    const reimbByEmployee = /* @__PURE__ */ new Map();
+    for (const reimb of allReimbursements) {
+      if (reimb.status === "locked" && reimb.payrollRunId) continue;
+      const list = reimbByEmployee.get(reimb.employeeId) ?? [];
+      list.push(reimb);
+      reimbByEmployee.set(reimb.employeeId, list);
+    }
+    const allUnpaidLeave = await getSubmittedUnpaidLeaveForPayroll(run.countryCode, prevMonthPrefix, ["admin_approved", "locked"]);
     const leaveByEmployee = /* @__PURE__ */ new Map();
     for (const lv of allUnpaidLeave) {
       const list = leaveByEmployee.get(lv.employeeId) ?? [];
@@ -7531,6 +9560,7 @@ var payrollRouter = router({
     const newItems = [];
     const lockedAdjustmentIds = [];
     const lockedLeaveIds = [];
+    const lockedReimbursementIds = [];
     for (const emp of activeEmployees) {
       if (existingEmployeeIds.has(emp.id)) continue;
       const baseSalary = parseFloat(emp.baseSalary?.toString() ?? "0");
@@ -7567,6 +9597,20 @@ var payrollRouter = router({
           amount: adj.amount
         });
         lockedAdjustmentIds.push(adj.id);
+      }
+      const empReimb = reimbByEmployee.get(emp.id) ?? [];
+      for (const reimb of empReimb) {
+        const amount = parseFloat(reimb.amount?.toString() ?? "0");
+        totalReimbursements += amount;
+        adjustmentsBreakdown.push({
+          id: reimb.id,
+          type: "reimbursement",
+          category: reimb.category,
+          description: reimb.description,
+          amount: reimb.amount,
+          source: "reimbursement_table"
+        });
+        lockedReimbursementIds.push(reimb.id);
       }
       const empLeave = leaveByEmployee.get(emp.id) ?? [];
       let totalUnpaidDays = 0;
@@ -7609,7 +9653,10 @@ var payrollRouter = router({
       await updateAdjustment(adjId, { status: "locked", payrollRunId: input.payrollRunId });
     }
     for (const leaveId of lockedLeaveIds) {
-      await updateLeaveRecord(leaveId, { status: "locked" });
+      await updateLeaveRecord(leaveId, { status: "locked", payrollRunId: input.payrollRunId });
+    }
+    for (const reimbId of lockedReimbursementIds) {
+      await updateReimbursement(reimbId, { status: "locked", payrollRunId: input.payrollRunId });
     }
     await logAuditAction({
       userId: ctx.user.id,
@@ -7620,14 +9667,16 @@ var payrollRouter = router({
       changes: JSON.stringify({
         employeesAdded: newItems.length,
         adjustmentsLocked: lockedAdjustmentIds.length,
-        leaveRecordsLocked: lockedLeaveIds.length
+        leaveRecordsLocked: lockedLeaveIds.length,
+        reimbursementsLocked: lockedReimbursementIds.length
       })
     });
     return {
       success: true,
       itemsAdded: newItems.length,
       adjustmentsLocked: lockedAdjustmentIds.length,
-      leaveRecordsLocked: lockedLeaveIds.length
+      leaveRecordsLocked: lockedLeaveIds.length,
+      reimbursementsLocked: lockedReimbursementIds.length
     };
   })
 });
@@ -7636,19 +9685,19 @@ var payrollRouter = router({
 import { z as z6 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq17, sql as sql7 } from "drizzle-orm";
+import { eq as eq18, sql as sql8 } from "drizzle-orm";
 import { TRPCError as TRPCError8 } from "@trpc/server";
 
 // server/services/creditNoteService.ts
 init_db2();
 init_schema();
 init_db2();
-import { eq as eq15, like as like8, and as and13 } from "drizzle-orm";
+import { eq as eq17, like as like9, and as and15 } from "drizzle-orm";
 
 // server/services/walletService.ts
 init_connection();
 init_schema();
-import { eq as eq14, and as and12 } from "drizzle-orm";
+import { eq as eq16, and as and14 } from "drizzle-orm";
 import { TRPCError as TRPCError7 } from "@trpc/server";
 var WalletService = class {
   /**
@@ -7659,7 +9708,7 @@ var WalletService = class {
     const db = externalTx || getDb();
     if (!db) throw new Error("Database not initialized");
     const existing = await db.query.customerWallets.findFirst({
-      where: (t4, { and: and50, eq: eq65 }) => and50(eq65(t4.customerId, customerId), eq65(t4.currency, currency))
+      where: (t4, { and: and53, eq: eq67 }) => and53(eq67(t4.customerId, customerId), eq67(t4.currency, currency))
     });
     if (existing) return existing;
     const [inserted] = await db.insert(customerWallets).values({
@@ -7682,7 +9731,7 @@ var WalletService = class {
     const amountNum = parseFloat(params.amount);
     if (amountNum <= 0) throw new Error("Transaction amount must be positive");
     const wallet = await tx.query.customerWallets.findFirst({
-      where: eq14(customerWallets.id, params.walletId)
+      where: eq16(customerWallets.id, params.walletId)
     });
     if (!wallet) throw new Error(`Wallet ${params.walletId} not found`);
     const currentBalance = parseFloat(wallet.balance);
@@ -7703,7 +9752,7 @@ var WalletService = class {
       version: wallet.version + 1
     }).where(
       // Ensure version hasn't changed since read
-      and12(eq14(customerWallets.id, params.walletId), eq14(customerWallets.version, wallet.version))
+      and14(eq16(customerWallets.id, params.walletId), eq16(customerWallets.version, wallet.version))
     );
     if (result.rowsAffected === 0) {
       throw new TRPCError7({
@@ -7751,6 +9800,11 @@ var WalletService = class {
     const balance = parseFloat(wallet.balance);
     const total = parseFloat(totalAmount);
     if (balance <= 0) return "0";
+    let invoiceLabel = `#${invoiceId}`;
+    const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq16(invoices.id, invoiceId)).limit(1);
+    if (invoiceRecord.length > 0 && invoiceRecord[0].invoiceNumber) {
+      invoiceLabel = invoiceRecord[0].invoiceNumber;
+    }
     const deductionAmount = Math.min(balance, total).toFixed(2);
     if (parseFloat(deductionAmount) > 0) {
       await this.transact({
@@ -7760,7 +9814,7 @@ var WalletService = class {
         direction: "debit",
         referenceId: invoiceId,
         referenceType: "invoice",
-        description: `Auto-deduction for invoice payment`
+        description: `Auto-deduction for Invoice ${invoiceLabel}`
       });
     }
     return deductionAmount;
@@ -7770,6 +9824,14 @@ var WalletService = class {
    */
   async refundDeduction(invoiceId, customerId, currency, amount) {
     if (parseFloat(amount) <= 0) return;
+    const db = getDb();
+    let invoiceLabel = `#${invoiceId}`;
+    if (db) {
+      const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq16(invoices.id, invoiceId)).limit(1);
+      if (invoiceRecord.length > 0 && invoiceRecord[0].invoiceNumber) {
+        invoiceLabel = invoiceRecord[0].invoiceNumber;
+      }
+    }
     const wallet = await this.getWallet(customerId, currency);
     await this.transact({
       walletId: wallet.id,
@@ -7778,7 +9840,7 @@ var WalletService = class {
       direction: "credit",
       referenceId: invoiceId,
       referenceType: "invoice",
-      description: `Refund for rejected/voided invoice`
+      description: `Refund for rejected/voided Invoice ${invoiceLabel}`
     });
   }
   // ── Frozen Wallet Methods ─────────────────────────────────────────────
@@ -7790,7 +9852,7 @@ var WalletService = class {
     const db = externalTx || getDb();
     if (!db) throw new Error("Database not initialized");
     const existing = await db.query.customerFrozenWallets.findFirst({
-      where: (t4, { and: and50, eq: eq65 }) => and50(eq65(t4.customerId, customerId), eq65(t4.currency, currency))
+      where: (t4, { and: and53, eq: eq67 }) => and53(eq67(t4.customerId, customerId), eq67(t4.currency, currency))
     });
     if (existing) return existing;
     const [inserted] = await db.insert(customerFrozenWallets).values({
@@ -7811,7 +9873,7 @@ var WalletService = class {
     const amountNum = parseFloat(params.amount);
     if (amountNum <= 0) throw new Error("Transaction amount must be positive");
     const wallet = await tx.query.customerFrozenWallets.findFirst({
-      where: eq14(customerFrozenWallets.id, params.walletId)
+      where: eq16(customerFrozenWallets.id, params.walletId)
     });
     if (!wallet) throw new Error(`Frozen Wallet ${params.walletId} not found`);
     const currentBalance = parseFloat(wallet.balance);
@@ -7831,7 +9893,7 @@ var WalletService = class {
       balance: newBalance.toFixed(2),
       version: wallet.version + 1
     }).where(
-      and12(eq14(customerFrozenWallets.id, params.walletId), eq14(customerFrozenWallets.version, wallet.version))
+      and14(eq16(customerFrozenWallets.id, params.walletId), eq16(customerFrozenWallets.version, wallet.version))
     );
     if (result.rowsAffected === 0) {
       throw new TRPCError7({
@@ -7872,6 +9934,24 @@ var WalletService = class {
    * Deposit funds into frozen wallet (e.g. from paid deposit invoice)
    */
   async depositToFrozen(customerId, currency, amount, invoiceId, createdBy) {
+    const db = getDb();
+    if (!db) throw new Error("Database not initialized");
+    const existingTx = await db.query.frozenWalletTransactions.findFirst({
+      where: (t4, { and: and53, eq: eq67 }) => and53(
+        eq67(t4.type, "deposit_in"),
+        eq67(t4.referenceId, invoiceId),
+        eq67(t4.referenceType, "invoice")
+      )
+    });
+    if (existingTx) {
+      console.warn(`[WalletService] Skipping duplicate depositToFrozen for invoice #${invoiceId} \u2014 transaction #${existingTx.id} already exists.`);
+      return { wallet: null, transaction: existingTx, skipped: true };
+    }
+    let invoiceLabel = `#${invoiceId}`;
+    const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq16(invoices.id, invoiceId)).limit(1);
+    if (invoiceRecord.length > 0 && invoiceRecord[0].invoiceNumber) {
+      invoiceLabel = invoiceRecord[0].invoiceNumber;
+    }
     const wallet = await this.getFrozenWallet(customerId, currency);
     return await this.frozenTransact({
       walletId: wallet.id,
@@ -7880,7 +9960,7 @@ var WalletService = class {
       direction: "credit",
       referenceId: invoiceId,
       referenceType: "invoice",
-      description: `Deposit received from Invoice #${invoiceId}`,
+      description: `Deposit received from Invoice ${invoiceLabel}`,
       createdBy
     });
   }
@@ -7890,6 +9970,14 @@ var WalletService = class {
    * Accepts an optional external transaction object to avoid nested transactions.
    */
   async releaseDepositToCreditNote(customerId, currency, amount, creditNoteId, reason, createdBy, externalTx) {
+    const db = externalTx || getDb();
+    let cnLabel = `#${creditNoteId}`;
+    if (db) {
+      const cnRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq16(invoices.id, creditNoteId)).limit(1);
+      if (cnRecord.length > 0 && cnRecord[0].invoiceNumber) {
+        cnLabel = cnRecord[0].invoiceNumber;
+      }
+    }
     const frozenWallet = await this.getFrozenWallet(customerId, currency, externalTx);
     return await this.frozenTransact({
       walletId: frozenWallet.id,
@@ -7898,7 +9986,7 @@ var WalletService = class {
       direction: "debit",
       referenceId: creditNoteId,
       referenceType: "credit_note",
-      description: `Deposit released to Credit Note #${creditNoteId}: ${reason}`,
+      description: `Deposit released to Credit Note ${cnLabel}: ${reason}`,
       createdBy
     }, externalTx);
   }
@@ -7929,7 +10017,7 @@ async function approveCreditNote(creditNoteId, approvedBy, disposition) {
   if (!db) throw new Error("Database not initialized");
   return await db.transaction(async (tx) => {
     const creditNote = await tx.query.invoices.findFirst({
-      where: eq15(invoices.id, creditNoteId)
+      where: eq17(invoices.id, creditNoteId)
     });
     if (!creditNote) throw new Error("Credit note not found");
     if (creditNote.invoiceType !== "credit_note" && creditNote.invoiceType !== "deposit_refund") {
@@ -7940,7 +10028,7 @@ async function approveCreditNote(creditNoteId, approvedBy, disposition) {
     }
     const finalDisposition = disposition || creditNote.creditNoteDisposition || "to_wallet";
     if (disposition) {
-      await tx.update(invoices).set({ creditNoteDisposition: disposition }).where(eq15(invoices.id, creditNoteId));
+      await tx.update(invoices).set({ creditNoteDisposition: disposition }).where(eq17(invoices.id, creditNoteId));
     }
     if (creditNote.relatedInvoiceId) {
       const relatedInvoice = await getInvoiceById(creditNote.relatedInvoiceId);
@@ -7980,7 +10068,7 @@ async function approveCreditNote(creditNoteId, approvedBy, disposition) {
       paidAmount: creditNote.total,
       // Negative amount
       amountDue: "0"
-    }).where(eq15(invoices.id, creditNoteId));
+    }).where(eq17(invoices.id, creditNoteId));
     return { success: true, message: `Credit note approved (${finalDisposition})` };
   });
 }
@@ -8000,7 +10088,7 @@ async function generateCreditNoteNumber(billingEntityId, invoiceMonth) {
   }
   const prefix = `CN-${bePrefix}`;
   const pattern = `${prefix}${yearMonth}-%`;
-  const existing = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(like8(invoices.invoiceNumber, pattern));
+  const existing = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(like9(invoices.invoiceNumber, pattern));
   let maxSeq = 0;
   for (const row of existing) {
     const parts = row.invoiceNumber.split("-");
@@ -8036,9 +10124,9 @@ async function generateCreditNote(params) {
         }
       }
       const existingRefunds = await db.select({ id: invoices.id, status: invoices.status }).from(invoices).where(
-        and13(
-          eq15(invoices.relatedInvoiceId, params.originalInvoiceId),
-          eq15(invoices.invoiceType, "deposit_refund")
+        and15(
+          eq17(invoices.relatedInvoiceId, params.originalInvoiceId),
+          eq17(invoices.invoiceType, "deposit_refund")
         )
       );
       const hasActiveRefund = existingRefunds.some(
@@ -8051,9 +10139,9 @@ async function generateCreditNote(params) {
         throw new Error("Deposit invoices only support full-amount credit notes. Partial credit is not allowed for deposits.");
       }
       const existingCreditNotes = await db.select({ id: invoices.id, status: invoices.status }).from(invoices).where(
-        and13(
-          eq15(invoices.relatedInvoiceId, params.originalInvoiceId),
-          eq15(invoices.invoiceType, "credit_note")
+        and15(
+          eq17(invoices.relatedInvoiceId, params.originalInvoiceId),
+          eq17(invoices.invoiceType, "credit_note")
         )
       );
       const hasActiveCreditNote = existingCreditNotes.some(
@@ -8065,9 +10153,9 @@ async function generateCreditNote(params) {
     }
     if (originalInvoice.invoiceType !== "deposit") {
       const existingCreditNotes = await db.select({ total: invoices.total, status: invoices.status }).from(invoices).where(
-        and13(
-          eq15(invoices.relatedInvoiceId, params.originalInvoiceId),
-          eq15(invoices.invoiceType, "credit_note")
+        and15(
+          eq17(invoices.relatedInvoiceId, params.originalInvoiceId),
+          eq17(invoices.invoiceType, "credit_note")
         )
       );
       const existingCreditTotal = existingCreditNotes.filter((cn) => cn.status !== "cancelled").reduce((sum3, cn) => sum3 + Math.abs(parseFloat(cn.total?.toString() ?? "0")), 0);
@@ -8178,706 +10266,7 @@ async function generateCreditNote(params) {
 
 // server/routers/invoices.ts
 init_notification();
-
-// server/services/notificationService.ts
 init_db2();
-init_schema();
-import { eq as eq16, and as and14, like as like9 } from "drizzle-orm";
-
-// server/services/invoicePdfService.ts
-init_db2();
-import PDFDocument from "pdfkit";
-import path from "path";
-import fs from "fs";
-import os from "os";
-var CJK_FONT_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663378930055/BicAsHhoridCdJUF.ttf";
-var CJK_FONT_CACHE_DIR = path.join(os.tmpdir(), ".font-cache");
-var CJK_FONT_CACHE_PATH = path.join(CJK_FONT_CACHE_DIR, "NotoSansSC-Regular.ttf");
-function hasCJK(text4) {
-  return /[^\x00-\x7F]/.test(text4);
-}
-async function ensureCJKFont() {
-  try {
-    if (fs.existsSync(CJK_FONT_CACHE_PATH)) {
-      return CJK_FONT_CACHE_PATH;
-    }
-    console.log("[InvoicePDF] Downloading CJK font...");
-    fs.mkdirSync(CJK_FONT_CACHE_DIR, { recursive: true });
-    const response = await fetch(CJK_FONT_URL);
-    if (!response.ok) {
-      console.warn("[InvoicePDF] Failed to download CJK font:", response.status);
-      return null;
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    fs.writeFileSync(CJK_FONT_CACHE_PATH, buffer);
-    console.log("[InvoicePDF] CJK font cached successfully");
-    return CJK_FONT_CACHE_PATH;
-  } catch (err) {
-    console.warn("[InvoicePDF] Failed to ensure CJK font:", err);
-    return null;
-  }
-}
-async function generateInvoicePdf(options) {
-  const invoice = await getInvoiceById(options.invoiceId);
-  if (!invoice) throw new Error("Invoice not found");
-  const customer = await getCustomerById(invoice.customerId);
-  const billingEntity = invoice.billingEntityId ? await getBillingEntityById(invoice.billingEntityId) : null;
-  const items = await listInvoiceItemsByInvoice(invoice.id);
-  let logoBuffer = null;
-  if (billingEntity && (billingEntity.logoFileKey || billingEntity.logoUrl)) {
-    try {
-      let logoUrl = billingEntity.logoUrl;
-      if (billingEntity.logoFileKey) {
-        const { url: signedUrl } = await storageGet(billingEntity.logoFileKey);
-        logoUrl = signedUrl;
-      }
-      if (logoUrl) {
-        const logoResponse = await fetch(logoUrl);
-        if (logoResponse.ok) {
-          logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
-        }
-      }
-    } catch (logoErr) {
-      console.warn("[InvoicePDF] Failed to fetch billing entity logo:", logoErr);
-    }
-  }
-  const cjkFontPath = await ensureCJKFont();
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({
-      size: "A4",
-      margins: { top: 50, bottom: 50, left: 50, right: 50 }
-    });
-    if (cjkFontPath) {
-      doc.registerFont("NotoSansSC", cjkFontPath);
-    }
-    const buffers = [];
-    doc.on("data", (chunk) => buffers.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(buffers)));
-    doc.on("error", reject);
-    const pageWidth = doc.page.width - 100;
-    const rightCol = 350;
-    function smartText(text4, x, y, opts, fontStyle) {
-      if (hasCJK(text4) && cjkFontPath) {
-        doc.font("NotoSansSC");
-      } else {
-        doc.font(fontStyle === "bold" ? "Helvetica-Bold" : "Helvetica");
-      }
-      doc.text(text4, x, y, opts);
-    }
-    let leftY = 50;
-    const rightStartY = 50;
-    if (logoBuffer) {
-      try {
-        doc.image(logoBuffer, 50, leftY, { width: 80, height: 40, fit: [80, 40] });
-        leftY += 48;
-      } catch (logoErr) {
-        console.warn("[InvoicePDF] Failed to render logo:", logoErr);
-      }
-    }
-    function textHeight(text4, fontSize, width) {
-      doc.fontSize(fontSize);
-      return doc.heightOfString(text4, { width }) + 2;
-    }
-    doc.fontSize(16).fillColor("#1a1a1a");
-    if (billingEntity) {
-      smartText(billingEntity.entityName, 50, leftY, { width: 280 }, "bold");
-      leftY += textHeight(billingEntity.entityName, 16, 280) + 2;
-      doc.fontSize(9).fillColor("#666666");
-      if (billingEntity.legalName && billingEntity.legalName !== billingEntity.entityName) {
-        smartText(billingEntity.legalName, 50, leftY, { width: 280 });
-        leftY += textHeight(billingEntity.legalName, 9, 280);
-      }
-      if (billingEntity.address) {
-        smartText(billingEntity.address, 50, leftY, { width: 280 });
-        leftY += textHeight(billingEntity.address, 9, 280);
-      }
-      const cityLine = [billingEntity.city, billingEntity.state, billingEntity.postalCode].filter(Boolean).join(", ");
-      if (cityLine) {
-        smartText(cityLine, 50, leftY, { width: 280 });
-        leftY += textHeight(cityLine, 9, 280);
-      }
-      if (billingEntity.country) {
-        smartText(billingEntity.country, 50, leftY, { width: 280 });
-        leftY += textHeight(billingEntity.country, 9, 280);
-      }
-      if (billingEntity.registrationNumber) {
-        const regText = `Reg: ${billingEntity.registrationNumber}`;
-        smartText(regText, 50, leftY, { width: 280 });
-        leftY += textHeight(regText, 9, 280);
-      }
-      if (billingEntity.taxId) {
-        const taxText = `Tax ID: ${billingEntity.taxId}`;
-        smartText(taxText, 50, leftY, { width: 280 });
-        leftY += textHeight(taxText, 9, 280);
-      }
-    } else {
-      smartText("GEA - Global Employment Advisors", 50, leftY, { width: 280 }, "bold");
-      leftY += 20;
-    }
-    let ry = rightStartY;
-    doc.fontSize(24).font("Helvetica-Bold").fillColor("#1a1a1a");
-    doc.text("INVOICE", rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
-    ry += 32;
-    doc.fontSize(10).font("Helvetica").fillColor("#333333");
-    doc.text(`Invoice #: ${invoice.invoiceNumber}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
-    ry += 14;
-    doc.text(`Date: ${new Date(invoice.createdAt).toLocaleDateString("en-GB")}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
-    ry += 14;
-    if (invoice.dueDate) {
-      doc.text(`Due Date: ${new Date(invoice.dueDate).toLocaleDateString("en-GB")}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
-      ry += 14;
-    }
-    if (invoice.invoiceMonth) {
-      const monthVal = String(invoice.invoiceMonth);
-      let monthStr;
-      if (/^\d{4}-\d{2}/.test(monthVal)) {
-        const [yearStr, monthNumStr] = monthVal.split("-");
-        const monthNames = [
-          "January",
-          "February",
-          "March",
-          "April",
-          "May",
-          "June",
-          "July",
-          "August",
-          "September",
-          "October",
-          "November",
-          "December"
-        ];
-        monthStr = `${monthNames[parseInt(monthNumStr, 10) - 1]} ${yearStr}`;
-      } else {
-        monthStr = new Date(monthVal).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
-      }
-      doc.text(`Period: ${monthStr}`, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
-      ry += 14;
-    }
-    const typeLabel = invoice.invoiceType === "deposit" ? "Deposit Invoice" : invoice.invoiceType === "monthly_eor" ? "Monthly Invoice (EOR)" : invoice.invoiceType === "monthly_visa_eor" ? "Monthly Invoice (Visa EOR)" : invoice.invoiceType === "monthly_aor" ? "Monthly Invoice (AOR)" : invoice.invoiceType === "visa_service" ? "Visa Service Invoice" : invoice.invoiceType === "credit_note" ? "Credit Note" : invoice.invoiceType === "deposit_refund" ? "Deposit Refund" : invoice.invoiceType === "manual" ? "Invoice" : "Invoice";
-    doc.font("Helvetica-Bold").text(typeLabel, rightCol, ry, { width: pageWidth - rightCol + 50, align: "right" });
-    ry += 14;
-    let billToY = Math.max(leftY, ry) + 15;
-    doc.moveTo(50, billToY).lineTo(50 + pageWidth, billToY).lineWidth(0.5).strokeColor("#cccccc").stroke();
-    billToY += 15;
-    doc.fontSize(9).font("Helvetica-Bold").fillColor("#888888");
-    doc.text("BILL TO", 50, billToY);
-    billToY += 14;
-    doc.fontSize(10).fillColor("#1a1a1a");
-    smartText(customer?.companyName || `Customer #${invoice.customerId}`, 50, billToY, void 0, "bold");
-    billToY += 14;
-    doc.fontSize(9).fillColor("#666666");
-    if (customer?.legalEntityName) {
-      smartText(customer.legalEntityName, 50, billToY, { width: 280 });
-      billToY += textHeight(customer.legalEntityName, 9, 280);
-    }
-    if (customer?.address) {
-      smartText(customer.address, 50, billToY, { width: 280 });
-      billToY += textHeight(customer.address, 9, 280);
-    }
-    const custCityLine = [customer?.city, customer?.state, customer?.postalCode].filter(Boolean).join(", ");
-    if (custCityLine) {
-      smartText(custCityLine, 50, billToY, { width: 280 });
-      billToY += textHeight(custCityLine, 9, 280);
-    }
-    if (customer?.country) {
-      smartText(customer.country, 50, billToY, { width: 280 });
-      billToY += textHeight(customer.country, 9, 280);
-    }
-    if (customer?.primaryContactEmail) {
-      doc.font("Helvetica");
-      doc.text(customer.primaryContactEmail, 50, billToY, { width: 280 });
-      billToY += textHeight(customer.primaryContactEmail, 9, 280);
-    }
-    let tableY = billToY + 20;
-    doc.moveTo(50, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.5).strokeColor("#cccccc").stroke();
-    tableY += 8;
-    const cols = {
-      item: { x: 50, w: 175 },
-      curr: { x: 230, w: 40 },
-      qty: { x: 275, w: 40 },
-      rate: { x: 320, w: 75 },
-      tax: { x: 400, w: 50 },
-      amount: { x: 455, w: 90 }
-    };
-    doc.fontSize(8).font("Helvetica-Bold").fillColor("#888888");
-    doc.text("ITEM", cols.item.x, tableY, { width: cols.item.w });
-    doc.text("CURR", cols.curr.x, tableY, { width: cols.curr.w });
-    doc.text("QTY", cols.qty.x, tableY, { width: cols.qty.w, align: "right" });
-    doc.text("RATE", cols.rate.x, tableY, { width: cols.rate.w, align: "right" });
-    doc.text("TAX", cols.tax.x, tableY, { width: cols.tax.w, align: "right" });
-    doc.text("AMOUNT", cols.amount.x, tableY, { width: cols.amount.w, align: "right" });
-    tableY += 14;
-    doc.moveTo(50, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.3).strokeColor("#e0e0e0").stroke();
-    tableY += 6;
-    const currency = invoice.currency || "USD";
-    const itemTypeLabels = {
-      eor_service_fee: "EOR Service Fee",
-      visa_eor_service_fee: "Visa EOR Service Fee",
-      aor_service_fee: "AOR Service Fee",
-      employment_cost: "Employment Cost",
-      deposit: "Deposit",
-      equipment_procurement_fee: "Equipment Procurement",
-      one_time_onboarding_fee: "Onboarding Fee",
-      one_time_offboarding_fee: "Offboarding Fee",
-      administrative_setup_fee: "Admin Setup Fee",
-      contract_termination_fee: "Contract Termination",
-      payroll_processing_fee: "Payroll Processing",
-      tax_filing_compliance_fee: "Tax Filing & Compliance",
-      hr_advisory_service_fee: "HR Advisory",
-      legal_compliance_support_fee: "Legal & Compliance",
-      visa_immigration_service_fee: "Visa & Immigration",
-      relocation_support_fee: "Relocation Support",
-      custom_benefits_admin_fee: "Benefits Admin",
-      bank_transfer_fee: "Bank Transfer Fee",
-      consulting_fee: "Consulting Fee",
-      management_consulting_fee: "Mgmt Consulting"
-    };
-    for (const item of items) {
-      if (tableY > doc.page.height - 160) {
-        doc.addPage();
-        tableY = 50;
-      }
-      doc.fontSize(8).font("Helvetica-Bold").fillColor("#333333");
-      const typeText = itemTypeLabels[item.itemType] || item.itemType;
-      doc.text(typeText, cols.item.x, tableY, { width: cols.item.w });
-      doc.font("Helvetica").fillColor("#333333").fontSize(8);
-      doc.text(item.localCurrency || currency || "\u2014", cols.curr.x, tableY, { width: cols.curr.w });
-      doc.text(parseFloat(item.quantity?.toString() || "1").toString(), cols.qty.x, tableY, { width: cols.qty.w, align: "right" });
-      doc.text(formatNum(item.unitPrice), cols.rate.x, tableY, { width: cols.rate.w, align: "right" });
-      const vatRate = parseFloat(item.vatRate?.toString() || "0");
-      doc.text(vatRate > 0 ? `${vatRate}%` : "\u2014", cols.tax.x, tableY, { width: cols.tax.w, align: "right" });
-      doc.text(formatNum(item.localAmount || item.amount), cols.amount.x, tableY, { width: cols.amount.w, align: "right" });
-      tableY += 11;
-      doc.fontSize(7).fillColor("#888888");
-      const desc26 = item.description.length > 80 ? item.description.slice(0, 77) + "..." : item.description;
-      smartText(desc26, cols.item.x + 2, tableY, { width: cols.item.w + cols.curr.w + cols.qty.w - 2 });
-      tableY += 14;
-    }
-    tableY += 6;
-    doc.moveTo(50, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.5).strokeColor("#cccccc").stroke();
-    tableY += 10;
-    const totalsLabelX = 350;
-    const totalsValX = 435;
-    const totalsValW = 110;
-    doc.fontSize(9).font("Helvetica").fillColor("#888888");
-    doc.text("Invoice Currency", totalsLabelX, tableY, { width: 110 });
-    doc.font("Helvetica-Bold").fillColor("#333333");
-    doc.text(currency, totalsValX, tableY, { width: totalsValW, align: "right" });
-    tableY += 16;
-    const foreignCurrencies = new Set(
-      items.map((i) => i.localCurrency).filter((c) => c && c !== currency)
-    );
-    if (foreignCurrencies.size > 0 && invoice.exchangeRateWithMarkup) {
-      const foreignCcy = Array.from(foreignCurrencies)[0];
-      doc.fontSize(9).font("Helvetica").fillColor("#888888");
-      doc.text("Exchange Rate", totalsLabelX, tableY, { width: 110 });
-      doc.font("Helvetica").fillColor("#333333");
-      doc.text(`1 ${foreignCcy} = ${invoice.exchangeRateWithMarkup} ${currency}`, totalsValX, tableY, { width: totalsValW, align: "right" });
-      tableY += 16;
-    }
-    doc.fontSize(9).font("Helvetica").fillColor("#666666");
-    doc.text("Subtotal", totalsLabelX, tableY, { width: 110 });
-    doc.text(`${currency} ${formatNum(invoice.subtotal)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
-    tableY += 14;
-    doc.text("Tax / VAT", totalsLabelX, tableY, { width: 110 });
-    doc.text(`${currency} ${formatNum(invoice.tax)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
-    tableY += 14;
-    const walletAppliedAmt = parseFloat(invoice.walletAppliedAmount?.toString() || "0");
-    const hasDeductions = walletAppliedAmt > 0.01;
-    if (hasDeductions) {
-      tableY += 4;
-      doc.moveTo(totalsLabelX, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.3).strokeColor("#aaaaaa").stroke();
-      tableY += 8;
-      doc.fontSize(9).font("Helvetica-Bold").fillColor("#2563eb");
-      doc.text("INVOICE TOTAL", totalsLabelX, tableY, { width: 110 });
-      doc.text(`${currency} ${formatNum(invoice.total)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
-      tableY += 14;
-      doc.fontSize(8).font("Helvetica").fillColor("#2563eb");
-      doc.text("Less: Wallet Balance Applied", totalsLabelX, tableY, { width: totalsValX - totalsLabelX - 5 });
-      doc.text(`- ${currency} ${formatNum(walletAppliedAmt)}`, totalsValX, tableY, { width: totalsValW, align: "right" });
-      tableY += 12;
-      tableY += 2;
-    }
-    tableY += 4;
-    doc.moveTo(totalsLabelX, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.5).strokeColor("#333333").stroke();
-    tableY += 8;
-    const finalAmountDue = walletAppliedAmt > 0.01 ? parseFloat(invoice.amountDue?.toString() || (parseFloat(invoice.total?.toString() || "0") - walletAppliedAmt).toFixed(2)) : parseFloat(invoice.total?.toString() || "0");
-    const totalLabel = walletAppliedAmt > 0.01 ? "AMOUNT DUE" : "TOTAL DUE";
-    doc.fontSize(11).font("Helvetica-Bold").fillColor("#1a1a1a");
-    doc.text(totalLabel, totalsLabelX, tableY, { width: 110 });
-    doc.text(`${currency} ${formatNum(finalAmountDue.toFixed(2))}`, totalsValX, tableY, { width: totalsValW, align: "right" });
-    if (billingEntity && billingEntity.bankDetails) {
-      tableY += 35;
-      if (tableY > doc.page.height - 120) {
-        doc.addPage();
-        tableY = 50;
-      }
-      doc.moveTo(50, tableY).lineTo(50 + pageWidth, tableY).lineWidth(0.5).strokeColor("#cccccc").stroke();
-      tableY += 12;
-      doc.fontSize(9).font("Helvetica-Bold").fillColor("#888888");
-      doc.text("PAYMENT DETAILS", 50, tableY);
-      tableY += 14;
-      doc.fontSize(9).fillColor("#333333");
-      const bankLines = billingEntity.bankDetails.split("\n");
-      for (const line of bankLines) {
-        if (tableY > doc.page.height - 80) {
-          doc.addPage();
-          tableY = 50;
-        }
-        smartText(line.trim(), 50, tableY, { width: pageWidth });
-        tableY += 12;
-      }
-    }
-    if (invoice.notes) {
-      tableY += 20;
-      if (tableY > doc.page.height - 80) {
-        doc.addPage();
-        tableY = 50;
-      }
-      doc.fontSize(8).font("Helvetica-Bold").fillColor("#888888");
-      doc.text("NOTES", 50, tableY);
-      tableY += 12;
-      doc.fontSize(8).fillColor("#666666");
-      smartText(invoice.notes, 50, tableY, { width: pageWidth });
-    }
-    doc.end();
-  });
-}
-function formatNum(val) {
-  if (val === null || val === void 0) return "0.00";
-  const num = typeof val === "string" ? parseFloat(val) : Number(val);
-  if (isNaN(num)) return "0.00";
-  return num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// server/services/notificationConstants.ts
-var DEFAULT_RULES = {
-  invoice_sent: {
-    enabled: true,
-    channels: ["email", "in_app"],
-    recipients: ["client:finance", "client:admin", "admin:finance_manager"],
-    templates: {
-      en: {
-        emailSubject: "Invoice #{{invoiceNumber}} from GEA",
-        emailBody: "<p>Dear {{contactName}},</p><p>Please find attached invoice #{{invoiceNumber}} for {{currency}} {{amount}}.</p><p>Due Date: {{dueDate}}</p><p>Best regards,<br>GEA Team</p>",
-        inAppMessage: "Invoice #{{invoiceNumber}} has been sent."
-      },
-      zh: {
-        emailSubject: "\u53D1\u7968 #{{invoiceNumber}} - GEA",
-        emailBody: "<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p><p>\u9644\u4EF6\u662F\u60A8\u7684\u53D1\u7968 #{{invoiceNumber}}\uFF0C\u91D1\u989D {{currency}} {{amount}}\u3002</p><p>\u5230\u671F\u65E5\uFF1A{{dueDate}}</p><p>\u795D\u597D\uFF0C<br>GEA \u56E2\u961F</p>",
-        inAppMessage: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u53D1\u9001\u3002"
-      }
-    }
-  },
-  invoice_overdue: {
-    enabled: true,
-    channels: ["email", "in_app"],
-    recipients: ["client:finance", "client:admin", "admin:customer_manager"],
-    templates: {
-      en: {
-        emailSubject: "OVERDUE: Invoice #{{invoiceNumber}}",
-        emailBody: "<p>Dear {{contactName}},</p><p>This is a reminder that invoice #{{invoiceNumber}} was due on {{dueDate}}.</p><p>Please arrange payment immediately.</p>",
-        inAppMessage: "Invoice #{{invoiceNumber}} is overdue."
-      },
-      zh: {
-        emailSubject: "\u903E\u671F\u63D0\u9192\uFF1A\u53D1\u7968 #{{invoiceNumber}}",
-        emailBody: "<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p><p>\u6E29\u99A8\u63D0\u9192\uFF1A\u60A8\u7684\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u4E8E {{dueDate}} \u5230\u671F\u3002</p><p>\u8BF7\u5C3D\u5FEB\u5B89\u6392\u4ED8\u6B3E\u3002</p>",
-        inAppMessage: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u903E\u671F\u3002"
-      }
-    }
-  },
-  payroll_draft_created: {
-    enabled: true,
-    channels: ["in_app"],
-    recipients: ["admin:operations_manager"],
-    templates: {
-      en: {
-        emailSubject: "Payroll Draft Ready",
-        emailBody: "Payroll draft for {{period}} has been created.",
-        inAppMessage: "Payroll draft for {{period}} is ready for review."
-      },
-      zh: {
-        emailSubject: "\u5DE5\u8D44\u5355\u8349\u7A3F\u5DF2\u751F\u6210",
-        emailBody: "{{period}} \u7684\u5DE5\u8D44\u5355\u8349\u7A3F\u5DF2\u751F\u6210\u3002",
-        inAppMessage: "{{period}} \u7684\u5DE5\u8D44\u5355\u8349\u7A3F\u5DF2\u751F\u6210\uFF0C\u8BF7\u5BA1\u6838\u3002"
-      }
-    }
-  },
-  new_employee_request: {
-    enabled: true,
-    channels: ["email", "in_app"],
-    recipients: ["admin:operations_manager"],
-    templates: {
-      en: {
-        emailSubject: "New Employee Onboarding Request",
-        emailBody: "Customer {{customerName}} has requested onboarding for {{employeeName}}.",
-        inAppMessage: "New onboarding request: {{employeeName}} from {{customerName}}."
-      },
-      zh: {
-        emailSubject: "\u65B0\u5458\u5DE5\u5165\u804C\u7533\u8BF7",
-        emailBody: "\u5BA2\u6237 {{customerName}} \u4E3A {{employeeName}} \u63D0\u4EA4\u4E86\u5165\u804C\u7533\u8BF7\u3002",
-        inAppMessage: "\u6536\u5230 {{customerName}} \u63D0\u4EA4\u7684 {{employeeName}} \u5165\u804C\u7533\u8BF7\u3002"
-      }
-    }
-  },
-  worker_invite: {
-    enabled: true,
-    channels: ["email"],
-    recipients: ["worker:user"],
-    // Special role for worker
-    templates: {
-      en: {
-        emailSubject: "Invitation to GEA Worker Portal",
-        emailBody: '<p>Dear {{workerName}},</p><p>You have been invited to the GEA Worker Portal.</p><p>Please click the link below to set up your account:</p><p><a href="{{inviteLink}}">Accept Invitation</a></p>',
-        inAppMessage: "Welcome to GEA Worker Portal!"
-      },
-      zh: {
-        emailSubject: "GEA \u5458\u5DE5\u95E8\u6237\u9080\u8BF7",
-        emailBody: '<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p><p>\u60A8\u5DF2\u88AB\u9080\u8BF7\u52A0\u5165 GEA \u5458\u5DE5\u95E8\u6237\u3002</p><p>\u8BF7\u70B9\u51FB\u4E0B\u65B9\u94FE\u63A5\u8BBE\u7F6E\u60A8\u7684\u8D26\u6237\uFF1A</p><p><a href="{{inviteLink}}">\u63A5\u53D7\u9080\u8BF7</a></p>',
-        inAppMessage: "\u6B22\u8FCE\u6765\u5230 GEA \u5458\u5DE5\u95E8\u6237\uFF01"
-      }
-    }
-  },
-  worker_invoice_ready: {
-    enabled: true,
-    channels: ["email", "in_app"],
-    recipients: ["worker:user"],
-    templates: {
-      en: {
-        emailSubject: "Invoice #{{invoiceNumber}} Ready",
-        emailBody: "<p>Dear {{workerName}},</p><p>Your invoice #{{invoiceNumber}} for {{period}} is now ready.</p>",
-        inAppMessage: "Invoice #{{invoiceNumber}} is ready for review."
-      },
-      zh: {
-        emailSubject: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u751F\u6210",
-        emailBody: "<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p><p>\u60A8\u7684 {{period}} \u53D1\u7968 #{{invoiceNumber}} \u5DF2\u751F\u6210\u3002</p>",
-        inAppMessage: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u751F\u6210\uFF0C\u8BF7\u67E5\u770B\u3002"
-      }
-    }
-  },
-  worker_payment_sent: {
-    enabled: true,
-    channels: ["email", "in_app"],
-    recipients: ["worker:user"],
-    templates: {
-      en: {
-        emailSubject: "Payment Sent: {{currency}} {{amount}}",
-        emailBody: "<p>Dear {{workerName}},</p><p>We have processed a payment of {{currency}} {{amount}} for invoice #{{invoiceNumber}}.</p>",
-        inAppMessage: "Payment of {{currency}} {{amount}} has been sent."
-      },
-      zh: {
-        emailSubject: "\u4ED8\u6B3E\u5DF2\u53D1\u9001\uFF1A{{currency}} {{amount}}",
-        emailBody: "<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p><p>\u6211\u4EEC\u5DF2\u5904\u7406\u53D1\u7968 #{{invoiceNumber}} \u7684\u4ED8\u6B3E\uFF0C\u91D1\u989D\u4E3A {{currency}} {{amount}}\u3002</p>",
-        inAppMessage: "\u6B3E\u9879 {{currency}} {{amount}} \u5DF2\u6C47\u51FA\u3002"
-      }
-    }
-  }
-};
-
-// server/services/notificationService.ts
-var notificationService = {
-  /**
-   * Main entry point to send notifications.
-   * Handles configuration lookup, recipient resolution, template rendering, and multi-channel delivery.
-   */
-  async send(event) {
-    const db = getDb();
-    if (!db) {
-      console.error("[Notification] DB connection failed");
-      return;
-    }
-    try {
-      const config = await this.getConfig(event.type);
-      if (!config || !config.enabled) {
-        console.log(`[Notification] Skipped ${event.type} (disabled or config missing)`);
-        return;
-      }
-      console.log(`[Notification] Processing ${event.type} for customer ${event.customerId || "N/A"}`);
-      const recipients = await this.resolveRecipients(config.recipients, event.customerId, event.data.workerId);
-      if (recipients.length === 0) {
-        console.warn(`[Notification] No recipients found for ${event.type}`);
-        return;
-      }
-      const attachments = [];
-      if ((event.type === "invoice_sent" || event.type === "invoice_overdue") && event.data.invoiceId) {
-        try {
-          const pdfBuffer = await generateInvoicePdf({ invoiceId: event.data.invoiceId });
-          attachments.push({
-            filename: `Invoice_${event.data.invoiceNumber || event.data.invoiceId}.pdf`,
-            content: pdfBuffer,
-            contentType: "application/pdf"
-          });
-        } catch (err) {
-          console.error(`[Notification] Failed to generate PDF for invoice ${event.data.invoiceId}`, err);
-        }
-      }
-      for (const recipient of recipients) {
-        const lang = recipient.language || "en";
-        const template = config.templates[lang] || config.templates.en;
-        const emailSubject = this.renderTemplate(template.emailSubject, event.data);
-        const emailBody = this.renderTemplate(template.emailBody, { ...event.data, contactName: recipient.name });
-        const inAppMessage = this.renderTemplate(template.inAppMessage, event.data);
-        if (config.channels.includes("in_app")) {
-          await db.insert(notifications).values({
-            targetPortal: recipient.portal,
-            targetUserId: recipient.id,
-            targetRole: recipient.role,
-            targetCustomerId: recipient.portal === "client" ? event.customerId : void 0,
-            type: event.type,
-            title: inAppMessage,
-            // Using the short message as title for now
-            data: JSON.stringify(event.data),
-            // Fix: data should be stringified JSON
-            isRead: false
-          });
-        }
-        if (config.channels.includes("email") && recipient.email) {
-          await this.sendRawEmail({
-            to: recipient.email,
-            subject: emailSubject,
-            html: emailBody,
-            attachments
-          });
-        }
-      }
-    } catch (err) {
-      console.error(`[Notification] Error processing ${event.type}:`, err);
-    }
-  },
-  // --- Helper Methods ---
-  async getConfig(type) {
-    const db = getDb();
-    if (!db) return null;
-    const setting = await db.query.systemSettings.findFirst({
-      where: eq16(systemSettings.key, "notification_rules")
-    });
-    if (setting && setting.value) {
-      try {
-        const rules = JSON.parse(setting.value);
-        if (rules[type]) {
-          return { ...DEFAULT_RULES[type], ...rules[type] };
-        }
-      } catch (e) {
-        console.error("[Notification] Failed to parse notification rules JSON", e);
-      }
-    }
-    return DEFAULT_RULES[type] || null;
-  },
-  async resolveRecipients(recipientRules, customerId, workerId) {
-    const db = getDb();
-    if (!db) return [];
-    const targets = [];
-    for (const rule of recipientRules) {
-      const [portal, role] = rule.split(":");
-      if (portal === "worker" && workerId) {
-        const worker = await db.query.workerUsers.findFirst({
-          where: eq16(workerUsers.id, workerId)
-        });
-        if (worker) {
-          targets.push({
-            id: worker.id,
-            email: worker.email,
-            name: worker.email,
-            // TODO: Join with contractors table to get name
-            role: "user",
-            portal: "worker",
-            language: "en"
-          });
-        }
-      } else if (portal === "admin") {
-        const adminUsers = await db.query.users.findMany({
-          where: and14(
-            eq16(users.isActive, true),
-            like9(users.role, `%${role}%`)
-            // Role is comma-separated string
-          )
-        });
-        targets.push(...adminUsers.map((u) => ({
-          id: u.id,
-          email: u.email || "",
-          name: u.name || "Admin",
-          role,
-          portal: "admin",
-          language: u.language || "en"
-        })));
-      } else if (portal === "client" && customerId) {
-        const contacts = await db.query.customerContacts.findMany({
-          where: and14(
-            eq16(customerContacts.customerId, customerId),
-            eq16(customerContacts.portalRole, role),
-            // portalRole is enum
-            eq16(customerContacts.hasPortalAccess, true)
-          )
-        });
-        if (role === "finance" && contacts.length === 0) {
-          const adminContacts = await db.query.customerContacts.findMany({
-            where: and14(
-              eq16(customerContacts.customerId, customerId),
-              eq16(customerContacts.portalRole, "admin"),
-              eq16(customerContacts.hasPortalAccess, true)
-            )
-          });
-          targets.push(...adminContacts.map((c) => ({
-            id: c.id,
-            email: c.email,
-            name: c.contactName,
-            role: "admin",
-            // Fallback role
-            portal: "client",
-            language: "en"
-            // Contacts don't have language field yet, default to en
-          })));
-        } else {
-          targets.push(...contacts.map((c) => ({
-            id: c.id,
-            email: c.email,
-            name: c.contactName,
-            role,
-            portal: "client",
-            language: "en"
-          })));
-        }
-      }
-    }
-    const uniqueTargets = /* @__PURE__ */ new Map();
-    for (const t4 of targets) {
-      if (t4.email) uniqueTargets.set(t4.email, t4);
-    }
-    return Array.from(uniqueTargets.values());
-  },
-  renderTemplate(template, data) {
-    return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
-      return data[key] !== void 0 ? String(data[key]) : "";
-    });
-  },
-  // Temporary internal mailer until we refactor _core/notification.ts
-  async sendRawEmail(payload) {
-    const nodemailer2 = (await import("nodemailer")).default;
-    const { ENV: ENV2 } = await Promise.resolve().then(() => (init_env(), env_exports));
-    if (!ENV2.emailSmtpHost || !ENV2.emailSmtpUser) {
-      console.log(`[Dev Email] To: ${payload.to} | Subject: ${payload.subject}`);
-      return;
-    }
-    const transporter = nodemailer2.createTransport({
-      host: ENV2.emailSmtpHost,
-      port: Number(ENV2.emailSmtpPort) || 587,
-      secure: Number(ENV2.emailSmtpPort) === 465,
-      auth: {
-        user: ENV2.emailSmtpUser,
-        pass: ENV2.emailSmtpPass
-      }
-    });
-    await transporter.sendMail({
-      from: `GEA Notification <${ENV2.emailFrom}>`,
-      to: payload.to,
-      subject: payload.subject,
-      html: payload.html,
-      attachments: payload.attachments
-    });
-  }
-};
-
-// server/routers/invoices.ts
 var invoiceItemTypeEnum = z6.enum([
   "eor_service_fee",
   "visa_eor_service_fee",
@@ -8938,11 +10327,15 @@ async function recalculateInvoiceTotals(invoiceId) {
   }
   const total = subtotal + serviceFeeTotal + taxTotal;
   const foreignItems = items.filter((item) => item.localCurrency && item.localCurrency !== settlementCurrency);
+  const walletApplied = parseFloat(invoice?.walletAppliedAmount?.toString() || "0");
+  const paidAmount = parseFloat(invoice?.paidAmount?.toString() || "0");
+  const newAmountDue = Math.max(0, total - walletApplied - paidAmount);
   const updateData = {
     subtotal: subtotal.toFixed(2),
     serviceFeeTotal: serviceFeeTotal.toFixed(2),
     tax: taxTotal.toFixed(2),
-    total: total.toFixed(2)
+    total: total.toFixed(2),
+    amountDue: newAmountDue.toFixed(2)
   };
   if (foreignItems.length > 0) {
     const firstForeign = foreignItems[0];
@@ -9103,7 +10496,7 @@ var invoicesRouter = router({
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    const [customer] = await db.select({ id: customers.id }).from(customers).where(eq17(customers.id, input.customerId)).limit(1);
+    const [customer] = await db.select({ id: customers.id }).from(customers).where(eq18(customers.id, input.customerId)).limit(1);
     if (!customer) {
       throw new TRPCError8({ code: "BAD_REQUEST", message: `Customer with ID ${input.customerId} does not exist` });
     }
@@ -9300,6 +10693,18 @@ var invoicesRouter = router({
       }
     }
     await updateInvoice(input.id, updateData);
+    if (input.status === "paid" && input.paidAmount) {
+      const invoiceForDeposit = await getInvoiceById(input.id);
+      if (invoiceForDeposit && invoiceForDeposit.invoiceType === "deposit") {
+        await walletService.depositToFrozen(
+          invoiceForDeposit.customerId,
+          invoiceForDeposit.currency,
+          input.paidAmount,
+          invoiceForDeposit.id,
+          ctx.user.id
+        );
+      }
+    }
     await logAuditAction({
       userId: ctx.user.id,
       userName: ctx.user.name || null,
@@ -9408,6 +10813,31 @@ Invoice Total: ${invoice2.currency} ${paymentResult.invoiceTotal}
 Amount Paid: ${invoice2.currency} ${input.paidAmount}
 Excess Credited: ${invoice2.currency} ${paymentResult.difference}`
           }).catch((err) => console.warn("[Notification] Failed to notify about wallet credit:", err));
+        }
+      }
+    }
+    if (input.status === "paid") {
+      const paidInvoice = await getInvoiceById(input.id);
+      if (paidInvoice && paidInvoice.invoiceType === "monthly_aor") {
+        try {
+          const syncedCount = await markContractorInvoicesPaidByClientInvoice(input.id);
+          if (syncedCount > 0) {
+            console.log(`[AOR Sync] Marked ${syncedCount} contractor invoices as paid (client invoice #${input.id})`);
+            await logAuditAction({
+              userId: ctx.user.id,
+              userName: ctx.user.name || null,
+              action: "aor_payment_sync",
+              entityType: "invoice",
+              entityId: input.id,
+              changes: JSON.stringify({
+                type: "contractor_invoices_paid",
+                clientInvoiceId: input.id,
+                contractorInvoicesSynced: syncedCount
+              })
+            });
+          }
+        } catch (err) {
+          console.error(`[AOR Sync] Failed to sync contractor invoice payment for client invoice #${input.id}:`, err);
         }
       }
     }
@@ -9651,7 +11081,7 @@ Excess Credited: ${invoice2.currency} ${paymentResult.difference}`
     }
     const db = getDb();
     if (db) {
-      const children = await db.select().from(invoices).where(eq17(invoices.relatedInvoiceId, input.id));
+      const children = await db.select().from(invoices).where(eq18(invoices.relatedInvoiceId, input.id));
       if (children.length > 0) {
         throw new TRPCError8({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice referenced by other invoices. Void/Cancel downstream invoices first." });
       }
@@ -9695,7 +11125,7 @@ Excess Credited: ${invoice2.currency} ${paymentResult.difference}`
       billingEntityId: invoices.billingEntityId,
       createdAt: invoices.createdAt,
       paidAmount: invoices.paidAmount
-    }).from(invoices).orderBy(sql7`${invoices.invoiceMonth} DESC, ${invoices.createdAt} DESC`);
+    }).from(invoices).orderBy(sql8`${invoices.invoiceMonth} DESC, ${invoices.createdAt} DESC`);
     const monthMap = /* @__PURE__ */ new Map();
     for (const inv of allInvoices) {
       const monthKey = inv.invoiceMonth ? new Date(inv.invoiceMonth).toISOString().slice(0, 7) : inv.createdAt ? new Date(inv.createdAt).toISOString().slice(0, 7) : "unknown";
@@ -9960,16 +11390,16 @@ import { z as z7 } from "zod";
 // server/services/invoiceGenerationService.ts
 init_schema();
 init_db2();
-import { eq as eq18, and as and16, isNull, inArray as inArray4, desc as desc9 } from "drizzle-orm";
+import { eq as eq19, and as and17, isNull as isNull2, inArray as inArray5, desc as desc9 } from "drizzle-orm";
 async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnings = []) {
   try {
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
     const nonApprovedRuns = await db.select().from(payrollRuns).where(
-      and16(
-        eq18(payrollRuns.payrollMonth, payrollMonthStr),
-        inArray4(payrollRuns.status, ["draft", "pending_approval", "rejected"])
+      and17(
+        eq19(payrollRuns.payrollMonth, payrollMonthStr),
+        inArray5(payrollRuns.status, ["draft", "pending_approval", "rejected"])
       )
     );
     if (nonApprovedRuns.length > 0) {
@@ -9979,9 +11409,9 @@ async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnin
     }
     const aorResult = await generateAorInvoices(payrollMonth, monthLabel, warnings);
     const approvedRuns = await db.select().from(payrollRuns).where(
-      and16(
-        eq18(payrollRuns.payrollMonth, payrollMonthStr),
-        eq18(payrollRuns.status, "approved")
+      and17(
+        eq19(payrollRuns.payrollMonth, payrollMonthStr),
+        eq19(payrollRuns.status, "approved")
       )
     );
     if (approvedRuns.length === 0 && (!aorResult.invoiceIds || aorResult.invoiceIds.length === 0)) {
@@ -9999,11 +11429,12 @@ async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnin
         item: payrollItems,
         employee: employees,
         run: payrollRuns
-      }).from(payrollItems).innerJoin(employees, eq18(payrollItems.employeeId, employees.id)).innerJoin(payrollRuns, eq18(payrollItems.payrollRunId, payrollRuns.id)).where(inArray4(payrollItems.payrollRunId, runIds));
+      }).from(payrollItems).innerJoin(employees, eq19(payrollItems.employeeId, employees.id)).innerJoin(payrollRuns, eq19(payrollItems.payrollRunId, payrollRuns.id)).where(inArray5(payrollItems.payrollRunId, runIds));
     }
     const groups = /* @__PURE__ */ new Map();
     for (const row of payrollItemsData) {
-      const key = `${row.employee.customerId}|${row.run.currency}`;
+      const svcType = row.employee.serviceType === "visa_eor" ? "visa_eor" : "eor";
+      const key = `${row.employee.customerId}|${row.run.currency}|${svcType}`;
       if (!groups.has(key)) {
         groups.set(key, []);
       }
@@ -10011,18 +11442,18 @@ async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnin
     }
     const invoiceIds = [...aorResult.invoiceIds || []];
     let skippedDuplicates = 0;
-    for (const [key, items] of groups.entries()) {
-      const [customerIdStr, currency] = key.split("|");
+    for (const [key, items] of Array.from(groups.entries())) {
+      const [customerIdStr, currency, groupServiceType] = key.split("|");
       const customerId = parseInt(customerIdStr);
       const existing = await db.select().from(invoices).where(
-        and16(
-          eq18(invoices.customerId, customerId),
-          eq18(invoices.invoiceMonth, payrollMonthStr),
-          inArray4(invoices.invoiceType, ["monthly_eor", "monthly_visa_eor"])
+        and17(
+          eq19(invoices.customerId, customerId),
+          eq19(invoices.invoiceMonth, payrollMonthStr),
+          inArray5(invoices.invoiceType, ["monthly_eor", "monthly_visa_eor"])
         )
       );
       const existingForCurrency = existing.find((i) => i.currency === currency);
-      const customerResult = await db.select().from(customers).where(eq18(customers.id, customerId)).limit(1);
+      const customerResult = await db.select().from(customers).where(eq19(customers.id, customerId)).limit(1);
       if (customerResult.length === 0) continue;
       const customer = customerResult[0];
       const settlementCurrency = customer.settlementCurrency || "USD";
@@ -10054,7 +11485,7 @@ async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnin
         }
         employeeItems.get(row.employee.id).push(row);
       }
-      for (const [empId, empRows] of employeeItems.entries()) {
+      for (const [empId, empRows] of Array.from(employeeItems.entries())) {
         const employee = empRows[0].employee;
         let empTotalCost = 0;
         for (const row of empRows) {
@@ -10077,7 +11508,7 @@ async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnin
           exchangeRateWithMarkup: rateWithMarkup.toString(),
           employeeId: empId
         });
-        const ccResult = await db.select().from(countriesConfig).where(eq18(countriesConfig.countryCode, employee.country)).limit(1);
+        const ccResult = await db.select().from(countriesConfig).where(eq19(countriesConfig.countryCode, employee.country)).limit(1);
         const cc = ccResult.length > 0 ? ccResult[0] : null;
         const fee = await getServiceFeeRate(
           customerId,
@@ -10107,12 +11538,12 @@ async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnin
       const issueDate = /* @__PURE__ */ new Date();
       const dueDate = new Date(issueDate);
       dueDate.setDate(dueDate.getDate() + termDays);
+      const invoiceType = groupServiceType === "visa_eor" ? "monthly_visa_eor" : "monthly_eor";
       const invoiceData = {
         customerId,
         billingEntityId,
         invoiceNumber,
-        invoiceType: "monthly_eor",
-        // or mixed?
+        invoiceType,
         invoiceMonth: payrollMonthStr,
         currency: settlementCurrency,
         exchangeRate: exchangeRate.toString(),
@@ -10160,9 +11591,9 @@ async function generateAorInvoices(payrollMonth, monthLabel, warnings) {
   const invoiceIds = [];
   const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
   const unbilledInvoices = await db.select().from(contractorInvoices).where(
-    and16(
-      eq18(contractorInvoices.status, "approved"),
-      isNull(contractorInvoices.clientInvoiceId)
+    and17(
+      eq19(contractorInvoices.status, "approved"),
+      isNull2(contractorInvoices.clientInvoiceId)
     )
   );
   if (unbilledInvoices.length === 0) return { invoiceIds: [] };
@@ -10174,10 +11605,10 @@ async function generateAorInvoices(payrollMonth, monthLabel, warnings) {
     }
     groups.get(key).push(inv);
   }
-  for (const [key, batch] of groups.entries()) {
+  for (const [key, batch] of Array.from(groups.entries())) {
     const [customerIdStr, currency] = key.split("|");
     const customerId = parseInt(customerIdStr);
-    const customerResult = await db.select().from(customers).where(eq18(customers.id, customerId)).limit(1);
+    const customerResult = await db.select().from(customers).where(eq19(customers.id, customerId)).limit(1);
     if (customerResult.length === 0) continue;
     const customer = customerResult[0];
     const settlementCurrency = customer.settlementCurrency || "USD";
@@ -10202,7 +11633,7 @@ async function generateAorInvoices(payrollMonth, monthLabel, warnings) {
     const contractorIds = /* @__PURE__ */ new Set();
     for (const inv of batch) {
       contractorIds.add(inv.contractorId);
-      const contractorResult = await db.select().from(contractors).where(eq18(contractors.id, inv.contractorId)).limit(1);
+      const contractorResult = await db.select().from(contractors).where(eq19(contractors.id, inv.contractorId)).limit(1);
       const contractorName = contractorResult.length > 0 ? `${contractorResult[0].firstName} ${contractorResult[0].lastName}` : `Contractor #${inv.contractorId}`;
       const amountLocal = parseFloat(inv.totalAmount);
       const amountSettlement = amountLocal * rateWithMarkup;
@@ -10230,10 +11661,10 @@ async function generateAorInvoices(payrollMonth, monthLabel, warnings) {
     }
     let totalFee = 0;
     for (const cid of contractorIds) {
-      const contractorResult = await db.select().from(contractors).where(eq18(contractors.id, cid)).limit(1);
+      const contractorResult = await db.select().from(contractors).where(eq19(contractors.id, cid)).limit(1);
       if (contractorResult.length === 0) continue;
       const ctr = contractorResult[0];
-      const ccResult = await db.select().from(countriesConfig).where(eq18(countriesConfig.countryCode, ctr.country)).limit(1);
+      const ccResult = await db.select().from(countriesConfig).where(eq19(countriesConfig.countryCode, ctr.country)).limit(1);
       const cc = ccResult.length > 0 ? ccResult[0] : null;
       const fee = await getServiceFeeRate(
         customerId,
@@ -10298,7 +11729,7 @@ async function generateAorInvoices(payrollMonth, monthLabel, warnings) {
       await db.insert(invoiceItems).values(finalLineItems);
     }
     const batchIds = batch.map((b) => b.id);
-    await db.update(contractorInvoices).set({ clientInvoiceId: invoiceId }).where(inArray4(contractorInvoices.id, batchIds));
+    await db.update(contractorInvoices).set({ clientInvoiceId: invoiceId }).where(inArray5(contractorInvoices.id, batchIds));
   }
   return { invoiceIds };
 }
@@ -10306,7 +11737,7 @@ async function getInvoiceGenerationStatus(payrollMonth) {
   const db = await getDb();
   if (!db) return null;
   const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
-  const monthInvoices = await db.select({ status: invoices.status }).from(invoices).where(eq18(invoices.invoiceMonth, payrollMonthStr));
+  const monthInvoices = await db.select({ status: invoices.status }).from(invoices).where(eq19(invoices.invoiceMonth, payrollMonthStr));
   const statusCounts = {};
   for (const inv of monthInvoices) {
     const s = inv.status || "unknown";
@@ -10321,24 +11752,46 @@ async function regenerateInvoices(payrollMonth) {
   const db = await getDb();
   if (!db) return { success: false, warnings: ["Database unavailable"] };
   const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
-  const drafts = await db.select({ id: invoices.id }).from(invoices).where(
-    and16(
-      eq18(invoices.invoiceMonth, payrollMonthStr),
-      eq18(invoices.status, "draft")
+  const drafts = await db.select({ id: invoices.id, customerId: invoices.customerId, invoiceType: invoices.invoiceType, notes: invoices.notes }).from(invoices).where(
+    and17(
+      eq19(invoices.invoiceMonth, payrollMonthStr),
+      eq19(invoices.status, "draft"),
+      inArray5(invoices.invoiceType, ["monthly_eor", "monthly_visa_eor", "monthly_aor"])
     )
   );
+  const savedNotes = {};
+  for (const d of drafts) {
+    if (d.notes) {
+      savedNotes[`${d.customerId}_${d.invoiceType}`] = d.notes;
+    }
+  }
   const draftIds = drafts.map((d) => d.id);
   if (draftIds.length > 0) {
-    await db.delete(invoiceItems).where(inArray4(invoiceItems.invoiceId, draftIds));
-    await db.delete(invoices).where(inArray4(invoices.id, draftIds));
+    const aorDraftIds = drafts.filter((d) => d.invoiceType === "monthly_aor").map((d) => d.id);
+    if (aorDraftIds.length > 0) {
+      await db.update(contractorInvoices).set({ clientInvoiceId: null }).where(inArray5(contractorInvoices.clientInvoiceId, aorDraftIds));
+    }
+    await db.delete(invoiceItems).where(inArray5(invoiceItems.invoiceId, draftIds));
+    await db.delete(invoices).where(inArray5(invoices.id, draftIds));
   }
-  return await generateInvoicesFromPayroll(payrollMonth, "Regenerated Invoices");
+  const monthLabel = payrollMonth.toLocaleDateString("en", { month: "short", year: "numeric" });
+  const result = await generateInvoicesFromPayroll(payrollMonth, monthLabel);
+  if (result.success && result.invoiceIds && result.invoiceIds.length > 0) {
+    const newInvoices = await db.select({ id: invoices.id, customerId: invoices.customerId, invoiceType: invoices.invoiceType }).from(invoices).where(inArray5(invoices.id, result.invoiceIds));
+    for (const inv of newInvoices) {
+      const key = `${inv.customerId}_${inv.invoiceType}`;
+      if (savedNotes[key]) {
+        await db.update(invoices).set({ notes: savedNotes[key] }).where(eq19(invoices.id, inv.id));
+      }
+    }
+  }
+  return result;
 }
 async function regenerateSingleInvoice(invoiceId) {
   const db = await getDb();
   if (!db) return { success: false, message: "Database unavailable" };
   const invoice = await db.query.invoices.findFirst({
-    where: eq18(invoices.id, invoiceId)
+    where: eq19(invoices.id, invoiceId)
   });
   if (!invoice) return { success: false, message: "Invoice not found" };
   if (invoice.status !== "draft") {
@@ -10347,10 +11800,27 @@ async function regenerateSingleInvoice(invoiceId) {
   if (!invoice.invoiceMonth) {
     return { success: false, message: "Invoice does not have a month set" };
   }
-  await db.delete(invoiceItems).where(eq18(invoiceItems.invoiceId, invoiceId));
-  await db.delete(invoices).where(eq18(invoices.id, invoiceId));
+  const savedNotes = invoice.notes || null;
+  const savedCustomerId = invoice.customerId;
+  const savedInvoiceType = invoice.invoiceType;
+  if (invoice.invoiceType === "monthly_aor") {
+    await db.update(contractorInvoices).set({ clientInvoiceId: null }).where(eq19(contractorInvoices.clientInvoiceId, invoiceId));
+  }
+  await db.delete(invoiceItems).where(eq19(invoiceItems.invoiceId, invoiceId));
+  await db.delete(invoices).where(eq19(invoices.id, invoiceId));
   const payrollMonth = new Date(invoice.invoiceMonth);
-  return await generateInvoicesFromPayroll(payrollMonth, "Regenerated Single Invoice");
+  const monthLabel = payrollMonth.toLocaleDateString("en", { month: "short", year: "numeric" });
+  const result = await generateInvoicesFromPayroll(payrollMonth, monthLabel);
+  if (result.success && result.invoiceIds && result.invoiceIds.length > 0 && savedNotes) {
+    const newInvoices = await db.select({ id: invoices.id, customerId: invoices.customerId, invoiceType: invoices.invoiceType }).from(invoices).where(inArray5(invoices.id, result.invoiceIds));
+    for (const inv of newInvoices) {
+      if (inv.customerId === savedCustomerId && inv.invoiceType === savedInvoiceType) {
+        await db.update(invoices).set({ notes: savedNotes }).where(eq19(invoices.id, inv.id));
+        break;
+      }
+    }
+  }
+  return result;
 }
 async function getServiceFeeRate(customerId, countryCode, serviceType, countryConfig, settlementCurrency, warnings) {
   const db = await getDb();
@@ -10359,10 +11829,10 @@ async function getServiceFeeRate(customerId, countryCode, serviceType, countryCo
   let feeCurrency = "USD";
   if (serviceType === "aor") {
     const aorFixedPrice = await db.select().from(customerPricing).where(
-      and16(
-        eq18(customerPricing.customerId, customerId),
-        eq18(customerPricing.isActive, true),
-        eq18(customerPricing.pricingType, "client_aor_fixed")
+      and17(
+        eq19(customerPricing.customerId, customerId),
+        eq19(customerPricing.isActive, true),
+        eq19(customerPricing.pricingType, "client_aor_fixed")
       )
     ).limit(1);
     if (aorFixedPrice.length > 0 && aorFixedPrice[0].fixedPrice) {
@@ -10372,12 +11842,12 @@ async function getServiceFeeRate(customerId, countryCode, serviceType, countryCo
     }
   }
   const countryPrice = await db.select().from(customerPricing).where(
-    and16(
-      eq18(customerPricing.customerId, customerId),
-      eq18(customerPricing.isActive, true),
-      eq18(customerPricing.pricingType, "country_specific"),
-      eq18(customerPricing.countryCode, countryCode),
-      eq18(customerPricing.serviceType, serviceType)
+    and17(
+      eq19(customerPricing.customerId, customerId),
+      eq19(customerPricing.isActive, true),
+      eq19(customerPricing.pricingType, "country_specific"),
+      eq19(customerPricing.countryCode, countryCode),
+      eq19(customerPricing.serviceType, serviceType)
     )
   ).limit(1);
   if (countryPrice.length > 0 && countryPrice[0].fixedPrice) {
@@ -10385,10 +11855,10 @@ async function getServiceFeeRate(customerId, countryCode, serviceType, countryCo
     feeCurrency = countryPrice[0].currency || "USD";
   } else {
     const globalDiscount = await db.select().from(customerPricing).where(
-      and16(
-        eq18(customerPricing.customerId, customerId),
-        eq18(customerPricing.isActive, true),
-        eq18(customerPricing.pricingType, "global_discount")
+      and17(
+        eq19(customerPricing.customerId, customerId),
+        eq19(customerPricing.isActive, true),
+        eq19(customerPricing.pricingType, "global_discount")
       )
     ).limit(1);
     let standardRate = 0;
@@ -10425,9 +11895,9 @@ async function getExchangeRateWithFallback(from, to, date) {
   const rate = await getExchangeRate(from, to, date);
   if (rate) return { ...rate, isFallback: false };
   const latest = await db.query.exchangeRates.findFirst({
-    where: and16(
-      eq18(exchangeRates.fromCurrency, from),
-      eq18(exchangeRates.toCurrency, to)
+    where: and17(
+      eq19(exchangeRates.fromCurrency, from),
+      eq19(exchangeRates.toCurrency, to)
     ),
     orderBy: [desc9(exchangeRates.effectiveDate)]
   });
@@ -10459,7 +11929,8 @@ var invoiceGenerationRouter = router({
     })
   ).mutation(async ({ input, ctx }) => {
     const payrollDate = new Date(input.payrollMonth);
-    const result = await generateInvoicesFromPayroll(payrollDate);
+    const monthLabel = payrollDate.toLocaleDateString("en", { month: "short", year: "numeric" });
+    const result = await generateInvoicesFromPayroll(payrollDate, monthLabel);
     if (result.success) {
       await logAuditAction({
         userId: ctx.user.id,
@@ -10849,7 +12320,7 @@ import { TRPCError as TRPCError9 } from "@trpc/server";
 import { z as z9 } from "zod";
 init_db2();
 init_schema();
-import { and as and17, eq as eq19, sql as sql8, ne as ne3 } from "drizzle-orm";
+import { and as and18, eq as eq20, sql as sql9, ne as ne3 } from "drizzle-orm";
 
 // server/utils/cutoff.ts
 init_db2();
@@ -10882,13 +12353,37 @@ async function checkCutoffPassed(effectiveMonth) {
     cutoffDate: cutoffDateBeijing
   };
 }
-async function enforceCutoff(effectiveMonth, userRole, action = "modify") {
+async function enforceCutoff(effectiveMonth, userRole, action = "modify", countryCode) {
   const { passed, cutoffDate } = await checkCutoffPassed(effectiveMonth);
   if (passed && !hasAnyRole(userRole, ["admin", "operations_manager"])) {
     const cutoffStr = cutoffDate.toISOString().replace("T", " ").substring(0, 16);
     throw new Error(
       `Cannot ${action}: payroll cutoff has passed (${cutoffStr} UTC). Only operations managers can modify after cutoff.`
     );
+  }
+  if (passed && hasAnyRole(userRole, ["admin", "operations_manager"]) && countryCode) {
+    let year, month;
+    if (typeof effectiveMonth === "string") {
+      const parts = effectiveMonth.split("-");
+      year = parseInt(parts[0], 10);
+      month = parseInt(parts[1], 10);
+    } else {
+      year = effectiveMonth.getFullYear();
+      month = effectiveMonth.getMonth() + 1;
+    }
+    let runMonth = month + 1;
+    let runYear = year;
+    if (runMonth > 12) {
+      runMonth = 1;
+      runYear++;
+    }
+    const runMonthStr = `${runYear}-${String(runMonth).padStart(2, "0")}-01`;
+    const payrollRun = await findPayrollRunByCountryMonth(countryCode, runMonthStr);
+    if (payrollRun && payrollRun.status === "approved") {
+      throw new Error(
+        `Cannot ${action}: the payroll run for ${runYear}-${String(runMonth).padStart(2, "0")} (${countryCode}) has been approved. Data for this month is locked.`
+      );
+    }
   }
 }
 function getLeavePayrollMonth(endDate) {
@@ -11084,12 +12579,12 @@ async function findOverlappingLeave(employeeId, startDate, endDate, excludeIds =
   const db = await getDb();
   if (!db) return [];
   const conditions = [
-    eq19(leaveRecords.employeeId, employeeId),
+    eq20(leaveRecords.employeeId, employeeId),
     // Overlap: existing.start <= new.end AND existing.end >= new.start
-    sql8`${leaveRecords.startDate} <= ${endDate}`,
-    sql8`${leaveRecords.endDate} >= ${startDate}`,
+    sql9`${leaveRecords.startDate} <= ${endDate}`,
+    sql9`${leaveRecords.endDate} >= ${startDate}`,
     // Only check active records
-    sql8`${leaveRecords.status} IN ('submitted', 'locked')`
+    sql9`${leaveRecords.status} IN ('submitted', 'locked')`
   ];
   if (excludeIds.length > 0) {
     for (const id of excludeIds) {
@@ -11101,7 +12596,7 @@ async function findOverlappingLeave(employeeId, startDate, endDate, excludeIds =
     startDate: leaveRecords.startDate,
     endDate: leaveRecords.endDate,
     days: leaveRecords.days
-  }).from(leaveRecords).where(and17(...conditions));
+  }).from(leaveRecords).where(and18(...conditions));
   return overlapping.map((r) => ({
     id: r.id,
     startDate: String(r.startDate),
@@ -11367,6 +12862,38 @@ var leaveRouter = router({
     });
     return { success: true };
   }),
+  /**
+   * Bulk admin approve — approve all client_approved leave records matching filters
+   */
+  bulkAdminApprove: operationsManagerProcedure.input(z9.object({
+    ids: z9.array(z9.number()).min(1).max(500)
+  })).mutation(async ({ input, ctx }) => {
+    const db = getDb();
+    let approvedCount = 0;
+    let skippedCount = 0;
+    for (const id of input.ids) {
+      const existing = await getLeaveRecordById(id);
+      if (!existing || existing.status !== "client_approved") {
+        skippedCount++;
+        continue;
+      }
+      await updateLeaveRecord(id, {
+        status: "admin_approved",
+        adminApprovedBy: ctx.user.id,
+        adminApprovedAt: /* @__PURE__ */ new Date()
+      });
+      await logAuditAction({
+        userId: ctx.user.id,
+        userName: ctx.user.name || null,
+        action: "admin_approve",
+        entityType: "leave_record",
+        entityId: id,
+        changes: JSON.stringify({ bulk: true })
+      });
+      approvedCount++;
+    }
+    return { approvedCount, skippedCount };
+  }),
   balances: userProcedure.input(z9.object({ employeeId: z9.number(), year: z9.number().optional() })).query(async ({ input }) => {
     return await listLeaveBalances(input.employeeId, input.year);
   })
@@ -11475,8 +13002,8 @@ var adjustmentsRouter = router({
       description: input.description,
       amount: input.amount,
       currency,
-      effectiveMonth: new Date(normalizedMonth),
-      // Safe conversion
+      effectiveMonth: normalizedMonth,
+      // Store as YYYY-MM-01 string (text column)
       receiptFileUrl: input.receiptFileUrl,
       receiptFileKey: input.receiptFileKey,
       status: "submitted",
@@ -11528,7 +13055,7 @@ var adjustmentsRouter = router({
     const updateData = { ...input.data };
     if (input.data.effectiveMonth) {
       const parts = input.data.effectiveMonth.split("-");
-      updateData.effectiveMonth = /* @__PURE__ */ new Date(`${parts[0]}-${parts[1].padStart(2, "0")}-01`);
+      updateData.effectiveMonth = `${parts[0]}-${parts[1].padStart(2, "0")}-01`;
     }
     if (input.data.effectiveMonth && input.data.effectiveMonth !== String(existing.effectiveMonth)) {
       await enforceCutoff(updateData.effectiveMonth, ctx.user.role, "update adjustment (new month)");
@@ -11565,8 +13092,8 @@ var adjustmentsRouter = router({
   adminApprove: operationsManagerProcedure.input(z10.object({ id: z10.number() })).mutation(async ({ input, ctx }) => {
     const existing = await getAdjustmentById(input.id);
     if (!existing) throw new TRPCError10({ code: "BAD_REQUEST", message: "Adjustment not found" });
-    if (existing.status !== "submitted") {
-      throw new TRPCError10({ code: "BAD_REQUEST", message: "Only submitted adjustments can be admin-approved" });
+    if (existing.status !== "client_approved") {
+      throw new TRPCError10({ code: "BAD_REQUEST", message: "Only client-approved adjustments can be admin-approved. Current status: " + existing.status });
     }
     await updateAdjustment(input.id, {
       status: "admin_approved",
@@ -11583,7 +13110,7 @@ var adjustmentsRouter = router({
     return { success: true };
   }),
   /**
-   * Admin reject — rejects a submitted adjustment
+   * Admin reject — rejects a client-approved adjustment
    */
   adminReject: operationsManagerProcedure.input(z10.object({
     id: z10.number(),
@@ -11591,8 +13118,8 @@ var adjustmentsRouter = router({
   })).mutation(async ({ input, ctx }) => {
     const existing = await getAdjustmentById(input.id);
     if (!existing) throw new TRPCError10({ code: "BAD_REQUEST", message: "Adjustment not found" });
-    if (existing.status !== "submitted") {
-      throw new TRPCError10({ code: "BAD_REQUEST", message: "Only submitted adjustments can be admin-rejected" });
+    if (existing.status !== "client_approved") {
+      throw new TRPCError10({ code: "BAD_REQUEST", message: "Only client-approved adjustments can be admin-rejected. Current status: " + existing.status });
     }
     await updateAdjustment(input.id, {
       status: "admin_rejected",
@@ -11609,6 +13136,37 @@ var adjustmentsRouter = router({
       changes: JSON.stringify({ reason: input.reason })
     });
     return { success: true };
+  }),
+  /**
+   * Bulk admin approve — approve all client_approved adjustments by IDs
+   */
+  bulkAdminApprove: operationsManagerProcedure.input(z10.object({
+    ids: z10.array(z10.number()).min(1).max(500)
+  })).mutation(async ({ input, ctx }) => {
+    let approvedCount = 0;
+    let skippedCount = 0;
+    for (const id of input.ids) {
+      const existing = await getAdjustmentById(id);
+      if (!existing || existing.status !== "client_approved") {
+        skippedCount++;
+        continue;
+      }
+      await updateAdjustment(id, {
+        status: "admin_approved",
+        adminApprovedBy: ctx.user.id,
+        adminApprovedAt: /* @__PURE__ */ new Date()
+      });
+      await logAuditAction({
+        userId: ctx.user.id,
+        userName: ctx.user.name || null,
+        action: "admin_approve",
+        entityType: "adjustment",
+        entityId: id,
+        changes: JSON.stringify({ bulk: true })
+      });
+      approvedCount++;
+    }
+    return { approvedCount, skippedCount };
   }),
   // Upload receipt file for reimbursement adjustments
   uploadReceipt: operationsManagerProcedure.input(
@@ -11806,8 +13364,8 @@ var reimbursementsRouter = router({
   adminApprove: operationsManagerProcedure.input(z11.object({ id: z11.number() })).mutation(async ({ input, ctx }) => {
     const existing = await getReimbursementById(input.id);
     if (!existing) throw new TRPCError11({ code: "BAD_REQUEST", message: "Reimbursement not found" });
-    if (existing.status !== "submitted") {
-      throw new TRPCError11({ code: "BAD_REQUEST", message: "Only submitted reimbursements can be admin-approved" });
+    if (existing.status !== "client_approved") {
+      throw new TRPCError11({ code: "BAD_REQUEST", message: "Only client-approved reimbursements can be admin-approved. Current status: " + existing.status });
     }
     await updateReimbursement(input.id, {
       status: "admin_approved",
@@ -11824,7 +13382,7 @@ var reimbursementsRouter = router({
     return { success: true };
   }),
   /**
-   * Admin reject — rejects a submitted reimbursement
+   * Admin reject — rejects a client-approved reimbursement
    */
   adminReject: operationsManagerProcedure.input(z11.object({
     id: z11.number(),
@@ -11832,8 +13390,8 @@ var reimbursementsRouter = router({
   })).mutation(async ({ input, ctx }) => {
     const existing = await getReimbursementById(input.id);
     if (!existing) throw new TRPCError11({ code: "BAD_REQUEST", message: "Reimbursement not found" });
-    if (existing.status !== "submitted") {
-      throw new TRPCError11({ code: "BAD_REQUEST", message: "Only submitted reimbursements can be admin-rejected" });
+    if (existing.status !== "client_approved") {
+      throw new TRPCError11({ code: "BAD_REQUEST", message: "Only client-approved reimbursements can be admin-rejected. Current status: " + existing.status });
     }
     await updateReimbursement(input.id, {
       status: "admin_rejected",
@@ -11879,7 +13437,7 @@ var reimbursementsRouter = router({
 // server/routers/dashboard.ts
 init_db2();
 init_schema();
-import { eq as eq20, and as and18, sql as sql9, count as count7, desc as desc10, inArray as inArray5, isNotNull } from "drizzle-orm";
+import { eq as eq21, and as and19, sql as sql10, count as count7, desc as desc10, inArray as inArray6, isNotNull } from "drizzle-orm";
 function getLastNMonths(n) {
   const months = [];
   const now = /* @__PURE__ */ new Date();
@@ -11918,24 +13476,24 @@ var dashboardRouter = router({
       const monthEnd = new Date(y, mo, 0, 23, 59, 59);
       const monthStart = `${m}-01`;
       const nextMonth = mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, "0")}-01`;
-      const [empResult] = await db.select({ count: count7() }).from(employees).where(and18(
-        sql9`${employees.createdAt} <= ${monthEnd}`,
-        inArray5(employees.status, ["active", "contract_signed", "onboarding", "offboarding"])
+      const [empResult] = await db.select({ count: count7() }).from(employees).where(and19(
+        sql10`${employees.createdAt} <= ${monthEnd}`,
+        inArray6(employees.status, ["active", "contract_signed", "onboarding", "offboarding"])
       ));
       employeeTrend.push(empResult?.count ?? 0);
-      const [custResult] = await db.select({ count: count7() }).from(customers).where(and18(
-        sql9`${customers.createdAt} <= ${monthEnd}`,
-        eq20(customers.status, "active")
+      const [custResult] = await db.select({ count: count7() }).from(customers).where(and19(
+        sql10`${customers.createdAt} <= ${monthEnd}`,
+        eq21(customers.status, "active")
       ));
       customerTrend.push(custResult?.count ?? 0);
-      const [invResult] = await db.select({ count: count7() }).from(invoices).where(and18(
-        sql9`${invoices.createdAt} >= ${monthStart}`,
-        sql9`${invoices.createdAt} < ${nextMonth}`
+      const [invResult] = await db.select({ count: count7() }).from(invoices).where(and19(
+        sql10`${invoices.createdAt} >= ${monthStart}`,
+        sql10`${invoices.createdAt} < ${nextMonth}`
       ));
       invoiceTrend.push(invResult?.count ?? 0);
-      const [prResult] = await db.select({ count: count7() }).from(payrollRuns).where(and18(
-        sql9`${payrollRuns.payrollMonth} >= ${monthStart}`,
-        sql9`${payrollRuns.payrollMonth} < ${nextMonth}`
+      const [prResult] = await db.select({ count: count7() }).from(payrollRuns).where(and19(
+        sql10`${payrollRuns.payrollMonth} >= ${monthStart}`,
+        sql10`${payrollRuns.payrollMonth} < ${nextMonth}`
       ));
       payrollTrend.push(prResult?.count ?? 0);
     }
@@ -11955,32 +13513,32 @@ var dashboardRouter = router({
       monthlyRevenue: []
     };
     const [paidTotal] = await db.select({
-      total: sql9`COALESCE(SUM(${invoices.total}), 0)`,
+      total: sql10`COALESCE(SUM(${invoices.total}), 0)`,
       count: count7()
-    }).from(invoices).where(and18(
-      eq20(invoices.status, "paid"),
-      sql9`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+    }).from(invoices).where(and19(
+      eq21(invoices.status, "paid"),
+      sql10`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
     ));
     const [depositTotal] = await db.select({
-      total: sql9`COALESCE(SUM(${invoices.total}), 0)`,
+      total: sql10`COALESCE(SUM(${invoices.total}), 0)`,
       count: count7()
-    }).from(invoices).where(and18(
-      eq20(invoices.status, "paid"),
-      eq20(invoices.invoiceType, "deposit")
+    }).from(invoices).where(and19(
+      eq21(invoices.status, "paid"),
+      eq21(invoices.invoiceType, "deposit")
     ));
     const [serviceFeeTotal] = await db.select({
-      total: sql9`COALESCE(SUM(ii.amount), 0)`
-    }).from(invoices).innerJoin(sql9`invoice_items ii`, sql9`ii.invoiceId = ${invoices.id}`).where(and18(
-      eq20(invoices.status, "paid"),
-      sql9`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
-      sql9`ii.itemType IN ('eor_service_fee', 'visa_eor_service_fee', 'aor_service_fee')`
+      total: sql10`COALESCE(SUM(ii.amount), 0)`
+    }).from(invoices).innerJoin(sql10`invoice_items ii`, sql10`ii.invoiceId = ${invoices.id}`).where(and19(
+      eq21(invoices.status, "paid"),
+      sql10`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
+      sql10`ii.itemType IN ('eor_service_fee', 'visa_eor_service_fee', 'aor_service_fee')`
     ));
     const [outstanding] = await db.select({
-      total: sql9`COALESCE(SUM(${invoices.total}), 0)`
-    }).from(invoices).where(inArray5(invoices.status, ["sent", "overdue"]));
+      total: sql10`COALESCE(SUM(${invoices.total}), 0)`
+    }).from(invoices).where(inArray6(invoices.status, ["sent", "overdue"]));
     const [overdue] = await db.select({
-      total: sql9`COALESCE(SUM(${invoices.total}), 0)`
-    }).from(invoices).where(eq20(invoices.status, "overdue"));
+      total: sql10`COALESCE(SUM(${invoices.total}), 0)`
+    }).from(invoices).where(eq21(invoices.status, "overdue"));
     const months = getLastNMonths(12);
     const monthlyRevenue = [];
     for (const m of months) {
@@ -11988,21 +13546,21 @@ var dashboardRouter = router({
       const monthStart = `${m}-01`;
       const nextMonth = mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, "0")}-01`;
       const [monthTotal] = await db.select({
-        total: sql9`COALESCE(SUM(${invoices.total}), 0)`,
+        total: sql10`COALESCE(SUM(${invoices.total}), 0)`,
         count: count7()
-      }).from(invoices).where(and18(
-        eq20(invoices.status, "paid"),
-        sql9`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
-        sql9`(${invoices.paidDate} >= ${monthStart} AND ${invoices.paidDate} < ${nextMonth})
+      }).from(invoices).where(and19(
+        eq21(invoices.status, "paid"),
+        sql10`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
+        sql10`(${invoices.paidDate} >= ${monthStart} AND ${invoices.paidDate} < ${nextMonth})
             OR (${invoices.paidDate} IS NULL AND ${invoices.createdAt} >= ${monthStart} AND ${invoices.createdAt} < ${nextMonth})`
       ));
       const [monthServiceFee] = await db.select({
-        total: sql9`COALESCE(SUM(ii.amount), 0)`
-      }).from(invoices).innerJoin(sql9`invoice_items ii`, sql9`ii.invoiceId = ${invoices.id}`).where(and18(
-        eq20(invoices.status, "paid"),
-        sql9`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
-        sql9`ii.itemType IN ('eor_service_fee', 'visa_eor_service_fee', 'aor_service_fee')`,
-        sql9`(${invoices.paidDate} >= ${monthStart} AND ${invoices.paidDate} < ${nextMonth})
+        total: sql10`COALESCE(SUM(ii.amount), 0)`
+      }).from(invoices).innerJoin(sql10`invoice_items ii`, sql10`ii.invoiceId = ${invoices.id}`).where(and19(
+        eq21(invoices.status, "paid"),
+        sql10`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
+        sql10`ii.itemType IN ('eor_service_fee', 'visa_eor_service_fee', 'aor_service_fee')`,
+        sql10`(${invoices.paidDate} >= ${monthStart} AND ${invoices.paidDate} < ${nextMonth})
               OR (${invoices.paidDate} IS NULL AND ${invoices.createdAt} >= ${monthStart} AND ${invoices.createdAt} < ${nextMonth})`
       ));
       monthlyRevenue.push({
@@ -12037,9 +13595,9 @@ var dashboardRouter = router({
       status: payrollRuns.status,
       count: count7()
     }).from(payrollRuns).groupBy(payrollRuns.status);
-    const [pendingPayrolls] = await db.select({ count: count7() }).from(payrollRuns).where(eq20(payrollRuns.status, "pending_approval"));
-    const [pendingAdj] = await db.select({ count: count7() }).from(adjustments).where(eq20(adjustments.status, "submitted"));
-    const [pendingLeaves] = await db.select({ count: count7() }).from(leaveRecords).where(eq20(leaveRecords.status, "submitted"));
+    const [pendingPayrolls] = await db.select({ count: count7() }).from(payrollRuns).where(eq21(payrollRuns.status, "pending_approval"));
+    const [pendingAdj] = await db.select({ count: count7() }).from(adjustments).where(eq21(adjustments.status, "submitted"));
+    const [pendingLeaves] = await db.select({ count: count7() }).from(leaveRecords).where(eq21(leaveRecords.status, "submitted"));
     const recentPayrollRuns = await db.select({
       id: payrollRuns.id,
       countryCode: payrollRuns.countryCode,
@@ -12049,8 +13607,8 @@ var dashboardRouter = router({
       totalEmployerCost: payrollRuns.totalDeductions,
       createdAt: payrollRuns.createdAt
     }).from(payrollRuns).orderBy(desc10(payrollRuns.createdAt)).limit(10);
-    const [onboarding] = await db.select({ count: count7() }).from(employees).where(inArray5(employees.status, ["pending_review", "documents_incomplete", "onboarding", "contract_signed"]));
-    const [offboarding] = await db.select({ count: count7() }).from(employees).where(eq20(employees.status, "offboarding"));
+    const [onboarding] = await db.select({ count: count7() }).from(employees).where(inArray6(employees.status, ["pending_review", "documents_incomplete", "onboarding", "contract_signed"]));
+    const [offboarding] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "offboarding"));
     return {
       payrollByStatus: payrollByStatus.map((r) => ({ status: r.status, count: r.count })),
       pendingApprovals: {
@@ -12090,18 +13648,18 @@ var dashboardRouter = router({
     const todayStr = now.toISOString().slice(0, 10);
     const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
     const nextMonthStart = now.getMonth() === 11 ? `${now.getFullYear() + 1}-01-01` : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, "0")}-01`;
-    const [activeResult] = await db.select({ count: count7() }).from(employees).where(eq20(employees.status, "active"));
-    const [onLeaveResult] = await db.select({ count: count7() }).from(employees).where(eq20(employees.status, "on_leave"));
-    const [onboardingResult] = await db.select({ count: count7() }).from(employees).where(inArray5(employees.status, ["pending_review", "documents_incomplete", "onboarding", "contract_signed"]));
-    const [offboardingResult] = await db.select({ count: count7() }).from(employees).where(eq20(employees.status, "offboarding"));
-    const [newHiresResult] = await db.select({ count: count7() }).from(employees).where(and18(
-      sql9`${employees.startDate} >= ${currentMonthStart}`,
-      sql9`${employees.startDate} < ${nextMonthStart}`
+    const [activeResult] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "active"));
+    const [onLeaveResult] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "on_leave"));
+    const [onboardingResult] = await db.select({ count: count7() }).from(employees).where(inArray6(employees.status, ["pending_review", "documents_incomplete", "onboarding", "contract_signed"]));
+    const [offboardingResult] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "offboarding"));
+    const [newHiresResult] = await db.select({ count: count7() }).from(employees).where(and19(
+      sql10`${employees.startDate} >= ${currentMonthStart}`,
+      sql10`${employees.startDate} < ${nextMonthStart}`
     ));
-    const [terminationsResult] = await db.select({ count: count7() }).from(employees).where(and18(
-      eq20(employees.status, "terminated"),
-      sql9`${employees.updatedAt} >= ${currentMonthStart}`,
-      sql9`${employees.updatedAt} < ${nextMonthStart}`
+    const [terminationsResult] = await db.select({ count: count7() }).from(employees).where(and19(
+      eq21(employees.status, "terminated"),
+      sql10`${employees.updatedAt} >= ${currentMonthStart}`,
+      sql10`${employees.updatedAt} < ${nextMonthStart}`
     ));
     const getExpiringContracts = async (daysAhead) => {
       const futureDate = new Date(now);
@@ -12114,12 +13672,12 @@ var dashboardRouter = router({
         firstName: employees.firstName,
         lastName: employees.lastName,
         employeeCode: employees.employeeCode
-      }).from(employeeContracts).innerJoin(employees, eq20(employeeContracts.employeeId, employees.id)).where(and18(
+      }).from(employeeContracts).innerJoin(employees, eq21(employeeContracts.employeeId, employees.id)).where(and19(
         isNotNull(employeeContracts.expiryDate),
-        sql9`${employeeContracts.expiryDate} >= ${todayStr}`,
-        sql9`${employeeContracts.expiryDate} <= ${futureDateStr}`,
-        eq20(employeeContracts.status, "signed"),
-        inArray5(employees.status, ["active", "on_leave"])
+        sql10`${employeeContracts.expiryDate} >= ${todayStr}`,
+        sql10`${employeeContracts.expiryDate} <= ${futureDateStr}`,
+        eq21(employeeContracts.status, "signed"),
+        inArray6(employees.status, ["active", "on_leave"])
       )).orderBy(employeeContracts.expiryDate);
       return results.map((r) => ({
         employeeId: r.employeeId,
@@ -12139,22 +13697,22 @@ var dashboardRouter = router({
       const monthEnd = new Date(y, mo, 0, 23, 59, 59);
       const monthStart = `${m}-01`;
       const mNextMonth = mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, "0")}-01`;
-      const [activeAtMonth] = await db.select({ count: count7() }).from(employees).where(and18(
-        sql9`${employees.createdAt} <= ${monthEnd}`,
-        inArray5(employees.status, ["active", "on_leave", "offboarding"])
+      const [activeAtMonth] = await db.select({ count: count7() }).from(employees).where(and19(
+        sql10`${employees.createdAt} <= ${monthEnd}`,
+        inArray6(employees.status, ["active", "on_leave", "offboarding"])
       ));
-      const [newInMonth] = await db.select({ count: count7() }).from(employees).where(and18(
-        sql9`${employees.startDate} >= ${monthStart}`,
-        sql9`${employees.startDate} < ${mNextMonth}`
+      const [newInMonth] = await db.select({ count: count7() }).from(employees).where(and19(
+        sql10`${employees.startDate} >= ${monthStart}`,
+        sql10`${employees.startDate} < ${mNextMonth}`
       ));
-      const [termInMonth] = await db.select({ count: count7() }).from(employees).where(and18(
-        eq20(employees.status, "terminated"),
-        sql9`${employees.updatedAt} >= ${monthStart}`,
-        sql9`${employees.updatedAt} < ${mNextMonth}`
+      const [termInMonth] = await db.select({ count: count7() }).from(employees).where(and19(
+        eq21(employees.status, "terminated"),
+        sql10`${employees.updatedAt} >= ${monthStart}`,
+        sql10`${employees.updatedAt} < ${mNextMonth}`
       ));
-      const [onLeaveAtMonth] = await db.select({ count: count7() }).from(employees).where(and18(
-        sql9`${employees.createdAt} <= ${monthEnd}`,
-        eq20(employees.status, "on_leave")
+      const [onLeaveAtMonth] = await db.select({ count: count7() }).from(employees).where(and19(
+        sql10`${employees.createdAt} <= ${monthEnd}`,
+        eq21(employees.status, "on_leave")
       ));
       monthlyWorkforce.push({
         month: m,
@@ -12175,7 +13733,7 @@ var dashboardRouter = router({
     const adjustmentByType = await db.select({
       type: adjustments.adjustmentType,
       count: count7(),
-      totalAmount: sql9`COALESCE(SUM(${adjustments.amount}), 0)`
+      totalAmount: sql10`COALESCE(SUM(${adjustments.amount}), 0)`
     }).from(adjustments).groupBy(adjustments.adjustmentType);
     const monthlyLeave = [];
     for (const m of months) {
@@ -12184,10 +13742,10 @@ var dashboardRouter = router({
       const mNextMonth = mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, "0")}-01`;
       const [result] = await db.select({
         count: count7(),
-        totalDays: sql9`COALESCE(SUM(${leaveRecords.days}), 0)`
-      }).from(leaveRecords).where(and18(
-        sql9`${leaveRecords.startDate} >= ${monthStart}`,
-        sql9`${leaveRecords.startDate} < ${mNextMonth}`
+        totalDays: sql10`COALESCE(SUM(${leaveRecords.days}), 0)`
+      }).from(leaveRecords).where(and19(
+        sql10`${leaveRecords.startDate} >= ${monthStart}`,
+        sql10`${leaveRecords.startDate} < ${mNextMonth}`
       ));
       monthlyLeave.push({
         month: m,
@@ -12388,7 +13946,7 @@ import { z as z13 } from "zod";
 import { TRPCError as TRPCError13 } from "@trpc/server";
 init_db2();
 init_schema();
-import { eq as eq21 } from "drizzle-orm";
+import { eq as eq22 } from "drizzle-orm";
 import crypto3 from "crypto";
 var userManagementRouter = router({
   list: adminProcedure2.input(
@@ -12546,7 +14104,7 @@ var userManagementRouter = router({
       inviteToken: null,
       inviteExpiresAt: null,
       lastSignedIn: /* @__PURE__ */ new Date()
-    }).where(eq21(users.id, user.id));
+    }).where(eq22(users.id, user.id));
     const payload = {
       sub: String(user.id),
       email: user.email || "",
@@ -12586,7 +14144,7 @@ var userManagementRouter = router({
     const newHash = await hashPassword(input.newPassword);
     const db = await getDb();
     if (!db) throw new TRPCError13({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    await db.update(users).set({ passwordHash: newHash }).where(eq21(users.id, ctx.user.id));
+    await db.update(users).set({ passwordHash: newHash }).where(eq22(users.id, ctx.user.id));
     return { success: true };
   }),
   /**
@@ -12608,7 +14166,7 @@ var userManagementRouter = router({
     await db.update(users).set({
       passwordHash,
       mustChangePassword: true
-    }).where(eq21(users.id, input.id));
+    }).where(eq22(users.id, input.id));
     await logAuditAction({
       userId: ctx.user.id,
       userName: ctx.user.name || null,
@@ -12639,7 +14197,7 @@ var userManagementRouter = router({
     const inviteExpiresAt = getInviteExpiryDate();
     const db = await getDb();
     if (!db) throw new TRPCError13({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    await db.update(users).set({ inviteToken, inviteExpiresAt }).where(eq21(users.id, input.id));
+    await db.update(users).set({ inviteToken, inviteExpiresAt }).where(eq22(users.id, input.id));
     const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
     const inviteUrl = `${origin}/invite?token=${inviteToken}`;
     return { success: true, inviteUrl, inviteToken };
@@ -12675,7 +14233,7 @@ init_db2();
 // server/services/exchangeRateFetchService.ts
 init_db2();
 init_schema();
-import { eq as eq22 } from "drizzle-orm";
+import { eq as eq23 } from "drizzle-orm";
 var EXCHANGERATE_API_URL = "https://open.er-api.com/v6/latest";
 var FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1";
 var FRANKFURTER_SUPPORTED = /* @__PURE__ */ new Set([
@@ -12768,7 +14326,7 @@ async function getDefaultMarkup() {
   try {
     const db = await getDb();
     if (!db) return 5;
-    const result = await db.select().from(systemConfig).where(eq22(systemConfig.configKey, "exchange_rate_markup_percentage")).limit(1);
+    const result = await db.select().from(systemConfig).where(eq23(systemConfig.configKey, "exchange_rate_markup_percentage")).limit(1);
     if (result.length > 0) {
       return parseFloat(result[0].configValue) || 5;
     }
@@ -13040,107 +14598,295 @@ init_db2();
 // server/services/contractorInvoiceGenerationService.ts
 init_connection();
 init_schema();
-import { eq as eq23, and as and19, isNull as isNull2, or as or5 } from "drizzle-orm";
+import { eq as eq24, and as and20, isNull as isNull3 } from "drizzle-orm";
 var ContractorInvoiceGenerationService = {
   /**
-   * Main entry point to process all pending invoices.
-   * Recommended to run via Cron daily.
+   * Generate contractor invoices from locked data for a specific month.
+   * This is the primary entry point called by the cron job (5th 00:01).
+   * 
+   * @param effectiveMonth - The month to process in YYYY-MM-01 format
+   * @param year - Year number
+   * @param month - Month number (1-indexed)
+   * @returns { created: number, errors: string[] }
    */
-  async processAll(targetDate = /* @__PURE__ */ new Date()) {
+  async generateFromLockedData(effectiveMonth, year, month) {
     const db = await getDb();
-    if (!db) return { generated: 0, errors: ["DB Connection Failed"] };
-    let generatedCount = 0;
+    if (!db) return { created: 0, errors: ["DB Connection Failed"] };
+    let totalCreated = 0;
     const errors = [];
     try {
-      const monthlyCount = await this.processMonthlyInvoices(targetDate);
-      generatedCount += monthlyCount;
+      const monthlyCount = await this.processMonthlyFromLocked(effectiveMonth, year, month);
+      totalCreated += monthlyCount;
     } catch (e) {
       errors.push(`Monthly Invoice Error: ${e instanceof Error ? e.message : String(e)}`);
     }
     try {
-      const semiMonthlyCount = await this.processSemiMonthlyInvoices(targetDate);
-      generatedCount += semiMonthlyCount;
+      const semiMonthlyCount = await this.processSemiMonthlyFromLocked(effectiveMonth, year, month);
+      totalCreated += semiMonthlyCount;
     } catch (e) {
       errors.push(`Semi-Monthly Invoice Error: ${e instanceof Error ? e.message : String(e)}`);
     }
     try {
-      const milestoneCount = await this.processMilestoneInvoices(targetDate);
-      generatedCount += milestoneCount;
+      const milestoneCount = await this.processMilestoneFromLocked(effectiveMonth, year, month);
+      totalCreated += milestoneCount;
     } catch (e) {
       errors.push(`Milestone Invoice Error: ${e instanceof Error ? e.message : String(e)}`);
     }
-    return { generated: generatedCount, errors };
+    return { created: totalCreated, errors };
   },
   /**
-   * Generate invoices for active contractors with 'semi_monthly' frequency.
-   * Cycles:
-   * 1. 1st - 15th (Run on 15th)
-   * 2. 16th - End of Month (Run on Last Day)
+   * Generate invoices for monthly contractors from locked data.
+   * Creates 1 invoice per contractor per month:
+   * - Base monthly rate as service_fee line item
+   * - All locked adjustments for the month as separate line items
    */
-  async processSemiMonthlyInvoices(targetDate) {
+  async processMonthlyFromLocked(effectiveMonth, year, month) {
     const db = await getDb();
     if (!db) return 0;
-    const d = targetDate.getDate();
-    const y = targetDate.getFullYear();
-    const m = targetDate.getMonth();
-    const lastDayOfMonth = new Date(y, m + 1, 0).getDate();
-    let periodStart = "";
-    let periodEnd = "";
-    let isCycleRun = false;
-    if (d === 15) {
-      periodStart = new Date(Date.UTC(y, m, 1)).toISOString().split("T")[0];
-      periodEnd = new Date(Date.UTC(y, m, 15)).toISOString().split("T")[0];
-      isCycleRun = true;
-    } else if (d === lastDayOfMonth) {
-      periodStart = new Date(Date.UTC(y, m, 16)).toISOString().split("T")[0];
-      periodEnd = new Date(Date.UTC(y, m + 1, 0)).toISOString().split("T")[0];
-      isCycleRun = true;
-    }
-    if (!isCycleRun) return 0;
-    const invoiceDate = targetDate.toISOString().split("T")[0];
+    const periodStart = `${year}-${String(month).padStart(2, "0")}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const periodEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+    const invoiceDate = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     const eligibleContractors = await db.select().from(contractors).where(
-      and19(
-        eq23(contractors.status, "active"),
-        eq23(contractors.paymentFrequency, "semi_monthly"),
-        or5(eq23(contractors.rateType, "fixed_monthly"))
+      and20(
+        eq24(contractors.status, "active"),
+        eq24(contractors.paymentFrequency, "monthly")
       )
     );
     let count19 = 0;
     for (const contractor of eligibleContractors) {
       const existing = await db.select().from(contractorInvoices).where(
-        and19(
-          eq23(contractorInvoices.contractorId, contractor.id),
-          eq23(contractorInvoices.periodStart, periodStart),
-          eq23(contractorInvoices.periodEnd, periodEnd)
+        and20(
+          eq24(contractorInvoices.contractorId, contractor.id),
+          eq24(contractorInvoices.periodStart, periodStart),
+          eq24(contractorInvoices.periodEnd, periodEnd)
         )
       ).limit(1);
       if (existing.length > 0) continue;
-      const invoiceNumber = `CTR-INV-${y}${String(m + 1).padStart(2, "0")}-${d === 15 ? "1" : "2"}-${contractor.id}-${Math.floor(Math.random() * 1e3)}`;
+      const lockedAdjustments = await db.select().from(contractorAdjustments).where(
+        and20(
+          eq24(contractorAdjustments.contractorId, contractor.id),
+          eq24(contractorAdjustments.effectiveMonth, effectiveMonth),
+          eq24(contractorAdjustments.status, "locked"),
+          isNull3(contractorAdjustments.invoiceId)
+        )
+      );
+      const lineItems = [];
       let totalAmount = 0;
       const currency = contractor.currency;
-      const lineItems = [];
-      if (contractor.rateAmount) {
+      const adjustmentIdsToLink = [];
+      if (contractor.rateAmount && contractor.rateType === "fixed_monthly") {
         const amount = parseFloat(contractor.rateAmount);
         totalAmount += amount;
         lineItems.push({
           invoiceId: 0,
-          description: `Semi-Monthly Service Fee - ${periodStart} to ${periodEnd}`,
+          description: `Monthly Consulting Fee - ${periodStart} to ${periodEnd}`,
           quantity: "1",
           unitPrice: amount.toFixed(2),
           amount: amount.toFixed(2),
           itemType: "service_fee"
         });
       }
-      const adjustmentsToLink = [];
-      if (d === lastDayOfMonth) {
-        const pendingAdjustments = await db.select().from(contractorAdjustments).where(
-          and19(
-            eq23(contractorAdjustments.contractorId, contractor.id),
-            eq23(contractorAdjustments.status, "approved"),
-            isNull2(contractorAdjustments.invoiceId)
+      for (const adj of lockedAdjustments) {
+        if (adj.currency !== currency) continue;
+        const amount = parseFloat(adj.amount);
+        const isDeduction = adj.type === "deduction";
+        const signedAmount = isDeduction ? -amount : amount;
+        totalAmount += signedAmount;
+        lineItems.push({
+          invoiceId: 0,
+          description: `${adj.type.toUpperCase()}: ${adj.description}`,
+          quantity: "1",
+          unitPrice: signedAmount.toFixed(2),
+          amount: signedAmount.toFixed(2),
+          itemType: isDeduction ? "adjustment" : adj.type === "expense" ? "expense" : "adjustment",
+          adjustmentId: adj.id
+        });
+        adjustmentIdsToLink.push(adj.id);
+      }
+      if (lineItems.length === 0) continue;
+      const invoiceNumber = generateContractorInvoiceNumber(contractor.id, year, month, "M");
+      const invoiceData = {
+        invoiceNumber,
+        contractorId: contractor.id,
+        customerId: contractor.customerId,
+        invoiceDate,
+        periodStart,
+        periodEnd,
+        currency,
+        totalAmount: totalAmount.toFixed(2),
+        status: "draft"
+      };
+      const result = await db.insert(contractorInvoices).values(invoiceData).returning();
+      const invoice = result[0];
+      const itemsWithId = lineItems.map((item) => ({ ...item, invoiceId: invoice.id }));
+      await db.insert(contractorInvoiceItems).values(itemsWithId);
+      for (const adjId of adjustmentIdsToLink) {
+        await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq24(contractorAdjustments.id, adjId));
+      }
+      count19++;
+      console.log(`[ContractorInvoice] Created monthly invoice ${invoiceNumber} for contractor #${contractor.id} (${totalAmount.toFixed(2)} ${currency})`);
+    }
+    return count19;
+  },
+  /**
+   * Generate invoices for semi-monthly contractors from locked data.
+   * Creates 2 invoices per contractor per month:
+   * - First half (1st-15th): base rate only
+   * - Second half (16th-end): base rate + locked adjustments
+   */
+  async processSemiMonthlyFromLocked(effectiveMonth, year, month) {
+    const db = await getDb();
+    if (!db) return 0;
+    const lastDay = new Date(year, month, 0).getDate();
+    const invoiceDate = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    const periods = [
+      {
+        periodStart: `${year}-${String(month).padStart(2, "0")}-01`,
+        periodEnd: `${year}-${String(month).padStart(2, "0")}-15`,
+        suffix: "1H",
+        includeAdjustments: false
+      },
+      {
+        periodStart: `${year}-${String(month).padStart(2, "0")}-16`,
+        periodEnd: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+        suffix: "2H",
+        includeAdjustments: true
+        // Adjustments only in second half
+      }
+    ];
+    const eligibleContractors = await db.select().from(contractors).where(
+      and20(
+        eq24(contractors.status, "active"),
+        eq24(contractors.paymentFrequency, "semi_monthly")
+      )
+    );
+    let count19 = 0;
+    for (const contractor of eligibleContractors) {
+      for (const period of periods) {
+        const existing = await db.select().from(contractorInvoices).where(
+          and20(
+            eq24(contractorInvoices.contractorId, contractor.id),
+            eq24(contractorInvoices.periodStart, period.periodStart),
+            eq24(contractorInvoices.periodEnd, period.periodEnd)
+          )
+        ).limit(1);
+        if (existing.length > 0) continue;
+        const lineItems = [];
+        let totalAmount = 0;
+        const currency = contractor.currency;
+        const adjustmentIdsToLink = [];
+        if (contractor.rateAmount && contractor.rateType === "fixed_monthly") {
+          const amount = parseFloat(contractor.rateAmount);
+          totalAmount += amount;
+          lineItems.push({
+            invoiceId: 0,
+            description: `Semi-Monthly Consulting Fee - ${period.periodStart} to ${period.periodEnd}`,
+            quantity: "1",
+            unitPrice: amount.toFixed(2),
+            amount: amount.toFixed(2),
+            itemType: "service_fee"
+          });
+        }
+        if (period.includeAdjustments) {
+          const lockedAdjustments = await db.select().from(contractorAdjustments).where(
+            and20(
+              eq24(contractorAdjustments.contractorId, contractor.id),
+              eq24(contractorAdjustments.effectiveMonth, effectiveMonth),
+              eq24(contractorAdjustments.status, "locked"),
+              isNull3(contractorAdjustments.invoiceId)
+            )
+          );
+          for (const adj of lockedAdjustments) {
+            if (adj.currency !== currency) continue;
+            const amount = parseFloat(adj.amount);
+            const isDeduction = adj.type === "deduction";
+            const signedAmount = isDeduction ? -amount : amount;
+            totalAmount += signedAmount;
+            lineItems.push({
+              invoiceId: 0,
+              description: `${adj.type.toUpperCase()}: ${adj.description}`,
+              quantity: "1",
+              unitPrice: signedAmount.toFixed(2),
+              amount: signedAmount.toFixed(2),
+              itemType: isDeduction ? "adjustment" : adj.type === "expense" ? "expense" : "adjustment",
+              adjustmentId: adj.id
+            });
+            adjustmentIdsToLink.push(adj.id);
+          }
+        }
+        if (lineItems.length === 0) continue;
+        const invoiceNumber = generateContractorInvoiceNumber(contractor.id, year, month, period.suffix);
+        const invoiceData = {
+          invoiceNumber,
+          contractorId: contractor.id,
+          customerId: contractor.customerId,
+          invoiceDate,
+          periodStart: period.periodStart,
+          periodEnd: period.periodEnd,
+          currency,
+          totalAmount: totalAmount.toFixed(2),
+          status: "draft"
+        };
+        const result = await db.insert(contractorInvoices).values(invoiceData).returning();
+        const invoice = result[0];
+        const itemsWithId = lineItems.map((item) => ({ ...item, invoiceId: invoice.id }));
+        await db.insert(contractorInvoiceItems).values(itemsWithId);
+        for (const adjId of adjustmentIdsToLink) {
+          await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq24(contractorAdjustments.id, adjId));
+        }
+        count19++;
+        console.log(`[ContractorInvoice] Created semi-monthly invoice ${invoiceNumber} for contractor #${contractor.id} (${totalAmount.toFixed(2)} ${currency})`);
+      }
+    }
+    return count19;
+  },
+  /**
+   * Generate invoices for milestone contractors from locked data.
+   * Creates 1 invoice per locked milestone:
+   * - Milestone amount as the primary line item
+   * - Locked adjustments are attached to the first milestone invoice
+   */
+  async processMilestoneFromLocked(effectiveMonth, year, month) {
+    const db = await getDb();
+    if (!db) return 0;
+    const invoiceDate = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    const lockedMilestones = await db.select().from(contractorMilestones).where(
+      and20(
+        eq24(contractorMilestones.effectiveMonth, effectiveMonth),
+        eq24(contractorMilestones.status, "locked"),
+        isNull3(contractorMilestones.invoiceId)
+      )
+    );
+    let count19 = 0;
+    const contractorsWithAdjAttached = /* @__PURE__ */ new Set();
+    for (const milestone of lockedMilestones) {
+      const contractorResult = await db.select().from(contractors).where(eq24(contractors.id, milestone.contractorId)).limit(1);
+      if (contractorResult.length === 0) continue;
+      const contractor = contractorResult[0];
+      const lineItems = [];
+      let totalAmount = parseFloat(milestone.amount);
+      const currency = milestone.currency;
+      const adjustmentIdsToLink = [];
+      lineItems.push({
+        invoiceId: 0,
+        description: `Milestone: ${milestone.title}`,
+        quantity: "1",
+        unitPrice: milestone.amount,
+        amount: milestone.amount,
+        itemType: "milestone",
+        milestoneId: milestone.id
+      });
+      if (!contractorsWithAdjAttached.has(contractor.id)) {
+        const lockedAdjustments = await db.select().from(contractorAdjustments).where(
+          and20(
+            eq24(contractorAdjustments.contractorId, contractor.id),
+            eq24(contractorAdjustments.effectiveMonth, effectiveMonth),
+            eq24(contractorAdjustments.status, "locked"),
+            isNull3(contractorAdjustments.invoiceId)
           )
         );
-        for (const adj of pendingAdjustments) {
+        for (const adj of lockedAdjustments) {
           if (adj.currency !== currency) continue;
           const amount = parseFloat(adj.amount);
           const isDeduction = adj.type === "deduction";
@@ -13155,196 +14901,22 @@ var ContractorInvoiceGenerationService = {
             itemType: isDeduction ? "adjustment" : adj.type === "expense" ? "expense" : "adjustment",
             adjustmentId: adj.id
           });
-          adjustmentsToLink.push(adj.id);
+          adjustmentIdsToLink.push(adj.id);
         }
+        contractorsWithAdjAttached.add(contractor.id);
       }
-      if (lineItems.length === 0) continue;
-      const invoiceData = {
-        invoiceNumber,
-        contractorId: contractor.id,
-        customerId: contractor.customerId,
-        invoiceDate,
-        periodStart,
-        periodEnd,
-        currency,
-        totalAmount: totalAmount.toFixed(2),
-        status: "draft"
-      };
-      const result = await db.insert(contractorInvoices).values(invoiceData).returning();
-      const invoice = result[0];
-      if (lineItems.length > 0) {
-        const itemsWithId = lineItems.map((item) => ({ ...item, invoiceId: invoice.id }));
-        await db.insert(contractorInvoiceItems).values(itemsWithId);
-      }
-      for (const adjId of adjustmentsToLink) {
-        await db.update(contractorAdjustments).set({ invoiceId: invoice.id, status: "invoiced" }).where(eq23(contractorAdjustments.id, adjId));
-      }
-      count19++;
-    }
-    return count19;
-  },
-  /**
-   * Generate invoices for active contractors with 'monthly' frequency.
-   * Generates one invoice per month containing:
-   * - Fixed Monthly Rate
-   * - Any approved, uninvoiced adjustments
-   */
-  async processMonthlyInvoices(targetDate) {
-    const db = await getDb();
-    if (!db) return 0;
-    let count19 = 0;
-    const y = targetDate.getFullYear();
-    const m = targetDate.getMonth();
-    const periodStart = new Date(Date.UTC(y, m, 1)).toISOString().split("T")[0];
-    const periodEnd = new Date(Date.UTC(y, m + 1, 0)).toISOString().split("T")[0];
-    const invoiceDate = targetDate.toISOString().split("T")[0];
-    const eligibleContractors = await db.select().from(contractors).where(
-      and19(
-        eq23(contractors.status, "active"),
-        eq23(contractors.paymentFrequency, "monthly"),
-        // Only process if rateType is fixed_monthly (otherwise they might be hourly which needs timesheets)
-        or5(eq23(contractors.rateType, "fixed_monthly"))
-      )
-    );
-    for (const contractor of eligibleContractors) {
-      const existing = await db.select().from(contractorInvoices).where(
-        and19(
-          eq23(contractorInvoices.contractorId, contractor.id),
-          eq23(contractorInvoices.periodStart, periodStart),
-          eq23(contractorInvoices.periodEnd, periodEnd)
-        )
-      ).limit(1);
-      if (existing.length > 0) continue;
-      const invoiceNumber = `CTR-INV-${y}${String(m + 1).padStart(2, "0")}-${contractor.id}-${Math.floor(Math.random() * 1e3)}`;
-      let totalAmount = 0;
-      const currency = contractor.currency;
-      const lineItems = [];
-      if (contractor.rateAmount) {
-        const amount = parseFloat(contractor.rateAmount);
-        totalAmount += amount;
-        lineItems.push({
-          invoiceId: 0,
-          // Placeholder
-          description: `Monthly Service Fee - ${periodStart} to ${periodEnd}`,
-          quantity: "1",
-          unitPrice: amount.toFixed(2),
-          amount: amount.toFixed(2),
-          itemType: "service_fee"
-        });
-      }
-      const pendingAdjustments = await db.select().from(contractorAdjustments).where(
-        and19(
-          eq23(contractorAdjustments.contractorId, contractor.id),
-          eq23(contractorAdjustments.status, "approved"),
-          isNull2(contractorAdjustments.invoiceId)
-        )
+      const invoiceNumber = generateContractorInvoiceNumber(
+        contractor.id,
+        year,
+        month,
+        `MIL-${milestone.id}`
       );
-      const adjustmentsToLink = [];
-      for (const adj of pendingAdjustments) {
-        if (adj.currency !== currency) continue;
-        const amount = parseFloat(adj.amount);
-        const isDeduction = adj.type === "deduction";
-        const signedAmount = isDeduction ? -amount : amount;
-        totalAmount += signedAmount;
-        lineItems.push({
-          invoiceId: 0,
-          // Placeholder
-          description: `${adj.type.toUpperCase()}: ${adj.description}`,
-          quantity: "1",
-          unitPrice: signedAmount.toFixed(2),
-          amount: signedAmount.toFixed(2),
-          itemType: isDeduction ? "adjustment" : adj.type === "expense" ? "expense" : "adjustment",
-          adjustmentId: adj.id
-        });
-        adjustmentsToLink.push(adj.id);
-      }
-      if (lineItems.length === 0) continue;
       const invoiceData = {
         invoiceNumber,
         contractorId: contractor.id,
         customerId: contractor.customerId,
         invoiceDate,
-        periodStart,
-        periodEnd,
         currency,
-        totalAmount: totalAmount.toFixed(2),
-        status: "draft"
-      };
-      const result = await db.insert(contractorInvoices).values(invoiceData).returning();
-      const invoice = result[0];
-      if (lineItems.length > 0) {
-        const itemsWithId = lineItems.map((item) => ({ ...item, invoiceId: invoice.id }));
-        await db.insert(contractorInvoiceItems).values(itemsWithId);
-      }
-      for (const adjId of adjustmentsToLink) {
-        await db.update(contractorAdjustments).set({ invoiceId: invoice.id, status: "invoiced" }).where(eq23(contractorAdjustments.id, adjId));
-      }
-      count19++;
-    }
-    return count19;
-  },
-  /**
-   * Generate invoices for Approved Milestones.
-   * Creates one invoice per milestone (plus any pending adjustments).
-   */
-  async processMilestoneInvoices(targetDate) {
-    const db = await getDb();
-    if (!db) return 0;
-    let count19 = 0;
-    const invoiceDate = targetDate.toISOString().split("T")[0];
-    const approvedMilestones = await db.select().from(contractorMilestones).where(
-      and19(
-        eq23(contractorMilestones.status, "approved"),
-        isNull2(contractorMilestones.invoiceId)
-      )
-    );
-    for (const milestone of approvedMilestones) {
-      const contractorResult = await db.select().from(contractors).where(eq23(contractors.id, milestone.contractorId)).limit(1);
-      if (contractorResult.length === 0) continue;
-      const contractor = contractorResult[0];
-      const invoiceNumber = `CTR-MIL-${milestone.id}-${Math.floor(Math.random() * 1e3)}`;
-      const lineItems = [];
-      let totalAmount = parseFloat(milestone.amount);
-      lineItems.push({
-        invoiceId: 0,
-        description: `Milestone: ${milestone.title}`,
-        quantity: "1",
-        unitPrice: milestone.amount,
-        amount: milestone.amount,
-        itemType: "milestone",
-        milestoneId: milestone.id
-      });
-      const pendingAdjustments = await db.select().from(contractorAdjustments).where(
-        and19(
-          eq23(contractorAdjustments.contractorId, contractor.id),
-          eq23(contractorAdjustments.status, "approved"),
-          isNull2(contractorAdjustments.invoiceId)
-        )
-      );
-      const adjustmentsToLink = [];
-      for (const adj of pendingAdjustments) {
-        if (adj.currency !== milestone.currency) continue;
-        const amount = parseFloat(adj.amount);
-        const isDeduction = adj.type === "deduction";
-        const signedAmount = isDeduction ? -amount : amount;
-        totalAmount += signedAmount;
-        lineItems.push({
-          invoiceId: 0,
-          description: `${adj.type.toUpperCase()}: ${adj.description}`,
-          quantity: "1",
-          unitPrice: signedAmount.toFixed(2),
-          amount: signedAmount.toFixed(2),
-          itemType: isDeduction ? "adjustment" : adj.type === "expense" ? "expense" : "adjustment",
-          adjustmentId: adj.id
-        });
-        adjustmentsToLink.push(adj.id);
-      }
-      const invoiceData = {
-        invoiceNumber,
-        contractorId: contractor.id,
-        customerId: contractor.customerId,
-        invoiceDate,
-        currency: milestone.currency,
         totalAmount: totalAmount.toFixed(2),
         status: "draft"
       };
@@ -13352,19 +14924,35 @@ var ContractorInvoiceGenerationService = {
       const invoice = result[0];
       const itemsWithId = lineItems.map((item) => ({ ...item, invoiceId: invoice.id }));
       await db.insert(contractorInvoiceItems).values(itemsWithId);
-      await db.update(contractorMilestones).set({ invoiceId: invoice.id }).where(eq23(contractorMilestones.id, milestone.id));
-      for (const adjId of adjustmentsToLink) {
-        await db.update(contractorAdjustments).set({ invoiceId: invoice.id, status: "invoiced" }).where(eq23(contractorAdjustments.id, adjId));
+      await db.update(contractorMilestones).set({ invoiceId: invoice.id }).where(eq24(contractorMilestones.id, milestone.id));
+      for (const adjId of adjustmentIdsToLink) {
+        await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq24(contractorAdjustments.id, adjId));
       }
       count19++;
+      console.log(`[ContractorInvoice] Created milestone invoice ${invoiceNumber} for contractor #${contractor.id} milestone #${milestone.id} (${totalAmount.toFixed(2)} ${currency})`);
     }
     return count19;
+  },
+  /**
+   * Legacy entry point - kept for backward compatibility but now delegates to generateFromLockedData.
+   * Previously ran daily to sweep "approved" items; now only processes locked data.
+   * @deprecated Use generateFromLockedData instead
+   */
+  async processAll(targetDate = /* @__PURE__ */ new Date()) {
+    const y = targetDate.getFullYear();
+    const m = targetDate.getMonth() + 1;
+    const effectiveMonth = `${y}-${String(m).padStart(2, "0")}-01`;
+    const result = await this.generateFromLockedData(effectiveMonth, y, m);
+    return { generated: result.created, errors: result.errors };
   }
 };
+function generateContractorInvoiceNumber(contractorId, year, month, suffix) {
+  return `CTR-INV-${year}${String(month).padStart(2, "0")}-${contractorId}-${suffix}`;
+}
 
 // server/cronJobs.ts
 init_schema();
-import { eq as eq24 } from "drizzle-orm";
+import { eq as eq25 } from "drizzle-orm";
 function getWorkingDaysInMonth(year, month, workingDaysPerWeek = 5) {
   const daysInMonth = new Date(year, month, 0).getDate();
   let workingDays = 0;
@@ -13424,8 +15012,13 @@ async function runEmployeeAutoActivation() {
     activated++;
     console.log(`[CronJob] Activated employee ${emp.employeeCode} (${emp.firstName} ${emp.lastName})`);
     try {
-      await initializeLeaveBalancesForEmployee(emp.id);
-      console.log(`[CronJob] Initialized leave balances for ${emp.employeeCode}`);
+      await autoInitializeLeavePolicyForCountry(emp.customerId, emp.country);
+    } catch (err) {
+      console.error(`[CronJob] Failed to auto-init leave policy for ${emp.employeeCode}:`, err);
+    }
+    try {
+      await initializeLeaveBalancesForEmployee(emp.id, { annualLeaveStartsAtZero: true });
+      console.log(`[CronJob] Initialized leave balances for ${emp.employeeCode} (annual leave starts at 0)`);
     } catch (err) {
       console.error(`[CronJob] Failed to initialize leave balances for ${emp.employeeCode}:`, err);
     }
@@ -13495,14 +15088,20 @@ async function runAutoLock() {
   console.log(`[CronJob] Locked ${adjLocked} adjustments for ${prevMonthStr}`);
   const leaveLocked = await lockSubmittedLeaveRecords(prevMonthStr);
   console.log(`[CronJob] Locked ${leaveLocked} leave records for ${prevMonthStr}`);
+  const reimbLocked = await lockSubmittedReimbursements(prevMonthDate);
+  console.log(`[CronJob] Locked ${reimbLocked} reimbursements for ${prevMonthStr}`);
+  const ctrAdjLocked = await lockContractorAdjustments(prevMonthDate);
+  console.log(`[CronJob] Locked ${ctrAdjLocked} contractor adjustments for ${prevMonthStr}`);
+  const ctrMilLocked = await lockContractorMilestones(prevMonthDate);
+  console.log(`[CronJob] Locked ${ctrMilLocked} contractor milestones for ${prevMonthStr}`);
   await logAuditAction({
     userName: "System",
     action: "auto_lock_monthly",
     entityType: "system",
     entityId: 0,
-    changes: { detail: `Auto-locked ${adjLocked} adjustments and ${leaveLocked} leave records for ${prevMonthStr}` }
+    changes: { detail: `Auto-locked for ${prevMonthStr}: EOR(${adjLocked} adj, ${leaveLocked} leave, ${reimbLocked} reimb) + AOR(${ctrAdjLocked} ctr_adj, ${ctrMilLocked} ctr_mil)` }
   });
-  return { adjustmentsLocked: adjLocked, leaveLocked };
+  return { adjustmentsLocked: adjLocked, leaveLocked, reimbursementsLocked: reimbLocked, contractorAdjustmentsLocked: ctrAdjLocked, contractorMilestonesLocked: ctrMilLocked };
 }
 async function runAutoCreatePayrollRuns() {
   const today = /* @__PURE__ */ new Date();
@@ -13539,7 +15138,7 @@ async function runAutoCreatePayrollRuns() {
       console.log(`[CronJob] Payroll run already exists for ${countryCode} ${targetMonthStr}, skipping`);
       continue;
     }
-    const [config] = await db.select().from(countriesConfig).where(eq24(countriesConfig.countryCode, countryCode)).limit(1);
+    const [config] = await db.select().from(countriesConfig).where(eq25(countriesConfig.countryCode, countryCode)).limit(1);
     if (!config) {
       console.log(`[CronJob] No country config for ${countryCode}, skipping`);
       continue;
@@ -13687,7 +15286,7 @@ async function runLeaveStatusTransition() {
   }
   const { employees: employees2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
   for (const empId of Array.from(employeesWithActiveLeave)) {
-    const [emp] = await db.select({ id: employees2.id, status: employees2.status, employeeCode: employees2.employeeCode }).from(employees2).where(eq24(employees2.id, empId)).limit(1);
+    const [emp] = await db.select({ id: employees2.id, status: employees2.status, employeeCode: employees2.employeeCode }).from(employees2).where(eq25(employees2.id, empId)).limit(1);
     if (emp && emp.status === "active") {
       await updateEmployee(empId, { status: "on_leave" });
       toOnLeave++;
@@ -13725,18 +15324,18 @@ async function runOverdueInvoiceDetection() {
     return { overdueCount: 0 };
   }
   const { invoices: invoices2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-  const { eq: eq65, and: and50, lt: lt3, isNotNull: isNotNull3 } = await import("drizzle-orm");
+  const { eq: eq67, and: and53, lt: lt3, isNotNull: isNotNull3 } = await import("drizzle-orm");
   const todayStr = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
   const overdueInvoices = await db.select({ id: invoices2.id, invoiceNumber: invoices2.invoiceNumber, dueDate: invoices2.dueDate, customerId: invoices2.customerId }).from(invoices2).where(
-    and50(
-      eq65(invoices2.status, "sent"),
+    and53(
+      eq67(invoices2.status, "sent"),
       isNotNull3(invoices2.dueDate),
       lt3(invoices2.dueDate, todayStr)
     )
   );
   let overdueCount = 0;
   for (const inv of overdueInvoices) {
-    await db.update(invoices2).set({ status: "overdue" }).where(eq65(invoices2.id, inv.id));
+    await db.update(invoices2).set({ status: "overdue" }).where(eq67(invoices2.id, inv.id));
     overdueCount++;
     console.log(`[CronJob] Invoice ${inv.invoiceNumber || inv.id} marked as overdue (due: ${inv.dueDate})`);
     notificationService.send({
@@ -13776,12 +15375,14 @@ async function runMonthlyLeaveAccrual() {
   const currentMonth = beijingDate.getMonth() + 1;
   console.log(`[CronJob] Running monthly leave accrual for ${currentYear}-${String(currentMonth).padStart(2, "0")}`);
   const { data: activeEmployees } = await listEmployees({ status: "active", pageSize: 1e4 });
-  const newEmployees = activeEmployees.filter((emp) => {
+  const { data: onLeaveEmployees } = await listEmployees({ status: "on_leave", pageSize: 1e4 });
+  const allEligibleEmployees = [...activeEmployees, ...onLeaveEmployees];
+  const newEmployees = allEligibleEmployees.filter((emp) => {
     if (!emp.startDate) return false;
     const startDate = new Date(emp.startDate);
     return startDate.getFullYear() === currentYear;
   });
-  console.log(`[CronJob] Found ${newEmployees.length} employees who started in ${currentYear}`);
+  console.log(`[CronJob] Found ${newEmployees.length} employees who started in ${currentYear} (active: ${activeEmployees.length}, on_leave: ${onLeaveEmployees.length})`);
   let processed = 0;
   let updated = 0;
   let errors = 0;
@@ -13803,20 +15404,23 @@ async function runMonthlyLeaveAccrual() {
       const policies = await getCustomerLeavePoliciesForCountry(emp.customerId, emp.country);
       const balances = await listLeaveBalances(emp.id, currentYear);
       for (const balance of balances) {
+        const isAnnualLeave = balance.leaveTypeName?.toLowerCase().includes("annual");
+        if (!isAnnualLeave) continue;
         const policy = policies.find((p) => p.leaveTypeId === balance.leaveTypeId);
-        const annualEntitlement = policy ? policy.annualEntitlement : balance.totalEntitlement;
+        const annualEntitlement = policy ? policy.annualEntitlement : balance.totalEntitlement || 0;
         if (!annualEntitlement || annualEntitlement <= 0) continue;
         const rawAccrued = annualEntitlement / 12 * fullMonthsServed;
         const accruedHalfDay = Math.ceil(rawAccrued * 2) / 2;
         const finalAccrued = Math.round(accruedHalfDay);
-        if (finalAccrued !== balance.totalEntitlement && finalAccrued < annualEntitlement) {
-          const newRemaining = finalAccrued - balance.used;
+        const cappedAccrued = Math.min(finalAccrued, annualEntitlement);
+        if (cappedAccrued !== balance.totalEntitlement) {
+          const newRemaining = cappedAccrued - balance.used;
           await updateLeaveBalance(balance.id, {
-            totalEntitlement: finalAccrued,
+            totalEntitlement: cappedAccrued,
             remaining: Math.max(0, newRemaining)
           });
           updated++;
-          console.log(`[CronJob] Updated leave balance for ${emp.firstName} ${emp.lastName} (${emp.employeeCode}): leaveTypeId=${balance.leaveTypeId}, months=${fullMonthsServed}, accrued=${finalAccrued}/${annualEntitlement}`);
+          console.log(`[CronJob] Updated annual leave for ${emp.firstName} ${emp.lastName} (${emp.employeeCode}): months=${fullMonthsServed}, accrued=${cappedAccrued}/${annualEntitlement}`);
         }
       }
     } catch (err) {
@@ -13834,13 +15438,33 @@ async function runMonthlyLeaveAccrual() {
   });
   return { processed, updated, errors };
 }
-async function runContractorInvoiceGeneration() {
-  console.log("[CronJob] Running contractor invoice generation...");
-  const result = await ContractorInvoiceGenerationService.processAll();
-  console.log(`[CronJob] Contractor invoices: ${result.generated} generated. Errors: ${result.errors.length}`);
+async function runAutoCreateContractorInvoices() {
+  const today = /* @__PURE__ */ new Date();
+  const beijingOffset = 8 * 60;
+  const beijingDate = new Date(today.getTime() + (beijingOffset - today.getTimezoneOffset()) * 6e4);
+  const currentYear = beijingDate.getFullYear();
+  const currentMonth = beijingDate.getMonth() + 1;
+  let prevMonth = currentMonth - 1;
+  let prevYear = currentYear;
+  if (prevMonth < 1) {
+    prevMonth = 12;
+    prevYear--;
+  }
+  const prevMonthDate = `${prevYear}-${String(prevMonth).padStart(2, "0")}-01`;
+  const prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
+  console.log(`[CronJob] Auto-creating contractor invoices for ${prevMonthStr}`);
+  const result = await ContractorInvoiceGenerationService.generateFromLockedData(prevMonthDate, prevYear, prevMonth);
+  console.log(`[CronJob] Contractor invoice auto-creation complete: ${result.created} invoices created`);
   if (result.errors.length > 0) {
     console.error("[CronJob] Contractor invoice errors:", result.errors);
   }
+  await logAuditAction({
+    userName: "System",
+    action: "contractor_invoices_auto_created",
+    entityType: "system",
+    entityId: 0,
+    changes: { detail: `Auto-created ${result.created} contractor invoices for ${prevMonthStr}. Errors: ${result.errors.length}` }
+  });
   return result;
 }
 function scheduleCronJobs() {
@@ -13866,6 +15490,12 @@ function scheduleCronJobs() {
       await runAutoCreatePayrollRuns();
     } catch (err) {
       console.error("[CronJob] Payroll auto-creation failed:", err);
+    }
+    console.log("[CronJob] Running monthly contractor invoice auto-creation (Beijing 00:01 on 5th)...");
+    try {
+      await runAutoCreateContractorInvoices();
+    } catch (err) {
+      console.error("[CronJob] Contractor invoice auto-creation failed:", err);
     }
   }, { timezone: "Asia/Shanghai" });
   cron.schedule("0 2 0 * * *", async () => {
@@ -13904,21 +15534,12 @@ function scheduleCronJobs() {
       console.error("[CronJob] Monthly leave accrual failed:", err);
     }
   }, { timezone: "Asia/Shanghai" });
-  cron.schedule("0 0 1 * * *", async () => {
-    console.log("[CronJob] Running daily contractor invoice generation (Beijing 01:00)...");
-    try {
-      await runContractorInvoiceGeneration();
-    } catch (err) {
-      console.error("[CronJob] Contractor invoice generation failed:", err);
-    }
-  }, { timezone: "Asia/Shanghai" });
   console.log("[CronJob] Scheduled: Employee auto-activation (daily 00:01 Beijing)");
   console.log("[CronJob] Scheduled: Leave status transition (daily 00:02 Beijing)");
   console.log("[CronJob] Scheduled: Overdue invoice detection (daily 00:03 Beijing)");
   console.log("[CronJob] Scheduled: Exchange rate auto-fetch (daily 00:05 Beijing)");
-  console.log("[CronJob] Scheduled: Contractor invoice generation (daily 01:00 Beijing)");
-  console.log("[CronJob] Scheduled: Auto-lock adjustments/leave (monthly 5th 00:00 Beijing)");
-  console.log("[CronJob] Scheduled: Payroll auto-creation (monthly 5th 00:01 Beijing)");
+  console.log("[CronJob] Scheduled: Auto-lock EOR+AOR (monthly 5th 00:00 Beijing)");
+  console.log("[CronJob] Scheduled: Payroll + Contractor Invoice auto-creation (monthly 5th 00:01 Beijing)");
   console.log("[CronJob] Scheduled: Monthly leave accrual (monthly 1st 00:10 Beijing)");
 }
 
@@ -14257,6 +15878,7 @@ var billItemSchema = z19.object({
   quantity: z19.string().default("1"),
   unitPrice: z19.string(),
   amount: z19.string(),
+  itemType: z19.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other"]).default("other"),
   relatedCustomerId: z19.number().optional(),
   relatedEmployeeId: z19.number().optional(),
   relatedCountryCode: z19.string().optional()
@@ -14508,7 +16130,7 @@ var vendorBillsRouter = router({
 import { z as z20 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq25, and as and20, sql as sql11, inArray as inArray6, count as count8 } from "drizzle-orm";
+import { eq as eq26, and as and21, sql as sql12, inArray as inArray8, count as count8 } from "drizzle-orm";
 function getLastNMonths2(n, fromDate) {
   const d = fromDate ? new Date(fromDate) : /* @__PURE__ */ new Date();
   const months = [];
@@ -14578,27 +16200,27 @@ var reportsRouter = router({
       const monthStart = `${m}-01`;
       const nextMonth = mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, "0")}-01`;
       const revenueResult = await db.select({
-        total: sql11`COALESCE(SUM(${invoices.total}), 0)`,
+        total: sql12`COALESCE(SUM(${invoices.total}), 0)`,
         cnt: count8()
       }).from(invoices).where(
-        and20(
-          eq25(invoices.status, "paid"),
-          sql11`${invoices.invoiceMonth} >= ${monthStart}`,
-          sql11`${invoices.invoiceMonth} < ${nextMonth}`,
+        and21(
+          eq26(invoices.status, "paid"),
+          sql12`${invoices.invoiceMonth} >= ${monthStart}`,
+          sql12`${invoices.invoiceMonth} < ${nextMonth}`,
           // Exclude deposit & deposit_refund — they are not revenue
-          sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+          sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
         )
       );
       const monthRevenue = parseFloat(revenueResult[0]?.total ?? "0");
       const invoiceCount = revenueResult[0]?.cnt ?? 0;
       const expenseResult = await db.select({
-        total: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)`,
+        total: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)`,
         cnt: count8()
       }).from(vendorBills).where(
-        and20(
-          inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
-          sql11`${vendorBills.billMonth} >= ${monthStart}`,
-          sql11`${vendorBills.billMonth} < ${nextMonth}`
+        and21(
+          inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
+          sql12`${vendorBills.billMonth} >= ${monthStart}`,
+          sql12`${vendorBills.billMonth} < ${nextMonth}`
         )
       );
       const monthExpenses = parseFloat(expenseResult[0]?.total ?? "0");
@@ -14622,68 +16244,68 @@ var reportsRouter = router({
     const globalEnd = lastMonth[1] === 12 ? `${lastMonth[0] + 1}-01-01` : `${lastMonth[0]}-${String(lastMonth[1] + 1).padStart(2, "0")}-01`;
     const revenueByTypeResult = await db.select({
       type: invoices.invoiceType,
-      amount: sql11`COALESCE(SUM(${invoices.total}), 0)`
+      amount: sql12`COALESCE(SUM(${invoices.total}), 0)`
     }).from(invoices).where(
-      and20(
-        eq25(invoices.status, "paid"),
-        sql11`${invoices.invoiceMonth} >= ${globalStart}`,
-        sql11`${invoices.invoiceMonth} < ${globalEnd}`,
-        sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+      and21(
+        eq26(invoices.status, "paid"),
+        sql12`${invoices.invoiceMonth} >= ${globalStart}`,
+        sql12`${invoices.invoiceMonth} < ${globalEnd}`,
+        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     ).groupBy(invoices.invoiceType);
     const expensesByCategoryResult = await db.select({
       category: vendorBills.category,
-      amount: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)`
+      amount: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)`
     }).from(vendorBills).where(
-      and20(
-        inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
-        sql11`${vendorBills.billMonth} >= ${globalStart}`,
-        sql11`${vendorBills.billMonth} < ${globalEnd}`
+      and21(
+        inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
+        sql12`${vendorBills.billMonth} >= ${globalStart}`,
+        sql12`${vendorBills.billMonth} < ${globalEnd}`
       )
     ).groupBy(vendorBills.category);
     const expensesByVendorResult = await db.select({
       vendorId: vendorBills.vendorId,
       vendorName: vendors.name,
-      amount: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)`
-    }).from(vendorBills).innerJoin(vendors, eq25(vendorBills.vendorId, vendors.id)).where(
-      and20(
-        inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
-        sql11`${vendorBills.billMonth} >= ${globalStart}`,
-        sql11`${vendorBills.billMonth} < ${globalEnd}`
+      amount: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)`
+    }).from(vendorBills).innerJoin(vendors, eq26(vendorBills.vendorId, vendors.id)).where(
+      and21(
+        inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
+        sql12`${vendorBills.billMonth} >= ${globalStart}`,
+        sql12`${vendorBills.billMonth} < ${globalEnd}`
       )
     ).groupBy(vendorBills.vendorId, vendors.name);
     const revenueByCustomerResult = await db.select({
       customerId: invoices.customerId,
       customerName: customers.companyName,
-      amount: sql11`COALESCE(SUM(${invoices.total}), 0)`
-    }).from(invoices).innerJoin(customers, eq25(invoices.customerId, customers.id)).where(
-      and20(
-        eq25(invoices.status, "paid"),
-        sql11`${invoices.invoiceMonth} >= ${globalStart}`,
-        sql11`${invoices.invoiceMonth} < ${globalEnd}`,
-        sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+      amount: sql12`COALESCE(SUM(${invoices.total}), 0)`
+    }).from(invoices).innerJoin(customers, eq26(invoices.customerId, customers.id)).where(
+      and21(
+        eq26(invoices.status, "paid"),
+        sql12`${invoices.invoiceMonth} >= ${globalStart}`,
+        sql12`${invoices.invoiceMonth} < ${globalEnd}`,
+        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     ).groupBy(invoices.customerId, customers.companyName);
     const customerProfitResult = await db.select({
       customerId: invoices.customerId,
       customerName: customers.companyName,
-      revenue: sql11`COALESCE(SUM(DISTINCT ${invoices.total}), 0)`,
-      costAllocated: sql11`COALESCE(SUM(${billInvoiceAllocations.allocatedAmount}), 0)`
-    }).from(invoices).innerJoin(customers, eq25(invoices.customerId, customers.id)).leftJoin(billInvoiceAllocations, eq25(billInvoiceAllocations.invoiceId, invoices.id)).where(
-      and20(
-        eq25(invoices.status, "paid"),
-        sql11`${invoices.invoiceMonth} >= ${globalStart}`,
-        sql11`${invoices.invoiceMonth} < ${globalEnd}`,
-        sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+      revenue: sql12`COALESCE(SUM(DISTINCT ${invoices.total}), 0)`,
+      costAllocated: sql12`COALESCE(SUM(${billInvoiceAllocations.allocatedAmount}), 0)`
+    }).from(invoices).innerJoin(customers, eq26(invoices.customerId, customers.id)).leftJoin(billInvoiceAllocations, eq26(billInvoiceAllocations.invoiceId, invoices.id)).where(
+      and21(
+        eq26(invoices.status, "paid"),
+        sql12`${invoices.invoiceMonth} >= ${globalStart}`,
+        sql12`${invoices.invoiceMonth} < ${globalEnd}`,
+        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     ).groupBy(invoices.customerId, customers.companyName);
     const unallocatedResult = await db.select({
-      total: sql11`COALESCE(SUM(${vendorBills.unallocatedAmount}), 0)`
+      total: sql12`COALESCE(SUM(${vendorBills.unallocatedAmount}), 0)`
     }).from(vendorBills).where(
-      and20(
-        inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
-        sql11`${vendorBills.billMonth} >= ${globalStart}`,
-        sql11`${vendorBills.billMonth} < ${globalEnd}`
+      and21(
+        inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
+        sql12`${vendorBills.billMonth} >= ${globalStart}`,
+        sql12`${vendorBills.billMonth} < ${globalEnd}`
       )
     );
     const totalUnallocated = Math.round(parseFloat(unallocatedResult[0]?.total ?? "0") * 100) / 100;
@@ -14753,41 +16375,41 @@ var reportsRouter = router({
     const nextMonthStart = now.getMonth() === 11 ? `${now.getFullYear() + 1}-01-01` : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, "0")}-01`;
     const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const prevMonthStart = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, "0")}-01`;
-    const [curRevenue] = await db.select({ total: sql11`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and20(
-        eq25(invoices.status, "paid"),
-        sql11`${invoices.invoiceMonth} >= ${currentMonthStart}`,
-        sql11`${invoices.invoiceMonth} < ${nextMonthStart}`,
-        sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+    const [curRevenue] = await db.select({ total: sql12`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and21(
+        eq26(invoices.status, "paid"),
+        sql12`${invoices.invoiceMonth} >= ${currentMonthStart}`,
+        sql12`${invoices.invoiceMonth} < ${nextMonthStart}`,
+        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     );
-    const [curExpenses] = await db.select({ total: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(
-      and20(
-        inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
-        sql11`${vendorBills.billMonth} >= ${currentMonthStart}`,
-        sql11`${vendorBills.billMonth} < ${nextMonthStart}`
+    const [curExpenses] = await db.select({ total: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(
+      and21(
+        inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
+        sql12`${vendorBills.billMonth} >= ${currentMonthStart}`,
+        sql12`${vendorBills.billMonth} < ${nextMonthStart}`
       )
     );
-    const [prevRevenue] = await db.select({ total: sql11`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and20(
-        eq25(invoices.status, "paid"),
-        sql11`${invoices.invoiceMonth} >= ${prevMonthStart}`,
-        sql11`${invoices.invoiceMonth} < ${currentMonthStart}`,
-        sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+    const [prevRevenue] = await db.select({ total: sql12`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and21(
+        eq26(invoices.status, "paid"),
+        sql12`${invoices.invoiceMonth} >= ${prevMonthStart}`,
+        sql12`${invoices.invoiceMonth} < ${currentMonthStart}`,
+        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     );
-    const [prevExpenses] = await db.select({ total: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(
-      and20(
-        inArray6(vendorBills.status, ["paid", "approved", "partially_paid"]),
-        sql11`${vendorBills.billMonth} >= ${prevMonthStart}`,
-        sql11`${vendorBills.billMonth} < ${currentMonthStart}`
+    const [prevExpenses] = await db.select({ total: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(
+      and21(
+        inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
+        sql12`${vendorBills.billMonth} >= ${prevMonthStart}`,
+        sql12`${vendorBills.billMonth} < ${currentMonthStart}`
       )
     );
-    const [outstandingBills] = await db.select({ total: sql11`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(inArray6(vendorBills.status, ["pending_approval", "approved", "overdue"]));
-    const [outstandingInvoices] = await db.select({ total: sql11`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and20(
-        inArray6(invoices.status, ["sent", "overdue"]),
-        sql11`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+    const [outstandingBills] = await db.select({ total: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(inArray8(vendorBills.status, ["pending_approval", "approved", "overdue"]));
+    const [outstandingInvoices] = await db.select({ total: sql12`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and21(
+        inArray8(invoices.status, ["sent", "overdue"]),
+        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     );
     const curRev = parseFloat(curRevenue?.total ?? "0");
@@ -14812,7 +16434,7 @@ import { z as z21 } from "zod";
 init_db2();
 init_schema();
 import { TRPCError as TRPCError17 } from "@trpc/server";
-import { eq as eq26, sql as sql12, and as and21, desc as desc11 } from "drizzle-orm";
+import { eq as eq27, sql as sql13, and as and22, desc as desc11 } from "drizzle-orm";
 var allocationsRouter = router({
   // List allocations for a specific vendor bill (with employee + invoice details)
   listByBill: userProcedure.input(z21.object({ vendorBillId: z21.number() })).query(async ({ input }) => {
@@ -14862,7 +16484,7 @@ var allocationsRouter = router({
     if (!bill) throw new TRPCError17({ code: "NOT_FOUND", message: "Vendor bill not found" });
     const db = await getDb();
     if (!db) throw new TRPCError17({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    const invRows = await db.select().from(invoices).where(eq26(invoices.id, input.invoiceId)).limit(1);
+    const invRows = await db.select().from(invoices).where(eq27(invoices.id, input.invoiceId)).limit(1);
     if (!invRows[0]) throw new TRPCError17({ code: "NOT_FOUND", message: "Invoice not found" });
     const inv = invRows[0];
     const billType = bill.billType || "operational";
@@ -14875,7 +16497,7 @@ var allocationsRouter = router({
     if (billType === "operational" && inv.invoiceType === "deposit") {
       throw new TRPCError17({ code: "BAD_REQUEST", message: "Operational vendor bills should not be allocated to deposit invoices. Use a deposit-type vendor bill instead." });
     }
-    const empRows = await db.select().from(employees).where(eq26(employees.id, input.employeeId)).limit(1);
+    const empRows = await db.select().from(employees).where(eq27(employees.id, input.employeeId)).limit(1);
     if (!empRows[0]) throw new TRPCError17({ code: "NOT_FOUND", message: "Employee not found" });
     const billAllocated = await getBillAllocatedTotal(input.vendorBillId);
     const billTotal = parseFloat(String(bill.totalAmount));
@@ -14883,6 +16505,25 @@ var allocationsRouter = router({
     const invoiceCostTotal = await getInvoiceCostAllocatedTotal(input.invoiceId);
     const invoiceTotal = parseFloat(String(invRows[0].total));
     const newInvoiceCostTotal = invoiceCostTotal + amount;
+    const billMonth = bill.billMonth;
+    let employeeRevenueWarning = false;
+    let employeeRevenue = 0;
+    let employeeAllocatedTotal = 0;
+    if (billMonth) {
+      const monthStr = typeof billMonth === "string" ? billMonth.substring(0, 7) : new Date(billMonth).toISOString().substring(0, 7);
+      const revenueData = await getEmployeeMonthlyRevenue(input.employeeId, monthStr);
+      employeeRevenue = revenueData.total;
+      const existingAllocations = await db.select({ allocatedAmount: billInvoiceAllocations.allocatedAmount }).from(billInvoiceAllocations).innerJoin(vendorBills, eq27(billInvoiceAllocations.vendorBillId, vendorBills.id)).where(
+        and22(
+          eq27(billInvoiceAllocations.employeeId, input.employeeId),
+          sql13`strftime('%Y-%m', ${vendorBills.billMonth}) = ${monthStr}`
+        )
+      );
+      employeeAllocatedTotal = existingAllocations.reduce((sum3, a) => sum3 + parseFloat(String(a.allocatedAmount || "0")), 0);
+      if (employeeRevenue > 0 && employeeAllocatedTotal + amount > employeeRevenue) {
+        employeeRevenueWarning = true;
+      }
+    }
     const allocationId = await createBillInvoiceAllocation({
       vendorBillId: input.vendorBillId,
       vendorBillItemId: input.vendorBillItemId,
@@ -14909,7 +16550,10 @@ var allocationsRouter = router({
         billOverAllocated: newBillTotal > billTotal,
         billOverAmount: newBillTotal > billTotal ? newBillTotal - billTotal : 0,
         invoiceLoss: newInvoiceCostTotal > invoiceTotal,
-        invoiceLossAmount: newInvoiceCostTotal > invoiceTotal ? newInvoiceCostTotal - invoiceTotal : 0
+        invoiceLossAmount: newInvoiceCostTotal > invoiceTotal ? newInvoiceCostTotal - invoiceTotal : 0,
+        employeeRevenueExceeded: employeeRevenueWarning,
+        employeeRevenue,
+        employeeAllocatedTotal: employeeAllocatedTotal + amount
       }
     };
   }),
@@ -15017,12 +16661,12 @@ var allocationsRouter = router({
     if (!db) throw new TRPCError17({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     let conditions = [];
     if (input.startMonth) {
-      conditions.push(sql12`${invoices.invoiceMonth} >= ${input.startMonth + "-01"}`);
+      conditions.push(sql13`${invoices.invoiceMonth} >= ${input.startMonth + "-01"}`);
     }
     if (input.endMonth) {
-      conditions.push(sql12`${invoices.invoiceMonth} <= ${input.endMonth + "-01"}`);
+      conditions.push(sql13`${invoices.invoiceMonth} <= ${input.endMonth + "-01"}`);
     }
-    const where = conditions.length > 0 ? and21(...conditions) : void 0;
+    const where = conditions.length > 0 ? and22(...conditions) : void 0;
     const invList = await db.select().from(invoices).where(where).orderBy(desc11(invoices.invoiceMonth));
     const results = [];
     for (const inv of invList) {
@@ -15032,7 +16676,7 @@ var allocationsRouter = router({
       const margin = revenue > 0 ? profit / revenue * 100 : 0;
       const customerRows = await db.select().from(
         (await Promise.resolve().then(() => (init_schema(), schema_exports))).customers
-      ).where(eq26((await Promise.resolve().then(() => (init_schema(), schema_exports))).customers.id, inv.customerId)).limit(1);
+      ).where(eq27((await Promise.resolve().then(() => (init_schema(), schema_exports))).customers.id, inv.customerId)).limit(1);
       results.push({
         invoiceId: inv.id,
         invoiceNumber: inv.invoiceNumber,
@@ -15066,7 +16710,7 @@ var allocationsRouter = router({
   vendorComparison: userProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError17({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    const vendorList = await db.select().from(vendors).where(eq26(vendors.status, "active"));
+    const vendorList = await db.select().from(vendors).where(eq27(vendors.status, "active"));
     const results = [];
     for (const vendor of vendorList) {
       const analysis = await getVendorProfitAnalysis(vendor.id);
@@ -15079,6 +16723,14 @@ var allocationsRouter = router({
       });
     }
     return results.sort((a, b) => b.totalBilled - a.totalBilled);
+  }),
+  // Get monthly revenue for all employees (used by allocation UI for ceiling display)
+  employeeMonthlyRevenue: userProcedure.input(z21.object({ serviceMonth: z21.string() })).query(async ({ input }) => {
+    return await getAllEmployeesMonthlyRevenue(input.serviceMonth);
+  }),
+  // Get monthly revenue for a single employee (used for inline validation)
+  singleEmployeeRevenue: userProcedure.input(z21.object({ employeeId: z21.number(), serviceMonth: z21.string() })).query(async ({ input }) => {
+    return await getEmployeeMonthlyRevenue(input.employeeId, input.serviceMonth);
   })
 });
 
@@ -15126,7 +16778,7 @@ async function logTaskExecution(payload) {
 }
 async function invokeOpenAICompatible(baseUrl, apiKey, model, params) {
   const responseFormat = params.responseFormat || params.response_format;
-  const hasStructuredOutput = responseFormat?.type === "json_schema";
+  const hasStructuredOutput = responseFormat?.type === "json_schema" || responseFormat?.type === "json_object";
   const body = {
     model,
     messages: params.messages
@@ -15234,7 +16886,7 @@ async function uploadFileToDashScope(buffer, filename) {
 // server/routers/pdfParsing.ts
 init_db2();
 init_schema();
-import { eq as eq27, sql as sql13, inArray as inArray7, desc as desc12 } from "drizzle-orm";
+import { eq as eq28, sql as sql14, inArray as inArray9, desc as desc12 } from "drizzle-orm";
 import { TRPCError as TRPCError18 } from "@trpc/server";
 async function buildSystemContext(serviceMonth) {
   const db = await getDb();
@@ -15249,14 +16901,14 @@ async function buildSystemContext(serviceMonth) {
     jobTitle: employees.jobTitle,
     baseSalary: employees.baseSalary,
     salaryCurrency: employees.salaryCurrency
-  }).from(employees).where(eq27(employees.status, "active"));
+  }).from(employees).where(eq28(employees.status, "active"));
   const custRows = await db.select({
     id: customers.id,
     clientCode: customers.clientCode,
     companyName: customers.companyName,
     country: customers.country,
     settlementCurrency: customers.settlementCurrency
-  }).from(customers).where(eq27(customers.status, "active"));
+  }).from(customers).where(eq28(customers.status, "active"));
   let invQuery = db.select({
     id: invoices.id,
     invoiceNumber: invoices.invoiceNumber,
@@ -15270,7 +16922,7 @@ async function buildSystemContext(serviceMonth) {
   let invRows;
   if (serviceMonth) {
     invRows = await invQuery.where(
-      sql13`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth} OR strftime('%Y-%m', ${invoices.createdAt}, 'unixepoch') = ${serviceMonth}`
+      sql14`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth} OR strftime('%Y-%m', ${invoices.createdAt}, 'unixepoch') = ${serviceMonth}`
     ).orderBy(desc12(invoices.createdAt)).limit(200);
   } else {
     invRows = await invQuery.orderBy(desc12(invoices.createdAt)).limit(100);
@@ -15284,7 +16936,7 @@ async function buildSystemContext(serviceMonth) {
       description: invoiceItems.description,
       amount: invoiceItems.amount,
       countryCode: invoiceItems.countryCode
-    }).from(invoiceItems).where(inArray7(invoiceItems.invoiceId, invIds));
+    }).from(invoiceItems).where(inArray9(invoiceItems.invoiceId, invIds));
   }
   const empInvoiceMap = {};
   for (const item of invItemRows) {
@@ -15398,10 +17050,12 @@ The documents may include invoices, payment receipts (POP), bank statements, or 
 YOUR TASK:
 1. Cross-reference ALL uploaded documents to extract and verify vendor bill information
 2. Match line items to employees and customers in our system
-3. Suggest cost allocations (link vendor costs to our customer invoices)
-4. Report confidence levels and any discrepancies between documents
+3. Classify each line item's cost type (employment_cost, service_fee, visa_fee, equipment_purchase, deposit, deposit_refund, or other)
+4. Suggest cost allocations (link vendor costs to our customer invoices)
+5. Report confidence levels and any discrepancies between documents
 
 SYSTEM DATA (our active employees, customers, and invoices):
+Each employee has: id, code (unique identifier like EMP-0001), name, country, customerId, customerName, salary, linkedInvoices.
 ${JSON.stringify(systemContext.employees.slice(0, 200), null, 1)}
 
 CUSTOMERS:
@@ -15452,13 +17106,17 @@ Return a JSON object with these fields:
   - description: string
   - employeeName: string | null (employee name as shown in document)
   - matchedEmployeeId: number | null (ID from our system if matched, from the SYSTEM DATA above)
+  - matchedEmployeeCode: string | null (employee code like EMP-0001 if matched)
   - matchedCustomerId: number | null (customer ID from our system if matched via employee)
   - matchedInvoiceId: number | null (invoice ID from our system if matched)
+  - itemType: string (REQUIRED - classify each line item as one of: "employment_cost" for salary/wages/social contributions/tax/pension/insurance paid on behalf of employee, "service_fee" for the vendor's own processing/management/service fee, "visa_fee" for visa/immigration/work permit related costs, "equipment_purchase" for equipment/hardware procurement, "deposit" for security deposit or guarantee, "deposit_refund" for deposit being returned, "other" for anything that doesn't fit above categories)
   - quantity: number
   - unitPrice: number
   - amount: number
   - countryCode: string | null (2-3 letter country code)
   - confidence: number (0-100)
+  - matchConfidence: number (0-100, how confident you are specifically about the employee matching. Use 90+ ONLY when employee name/code is explicitly written in the document and clearly matches one employee in SYSTEM DATA. Use 50-89 when matching is based on partial name, country, or inference. Use 0-49 when you are guessing or cannot determine the employee.)
+  - matchReason: string | null (explain WHY you matched or didn't match this line item to an employee, e.g. "Name 'John Zhang' exactly matches employee EMP-0012 John Zhang" or "Line item mentions 'China payroll' but cannot determine specific employee" or "No employee information found in this line item")
   - allocationSuggestion: object | null (only for client_related vendor type):
     - invoiceId: number (from our system)
     - employeeId: number (from our system)
@@ -15473,13 +17131,27 @@ Return a JSON object with these fields:
   - warnings: array of strings (any discrepancies or issues found)
   - notes: array of strings (any helpful observations)
 
-IMPORTANT RULES:
-- Match employees by name carefully. Names may appear in different orders (e.g. "John Smith" vs "Smith, John") or with slight variations.
+CRITICAL RULES FOR EMPLOYEE MATCHING:
+- Employee code (e.g. EMP-0001) is the MOST RELIABLE identifier. If you see an employee code in the document, use it as the primary matching key.
+- If no employee code is found, match by name. Names may appear in different orders (e.g. "John Smith" vs "Smith, John"), in local scripts (Chinese, Japanese, Korean), or with slight variations.
+- NEVER guess an employee match. If you are not confident (matchConfidence < 50), set matchedEmployeeId to null and explain in matchReason.
 - For matchedEmployeeId, ONLY use IDs from the SYSTEM DATA provided. If no match, use null.
 - For matchedCustomerId, derive from the matched employee's customerId in SYSTEM DATA.
 - For matchedInvoiceId, find the invoice linked to the matched employee for this service month.
-- Be conservative with confidence scores. Use 90+ only when data is clearly readable and cross-validated.
-- If a field is missing or unclear, use null and lower the confidence.
+
+CRITICAL RULES FOR ITEM TYPE CLASSIFICATION:
+- itemType is REQUIRED for every line item. You MUST classify each line item.
+- "employment_cost": Any cost that is the actual compensation or statutory cost of employing someone (salary, wages, social security, pension, health insurance, tax withholding, etc.)
+- "service_fee": The vendor's own fee for providing their service (processing fee, management fee, admin fee, platform fee, etc.)
+- "visa_fee": Government fees, legal fees, or processing fees specifically for visa/work permit/immigration
+- "equipment_purchase": Hardware, laptops, office equipment purchased for employees
+- If a line item contains BOTH employment cost and service fee bundled together, classify it as "employment_cost" and add a warning in crossValidation.warnings
+
+CONFIDENCE SCORING RULES:
+- Be VERY conservative. Use 90+ only when data is clearly readable, unambiguous, and cross-validated across documents.
+- Use 70-89 when data is readable but has minor ambiguity or cannot be cross-validated.
+- Use 50-69 when data requires inference or interpretation.
+- Use below 50 when you are uncertain. In this case, set the field to null and explain in matchReason or crossValidation.warnings.
 - For operational costs (bank fees, office rent, etc.), set vendorType to "operational" and skip allocation suggestions.`
         },
         {
@@ -15493,120 +17165,11 @@ IMPORTANT RULES:
           content: `I'm uploading ${input.files.length} document(s) from a single vendor for service month ${input.serviceMonth}. File types: ${input.files.map((f) => `${f.fileName} (${f.fileType})`).join(", ")}. Please analyze all documents together, cross-validate the information, and provide structured extraction with confidence scores and allocation suggestions.`
         }
       ],
+      // IMPORTANT: qwen-long-latest only supports json_object mode, NOT json_schema.
+      // Per DashScope docs (2026-02-24), json_schema is only supported by qwen-max/plus/flash series.
+      // The detailed JSON structure is already described in the system prompt above.
       response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "multi_file_vendor_parse",
-          description: "Structured extraction from multiple vendor documents including invoice details, payment info, line items, and cross-validation results.",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              overallConfidence: { type: "number" },
-              vendor: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  legalName: { type: ["string", "null"] },
-                  country: { type: "string" },
-                  address: { type: ["string", "null"] },
-                  city: { type: ["string", "null"] },
-                  contactName: { type: ["string", "null"] },
-                  contactEmail: { type: ["string", "null"] },
-                  contactPhone: { type: ["string", "null"] },
-                  taxId: { type: ["string", "null"] },
-                  serviceType: { type: ["string", "null"] },
-                  vendorType: { type: "string" },
-                  confidence: { type: "number" }
-                },
-                required: ["name", "legalName", "country", "address", "city", "contactName", "contactEmail", "contactPhone", "taxId", "serviceType", "vendorType", "confidence"],
-                additionalProperties: false
-              },
-              bill: {
-                type: "object",
-                properties: {
-                  invoiceNumber: { type: "string" },
-                  invoiceDate: { type: "string" },
-                  dueDate: { type: ["string", "null"] },
-                  serviceMonth: { type: "string" },
-                  currency: { type: "string" },
-                  subtotal: { type: "number" },
-                  tax: { type: "number" },
-                  totalAmount: { type: "number" },
-                  category: { type: "string" },
-                  billType: { type: "string", enum: ["operational", "deposit", "deposit_refund"] },
-                  description: { type: "string" },
-                  confidence: { type: "number" }
-                },
-                required: ["invoiceNumber", "invoiceDate", "dueDate", "serviceMonth", "currency", "subtotal", "tax", "totalAmount", "category", "billType", "description", "confidence"],
-                additionalProperties: false
-              },
-              payment: {
-                type: ["object", "null"],
-                properties: {
-                  bankName: { type: "string" },
-                  transactionReference: { type: "string" },
-                  paymentDate: { type: "string" },
-                  localCurrency: { type: "string" },
-                  localAmount: { type: "number" },
-                  usdAmount: { type: "number" },
-                  exchangeRate: { type: ["number", "null"] },
-                  bankFee: { type: "number" },
-                  confidence: { type: "number" }
-                },
-                required: ["bankName", "transactionReference", "paymentDate", "localCurrency", "localAmount", "usdAmount", "exchangeRate", "bankFee", "confidence"],
-                additionalProperties: false
-              },
-              lineItems: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    description: { type: "string" },
-                    employeeName: { type: ["string", "null"] },
-                    matchedEmployeeId: { type: ["number", "null"] },
-                    matchedCustomerId: { type: ["number", "null"] },
-                    matchedInvoiceId: { type: ["number", "null"] },
-                    quantity: { type: "number" },
-                    unitPrice: { type: "number" },
-                    amount: { type: "number" },
-                    countryCode: { type: ["string", "null"] },
-                    confidence: { type: "number" },
-                    allocationSuggestion: {
-                      type: ["object", "null"],
-                      properties: {
-                        invoiceId: { type: "number" },
-                        employeeId: { type: "number" },
-                        allocatedAmount: { type: "number" },
-                        reason: { type: "string" }
-                      },
-                      required: ["invoiceId", "employeeId", "allocatedAmount", "reason"],
-                      additionalProperties: false
-                    }
-                  },
-                  required: ["description", "employeeName", "matchedEmployeeId", "matchedCustomerId", "matchedInvoiceId", "quantity", "unitPrice", "amount", "countryCode", "confidence", "allocationSuggestion"],
-                  additionalProperties: false
-                }
-              },
-              crossValidation: {
-                type: "object",
-                properties: {
-                  invoiceVsPaymentMatch: { type: ["boolean", "null"] },
-                  invoiceVsPaymentDifference: { type: ["number", "null"] },
-                  lineItemsSumMatchesTotal: { type: "boolean" },
-                  lineItemsSumDifference: { type: "number" },
-                  documentsAnalyzed: { type: "number" },
-                  warnings: { type: "array", items: { type: "string" } },
-                  notes: { type: "array", items: { type: "string" } }
-                },
-                required: ["invoiceVsPaymentMatch", "invoiceVsPaymentDifference", "lineItemsSumMatchesTotal", "lineItemsSumDifference", "documentsAnalyzed", "warnings", "notes"],
-                additionalProperties: false
-              }
-            },
-            required: ["overallConfidence", "vendor", "bill", "payment", "lineItems", "crossValidation"],
-            additionalProperties: false
-          }
-        }
+        type: "json_object"
       }
     });
     const content = response.choices[0]?.message?.content;
@@ -15614,6 +17177,44 @@ IMPORTANT RULES:
       throw new TRPCError18({ code: "INTERNAL_SERVER_ERROR", message: "AI failed to parse documents" });
     }
     const parsed2 = JSON.parse(content);
+    if (!parsed2.vendor || !parsed2.bill || !Array.isArray(parsed2.lineItems)) {
+      console.error("[AI Parse] Missing required fields in AI response:", {
+        hasVendor: !!parsed2.vendor,
+        hasBill: !!parsed2.bill,
+        hasLineItems: Array.isArray(parsed2.lineItems)
+      });
+      throw new TRPCError18({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "AI response is missing required fields (vendor, bill, or lineItems). Please try again."
+      });
+    }
+    if (parsed2.payment && typeof parsed2.payment === "object" && parsed2.payment.hasPaymentInfo === void 0) {
+      parsed2.payment.hasPaymentInfo = true;
+    }
+    if (!parsed2.payment || parsed2.payment === null) {
+      parsed2.payment = { hasPaymentInfo: false };
+    }
+    if (parsed2.lineItems) {
+      parsed2.lineItems = parsed2.lineItems.map((item) => {
+        if (!item.allocationSuggestion || item.allocationSuggestion === null) {
+          item.allocationSuggestion = { hasAllocation: false, invoiceId: null, employeeId: null, allocatedAmount: null, reason: null };
+        } else if (item.allocationSuggestion.hasAllocation === void 0) {
+          item.allocationSuggestion.hasAllocation = !!(item.allocationSuggestion.invoiceId || item.allocationSuggestion.employeeId);
+        }
+        return item;
+      });
+    }
+    if (!parsed2.crossValidation) {
+      parsed2.crossValidation = {
+        invoiceVsPaymentMatch: null,
+        invoiceVsPaymentDifference: null,
+        lineItemsSumMatchesTotal: false,
+        lineItemsSumDifference: 0,
+        documentsAnalyzed: input.files.length,
+        warnings: ["Cross-validation data was not provided by AI"],
+        notes: []
+      };
+    }
     parsed2.vendorMatch = null;
     if (parsed2.vendor?.name && !input.vendorId) {
       const vendorList = await listVendors({ search: parsed2.vendor.name, pageSize: 5 });
@@ -15674,7 +17275,7 @@ IMPORTANT RULES:
       const vendorList = await listVendors({ pageSize: 1 });
       const db = await getDb();
       if (db) {
-        const vRows = await db.select().from(vendors).where(eq27(vendors.id, input.vendorId)).limit(1);
+        const vRows = await db.select().from(vendors).where(eq28(vendors.id, input.vendorId)).limit(1);
         if (vRows[0]) {
           parsed2.vendorMatch = {
             status: "pre_selected",
@@ -15742,6 +17343,7 @@ IMPORTANT RULES:
           quantity: z22.string().default("1"),
           unitPrice: z22.string(),
           amount: z22.string(),
+          itemType: z22.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other"]).default("other"),
           relatedEmployeeId: z22.number().optional(),
           relatedCustomerId: z22.number().optional(),
           relatedCountryCode: z22.string().optional()
@@ -15918,49 +17520,9 @@ Be precise with numbers. If a field is not found, use null.`
           content: "Parse this vendor invoice."
         }
       ],
+      // IMPORTANT: qwen-long-latest only supports json_object mode, NOT json_schema.
       response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "vendor_invoice_parse",
-          description: "Structured extraction from a single vendor invoice including vendor info, amounts, line items, and categorization.",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              vendorName: { type: "string" },
-              vendorCountry: { type: "string" },
-              invoiceNumber: { type: "string" },
-              invoiceDate: { type: "string" },
-              dueDate: { type: ["string", "null"] },
-              serviceMonth: { type: ["string", "null"] },
-              currency: { type: "string" },
-              subtotal: { type: "number" },
-              tax: { type: "number" },
-              totalAmount: { type: "number" },
-              category: { type: "string" },
-              billType: { type: "string", enum: ["operational", "deposit", "deposit_refund"] },
-              description: { type: "string" },
-              lineItems: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    description: { type: "string" },
-                    employeeName: { type: ["string", "null"] },
-                    quantity: { type: "number" },
-                    unitPrice: { type: "number" },
-                    amount: { type: "number" },
-                    countryCode: { type: ["string", "null"] }
-                  },
-                  required: ["description", "employeeName", "quantity", "unitPrice", "amount", "countryCode"],
-                  additionalProperties: false
-                }
-              }
-            },
-            required: ["vendorName", "vendorCountry", "invoiceNumber", "invoiceDate", "dueDate", "serviceMonth", "currency", "subtotal", "tax", "totalAmount", "category", "billType", "description", "lineItems"],
-            additionalProperties: false
-          }
-        }
+        type: "json_object"
       }
     });
     const content = response.choices[0]?.message?.content;
@@ -16018,6 +17580,7 @@ Be precise with numbers. If a field is not found, use null.`
           quantity: z22.string().default("1"),
           unitPrice: z22.string(),
           amount: z22.string(),
+          itemType: z22.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other"]).default("other"),
           relatedEmployeeId: z22.number().optional(),
           relatedCustomerId: z22.number().optional(),
           relatedCountryCode: z22.string().optional()
@@ -16060,7 +17623,7 @@ Be precise with numbers. If a field is not found, use null.`
 import { z as z23 } from "zod";
 init_db2();
 init_schema();
-import { desc as desc13, eq as eq28, and as and23 } from "drizzle-orm";
+import { desc as desc13, eq as eq29, and as and24, sql as sql15 } from "drizzle-orm";
 import { TRPCError as TRPCError19 } from "@trpc/server";
 var salesRouter = router({
   // ── List all sales leads ──────────────────────────────────────────────
@@ -16127,6 +17690,19 @@ var salesRouter = router({
       expectedCloseDate: input.expectedCloseDate || null,
       status: "discovery"
     });
+    const leadId = Array.isArray(result) ? result[0]?.id : result?.id;
+    if (leadId) {
+      await createLeadChangeLog({
+        leadId,
+        userId: ctx.user.id,
+        userName: ctx.user.name || null,
+        changeType: "created",
+        fieldName: null,
+        oldValue: null,
+        newValue: null,
+        description: `Lead created for "${input.companyName}"`
+      });
+    }
     await logAuditAction({
       userId: ctx.user.id,
       userName: ctx.user.name || null,
@@ -16194,9 +17770,9 @@ var salesRouter = router({
       const db = getDb();
       if (db) {
         const hasSentQuotation = await db.query.quotations.findFirst({
-          where: (q, { eq: eq65, or: or10 }) => and23(
-            eq65(q.leadId, input.id),
-            or10(eq65(q.status, "sent"), eq65(q.status, "accepted"))
+          where: (q, { eq: eq67, or: or10 }) => and24(
+            eq67(q.leadId, input.id),
+            or10(eq67(q.status, "sent"), eq67(q.status, "accepted"))
           )
         });
         if (!hasSentQuotation) {
@@ -16211,9 +17787,9 @@ var salesRouter = router({
       const db = getDb();
       if (db) {
         const hasAcceptedQuotation = await db.query.quotations.findFirst({
-          where: and23(
-            eq28(quotations.leadId, input.id),
-            eq28(quotations.status, "accepted")
+          where: and24(
+            eq29(quotations.leadId, input.id),
+            eq29(quotations.status, "accepted")
           )
         });
         if (!hasAcceptedQuotation) {
@@ -16223,9 +17799,9 @@ var salesRouter = router({
           });
         }
         const msaDoc = await db.query.salesDocuments.findFirst({
-          where: and23(
-            eq28(salesDocuments.leadId, input.id),
-            eq28(salesDocuments.docType, "contract")
+          where: and24(
+            eq29(salesDocuments.leadId, input.id),
+            eq29(salesDocuments.docType, "contract")
             // Assuming 'contract' is used for MSA
           )
         });
@@ -16242,6 +17818,44 @@ var salesRouter = router({
       updateData.expectedCloseDate = input.data.expectedCloseDate || null;
     }
     await updateSalesLead(input.id, updateData);
+    const fieldLabels = {
+      companyName: "Company Name",
+      contactName: "Contact Name",
+      contactEmail: "Contact Email",
+      contactPhone: "Contact Phone",
+      country: "Country",
+      industry: "Industry",
+      estimatedEmployees: "Estimated Employees",
+      estimatedRevenue: "Estimated Revenue",
+      currency: "Currency",
+      source: "Source",
+      intendedServices: "Intended Services",
+      targetCountries: "Target Countries",
+      status: "Status",
+      lostReason: "Lost Reason",
+      assignedTo: "Assigned To",
+      notes: "Notes",
+      expectedCloseDate: "Expected Close Date"
+    };
+    for (const [key, newVal] of Object.entries(input.data)) {
+      if (newVal === void 0) continue;
+      const oldVal = existing[key];
+      const newValStr = newVal === null ? "" : String(newVal);
+      const oldValStr = oldVal === null || oldVal === void 0 ? "" : String(oldVal);
+      if (newValStr !== oldValStr) {
+        const changeType = key === "status" ? "status_change" : "field_update";
+        await createLeadChangeLog({
+          leadId: input.id,
+          userId: ctx.user.id,
+          userName: ctx.user.name || null,
+          changeType,
+          fieldName: key,
+          oldValue: oldValStr || null,
+          newValue: newValStr || null,
+          description: key === "status" ? `Status changed from "${oldValStr}" to "${newValStr}"` : `${fieldLabels[key] || key} changed from "${oldValStr || "(empty)"}" to "${newValStr || "(empty)"}"`
+        });
+      }
+    }
     await logAuditAction({
       userId: ctx.user.id,
       userName: ctx.user.name || null,
@@ -16314,7 +17928,7 @@ var salesRouter = router({
     const db = getDb();
     if (db) {
       const latestQuotation = await db.query.quotations.findFirst({
-        where: eq28(quotations.leadId, input.leadId),
+        where: eq29(quotations.leadId, input.leadId),
         orderBy: [desc13(quotations.createdAt)]
       });
       if (latestQuotation && latestQuotation.snapshotData) {
@@ -16362,27 +17976,32 @@ var salesRouter = router({
       convertedCustomerId: customerId
     });
     const salesDocs = await db.query.salesDocuments.findMany({
-      where: eq28(salesDocuments.leadId, input.leadId)
+      where: eq29(salesDocuments.leadId, input.leadId)
     });
     for (const doc of salesDocs) {
       if (doc.docType === "contract") {
-        await db.insert(customerContracts).values({
-          customerId,
-          contractName: doc.fileName,
-          contractType: "MSA",
-          fileUrl: doc.fileUrl,
-          fileKey: doc.fileKey,
-          status: "signed",
-          createdAt: /* @__PURE__ */ new Date(),
-          updatedAt: /* @__PURE__ */ new Date()
-        });
+        const contractName = doc.title || `MSA-${lead.companyName}`;
+        const now = Date.now();
+        await db.run(sql15`INSERT INTO customer_contracts ("customerId", "contractName", "contractType", "fileUrl", "fileKey", "status", "createdAt", "updatedAt") VALUES (${customerId}, ${contractName}, ${"MSA"}, ${doc.fileUrl}, ${doc.fileKey}, ${"signed"}, ${now}, ${now})`);
       }
+      await db.update(salesDocuments).set({ customerId }).where(eq29(salesDocuments.id, doc.id));
     }
+    await db.update(quotations).set({ customerId }).where(eq29(quotations.leadId, input.leadId));
     await createSalesActivity({
       leadId: input.leadId,
       activityType: "note",
       description: `Customer created (ID: ${customerId}). Sales to introduce customer manager and arrange kickoff meeting. Converted by ${ctx.user.name || "Unknown"}.`,
       createdBy: ctx.user.id
+    });
+    await createLeadChangeLog({
+      leadId: input.leadId,
+      userId: ctx.user.id,
+      userName: ctx.user.name || null,
+      changeType: "converted",
+      fieldName: "convertedCustomerId",
+      oldValue: null,
+      newValue: String(customerId),
+      description: `Lead converted to Customer (ID: ${customerId})`
     });
     await logAuditAction({
       userId: ctx.user.id,
@@ -16453,6 +18072,16 @@ var salesRouter = router({
       });
     }
     await updateSalesLead(input.leadId, { status: "closed_won" });
+    await createLeadChangeLog({
+      leadId: input.leadId,
+      userId: ctx.user.id,
+      userName: ctx.user.name || null,
+      changeType: "status_change",
+      fieldName: "status",
+      oldValue: lead.status,
+      newValue: "closed_won",
+      description: `Deal closed as won with ${onboardingEmployees.length} employee(s) at onboarding or later stage`
+    });
     await createSalesActivity({
       leadId: input.leadId,
       activityType: "note",
@@ -16530,7 +18159,7 @@ var salesRouter = router({
       const db = getDb();
       if (!db) return [];
       const docs = await db.query.salesDocuments.findMany({
-        where: eq28(salesDocuments.leadId, input.leadId),
+        where: eq29(salesDocuments.leadId, input.leadId),
         orderBy: [desc13(salesDocuments.createdAt)]
       });
       return await Promise.all(docs.map(async (d) => {
@@ -16561,16 +18190,10 @@ var salesRouter = router({
       const { url } = await storagePut(fileKey, fileBuffer, input.mimeType);
       const db = getDb();
       if (!db) throw new TRPCError19({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-      const [doc] = await db.insert(salesDocuments).values({
-        leadId: input.leadId,
-        docType: input.docType,
-        title: input.fileName,
-        // Using fileName as title
-        fileKey,
-        fileUrl: url,
-        generatedBy: ctx.user.id,
-        createdAt: /* @__PURE__ */ new Date()
-      }).returning();
+      const docNow = Date.now();
+      const insertResult = await db.run(sql15`INSERT INTO sales_documents ("leadId", "docType", "title", "fileKey", "fileUrl", "generatedBy", "createdAt") VALUES (${input.leadId}, ${input.docType}, ${input.fileName}, ${fileKey}, ${url}, ${ctx.user.id}, ${docNow})`);
+      const docId = Number(insertResult.lastInsertRowid);
+      const doc = { id: docId, leadId: input.leadId, docType: input.docType, title: input.fileName, fileKey, fileUrl: url, generatedBy: ctx.user.id, createdAt: new Date(docNow) };
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -16584,7 +18207,7 @@ var salesRouter = router({
       const db = getDb();
       if (!db) throw new TRPCError19({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       const doc = await db.query.salesDocuments.findFirst({
-        where: eq28(salesDocuments.id, input.id)
+        where: eq29(salesDocuments.id, input.id)
       });
       if (!doc) throw new TRPCError19({ code: "NOT_FOUND", message: "Document not found" });
       if (doc.fileKey) {
@@ -16605,7 +18228,7 @@ var salesRouter = router({
     delete: crmProcedure.input(z23.object({ id: z23.number() })).mutation(async ({ input, ctx }) => {
       const db = getDb();
       if (!db) throw new TRPCError19({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-      await db.delete(salesDocuments).where(eq28(salesDocuments.id, input.id));
+      await db.delete(salesDocuments).where(eq29(salesDocuments.id, input.id));
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -16617,6 +18240,12 @@ var salesRouter = router({
     })
   }),
   // ── List users for assignment dropdown ───────────────────────────────
+  // ── Change Logs sub-router ────────────────────────────────────────────
+  changeLogs: router({
+    list: userProcedure.input(z23.object({ leadId: z23.number() })).query(async ({ input }) => {
+      return await listLeadChangeLogs(input.leadId);
+    })
+  }),
   assignableUsers: userProcedure.query(async () => {
     const result = await listUsers({ pageSize: 1e3 });
     return result.data.map((u) => ({
@@ -16629,7 +18258,7 @@ var salesRouter = router({
 
 // server/routers/knowledgeBaseAdmin.ts
 import { z as z24 } from "zod";
-import { desc as desc14, eq as eq29, gte as gte4, inArray as inArray8 } from "drizzle-orm";
+import { desc as desc14, eq as eq31, gte as gte4, inArray as inArray10 } from "drizzle-orm";
 import { TRPCError as TRPCError20 } from "@trpc/server";
 init_db2();
 init_schema();
@@ -16872,7 +18501,7 @@ var knowledgeBaseAdminRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError20({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
     const statuses = input?.statuses?.length ? input.statuses : ["pending_review"];
-    const rows = await db.select().from(knowledgeItems).where(inArray8(knowledgeItems.status, statuses)).orderBy(desc14(knowledgeItems.createdAt)).limit(200);
+    const rows = await db.select().from(knowledgeItems).where(inArray10(knowledgeItems.status, statuses)).orderBy(desc14(knowledgeItems.createdAt)).limit(200);
     return rows.map((row) => {
       const meta = row.metadata || {};
       const riskScore = computeRiskScore({
@@ -16959,7 +18588,7 @@ var knowledgeBaseAdminRouter = router({
         authorityReason: authority.reason,
         aiReviewedAt: /* @__PURE__ */ new Date(),
         updatedBy: ctx.user.id
-      }).where(eq29(knowledgeSources.id, input.id));
+      }).where(eq31(knowledgeSources.id, input.id));
       return { success: true, id: input.id };
     }
     const result = await db.insert(knowledgeSources).values({
@@ -16980,7 +18609,7 @@ var knowledgeBaseAdminRouter = router({
   auditSourceAuthority: adminProcedure2.input(z24.object({ sourceId: z24.number() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError20({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const [source] = await db.select().from(knowledgeSources).where(eq29(knowledgeSources.id, input.sourceId)).limit(1);
+    const [source] = await db.select().from(knowledgeSources).where(eq31(knowledgeSources.id, input.sourceId)).limit(1);
     if (!source) throw new TRPCError20({ code: "NOT_FOUND", message: "Source not found" });
     const authority = await evaluateSourceAuthorityWithAI({
       sourceName: source.name,
@@ -16992,13 +18621,13 @@ var knowledgeBaseAdminRouter = router({
       authorityLevel: authority.level,
       authorityReason: authority.reason,
       aiReviewedAt: /* @__PURE__ */ new Date()
-    }).where(eq29(knowledgeSources.id, source.id));
+    }).where(eq31(knowledgeSources.id, source.id));
     return { success: true, authority };
   }),
   ingestSourceNow: adminProcedure2.input(z24.object({ sourceId: z24.number(), customerId: z24.number().optional() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError20({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const [source] = await db.select().from(knowledgeSources).where(eq29(knowledgeSources.id, input.sourceId)).limit(1);
+    const [source] = await db.select().from(knowledgeSources).where(eq31(knowledgeSources.id, input.sourceId)).limit(1);
     if (!source) throw new TRPCError20({ code: "NOT_FOUND", message: "Source not found" });
     const pulled = await pullFromSource(source.url);
     if (!pulled.length) return { success: true, created: 0 };
@@ -17052,13 +18681,39 @@ ${item.content}`
         };
       })
     );
-    await db.update(knowledgeSources).set({ lastFetchedAt: /* @__PURE__ */ new Date() }).where(eq29(knowledgeSources.id, source.id));
+    await db.update(knowledgeSources).set({ lastFetchedAt: /* @__PURE__ */ new Date() }).where(eq31(knowledgeSources.id, source.id));
     return { success: true, created: drafts.length };
+  }),
+  generateFromInternalData: adminProcedure2.input(
+    z24.object({
+      types: z24.array(
+        z24.enum([
+          "countryOverview",
+          "socialInsurance",
+          "publicHolidays",
+          "leaveEntitlements",
+          "hiringGuide",
+          "compensationGuide",
+          "terminationGuide",
+          "workingConditions"
+        ])
+      ).optional(),
+      countryCodes: z24.array(z24.string()).optional(),
+      dryRun: z24.boolean().default(false)
+    })
+  ).mutation(async ({ input }) => {
+    const { generateKnowledgeFromInternalData: generateKnowledgeFromInternalData2 } = await Promise.resolve().then(() => (init_knowledgeInternalGeneratorService(), knowledgeInternalGeneratorService_exports));
+    const result = await generateKnowledgeFromInternalData2({
+      types: input.types,
+      countryCodes: input.countryCodes,
+      dryRun: input.dryRun
+    });
+    return result;
   }),
   reviewItem: adminProcedure2.input(z24.object({ id: z24.number(), action: z24.enum(["publish", "reject"]), note: z24.string().optional() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError20({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const [item] = await db.select().from(knowledgeItems).where(eq29(knowledgeItems.id, input.id)).limit(1);
+    const [item] = await db.select().from(knowledgeItems).where(eq31(knowledgeItems.id, input.id)).limit(1);
     if (!item) throw new TRPCError20({ code: "NOT_FOUND", message: "Item not found" });
     await db.update(knowledgeItems).set({
       status: input.action === "publish" ? "published" : "rejected",
@@ -17066,7 +18721,7 @@ ${item.content}`
       reviewedAt: /* @__PURE__ */ new Date(),
       publishedAt: input.action === "publish" ? /* @__PURE__ */ new Date() : item.publishedAt,
       reviewNote: input.note || null
-    }).where(eq29(knowledgeItems.id, input.id));
+    }).where(eq31(knowledgeItems.id, input.id));
     return { success: true };
   })
 });
@@ -17075,7 +18730,7 @@ ${item.content}`
 import { z as z25 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq30, and as and24, desc as desc15 } from "drizzle-orm";
+import { eq as eq32, and as and26, desc as desc15 } from "drizzle-orm";
 import { TRPCError as TRPCError21 } from "@trpc/server";
 var NotificationConfigSchema = z25.object({
   enabled: z25.boolean().default(false),
@@ -17103,7 +18758,7 @@ var notificationsRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const setting = await db.query.systemSettings.findFirst({
-      where: eq30(systemSettings.key, "notification_rules")
+      where: eq32(systemSettings.key, "notification_rules")
     });
     const config = JSON.parse(JSON.stringify(DEFAULT_RULES));
     if (setting && setting.value) {
@@ -17138,7 +18793,7 @@ var notificationsRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const setting = await db.query.systemSettings.findFirst({
-      where: eq30(systemSettings.key, "notification_rules")
+      where: eq32(systemSettings.key, "notification_rules")
     });
     let rules = {};
     if (setting && setting.value) {
@@ -17174,13 +18829,13 @@ var notificationsRouter = router({
     if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const userId = ctx.user.id;
     const userRoles = (ctx.user.role || "").split(",");
-    const roleConditions = userRoles.map((role) => eq30(notifications.targetRole, role.trim()));
+    const roleConditions = userRoles.map((role) => eq32(notifications.targetRole, role.trim()));
     return await db.query.notifications.findMany({
-      where: (t4, { and: and50, or: or10, eq: eq65 }) => and50(
-        eq65(t4.targetPortal, "admin"),
-        eq65(t4.isRead, false),
+      where: (t4, { and: and53, or: or10, eq: eq67 }) => and53(
+        eq67(t4.targetPortal, "admin"),
+        eq67(t4.isRead, false),
         or10(
-          eq65(t4.targetUserId, userId),
+          eq67(t4.targetUserId, userId),
           ...roleConditions
         )
       ),
@@ -17194,7 +18849,7 @@ var notificationsRouter = router({
   markAsRead: userProcedure.input(z25.object({ id: z25.number() })).mutation(async ({ ctx, input }) => {
     const db = getDb();
     if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(eq30(notifications.id, input.id));
+    await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(eq32(notifications.id, input.id));
     return { success: true };
   }),
   /**
@@ -17205,10 +18860,10 @@ var notificationsRouter = router({
     if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const userId = ctx.user.id;
     await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(
-      and24(
-        eq30(notifications.targetPortal, "admin"),
-        eq30(notifications.targetUserId, userId),
-        eq30(notifications.isRead, false)
+      and26(
+        eq32(notifications.targetPortal, "admin"),
+        eq32(notifications.targetUserId, userId),
+        eq32(notifications.isRead, false)
       )
     );
     return { success: true };
@@ -17221,7 +18876,7 @@ import { z as z26 } from "zod";
 // server/services/calculationService.ts
 init_db2();
 init_schema();
-import { eq as eq31, and as and25, or as or7, isNull as isNull3 } from "drizzle-orm";
+import { eq as eq33, and as and27, or as or7, isNull as isNull4 } from "drizzle-orm";
 var calculationService = {
   /**
    * Calculate social insurance contributions for a given salary
@@ -17230,28 +18885,28 @@ var calculationService = {
     const { countryCode, year, salary, regionCode, age } = input;
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
-    const whereClause = regionCode ? and25(
-      eq31(countrySocialInsuranceItems.countryCode, countryCode),
-      eq31(countrySocialInsuranceItems.effectiveYear, year),
-      eq31(countrySocialInsuranceItems.isActive, true),
+    const whereClause = regionCode ? and27(
+      eq33(countrySocialInsuranceItems.countryCode, countryCode),
+      eq33(countrySocialInsuranceItems.effectiveYear, year),
+      eq33(countrySocialInsuranceItems.isActive, true),
       or7(
-        eq31(countrySocialInsuranceItems.regionCode, regionCode),
-        isNull3(countrySocialInsuranceItems.regionCode)
+        eq33(countrySocialInsuranceItems.regionCode, regionCode),
+        isNull4(countrySocialInsuranceItems.regionCode)
       )
-    ) : and25(
-      eq31(countrySocialInsuranceItems.countryCode, countryCode),
-      eq31(countrySocialInsuranceItems.effectiveYear, year),
-      eq31(countrySocialInsuranceItems.isActive, true),
-      isNull3(countrySocialInsuranceItems.regionCode)
+    ) : and27(
+      eq33(countrySocialInsuranceItems.countryCode, countryCode),
+      eq33(countrySocialInsuranceItems.effectiveYear, year),
+      eq33(countrySocialInsuranceItems.isActive, true),
+      isNull4(countrySocialInsuranceItems.regionCode)
     );
     const db_rules = await db.select().from(countrySocialInsuranceItems).where(whereClause).orderBy(countrySocialInsuranceItems.sortOrder);
     let rules = db_rules;
     if (rules.length === 0 && !regionCode) {
       const anyRules = await db.query.countrySocialInsuranceItems.findMany({
-        where: and25(
-          eq31(countrySocialInsuranceItems.countryCode, countryCode),
-          eq31(countrySocialInsuranceItems.effectiveYear, year),
-          eq31(countrySocialInsuranceItems.isActive, true)
+        where: and27(
+          eq33(countrySocialInsuranceItems.countryCode, countryCode),
+          eq33(countrySocialInsuranceItems.effectiveYear, year),
+          eq33(countrySocialInsuranceItems.isActive, true)
         ),
         orderBy: [countrySocialInsuranceItems.sortOrder]
       });
@@ -17348,7 +19003,7 @@ var calculationService = {
 // server/routers/calculationRouter.ts
 init_db2();
 init_schema();
-import { eq as eq32, and as and26, isNotNull as isNotNull2 } from "drizzle-orm";
+import { eq as eq34, and as and28, isNotNull as isNotNull2 } from "drizzle-orm";
 import { TRPCError as TRPCError22 } from "@trpc/server";
 var calculationRouter = router({
   calculateContributions: protectedProcedure.input(
@@ -17374,10 +19029,10 @@ var calculationRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError22({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     return await db.select().from(countrySocialInsuranceItems).where(
-      and26(
-        eq32(countrySocialInsuranceItems.countryCode, input.countryCode),
-        eq32(countrySocialInsuranceItems.effectiveYear, input.year),
-        eq32(countrySocialInsuranceItems.isActive, true)
+      and28(
+        eq34(countrySocialInsuranceItems.countryCode, input.countryCode),
+        eq34(countrySocialInsuranceItems.effectiveYear, input.year),
+        eq34(countrySocialInsuranceItems.isActive, true)
       )
     ).orderBy(countrySocialInsuranceItems.sortOrder);
   }),
@@ -17393,9 +19048,9 @@ var calculationRouter = router({
       regionCode: countrySocialInsuranceItems.regionCode,
       regionName: countrySocialInsuranceItems.regionName
     }).from(countrySocialInsuranceItems).where(
-      and26(
-        eq32(countrySocialInsuranceItems.countryCode, input.countryCode),
-        eq32(countrySocialInsuranceItems.effectiveYear, input.year),
+      and28(
+        eq34(countrySocialInsuranceItems.countryCode, input.countryCode),
+        eq34(countrySocialInsuranceItems.effectiveYear, input.year),
         isNotNull2(countrySocialInsuranceItems.regionCode)
       )
     );
@@ -17409,12 +19064,12 @@ import { z as z27 } from "zod";
 // server/services/quotationService.ts
 init_db2();
 init_schema();
-import { eq as eq34 } from "drizzle-orm";
+import { eq as eq36 } from "drizzle-orm";
 
 // server/services/htmlPdfService.ts
 import puppeteer from "puppeteer-core";
 import { marked } from "marked";
-import { existsSync } from "fs";
+import { existsSync as existsSync2 } from "fs";
 import { execSync } from "child_process";
 var CHROMIUM_ARGS = [
   "--no-sandbox",
@@ -17440,7 +19095,7 @@ var CHROMIUM_CANDIDATES = [
 ];
 function findChromiumPath() {
   for (const p of CHROMIUM_CANDIDATES) {
-    if (p && existsSync(p)) return p;
+    if (p && existsSync2(p)) return p;
   }
   try {
     const found = execSync(
@@ -17487,73 +19142,166 @@ var BASE_CSS = `
     page-break-after: always;
     background: white;
   }
-  .page:last-child { page-break-after: avoid; }
+  .page:last-child { page-break-after: avoid; min-height: auto; }
 
   /* \u2500\u2500 Cover Page \u2500\u2500 */
   .cover {
-    background: ${BRAND.bg};
+    background: white;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     padding: 0;
     overflow: hidden;
+    position: relative;
   }
-  .cover-top-bar {
+  /* Decorative sidebar */
+  .cover-sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 18mm;
+    height: 100%;
     background: ${BRAND.primary};
-    height: 8mm;
-    width: 100%;
+    z-index: 1;
+  }
+  .cover-sidebar::after {
+    content: '';
+    position: absolute;
+    bottom: 60mm;
+    left: 0;
+    width: 18mm;
+    height: 3mm;
+    background: ${BRAND.gold};
+  }
+  /* Decorative corner accent */
+  .cover-corner {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 80mm;
+    height: 80mm;
+    z-index: 1;
+    overflow: hidden;
+  }
+  .cover-corner::before {
+    content: '';
+    position: absolute;
+    top: -30mm;
+    right: -30mm;
+    width: 100mm;
+    height: 100mm;
+    border: 6mm solid ${BRAND.bg};
+    border-radius: 50%;
+  }
+  .cover-corner::after {
+    content: '';
+    position: absolute;
+    top: -15mm;
+    right: -15mm;
+    width: 60mm;
+    height: 60mm;
+    border: 2mm solid ${BRAND.gold};
+    border-radius: 50%;
+    opacity: 0.5;
+  }
+  /* Bottom decorative stripe */
+  .cover-bottom-accent {
+    position: absolute;
+    bottom: 0;
+    left: 18mm;
+    right: 0;
+    height: 16mm;
+    background: linear-gradient(135deg, ${BRAND.primary} 0%, ${BRAND.primaryLight} 100%);
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    padding: 0 14mm;
+  }
+  .cover-bottom-accent::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 40mm;
+    height: 100%;
+    background: ${BRAND.gold};
+    opacity: 0.15;
+  }
+  .cover-bottom-text {
+    color: rgba(255,255,255,0.8);
+    font-size: 7.5pt;
+    letter-spacing: 0.5px;
+    z-index: 2;
   }
   .cover-body {
     flex: 1;
-    padding: 18mm 16mm;
+    padding: 30mm 16mm 30mm 34mm;
     display: flex;
     flex-direction: column;
     justify-content: center;
+    z-index: 2;
   }
   .cover-logo {
-    font-size: 28pt;
+    font-size: 32pt;
     font-weight: 700;
     color: ${BRAND.primary};
     letter-spacing: -0.5px;
   }
   .cover-tagline {
-    font-size: 9pt;
+    font-size: 8.5pt;
     color: ${BRAND.muted};
     margin-top: 2mm;
-    letter-spacing: 0.5px;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
   }
   .cover-divider {
-    width: 20mm;
-    height: 1mm;
-    background: ${BRAND.gold};
-    margin: 12mm 0;
+    width: 35mm;
+    height: 1.2mm;
+    background: linear-gradient(90deg, ${BRAND.gold} 0%, transparent 100%);
+    margin: 14mm 0;
+    border-radius: 1mm;
   }
   .cover-title {
-    font-size: 28pt;
+    font-size: 32pt;
     font-weight: 700;
     color: ${BRAND.primary};
-    line-height: 1.2;
-    margin-bottom: 4mm;
+    line-height: 1.15;
+    margin-bottom: 5mm;
+    letter-spacing: -0.3px;
   }
   .cover-subtitle {
     font-size: 14pt;
     color: ${BRAND.primaryLight};
     margin-bottom: 3mm;
+    font-weight: 500;
   }
   .cover-date {
     font-size: 9pt;
     color: ${BRAND.muted};
+    margin-top: 2mm;
   }
-  .cover-bottom-bar {
-    background: ${BRAND.primary};
-    height: 12mm;
-    width: 100%;
+  .cover-meta {
+    margin-top: 12mm;
+    padding-top: 6mm;
+    border-top: 0.5pt solid ${BRAND.border};
     display: flex;
-    align-items: center;
-    padding: 0 16mm;
-    color: rgba(255,255,255,0.7);
-    font-size: 8pt;
+    gap: 12mm;
+  }
+  .cover-meta-item {
+    display: flex;
+    flex-direction: column;
+  }
+  .cover-meta-label {
+    font-size: 6.5pt;
+    color: ${BRAND.muted};
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 1mm;
+  }
+  .cover-meta-value {
+    font-size: 9pt;
+    color: ${BRAND.text};
+    font-weight: 500;
   }
 
   /* \u2500\u2500 Page Header \u2500\u2500 */
@@ -17641,7 +19389,7 @@ var BASE_CSS = `
     border-radius: 2mm;
     padding: 4mm 5mm;
     margin-bottom: 4mm;
-    page-break-inside: avoid;
+    page-break-inside: auto;
   }
   .section-card-title {
     font-size: 10pt;
@@ -17852,7 +19600,7 @@ async function fetchLogoAsBase64(url) {
   try {
     const https = await import("https");
     const http = await import("http");
-    return await new Promise((resolve) => {
+    return await new Promise((resolve2) => {
       const client = url.startsWith("https") ? https : http;
       client.get(url, (res) => {
         const chunks = [];
@@ -17860,10 +19608,10 @@ async function fetchLogoAsBase64(url) {
         res.on("end", () => {
           const buf = Buffer.concat(chunks);
           const contentType = res.headers["content-type"] || "image/png";
-          resolve(`data:${contentType};base64,${buf.toString("base64")}`);
+          resolve2(`data:${contentType};base64,${buf.toString("base64")}`);
         });
-        res.on("error", () => resolve(null));
-      }).on("error", () => resolve(null));
+        res.on("error", () => resolve2(null));
+      }).on("error", () => resolve2(null));
     });
   } catch {
     return null;
@@ -17908,21 +19656,31 @@ function logoHtml(b, size) {
   }
   return `<span class="page-header-logo">${b.shortName}</span>`;
 }
-function coverPage(title, subtitle, date, branding = DEFAULT_BRANDING) {
+function coverPage(title, subtitle, date, branding = DEFAULT_BRANDING, meta) {
+  const metaHtml = meta && meta.length > 0 ? `<div class="cover-meta">${meta.map((m) => `
+        <div class="cover-meta-item">
+          <span class="cover-meta-label">${m.label}</span>
+          <span class="cover-meta-value">${m.value}</span>
+        </div>`).join("")}
+      </div>` : "";
   return `
   <div class="page cover">
-    <div class="cover-top-bar"></div>
+    <div class="cover-sidebar"></div>
+    <div class="cover-corner"></div>
     <div class="cover-body">
       <div>
         ${logoHtml(branding, "cover")}
-        ${!branding.logoUrl ? `<div class="cover-tagline">${branding.fullName}</div>` : ""}
+        ${!branding.logoUrl && !branding.logoBase64 ? `<div class="cover-tagline">${branding.fullName}</div>` : ""}
       </div>
       <div class="cover-divider"></div>
       <div class="cover-title">${title}</div>
       <div class="cover-subtitle">${subtitle}</div>
       <div class="cover-date">${date}</div>
+      ${metaHtml}
     </div>
-    <div class="cover-bottom-bar">Confidential &amp; Proprietary \u2014 ${branding.fullName}</div>
+    <div class="cover-bottom-accent">
+      <span class="cover-bottom-text">Confidential &amp; Proprietary &mdash; ${branding.fullName}</span>
+    </div>
   </div>`;
 }
 function contentPage(headerTitle, pageNum, totalPages, body, branding = DEFAULT_BRANDING) {
@@ -17945,7 +19703,11 @@ async function generateCountryGuidePdf(country, chapters, locale = "en", brandin
   const date = (/* @__PURE__ */ new Date()).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const headerTitle = `Country Guide: ${country.countryName}`;
   let pages = "";
-  pages += coverPage("Country Guide", country.countryName, date, branding);
+  const guideMeta = [
+    { label: "Country", value: country.countryName },
+    { label: "Chapters", value: `${chapters.length}` }
+  ];
+  pages += coverPage("Country Guide", country.countryName, date, branding, guideMeta);
   let tocRows = chapters.map((ch, i) => `
     <div class="toc-item">
       <span class="toc-num">${i + 1}.</span>
@@ -17985,13 +19747,25 @@ async function generateQuotationPdf(data) {
   const headerTitle = `Quotation #${data.quotationNumber}`;
   const validUntil = data.validUntil ? new Date(data.validUntil).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "N/A";
   let pages = "";
-  pages += coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date, branding);
+  const coverMeta = [
+    { label: "Prepared For", value: data.customerName },
+    { label: "Reference", value: data.quotationNumber }
+  ];
+  if (data.createdByName) {
+    coverMeta.push({ label: "Your Contact", value: data.createdByName });
+  }
+  pages += coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date, branding, coverMeta);
   const companyIntroHtml = data.companyIntro ? `<p>${data.companyIntro}</p>` : `
-    <p>${branding.fullName} is a leading Employer of Record (EOR) and workforce solutions provider, enabling businesses to hire talent across 50+ countries without the need to establish local legal entities. Our platform combines compliance expertise, payroll management, and HR technology to deliver a seamless employment experience for both clients and their employees.</p>
-    <p>We handle all aspects of local employment \u2014 including employment contracts, payroll processing, statutory benefits, tax compliance, and HR administration \u2014 so you can focus on growing your business globally.</p>
+    <h3>About CGL Group</h3>
+    <p>CGL Group's core business is international executive search (CGL), with a focus on serving innovative startups and traditional enterprises undergoing transformation in China's growing economy. We provide strategic talent advisory, talent mapping, and help enterprises recruit core executive teams based on our deep understanding of industry talent markets. We also design competitive compensation packages and deliver CEO and executive leadership coaching and onboarding support.</p>
+
+    <h3>About GEA (Global Employment Advisors)</h3>
+    <p>As CGL's overseas business sub-brand, GEA helps Chinese enterprises navigate emerging markets across the full lifecycle \u2014 from Access to Implementation, from Development to Reorganization \u2014 providing comprehensive, end-to-end human resources services and solutions.</p>
+    <p>We design differentiated solutions tailored not only to different industries \u2014 such as new energy, smart manufacturing, food &amp; beverage, healthcare, consumer electronics, and embodied AI \u2014 but also to clients within the same industry who have distinct strategic priorities for their overseas expansion.</p>
+    <p>From lightweight market entry targeting a single destination to regional hub models with unified settlement centers, we deliver customized solutions that best fit the flexible and diversified needs of Chinese enterprises going global.</p>
   `;
   pages += contentPage(headerTitle, 2, 0, `
-    <h2>About ${branding.fullName}</h2>
+    <h2>About GEA (Global Employment Advisors)</h2>
     <div class="section-card">
       ${companyIntroHtml}
     </div>
@@ -18025,15 +19799,11 @@ async function generateQuotationPdf(data) {
     <h2>Issued By</h2>
     <div class="info-grid">
       <div class="info-item">
-        <label>Entity</label>
-        <span>${data.billingEntity.entityName}</span>
-      </div>
-      <div class="info-item">
-        <label>Legal Name</label>
+        <label>Legal Entity</label>
         <span>${data.billingEntity.legalName}</span>
       </div>
-      ${data.billingEntity.address ? `<div class="info-item"><label>Address</label><span>${data.billingEntity.address}</span></div>` : ""}
-      ${data.billingEntity.contactEmail ? `<div class="info-item"><label>Email</label><span>${data.billingEntity.contactEmail}</span></div>` : ""}
+      ${data.createdByName ? `<div class="info-item"><label>Contact Person</label><span>${data.createdByName}</span></div>` : ""}
+      ${data.createdByEmail ? `<div class="info-item"><label>Email</label><span>${data.createdByEmail}</span></div>` : ""}
     </div>` : ""}
   `, branding);
   const tableRows = data.items.map((item, idx) => {
@@ -18114,37 +19884,49 @@ async function generateQuotationPdf(data) {
         <div class="total-amount">USD ${fmt(parseFloat(data.totalMonthly))}</div>
       </div>
     </div>
-
-    ${data.notes ? `
-    <div class="notes-box">
-      <strong>Notes:</strong><br>${data.notes}
-    </div>` : ""}
   `, branding);
-  const contactEmail = branding.contactEmail ?? data.billingEntity?.contactEmail ?? "sales@geahr.com";
+  const contactEmail = data.createdByEmail ?? branding.contactEmail ?? data.billingEntity?.contactEmail ?? "sales@geahr.com";
+  const contactName = data.createdByName ?? branding.shortName + " account manager";
+  const notesHtml = data.notes ? `
+    <div class="notes-box" style="margin-bottom:6mm;">
+      <strong>Notes:</strong><br>${data.notes}
+    </div>` : "";
   pages += contentPage(headerTitle, 4, 0, `
+    ${notesHtml}
     <h2>Terms &amp; Conditions</h2>
-    <div class="section-card">
-      <h3>Validity</h3>
-      <p>This quotation is valid until <strong>${validUntil}</strong>. Pricing is subject to change after this date.</p>
+    <div class="section-card" style="font-size: 8pt; line-height: 1.5;">
+        <h3>1. Agreement &amp; Validity</h3>
+        <p>This Quotation Proposal ("Quotation") is issued by ${branding.fullName} ("Company") to ${data.customerName} ("Client") and is valid until <strong>${validUntil}</strong>. Upon acceptance by the Client, this Quotation shall be incorporated into and form part of the Master Services Agreement ("MSA") executed between the Company and the Client. All terms defined in the MSA shall have the same meaning when used herein. Prices and terms are subject to change after the validity date, and any revised quotation shall supersede this document in its entirety.</p>
 
-      <h3>Service Scope</h3>
-      <p>The quoted service fee covers: employment contract administration, monthly payroll processing, statutory benefit contributions, HR compliance management, and dedicated account support.</p>
+        <h3>2. Scope of Services</h3>
+        <p>The Company shall provide comprehensive employment services tailored to the Client's needs, as described below. The specific scope for each engagement shall be detailed in the applicable Schedule to the MSA.</p>
+        <p><strong>2.1. Employer of Record (EOR):</strong> The Company will act as the legal employer for the Client's designated personnel in the respective country. Services include: preparing and maintaining employment contracts and all necessary documentation; facilitating employee onboarding; monthly payroll processing including wages, deductions, and withholdings; administration of statutory benefits programs; tax compliance; and managing termination procedures in accordance with local labor laws. The Client retains full responsibility for the day-to-day management, supervision, work assignments, and performance evaluation of the personnel.</p>
+        <p><strong>2.2. Agent of Record (AOR):</strong> The Company will engage independent contractors on behalf of the Client. Services include: contractor agreement administration, compliance verification, and payment processing. The fees quoted represent the contractor's gross rate plus the Company's management fee; no statutory employer contributions are applicable under this model.</p>
 
-      <h3>Employer of Record (EOR)</h3>
-      <p>Under the EOR model, ${branding.shortName} acts as the legal employer of the worker(s) in the respective country. The client retains full day-to-day management of the worker's tasks and responsibilities.</p>
+        <h3>3. Fees &amp; Payment</h3>
+        <p><strong>3.1. Service Fees:</strong> The recurring monthly service fees and any one-time fees are as specified in the Pricing Summary of this Quotation. All fees are exclusive of any applicable Value Added Tax (VAT), Goods and Services Tax (GST), or similar sales taxes, which shall be added to the invoice where required by applicable law.</p>
+        <p><strong>3.2. Employment Costs:</strong> The Client shall be responsible for the full employment cost, which includes the employee's gross salary and all mandatory employer contributions (e.g., social security, insurance, pension, housing fund) as required by local law in the country of employment. Current and future provisions of local labor law, collective labor agreements, and tax legislation shall apply.</p>
+        <p><strong>3.3. Invoicing &amp; Payment:</strong> The Company will issue invoices monthly in advance. Unless otherwise agreed in the MSA, invoices are payable within seven (7) days of issuance by bank transfer to the Company's designated account. The Client shall be solely responsible for paying any taxes, levies, or charges imposed by any applicable tax authority in connection with the Services.</p>
+        <p><strong>3.4. Security Deposit:</strong> A security deposit, typically equivalent to two (2) months of total estimated employment costs and service fees, is required upon commencement of services and will be invoiced separately. The deposit shall be refunded upon termination of services, net of any outstanding amounts owed by the Client.</p>
+        <p><strong>3.5. Late Payment:</strong> If the Client fails to pay any invoice within fourteen (14) days after a payment reminder notification from the Company, the Company reserves the right to suspend or terminate the Services immediately in accordance with the MSA.</p>
 
-      <h3>Agent of Record (AOR)</h3>
-      <p>Under the AOR model, ${branding.shortName} engages contractors on behalf of the client. The contractor rate shown is the gross contractor fee; no statutory employer contributions apply.</p>
+        <h3>4. Currency &amp; Exchange Rates</h3>
+        <p>This Quotation is presented in USD for comparative purposes. Invoices will be issued in the Client's designated billing currency as agreed in the MSA. Costs incurred in local currencies (e.g., salaries, employer contributions) will be converted using the prevailing exchange rate at the time of payroll processing. The exchange rates shown in this Quotation are indicative only and subject to market fluctuation; final invoiced amounts may vary accordingly.</p>
 
-      <h3>Exchange Rates</h3>
-      <p>Exchange rates are indicative and based on rates at the time of quotation. Final invoiced amounts may vary based on prevailing rates at the time of payroll processing.</p>
+        <h3>5. Confidentiality</h3>
+        <p>This Quotation and its contents are confidential and proprietary to the Company. It is intended solely for the use of the named Client and may not be disclosed, reproduced, or distributed to any third party without the prior written consent of the Company. Both parties agree to maintain the confidentiality of all proprietary and sensitive information exchanged during the course of the business relationship, using at least the same degree of care as each party applies to its own confidential information. These obligations shall survive the termination of the agreement.</p>
 
-      <h3>Confidentiality</h3>
-      <p>This document is confidential and intended solely for the named recipient. It may not be shared with third parties without prior written consent from ${branding.shortName}.</p>
+        <h3>6. Limitation of Liability</h3>
+        <p><strong>6.1.</strong> The Company's sole liability to the Client in relation to any and all claims arising under or in connection with the Services (whether in contract, tort, negligence, strict liability, or otherwise) shall be for direct damages only, and shall not exceed, in the aggregate, the total service fees paid by the Client to the Company in the six (6) month period immediately preceding the event giving rise to the claim.</p>
+        <p><strong>6.2.</strong> Neither party shall be liable for any loss of profits, income, revenue, anticipated savings, business, contracts, commercial opportunities, or goodwill, nor for any special, indirect, incidental, punitive, or consequential loss or damage, howsoever arising.</p>
+        <p><strong>6.3.</strong> Neither party shall be liable for any losses arising out of a Force Majeure Event, being an event outside the reasonable control of the affected party, including but not limited to natural disasters, wars, epidemics, government actions, internet failures, or power outages.</p>
+
+        <h3>7. Governing Law &amp; Dispute Resolution</h3>
+        <p>This Quotation and any subsequent agreement shall be governed by and construed in accordance with the laws of Hong Kong SAR. All disputes arising out of or in connection with this Quotation or the MSA shall be resolved in accordance with the dispute resolution mechanism specified in the MSA.</p>
     </div>
 
     <div class="notes-box" style="margin-top:6mm;">
-      For questions about this quotation, please contact your ${branding.shortName} account manager or email <strong>${contactEmail}</strong>.
+      For questions about this quotation, please contact <strong>${contactName}</strong> at <strong>${contactEmail}</strong>.
     </div>
   `, branding);
   const html = `<!DOCTYPE html>
@@ -18162,15 +19944,15 @@ async function generateQuotationPdf(data) {
 // server/services/countryGuidePdfService.ts
 init_db2();
 init_schema();
-import { eq as eq33, and as and27, asc } from "drizzle-orm";
+import { eq as eq35, and as and29, asc as asc2 } from "drizzle-orm";
 async function getDefaultBranding(db) {
   if (!db) return { shortName: "GEA", fullName: "Global Employment Advisors", contactEmail: "sales@geahr.com" };
   let entity = await db.query.billingEntities.findFirst({
-    where: and27(eq33(billingEntities.isDefault, true), eq33(billingEntities.isActive, true))
+    where: and29(eq35(billingEntities.isDefault, true), eq35(billingEntities.isActive, true))
   });
   if (!entity) {
     entity = await db.query.billingEntities.findFirst({
-      where: eq33(billingEntities.isActive, true)
+      where: eq35(billingEntities.isActive, true)
     });
   }
   if (!entity) {
@@ -18178,10 +19960,19 @@ async function getDefaultBranding(db) {
   }
   const addressParts = [entity.address, entity.city, entity.country].filter(Boolean);
   const address = addressParts.length > 0 ? addressParts.join(", ") : void 0;
+  let resolvedLogoUrl = entity.logoUrl ?? null;
+  if (entity.logoFileKey) {
+    try {
+      const { url: signedUrl } = await storageGet(entity.logoFileKey);
+      resolvedLogoUrl = signedUrl;
+    } catch (err) {
+      console.warn("[CountryGuidePdf] Failed to sign logo URL:", err);
+    }
+  }
   return {
     shortName: entity.entityName,
     fullName: entity.legalName,
-    logoUrl: entity.logoUrl ?? null,
+    logoUrl: resolvedLogoUrl,
     contactEmail: entity.contactEmail ?? null,
     address: address ?? null,
     legalName: entity.legalName
@@ -18192,15 +19983,15 @@ var countryGuidePdfService = {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
     const country = await db.query.countriesConfig.findFirst({
-      where: eq33(countriesConfig.countryCode, countryCode)
+      where: eq35(countriesConfig.countryCode, countryCode)
     });
     if (!country) return null;
     const chapters = await db.query.countryGuideChapters.findMany({
-      where: and27(
-        eq33(countryGuideChapters.countryCode, countryCode),
-        eq33(countryGuideChapters.status, "published")
+      where: and29(
+        eq35(countryGuideChapters.countryCode, countryCode),
+        eq35(countryGuideChapters.status, "published")
       ),
-      orderBy: [asc(countryGuideChapters.sortOrder)]
+      orderBy: [asc2(countryGuideChapters.sortOrder)]
     });
     if (chapters.length === 0) return null;
     const branding = await getDefaultBranding(db);
@@ -18361,7 +20152,7 @@ var quotationService = {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
     const existing = await db.query.quotations.findFirst({
-      where: eq34(quotations.id, input.id)
+      where: eq36(quotations.id, input.id)
     });
     if (!existing) throw new Error("Quotation not found");
     if (existing.status !== "draft") throw new Error("Only draft quotations can be edited");
@@ -18433,7 +20224,7 @@ var quotationService = {
       snapshotData: calculatedItems,
       validUntil: input.validUntil,
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq34(quotations.id, input.id));
+    }).where(eq36(quotations.id, input.id));
     await quotationService.generatePdf(input.id, input.includeCountryGuide);
     return { id: input.id };
   },
@@ -18441,14 +20232,14 @@ var quotationService = {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
     const quotation = await db.query.quotations.findFirst({
-      where: eq34(quotations.id, quotationId)
+      where: eq36(quotations.id, quotationId)
     });
     if (!quotation) throw new Error("Quotation not found");
     let customerName = "Valued Customer";
     let customerAddress = "";
     if (quotation.customerId) {
       const customer = await db.query.customers.findFirst({
-        where: eq34(customers.id, quotation.customerId)
+        where: eq36(customers.id, quotation.customerId)
       });
       if (customer) {
         customerName = customer.companyName;
@@ -18456,7 +20247,7 @@ var quotationService = {
       }
     } else if (quotation.leadId) {
       const lead = await db.query.salesLeads.findFirst({
-        where: eq34(salesLeads.id, quotation.leadId)
+        where: eq36(salesLeads.id, quotation.leadId)
       });
       if (lead) {
         customerName = lead.companyName;
@@ -18471,12 +20262,12 @@ var quotationService = {
       contactEmail: "sales@geahr.com"
     };
     let defaultBilling = await db.query.billingEntities.findFirst({
-      where: eq34(billingEntities.isDefault, true)
+      where: eq36(billingEntities.isDefault, true)
     });
     if (!defaultBilling) {
       defaultBilling = await db.query.billingEntities.findFirst({
-        where: eq34(billingEntities.isActive, true)
-      }) ?? null;
+        where: eq36(billingEntities.isActive, true)
+      }) ?? void 0;
     }
     if (defaultBilling) {
       const addressParts = [defaultBilling.address, defaultBilling.city, defaultBilling.country].filter(Boolean);
@@ -18489,14 +20280,34 @@ var quotationService = {
         contactPhone: defaultBilling.contactPhone ?? void 0,
         country: defaultBilling.country
       };
+      let resolvedLogoUrl = defaultBilling.logoUrl ?? null;
+      if (defaultBilling.logoFileKey) {
+        try {
+          const { url: signedUrl } = await storageGet(defaultBilling.logoFileKey);
+          resolvedLogoUrl = signedUrl;
+        } catch (err) {
+          console.warn("[QuotationService] Failed to sign logo URL:", err);
+        }
+      }
       branding = {
         shortName: defaultBilling.entityName,
         fullName: defaultBilling.legalName,
-        logoUrl: defaultBilling.logoUrl ?? null,
+        logoUrl: resolvedLogoUrl,
         contactEmail: defaultBilling.contactEmail ?? null,
         address: address ?? null,
         legalName: defaultBilling.legalName
       };
+    }
+    let createdByName;
+    let createdByEmail;
+    if (quotation.createdBy) {
+      const creator = await db.query.users.findFirst({
+        where: eq36(users.id, quotation.createdBy)
+      });
+      if (creator) {
+        createdByName = creator.name ?? void 0;
+        createdByEmail = creator.email ?? void 0;
+      }
     }
     const quotationBuffer = await generateQuotationPdf({
       quotationNumber: quotation.quotationNumber,
@@ -18507,7 +20318,9 @@ var quotationService = {
       currency: quotation.currency,
       validUntil: quotation.validUntil ?? void 0,
       billingEntity,
-      branding
+      branding,
+      createdByName,
+      createdByEmail
     });
     const pdfsToMerge = [quotationBuffer];
     if (includeCountryGuide) {
@@ -18526,7 +20339,7 @@ var quotationService = {
     });
     const fileName = `Quotation-${quotation.quotationNumber}.pdf`;
     const { key, url } = await storagePut(`quotations/${fileName}`, finalPdfBuffer, "application/pdf");
-    await db.update(quotations).set({ pdfKey: key, pdfUrl: url }).where(eq34(quotations.id, quotationId));
+    await db.update(quotations).set({ pdfKey: key, pdfUrl: url }).where(eq36(quotations.id, quotationId));
     return { key, url, buffer: finalPdfBuffer };
   }
 };
@@ -18534,7 +20347,7 @@ var quotationService = {
 // server/routers/quotationRouter.ts
 init_db2();
 init_schema();
-import { eq as eq35 } from "drizzle-orm";
+import { eq as eq37 } from "drizzle-orm";
 import { TRPCError as TRPCError23 } from "@trpc/server";
 var quotationRouter = router({
   create: crmProcedure.input(
@@ -18602,21 +20415,21 @@ var quotationRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const whereConditions = [];
-    if (input.customerId) whereConditions.push(eq35(quotations.customerId, input.customerId));
-    if (input.leadId) whereConditions.push(eq35(quotations.leadId, input.leadId));
+    if (input.customerId) whereConditions.push(eq37(quotations.customerId, input.customerId));
+    if (input.leadId) whereConditions.push(eq37(quotations.leadId, input.leadId));
     if (input.search) {
     }
     const items = await db.query.quotations.findMany({
-      where: (quotations2, { eq: eq65, or: or10, and: and50, like: like13 }) => {
+      where: (quotations2, { eq: eq67, or: or10, and: and53, like: like13 }) => {
         const conditions = [];
-        if (input.customerId) conditions.push(eq65(quotations2.customerId, input.customerId));
-        if (input.leadId) conditions.push(eq65(quotations2.leadId, input.leadId));
+        if (input.customerId) conditions.push(eq67(quotations2.customerId, input.customerId));
+        if (input.leadId) conditions.push(eq67(quotations2.leadId, input.leadId));
         if (input.search) {
           conditions.push(like13(quotations2.quotationNumber, `%${input.search}%`));
         }
-        return and50(...conditions);
+        return and53(...conditions);
       },
-      orderBy: (quotations2, { desc: desc26 }) => [desc26(quotations2.createdAt)],
+      orderBy: (quotations2, { desc: desc27 }) => [desc27(quotations2.createdAt)],
       limit: input.limit,
       offset: input.offset,
       with: {
@@ -18632,7 +20445,7 @@ var quotationRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const quotation = await db.query.quotations.findFirst({
-      where: eq35(quotations.id, input)
+      where: eq37(quotations.id, input)
     });
     return quotation;
   }),
@@ -18642,14 +20455,14 @@ var quotationRouter = router({
   })).mutation(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    await db.update(quotations).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq35(quotations.id, input.id));
+    await db.update(quotations).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq37(quotations.id, input.id));
     return { success: true };
   }),
   downloadPdf: crmProcedure.input(z27.number()).mutation(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const quotation = await db.query.quotations.findFirst({
-      where: eq35(quotations.id, input)
+      where: eq37(quotations.id, input)
     });
     if (!quotation) throw new TRPCError23({ code: "NOT_FOUND", message: "Quotation not found" });
     if (quotation.pdfKey) {
@@ -18681,7 +20494,7 @@ var quotationRouter = router({
 init_db2();
 init_schema();
 import { z as z28 } from "zod";
-import { eq as eq36, and as and28, asc as asc2, sql as sql15 } from "drizzle-orm";
+import { eq as eq38, and as and30, asc as asc3, sql as sql17 } from "drizzle-orm";
 import { TRPCError as TRPCError24 } from "@trpc/server";
 var countryGuideRouter = router({
   /** AI-generate content for a chapter */
@@ -18693,24 +20506,24 @@ var countryGuideRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     return await db.select().from(countryGuideChapters).where(
-      and28(
-        eq36(countryGuideChapters.countryCode, input.countryCode),
-        eq36(countryGuideChapters.status, "published")
+      and30(
+        eq38(countryGuideChapters.countryCode, input.countryCode),
+        eq38(countryGuideChapters.status, "published")
       )
-    ).orderBy(asc2(countryGuideChapters.sortOrder));
+    ).orderBy(asc3(countryGuideChapters.sortOrder));
   }),
   /** List ALL chapters for a country (admin view, includes drafts) */
   listAllChapters: protectedProcedure.input(z28.object({ countryCode: z28.string() })).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    return await db.select().from(countryGuideChapters).where(eq36(countryGuideChapters.countryCode, input.countryCode)).orderBy(asc2(countryGuideChapters.sortOrder));
+    return await db.select().from(countryGuideChapters).where(eq38(countryGuideChapters.countryCode, input.countryCode)).orderBy(asc3(countryGuideChapters.sortOrder));
   }),
   /** Get a single chapter by ID */
   getChapter: protectedProcedure.input(z28.number()).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const chapter = await db.query.countryGuideChapters.findFirst({
-      where: eq36(countryGuideChapters.id, input)
+      where: eq38(countryGuideChapters.id, input)
     });
     return chapter;
   }),
@@ -18736,7 +20549,7 @@ var countryGuideRouter = router({
       await db.update(countryGuideChapters).set({
         ...input,
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq36(countryGuideChapters.id, input.id));
+      }).where(eq38(countryGuideChapters.id, input.id));
       return { id: input.id };
     } else {
       const [res] = await db.insert(countryGuideChapters).values(input).returning({ id: countryGuideChapters.id });
@@ -18747,7 +20560,7 @@ var countryGuideRouter = router({
   deleteChapter: protectedProcedure.input(z28.object({ id: z28.number() })).mutation(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    await db.delete(countryGuideChapters).where(eq36(countryGuideChapters.id, input.id));
+    await db.delete(countryGuideChapters).where(eq38(countryGuideChapters.id, input.id));
     return { success: true };
   }),
   /** Update chapter status (publish / archive / draft) */
@@ -18759,7 +20572,7 @@ var countryGuideRouter = router({
   ).mutation(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    await db.update(countryGuideChapters).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq36(countryGuideChapters.id, input.id));
+    await db.update(countryGuideChapters).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq38(countryGuideChapters.id, input.id));
     return { success: true };
   }),
   /** Bulk update status for all chapters of a country */
@@ -18771,8 +20584,32 @@ var countryGuideRouter = router({
   ).mutation(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    const result = await db.update(countryGuideChapters).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq36(countryGuideChapters.countryCode, input.countryCode));
+    const result = await db.update(countryGuideChapters).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq38(countryGuideChapters.countryCode, input.countryCode));
     return { success: true };
+  }),
+  /** List countries that have published guides (for admin browse view) */
+  listCountriesWithGuides: protectedProcedure.query(async () => {
+    const db = getDb();
+    if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
+    const countriesWithGuides = await db.select({
+      countryCode: countryGuideChapters.countryCode,
+      chapterCount: sql17`count(*)`.as("chapterCount")
+    }).from(countryGuideChapters).where(eq38(countryGuideChapters.status, "published")).groupBy(countryGuideChapters.countryCode);
+    const allCountries = await db.select({
+      countryCode: countriesConfig.countryCode,
+      countryName: countriesConfig.countryName,
+      localCurrency: countriesConfig.localCurrency,
+      payrollCycle: countriesConfig.payrollCycle,
+      workingDaysPerWeek: countriesConfig.workingDaysPerWeek,
+      statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
+      noticePeriodDays: countriesConfig.noticePeriodDays,
+      probationPeriodDays: countriesConfig.probationPeriodDays
+    }).from(countriesConfig).where(eq38(countriesConfig.isActive, true));
+    const guideMap = new Map(countriesWithGuides.map((c) => [c.countryCode, c.chapterCount]));
+    return allCountries.filter((c) => guideMap.has(c.countryCode)).map((c) => ({
+      ...c,
+      chapterCount: guideMap.get(c.countryCode) || 0
+    }));
   }),
   /** Get summary stats for the country guide list page */
   getCountryStats: protectedProcedure.query(async () => {
@@ -18780,10 +20617,10 @@ var countryGuideRouter = router({
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const stats = await db.select({
       countryCode: countryGuideChapters.countryCode,
-      totalChapters: sql15`count(*)`.as("totalChapters"),
-      publishedChapters: sql15`sum(case when ${countryGuideChapters.status} = 'published' then 1 else 0 end)`.as("publishedChapters"),
-      draftChapters: sql15`sum(case when ${countryGuideChapters.status} = 'draft' then 1 else 0 end)`.as("draftChapters"),
-      lastUpdated: sql15`max(${countryGuideChapters.updatedAt})`.as("lastUpdated")
+      totalChapters: sql17`count(*)`.as("totalChapters"),
+      publishedChapters: sql17`sum(case when ${countryGuideChapters.status} = 'published' then 1 else 0 end)`.as("publishedChapters"),
+      draftChapters: sql17`sum(case when ${countryGuideChapters.status} = 'draft' then 1 else 0 end)`.as("draftChapters"),
+      lastUpdated: sql17`max(${countryGuideChapters.updatedAt})`.as("lastUpdated")
     }).from(countryGuideChapters).groupBy(countryGuideChapters.countryCode);
     return stats;
   }),
@@ -18813,9 +20650,9 @@ var countryGuideRouter = router({
     for (const chapter of input.chapters) {
       if (input.overwrite) {
         await db.delete(countryGuideChapters).where(
-          and28(
-            eq36(countryGuideChapters.countryCode, chapter.countryCode),
-            eq36(countryGuideChapters.chapterKey, chapter.chapterKey)
+          and30(
+            eq38(countryGuideChapters.countryCode, chapter.countryCode),
+            eq38(countryGuideChapters.chapterKey, chapter.chapterKey)
           )
         );
       }
@@ -18830,7 +20667,7 @@ var countryGuideRouter = router({
 init_db2();
 init_schema();
 import { z as z29 } from "zod";
-import { eq as eq37, and as and29 } from "drizzle-orm";
+import { eq as eq39, and as and31 } from "drizzle-orm";
 import { TRPCError as TRPCError25 } from "@trpc/server";
 var salaryBenchmarkRouter = router({
   getBenchmark: protectedProcedure.input(z29.object({
@@ -18841,17 +20678,17 @@ var salaryBenchmarkRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     return await db.query.salaryBenchmarks.findFirst({
-      where: and29(
-        eq37(salaryBenchmarks.countryCode, input.countryCode),
-        eq37(salaryBenchmarks.jobCategory, input.jobCategory),
-        eq37(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
+      where: and31(
+        eq39(salaryBenchmarks.countryCode, input.countryCode),
+        eq39(salaryBenchmarks.jobCategory, input.jobCategory),
+        eq39(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
       )
     });
   }),
   listJobFunctions: protectedProcedure.input(z29.object({ countryCode: z29.string() })).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    const rows = await db.selectDistinct({ category: salaryBenchmarks.jobCategory }).from(salaryBenchmarks).where(eq37(salaryBenchmarks.countryCode, input.countryCode));
+    const rows = await db.selectDistinct({ category: salaryBenchmarks.jobCategory }).from(salaryBenchmarks).where(eq39(salaryBenchmarks.countryCode, input.countryCode));
     return rows.map((r) => r.category);
   }),
   upsertBenchmark: protectedProcedure.input(z29.object({
@@ -18870,7 +20707,7 @@ var salaryBenchmarkRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     if (input.id) {
-      await db.update(salaryBenchmarks).set({ ...input, updatedAt: /* @__PURE__ */ new Date() }).where(eq37(salaryBenchmarks.id, input.id));
+      await db.update(salaryBenchmarks).set({ ...input, updatedAt: /* @__PURE__ */ new Date() }).where(eq39(salaryBenchmarks.id, input.id));
       return { id: input.id };
     } else {
       const [res] = await db.insert(salaryBenchmarks).values(input).returning({ id: salaryBenchmarks.id });
@@ -18884,12 +20721,12 @@ import { TRPCError as TRPCError26 } from "@trpc/server";
 import { z as z30 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq38 } from "drizzle-orm";
+import { eq as eq40 } from "drizzle-orm";
 var contractorsRouter = router({
   getApprovers: userProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
-    return await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq38(users.isActive, true));
+    return await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq40(users.isActive, true));
   }),
   list: userProcedure.input(
     z30.object({
@@ -19043,8 +20880,15 @@ var contractorsRouter = router({
       currency: z30.string(),
       dueDate: z30.string().optional()
     })).mutation(async ({ input, ctx }) => {
+      const contractor = await getContractorById(input.contractorId);
+      if (!contractor) {
+        throw new TRPCError26({ code: "NOT_FOUND", message: "Contractor not found" });
+      }
+      const currency = contractor.currency || input.currency;
       const result = await createContractorMilestone({
         ...input,
+        currency,
+        customerId: contractor.customerId,
         status: "pending"
       });
       await logAuditAction({
@@ -19100,9 +20944,22 @@ var contractorsRouter = router({
       date: z30.string(),
       attachmentUrl: z30.string().optional()
     })).mutation(async ({ input, ctx }) => {
+      const contractor = await getContractorById(input.contractorId);
+      if (!contractor) {
+        throw new TRPCError26({ code: "NOT_FOUND", message: "Contractor not found" });
+      }
+      const currency = contractor.currency || input.currency;
       const result = await createContractorAdjustment({
-        ...input,
-        status: "pending"
+        contractorId: input.contractorId,
+        type: input.type,
+        description: input.description,
+        amount: input.amount,
+        currency,
+        attachmentUrl: input.attachmentUrl || null,
+        customerId: contractor.customerId,
+        effectiveMonth: input.date.substring(0, 7) + "-01",
+        // Derive from date: YYYY-MM-01
+        status: "submitted"
       });
       return result;
     }),
@@ -19172,7 +21029,7 @@ var contractorsRouter = router({
         status: "approved",
         approvedBy: ctx.user.id,
         approvedAt: /* @__PURE__ */ new Date()
-      }).where(eq38(contractorInvoices.id, input.id));
+      }).where(eq40(contractorInvoices.id, input.id));
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -19188,7 +21045,7 @@ var contractorsRouter = router({
       await db.update(contractorInvoices).set({
         status: "rejected",
         rejectedReason: input.reason
-      }).where(eq38(contractorInvoices.id, input.id));
+      }).where(eq40(contractorInvoices.id, input.id));
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -19207,7 +21064,7 @@ import { z as z31 } from "zod";
 import { TRPCError as TRPCError27 } from "@trpc/server";
 init_db2();
 init_schema();
-import { eq as eq39, desc as desc18 } from "drizzle-orm";
+import { eq as eq41, desc as desc18 } from "drizzle-orm";
 var walletRouter = router({
   get: userProcedure.input(z31.object({
     customerId: z31.number(),
@@ -19229,7 +21086,7 @@ var walletRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError27({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     return await db.query.walletTransactions.findMany({
-      where: eq39(walletTransactions.walletId, input.walletId),
+      where: eq41(walletTransactions.walletId, input.walletId),
       orderBy: [desc18(walletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
@@ -19243,7 +21100,7 @@ var walletRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError27({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     return await db.query.frozenWalletTransactions.findMany({
-      where: eq39(frozenWalletTransactions.walletId, input.walletId),
+      where: eq41(frozenWalletTransactions.walletId, input.walletId),
       orderBy: [desc18(frozenWalletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
@@ -19485,7 +21342,7 @@ var portalFinanceProcedure = t2.procedure.use(
 // server/portal/routers/portalAuthRouter.ts
 import { z as z32 } from "zod";
 import { TRPCError as TRPCError29 } from "@trpc/server";
-import { eq as eq40 } from "drizzle-orm";
+import { eq as eq42 } from "drizzle-orm";
 init_portalAuth();
 init_db2();
 init_schema();
@@ -19526,7 +21383,7 @@ var portalAuthRouter = portalRouter({
     assertPortalLoginRateLimit(input.email.toLowerCase().trim());
     const db = await getDb();
     if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select().from(customerContacts).where(eq40(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
+    const contacts = await db.select().from(customerContacts).where(eq42(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
     if (contacts.length === 0) {
       throw new TRPCError29({ code: "UNAUTHORIZED", message: "Invalid email or password" });
     }
@@ -19541,7 +21398,7 @@ var portalAuthRouter = portalRouter({
     if (!passwordValid) {
       throw new TRPCError29({ code: "UNAUTHORIZED", message: "Invalid email or password" });
     }
-    const customerRows = await db.select({ companyName: customers.companyName, status: customers.status }).from(customers).where(eq40(customers.id, contact.customerId)).limit(1);
+    const customerRows = await db.select({ companyName: customers.companyName, status: customers.status }).from(customers).where(eq42(customers.id, contact.customerId)).limit(1);
     if (customerRows.length === 0 || customerRows[0].status !== "active") {
       throw new TRPCError29({ code: "FORBIDDEN", message: "Company account is not active" });
     }
@@ -19554,7 +21411,7 @@ var portalAuthRouter = portalRouter({
     };
     const token = await signPortalToken(payload);
     setPortalCookie(ctx.res, token);
-    await db.update(customerContacts).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq40(customerContacts.id, contact.id));
+    await db.update(customerContacts).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq42(customerContacts.id, contact.id));
     return {
       success: true,
       user: {
@@ -19580,7 +21437,7 @@ var portalAuthRouter = portalRouter({
       inviteExpiresAt: customerContacts.inviteExpiresAt,
       isPortalActive: customerContacts.isPortalActive,
       customerId: customerContacts.customerId
-    }).from(customerContacts).where(eq40(customerContacts.inviteToken, input.token)).limit(1);
+    }).from(customerContacts).where(eq42(customerContacts.inviteToken, input.token)).limit(1);
     if (contacts.length === 0) {
       return { valid: false, reason: "Invalid invite link" };
     }
@@ -19591,7 +21448,7 @@ var portalAuthRouter = portalRouter({
     if (contact.inviteExpiresAt && contact.inviteExpiresAt < /* @__PURE__ */ new Date()) {
       return { valid: false, reason: "Invite link has expired" };
     }
-    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq40(customers.id, contact.customerId)).limit(1);
+    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq42(customers.id, contact.customerId)).limit(1);
     return {
       valid: true,
       email: contact.email,
@@ -19614,7 +21471,7 @@ var portalAuthRouter = portalRouter({
     }
     const db = await getDb();
     if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select().from(customerContacts).where(eq40(customerContacts.inviteToken, input.token)).limit(1);
+    const contacts = await db.select().from(customerContacts).where(eq42(customerContacts.inviteToken, input.token)).limit(1);
     if (contacts.length === 0) {
       throw new TRPCError29({ code: "BAD_REQUEST", message: "Invalid invite link" });
     }
@@ -19634,8 +21491,8 @@ var portalAuthRouter = portalRouter({
       // Clear invite token after use
       inviteExpiresAt: null,
       lastLoginAt: /* @__PURE__ */ new Date()
-    }).where(eq40(customerContacts.id, contact.id));
-    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq40(customers.id, contact.customerId)).limit(1);
+    }).where(eq42(customerContacts.id, contact.id));
+    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq42(customers.id, contact.customerId)).limit(1);
     const payload = {
       sub: String(contact.id),
       customerId: contact.customerId,
@@ -19688,7 +21545,7 @@ var portalAuthRouter = portalRouter({
       email: customerContacts.email,
       isPortalActive: customerContacts.isPortalActive,
       hasPortalAccess: customerContacts.hasPortalAccess
-    }).from(customerContacts).where(eq40(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
+    }).from(customerContacts).where(eq42(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
     if (contacts.length === 0 || !contacts[0].isPortalActive || !contacts[0].hasPortalAccess) {
       return {
         success: true,
@@ -19698,7 +21555,7 @@ var portalAuthRouter = portalRouter({
     const contact = contacts[0];
     const resetToken = generateResetToken();
     const resetExpiresAt = getResetExpiryDate();
-    await db.update(customerContacts).set({ resetToken, resetExpiresAt }).where(eq40(customerContacts.id, contact.id));
+    await db.update(customerContacts).set({ resetToken, resetExpiresAt }).where(eq42(customerContacts.id, contact.id));
     const origin = input.origin;
     const isPortalDomain = origin.includes("app.geahr.com");
     const resetUrl = isPortalDomain ? `${origin}/reset-password?token=${resetToken}` : `${origin}/portal/reset-password?token=${resetToken}`;
@@ -19720,7 +21577,7 @@ var portalAuthRouter = portalRouter({
       email: customerContacts.email,
       contactName: customerContacts.contactName,
       resetExpiresAt: customerContacts.resetExpiresAt
-    }).from(customerContacts).where(eq40(customerContacts.resetToken, input.token)).limit(1);
+    }).from(customerContacts).where(eq42(customerContacts.resetToken, input.token)).limit(1);
     if (contacts.length === 0) {
       return { valid: false, reason: "Invalid reset link" };
     }
@@ -19749,7 +21606,7 @@ var portalAuthRouter = portalRouter({
     }
     const db = await getDb();
     if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select().from(customerContacts).where(eq40(customerContacts.resetToken, input.token)).limit(1);
+    const contacts = await db.select().from(customerContacts).where(eq42(customerContacts.resetToken, input.token)).limit(1);
     if (contacts.length === 0) {
       throw new TRPCError29({ code: "BAD_REQUEST", message: "Invalid reset link" });
     }
@@ -19762,8 +21619,8 @@ var portalAuthRouter = portalRouter({
       passwordHash,
       resetToken: null,
       resetExpiresAt: null
-    }).where(eq40(customerContacts.id, contact.id));
-    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq40(customers.id, contact.customerId)).limit(1);
+    }).where(eq42(customerContacts.id, contact.id));
+    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq42(customers.id, contact.customerId)).limit(1);
     const payload = {
       sub: String(contact.id),
       customerId: contact.customerId,
@@ -19800,7 +21657,7 @@ var portalAuthRouter = portalRouter({
     }
     const db = await getDb();
     if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select({ passwordHash: customerContacts.passwordHash }).from(customerContacts).where(eq40(customerContacts.id, ctx.portalUser.contactId)).limit(1);
+    const contacts = await db.select({ passwordHash: customerContacts.passwordHash }).from(customerContacts).where(eq42(customerContacts.id, ctx.portalUser.contactId)).limit(1);
     if (contacts.length === 0 || !contacts[0].passwordHash) {
       throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Account error" });
     }
@@ -19809,13 +21666,13 @@ var portalAuthRouter = portalRouter({
       throw new TRPCError29({ code: "BAD_REQUEST", message: "Current password is incorrect" });
     }
     const newHash = await hashPassword2(input.newPassword);
-    await db.update(customerContacts).set({ passwordHash: newHash }).where(eq40(customerContacts.id, ctx.portalUser.contactId));
+    await db.update(customerContacts).set({ passwordHash: newHash }).where(eq42(customerContacts.id, ctx.portalUser.contactId));
     return { success: true };
   })
 });
 
 // server/portal/routers/portalDashboardRouter.ts
-import { sql as sql16, eq as eq41, and as and32, count as count9, inArray as inArray10 } from "drizzle-orm";
+import { sql as sql18, eq as eq43, and as and34, count as count9, inArray as inArray12 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalDashboardRouter = portalRouter({
@@ -19826,19 +21683,26 @@ var portalDashboardRouter = portalRouter({
     const db = await getDb();
     if (!db) return null;
     const cid = ctx.portalUser.customerId;
-    const [empCount] = await db.select({ count: count9() }).from(employees).where(and32(eq41(employees.customerId, cid), eq41(employees.status, "active")));
-    const [contractorCount] = await db.select({ count: count9() }).from(contractors).where(and32(eq41(contractors.customerId, cid), eq41(contractors.status, "active")));
-    const activeCountries = await db.select({ countryCode: employees.country }).from(employees).where(and32(eq41(employees.customerId, cid), eq41(employees.status, "active"))).groupBy(employees.country);
+    const [empCount] = await db.select({ count: count9() }).from(employees).where(and34(eq43(employees.customerId, cid), eq43(employees.status, "active")));
+    const [contractorCount] = await db.select({ count: count9() }).from(contractors).where(and34(eq43(contractors.customerId, cid), eq43(contractors.status, "active")));
+    const activeCountries = await db.select({ countryCode: employees.country }).from(employees).where(and34(eq43(employees.customerId, cid), eq43(employees.status, "active"))).groupBy(employees.country);
     const [onboardingCount] = await db.select({ count: count9() }).from(employees).where(
-      and32(
-        eq41(employees.customerId, cid),
-        inArray10(employees.status, ["pending_review", "documents_incomplete", "onboarding"])
+      and34(
+        eq43(employees.customerId, cid),
+        inArray12(employees.status, ["pending_review", "documents_incomplete", "onboarding"])
       )
     );
-    const [adjCount] = await db.select({ count: count9() }).from(adjustments).where(and32(eq41(adjustments.customerId, cid), eq41(adjustments.status, "submitted")));
-    const [leaveCount] = await db.select({ count: count9() }).from(leaveRecords).innerJoin(employees, eq41(leaveRecords.employeeId, employees.id)).where(and32(eq41(employees.customerId, cid), eq41(leaveRecords.status, "submitted")));
-    const [overdueCount] = await db.select({ count: count9() }).from(invoices).where(and32(eq41(invoices.customerId, cid), eq41(invoices.status, "overdue")));
-    const [unpaidCount] = await db.select({ count: count9() }).from(invoices).where(and32(eq41(invoices.customerId, cid), eq41(invoices.status, "sent")));
+    const [adjCount] = await db.select({ count: count9() }).from(adjustments).where(and34(eq43(adjustments.customerId, cid), eq43(adjustments.status, "submitted")));
+    const [leaveCount] = await db.select({ count: count9() }).from(leaveRecords).innerJoin(employees, eq43(leaveRecords.employeeId, employees.id)).where(and34(eq43(employees.customerId, cid), eq43(leaveRecords.status, "submitted")));
+    const [overdueCount] = await db.select({ count: count9() }).from(invoices).where(and34(eq43(invoices.customerId, cid), eq43(invoices.status, "overdue")));
+    const [unpaidCount] = await db.select({ count: count9() }).from(invoices).where(and34(eq43(invoices.customerId, cid), eq43(invoices.status, "sent")));
+    const employeeCountries = await db.select({ countryCode: employees.country }).from(employees).where(and34(
+      eq43(employees.customerId, cid),
+      sql18`${employees.status} != 'terminated'`
+    )).groupBy(employees.country);
+    const policyCountries = await db.select({ countryCode: customerLeavePolicies.countryCode }).from(customerLeavePolicies).where(eq43(customerLeavePolicies.customerId, cid)).groupBy(customerLeavePolicies.countryCode);
+    const policyCountrySet = new Set(policyCountries.map((p) => p.countryCode));
+    const unconfiguredCountries = employeeCountries.filter((c) => !policyCountrySet.has(c.countryCode));
     return {
       activeEmployees: (empCount?.count ?? 0) + (contractorCount?.count ?? 0),
       activeEorEmployees: empCount?.count ?? 0,
@@ -19848,7 +21712,8 @@ var portalDashboardRouter = portalRouter({
       pendingAdjustments: adjCount?.count ?? 0,
       pendingLeave: leaveCount?.count ?? 0,
       overdueInvoices: overdueCount?.count ?? 0,
-      unpaidInvoices: unpaidCount?.count ?? 0
+      unpaidInvoices: unpaidCount?.count ?? 0,
+      unconfiguredLeavePolicyCountries: unconfiguredCountries.length
     };
   }),
   /**
@@ -19862,7 +21727,7 @@ var portalDashboardRouter = portalRouter({
       countryCode: employees.country,
       countryName: countriesConfig.countryName,
       count: count9()
-    }).from(employees).leftJoin(countriesConfig, eq41(employees.country, countriesConfig.countryCode)).where(and32(eq41(employees.customerId, cid), eq41(employees.status, "active"))).groupBy(employees.country, countriesConfig.countryName);
+    }).from(employees).leftJoin(countriesConfig, eq43(employees.country, countriesConfig.countryCode)).where(and34(eq43(employees.customerId, cid), eq43(employees.status, "active"))).groupBy(employees.country, countriesConfig.countryName);
     return result.map((r) => ({
       countryCode: r.countryCode,
       countryName: r.countryName || r.countryCode,
@@ -19878,25 +21743,25 @@ var portalDashboardRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const recentEmployees = await db.select({
       id: employees.id,
-      type: sql16`'employee'`,
-      title: sql16`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
+      type: sql18`'employee'`,
+      title: sql18`(${employees.firstName} || ' ' || ${employees.lastName})`,
       status: employees.status,
       date: employees.updatedAt
-    }).from(employees).where(eq41(employees.customerId, cid)).orderBy(sql16`${employees.updatedAt} DESC`).limit(10);
+    }).from(employees).where(eq43(employees.customerId, cid)).orderBy(sql18`${employees.updatedAt} DESC`).limit(10);
     const recentAdj = await db.select({
       id: adjustments.id,
-      type: sql16`'adjustment'`,
+      type: sql18`'adjustment'`,
       title: adjustments.adjustmentType,
       status: adjustments.status,
       date: adjustments.updatedAt
-    }).from(adjustments).where(eq41(adjustments.customerId, cid)).orderBy(sql16`${adjustments.updatedAt} DESC`).limit(10);
+    }).from(adjustments).where(eq43(adjustments.customerId, cid)).orderBy(sql18`${adjustments.updatedAt} DESC`).limit(10);
     const recentLeave = await db.select({
       id: leaveRecords.id,
-      type: sql16`'leave'`,
-      title: sql16`CONCAT('Leave #', ${leaveRecords.id})`,
+      type: sql18`'leave'`,
+      title: sql18`('Leave #' || ${leaveRecords.id})`,
       status: leaveRecords.status,
       date: leaveRecords.updatedAt
-    }).from(leaveRecords).innerJoin(employees, eq41(leaveRecords.employeeId, employees.id)).where(eq41(employees.customerId, cid)).orderBy(sql16`${leaveRecords.updatedAt} DESC`).limit(10);
+    }).from(leaveRecords).innerJoin(employees, eq43(leaveRecords.employeeId, employees.id)).where(eq43(employees.customerId, cid)).orderBy(sql18`${leaveRecords.updatedAt} DESC`).limit(10);
     const all = [...recentEmployees, ...recentAdj, ...recentLeave].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 20);
     return all;
   }),
@@ -19910,15 +21775,15 @@ var portalDashboardRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const result = await db.select({
       month: payrollRuns.payrollMonth,
-      totalGross: sql16`COALESCE(SUM(${payrollItems.gross}), 0)`,
-      totalNet: sql16`COALESCE(SUM(${payrollItems.net}), 0)`,
-      totalEmployerCost: sql16`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`,
+      totalGross: sql18`COALESCE(SUM(${payrollItems.gross}), 0)`,
+      totalNet: sql18`COALESCE(SUM(${payrollItems.net}), 0)`,
+      totalEmployerCost: sql18`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`,
       currency: payrollRuns.currency
-    }).from(payrollItems).innerJoin(payrollRuns, eq41(payrollItems.payrollRunId, payrollRuns.id)).innerJoin(employees, eq41(payrollItems.employeeId, employees.id)).where(
-      and32(
-        eq41(employees.customerId, cid),
-        sql16`${payrollRuns.status} IN ('approved', 'locked', 'paid')`,
-        sql16`${payrollRuns.payrollMonth} >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)`
+    }).from(payrollItems).innerJoin(payrollRuns, eq43(payrollItems.payrollRunId, payrollRuns.id)).innerJoin(employees, eq43(payrollItems.employeeId, employees.id)).where(
+      and34(
+        eq43(employees.customerId, cid),
+        sql18`${payrollRuns.status} IN ('approved', 'locked', 'paid')`,
+        sql18`${payrollRuns.payrollMonth} >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)`
       )
     ).groupBy(payrollRuns.payrollMonth, payrollRuns.currency).orderBy(payrollRuns.payrollMonth);
     return result.map((r) => ({
@@ -19939,7 +21804,7 @@ var portalDashboardRouter = portalRouter({
     const result = await db.select({
       status: employees.status,
       count: count9()
-    }).from(employees).where(eq41(employees.customerId, cid)).groupBy(employees.status);
+    }).from(employees).where(eq43(employees.customerId, cid)).groupBy(employees.status);
     return result.map((r) => ({
       status: r.status,
       count: r.count
@@ -19950,7 +21815,7 @@ var portalDashboardRouter = portalRouter({
 // server/portal/routers/portalEmployeesRouter.ts
 import { z as z33 } from "zod";
 import { TRPCError as TRPCError30 } from "@trpc/server";
-import { sql as sql17, eq as eq42, and as and33, count as count10 } from "drizzle-orm";
+import { sql as sql19, eq as eq44, and as and35, count as count10 } from "drizzle-orm";
 import crypto4 from "crypto";
 init_db2();
 init_schema();
@@ -19984,9 +21849,11 @@ var PORTAL_EMPLOYEE_FIELDS = {
   requiresVisa: employees.requiresVisa,
   visaStatus: employees.visaStatus,
   visaExpiryDate: employees.visaExpiryDate,
+  visaNotes: employees.visaNotes,
+  bankDetails: employees.bankDetails,
   createdAt: employees.createdAt,
   updatedAt: employees.updatedAt
-  // NOTE: estimatedEmployerCost, visaNotes, and other internal fields are NOT included
+  // NOTE: estimatedEmployerCost and other internal cost fields are NOT included
 };
 var portalEmployeesRouter = portalRouter({
   /**
@@ -20005,24 +21872,24 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const conditions = [eq42(employees.customerId, cid)];
+    const conditions = [eq44(employees.customerId, cid)];
     if (input.status) {
-      conditions.push(eq42(employees.status, input.status));
+      conditions.push(eq44(employees.status, input.status));
     }
     if (input.country) {
-      conditions.push(eq42(employees.country, input.country));
+      conditions.push(eq44(employees.country, input.country));
     }
     if (input.serviceType) {
-      conditions.push(eq42(employees.serviceType, input.serviceType));
+      conditions.push(eq44(employees.serviceType, input.serviceType));
     }
     if (input.search) {
       conditions.push(
-        sql17`(${employees.firstName} LIKE ${`%${input.search}%`} OR ${employees.lastName} LIKE ${`%${input.search}%`} OR ${employees.email} LIKE ${`%${input.search}%`})`
+        sql19`(${employees.firstName} LIKE ${`%${input.search}%`} OR ${employees.lastName} LIKE ${`%${input.search}%`} OR ${employees.email} LIKE ${`%${input.search}%`})`
       );
     }
-    const where = and33(...conditions);
+    const where = and35(...conditions);
     const [totalResult] = await db.select({ count: count10() }).from(employees).where(where);
-    const items = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(where).orderBy(sql17`${employees.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    const items = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(where).orderBy(sql19`${employees.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return {
       items,
       total: totalResult?.count ?? 0
@@ -20035,7 +21902,7 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(and33(eq42(employees.id, input.id), eq42(employees.customerId, cid)));
+    const [emp] = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(and35(eq44(employees.id, input.id), eq44(employees.customerId, cid)));
     if (!emp) {
       throw new TRPCError30({ code: "NOT_FOUND", message: "Employee not found" });
     }
@@ -20047,7 +21914,7 @@ var portalEmployeesRouter = portalRouter({
       effectiveDate: employeeContracts.effectiveDate,
       expiryDate: employeeContracts.expiryDate,
       status: employeeContracts.status
-    }).from(employeeContracts).where(eq42(employeeContracts.employeeId, input.id));
+    }).from(employeeContracts).where(eq44(employeeContracts.employeeId, input.id));
     const documents = await db.select({
       id: employeeDocuments.id,
       documentType: employeeDocuments.documentType,
@@ -20055,7 +21922,7 @@ var portalEmployeesRouter = portalRouter({
       fileUrl: employeeDocuments.fileUrl,
       mimeType: employeeDocuments.mimeType,
       uploadedAt: employeeDocuments.uploadedAt
-    }).from(employeeDocuments).where(eq42(employeeDocuments.employeeId, input.id));
+    }).from(employeeDocuments).where(eq44(employeeDocuments.employeeId, input.id));
     const balances = await db.select({
       id: leaveBalances.id,
       leaveTypeId: leaveBalances.leaveTypeId,
@@ -20064,7 +21931,7 @@ var portalEmployeesRouter = portalRouter({
       totalEntitlement: leaveBalances.totalEntitlement,
       used: leaveBalances.used,
       remaining: leaveBalances.remaining
-    }).from(leaveBalances).leftJoin(leaveTypes, eq42(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq42(leaveBalances.employeeId, input.id));
+    }).from(leaveBalances).leftJoin(leaveTypes, eq44(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq44(leaveBalances.employeeId, input.id));
     return {
       ...emp,
       contracts,
@@ -20100,12 +21967,38 @@ var portalEmployeesRouter = portalRouter({
       endDate: z33.string().optional(),
       baseSalary: z33.string().min(1),
       salaryCurrency: z33.string().default("USD"),
-      requiresVisa: z33.boolean().default(false)
+      requiresVisa: z33.boolean().default(false),
+      bankDetails: z33.any().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
+    const normalizedEmail = input.email.toLowerCase().trim();
+    const [existingEmployee] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(
+      and35(
+        eq44(employees.customerId, cid),
+        eq44(employees.email, normalizedEmail)
+      )
+    );
+    if (existingEmployee && existingEmployee.status !== "terminated") {
+      throw new TRPCError30({ code: "CONFLICT", message: `An active employee with email "${normalizedEmail}" already exists.` });
+    }
+    let serviceType = input.serviceType;
+    let requiresVisa = input.requiresVisa;
+    if (input.nationality && input.country) {
+      const natUpper = input.nationality.toUpperCase();
+      const countryUpper = input.country.toUpperCase();
+      if (natUpper !== countryUpper) {
+        requiresVisa = true;
+        if (serviceType === "eor") {
+          serviceType = "visa_eor";
+        }
+      }
+    }
+    if (serviceType === "visa_eor") {
+      requiresVisa = true;
+    }
     const result = await createEmployee({
       customerId: cid,
       firstName: input.firstName,
@@ -20124,16 +22017,22 @@ var portalEmployeesRouter = portalRouter({
       postalCode: input.postalCode || null,
       department: input.department || null,
       jobTitle: input.jobTitle,
-      serviceType: input.serviceType,
+      serviceType,
       employmentType: input.employmentType,
       startDate: input.startDate,
       endDate: input.endDate || null,
       baseSalary: input.baseSalary,
       salaryCurrency: input.salaryCurrency,
-      requiresVisa: input.requiresVisa,
+      requiresVisa,
+      bankDetails: input.bankDetails || null,
       status: "pending_review"
     });
-    const [customer] = await db.select({ companyName: customers.companyName }).from(customers).where(eq42(customers.id, cid));
+    try {
+      await autoInitializeLeavePolicyForCountry(cid, input.country);
+    } catch (e) {
+      console.error("Failed to auto-initialize leave policy:", e);
+    }
+    const [customer] = await db.select({ companyName: customers.companyName }).from(customers).where(eq44(customers.id, cid));
     notificationService.send({
       type: "new_employee_request",
       data: {
@@ -20163,7 +22062,7 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and33(eq42(employees.id, input.employeeId), eq42(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id }).from(employees).where(and35(eq44(employees.id, input.employeeId), eq44(employees.customerId, cid)));
     if (!emp) {
       throw new TRPCError30({ code: "NOT_FOUND", message: "Employee not found" });
     }
@@ -20192,7 +22091,7 @@ var portalEmployeesRouter = portalRouter({
       countryCode: countriesConfig.countryCode,
       countryName: countriesConfig.countryName,
       currency: countriesConfig.localCurrency
-    }).from(countriesConfig).where(eq42(countriesConfig.isActive, true)).orderBy(countriesConfig.countryName);
+    }).from(countriesConfig).where(eq44(countriesConfig.isActive, true)).orderBy(countriesConfig.countryName);
     return countries;
   }),
   /**
@@ -20207,7 +22106,7 @@ var portalEmployeesRouter = portalRouter({
       annualEntitlement: leaveTypes.annualEntitlement,
       isPaid: leaveTypes.isPaid,
       requiresApproval: leaveTypes.requiresApproval
-    }).from(leaveTypes).where(eq42(leaveTypes.countryCode, input.countryCode));
+    }).from(leaveTypes).where(eq44(leaveTypes.countryCode, input.countryCode));
     return types;
   }),
   /**
@@ -20236,6 +22135,38 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
+    const normalizedEmail = input.employeeEmail.toLowerCase().trim();
+    const [existingPendingInvite] = await db.select({ id: onboardingInvites.id }).from(onboardingInvites).where(
+      and35(
+        eq44(onboardingInvites.customerId, cid),
+        eq44(onboardingInvites.employeeEmail, normalizedEmail),
+        eq44(onboardingInvites.status, "pending")
+      )
+    );
+    if (existingPendingInvite) {
+      throw new TRPCError30({ code: "CONFLICT", message: "An invitation is already pending for this email address." });
+    }
+    if (input.serviceType === "aor") {
+      const [existingContractor] = await db.select({ id: contractors.id, status: contractors.status }).from(contractors).where(
+        and35(
+          eq44(contractors.customerId, cid),
+          eq44(contractors.email, normalizedEmail)
+        )
+      );
+      if (existingContractor && existingContractor.status !== "terminated") {
+        throw new TRPCError30({ code: "CONFLICT", message: "An active contractor with this email already exists." });
+      }
+    } else {
+      const [existingEmployee] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(
+        and35(
+          eq44(employees.customerId, cid),
+          eq44(employees.email, normalizedEmail)
+        )
+      );
+      if (existingEmployee && existingEmployee.status !== "terminated") {
+        throw new TRPCError30({ code: "CONFLICT", message: "An active employee with this email already exists." });
+      }
+    }
     const token = crypto4.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1e3);
     await db.insert(onboardingInvites).values({
@@ -20281,7 +22212,7 @@ var portalEmployeesRouter = portalRouter({
       expiresAt: onboardingInvites.expiresAt,
       completedAt: onboardingInvites.completedAt,
       createdAt: onboardingInvites.createdAt
-    }).from(onboardingInvites).where(eq42(onboardingInvites.customerId, cid)).orderBy(sql17`${onboardingInvites.createdAt} DESC`);
+    }).from(onboardingInvites).where(eq44(onboardingInvites.customerId, cid)).orderBy(sql19`${onboardingInvites.createdAt} DESC`);
     return invites;
   }),
   /**
@@ -20292,10 +22223,10 @@ var portalEmployeesRouter = portalRouter({
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     const [invite] = await db.select().from(onboardingInvites).where(
-      and33(
-        eq42(onboardingInvites.id, input.id),
-        eq42(onboardingInvites.customerId, cid),
-        eq42(onboardingInvites.status, "pending")
+      and35(
+        eq44(onboardingInvites.id, input.id),
+        eq44(onboardingInvites.customerId, cid),
+        eq44(onboardingInvites.status, "pending")
       )
     );
     if (!invite) {
@@ -20303,7 +22234,7 @@ var portalEmployeesRouter = portalRouter({
     }
     const newToken = crypto4.randomBytes(32).toString("hex");
     const newExpiresAt = new Date(Date.now() + 72 * 60 * 60 * 1e3);
-    await db.update(onboardingInvites).set({ token: newToken, expiresAt: newExpiresAt }).where(eq42(onboardingInvites.id, input.id));
+    await db.update(onboardingInvites).set({ token: newToken, expiresAt: newExpiresAt }).where(eq44(onboardingInvites.id, input.id));
     return { success: true, token: newToken };
   }),
   /**
@@ -20314,10 +22245,10 @@ var portalEmployeesRouter = portalRouter({
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     await db.update(onboardingInvites).set({ status: "cancelled" }).where(
-      and33(
-        eq42(onboardingInvites.id, input.id),
-        eq42(onboardingInvites.customerId, cid),
-        eq42(onboardingInvites.status, "pending")
+      and35(
+        eq44(onboardingInvites.id, input.id),
+        eq44(onboardingInvites.customerId, cid),
+        eq44(onboardingInvites.status, "pending")
       )
     );
     return { success: true };
@@ -20347,7 +22278,7 @@ var portalEmployeesRouter = portalRouter({
       paymentFrequency: onboardingInvites.paymentFrequency,
       rateAmount: onboardingInvites.rateAmount,
       contractorCurrency: onboardingInvites.contractorCurrency
-    }).from(onboardingInvites).where(eq42(onboardingInvites.token, input.token));
+    }).from(onboardingInvites).where(eq44(onboardingInvites.token, input.token));
     if (!invite) {
       return { valid: false, reason: "Invalid invite link" };
     }
@@ -20355,7 +22286,7 @@ var portalEmployeesRouter = portalRouter({
       return { valid: false, reason: invite.status === "completed" ? "This form has already been submitted" : "This invite has been cancelled or expired" };
     }
     if (new Date(invite.expiresAt) < /* @__PURE__ */ new Date()) {
-      await db.update(onboardingInvites).set({ status: "expired" }).where(eq42(onboardingInvites.id, invite.id));
+      await db.update(onboardingInvites).set({ status: "expired" }).where(eq44(onboardingInvites.id, invite.id));
       return { valid: false, reason: "This invite link has expired" };
     }
     return {
@@ -20399,29 +22330,45 @@ var portalEmployeesRouter = portalRouter({
       postalCode: z33.string().optional(),
       jobTitle: z33.string().min(1),
       department: z33.string().optional(),
-      startDate: z33.string().min(1)
+      startDate: z33.string().min(1),
+      bankDetails: z33.any().optional()
     })
   ).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const [invite] = await db.select().from(onboardingInvites).where(
-      and33(
-        eq42(onboardingInvites.token, input.token),
-        eq42(onboardingInvites.status, "pending")
+      and35(
+        eq44(onboardingInvites.token, input.token),
+        eq44(onboardingInvites.status, "pending")
       )
     );
     if (!invite) {
       throw new TRPCError30({ code: "NOT_FOUND", message: "Invalid or expired invite" });
     }
     if (new Date(invite.expiresAt) < /* @__PURE__ */ new Date()) {
-      await db.update(onboardingInvites).set({ status: "expired" }).where(eq42(onboardingInvites.id, invite.id));
+      await db.update(onboardingInvites).set({ status: "expired" }).where(eq44(onboardingInvites.id, invite.id));
       throw new TRPCError30({ code: "BAD_REQUEST", message: "This invite has expired" });
     }
-    const serviceType = invite.serviceType || "eor";
+    const normalizedEmail = input.email.toLowerCase().trim();
+    const [existingEmployee] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(
+      and35(
+        eq44(employees.customerId, invite.customerId),
+        eq44(employees.email, normalizedEmail)
+      )
+    );
+    if (existingEmployee && existingEmployee.status !== "terminated") {
+      throw new TRPCError30({ code: "CONFLICT", message: "An employee with this email already exists in the system." });
+    }
+    let serviceType = invite.serviceType || "eor";
     const country = invite.country || input.country;
     const jobTitle = invite.jobTitle || input.jobTitle;
     const department = invite.department || input.department;
     const startDate = invite.startDate || input.startDate;
+    let requiresVisa = false;
+    if (input.nationality && country && input.nationality !== country && serviceType === "eor") {
+      serviceType = "visa_eor";
+      requiresVisa = true;
+    }
     if (serviceType === "aor") {
       const existingContractors = await db.select({ id: contractors.id }).from(contractors);
       const nextNum = existingContractors.length + 1;
@@ -20450,6 +22397,7 @@ var portalEmployeesRouter = portalRouter({
         paymentFrequency: invite.paymentFrequency || "monthly",
         rateType: invite.paymentFrequency === "milestone" ? "milestone_only" : "fixed_monthly",
         rateAmount: invite.rateAmount || null,
+        bankDetails: input.bankDetails ? input.bankDetails : null,
         status: "pending_review"
       });
       const contractorId = result[0]?.id;
@@ -20457,7 +22405,7 @@ var portalEmployeesRouter = portalRouter({
         status: "completed",
         contractorId,
         completedAt: /* @__PURE__ */ new Date()
-      }).where(eq42(onboardingInvites.id, invite.id));
+      }).where(eq44(onboardingInvites.id, invite.id));
       return { success: true, contractorId };
     } else {
       const result = await createEmployee({
@@ -20484,14 +22432,21 @@ var portalEmployeesRouter = portalRouter({
         endDate: invite.endDate || null,
         baseSalary: invite.baseSalary || "0",
         salaryCurrency: invite.salaryCurrency || "USD",
+        requiresVisa,
+        bankDetails: input.bankDetails || null,
         status: "pending_review"
       });
       const employeeId = result[0]?.id;
+      try {
+        await autoInitializeLeavePolicyForCountry(invite.customerId, country);
+      } catch (e) {
+        console.error("Failed to auto-initialize leave policy:", e);
+      }
       await db.update(onboardingInvites).set({
         status: "completed",
         employeeId,
         completedAt: /* @__PURE__ */ new Date()
-      }).where(eq42(onboardingInvites.id, invite.id));
+      }).where(eq44(onboardingInvites.id, invite.id));
       return { success: true, employeeId };
     }
   }),
@@ -20513,9 +22468,9 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const [invite] = await db.select().from(onboardingInvites).where(
-      and33(
-        eq42(onboardingInvites.token, input.token),
-        eq42(onboardingInvites.employeeId, input.employeeId)
+      and35(
+        eq44(onboardingInvites.token, input.token),
+        eq44(onboardingInvites.employeeId, input.employeeId)
       )
     );
     if (!invite) {
@@ -20544,7 +22499,7 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(and33(eq42(employees.id, input.id), eq42(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(and35(eq44(employees.id, input.id), eq44(employees.customerId, cid)));
     if (!emp) {
       throw new TRPCError30({ code: "NOT_FOUND", message: "Employee not found" });
     }
@@ -20554,10 +22509,10 @@ var portalEmployeesRouter = portalRouter({
         message: "Only employees in pending review status can be deleted"
       });
     }
-    await db.delete(employeeDocuments).where(eq42(employeeDocuments.employeeId, input.id));
-    await db.delete(employeeContracts).where(eq42(employeeContracts.employeeId, input.id));
-    await db.delete(leaveBalances).where(eq42(leaveBalances.employeeId, input.id));
-    await db.delete(employees).where(eq42(employees.id, input.id));
+    await db.delete(employeeDocuments).where(eq44(employeeDocuments.employeeId, input.id));
+    await db.delete(employeeContracts).where(eq44(employeeContracts.employeeId, input.id));
+    await db.delete(leaveBalances).where(eq44(leaveBalances.employeeId, input.id));
+    await db.delete(employees).where(eq44(employees.id, input.id));
     return { success: true };
   })
 });
@@ -20565,12 +22520,12 @@ var portalEmployeesRouter = portalRouter({
 // server/portal/routers/portalAdjustmentsRouter.ts
 import { z as z34 } from "zod";
 import { TRPCError as TRPCError31 } from "@trpc/server";
-import { sql as sql18, eq as eq43, and as and34, count as count11 } from "drizzle-orm";
+import { sql as sql20, eq as eq45, and as and36 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalAdjustmentsRouter = portalRouter({
   /**
-   * List adjustments — scoped to customerId
+   * List adjustments — returns both EOR and AOR adjustments, scoped to customerId
    */
   list: protectedPortalProcedure.input(
     z34.object({
@@ -20578,59 +22533,111 @@ var portalAdjustmentsRouter = portalRouter({
       pageSize: z34.number().min(1).max(100).default(20),
       status: z34.string().optional(),
       effectiveMonth: z34.string().optional(),
-      employeeId: z34.number().optional()
+      workerType: z34.enum(["all", "employee", "contractor"]).default("all")
     })
   ).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const conditions = [eq43(adjustments.customerId, cid)];
-    if (input.status) {
-      conditions.push(eq43(adjustments.status, input.status));
+    const allItems = [];
+    if (input.workerType === "all" || input.workerType === "employee") {
+      const eorConditions = [eq45(adjustments.customerId, cid)];
+      if (input.status) {
+        eorConditions.push(eq45(adjustments.status, input.status));
+      }
+      if (input.effectiveMonth) {
+        eorConditions.push(eq45(adjustments.effectiveMonth, input.effectiveMonth));
+      }
+      const eorItems = await db.select({
+        id: adjustments.id,
+        adjustmentType: adjustments.adjustmentType,
+        category: adjustments.category,
+        amount: adjustments.amount,
+        currency: adjustments.currency,
+        effectiveMonth: adjustments.effectiveMonth,
+        description: adjustments.description,
+        status: adjustments.status,
+        receiptFileUrl: adjustments.receiptFileUrl,
+        clientApprovedBy: adjustments.clientApprovedBy,
+        clientApprovedAt: adjustments.clientApprovedAt,
+        clientRejectionReason: adjustments.clientRejectionReason,
+        adminApprovedBy: adjustments.adminApprovedBy,
+        adminApprovedAt: adjustments.adminApprovedAt,
+        adminRejectionReason: adjustments.adminRejectionReason,
+        createdAt: adjustments.createdAt,
+        updatedAt: adjustments.updatedAt,
+        workerFirstName: employees.firstName,
+        workerLastName: employees.lastName
+      }).from(adjustments).innerJoin(employees, eq45(adjustments.employeeId, employees.id)).where(and36(...eorConditions)).orderBy(sql20`${adjustments.updatedAt} DESC`);
+      for (const item of eorItems) {
+        allItems.push({
+          ...item,
+          workerType: "employee",
+          workerLabel: "EOR",
+          // Keep backward compat fields
+          employeeFirstName: item.workerFirstName,
+          employeeLastName: item.workerLastName
+        });
+      }
     }
-    if (input.effectiveMonth) {
-      conditions.push(eq43(adjustments.effectiveMonth, input.effectiveMonth));
+    if (input.workerType === "all" || input.workerType === "contractor") {
+      const aorConditions = [eq45(contractorAdjustments.customerId, cid)];
+      if (input.status) {
+        aorConditions.push(eq45(contractorAdjustments.status, input.status));
+      }
+      if (input.effectiveMonth) {
+        aorConditions.push(eq45(contractorAdjustments.effectiveMonth, input.effectiveMonth));
+      }
+      const aorItems = await db.select({
+        id: contractorAdjustments.id,
+        adjustmentType: contractorAdjustments.type,
+        amount: contractorAdjustments.amount,
+        currency: contractorAdjustments.currency,
+        effectiveMonth: contractorAdjustments.effectiveMonth,
+        description: contractorAdjustments.description,
+        status: contractorAdjustments.status,
+        receiptFileUrl: contractorAdjustments.attachmentUrl,
+        clientApprovedBy: contractorAdjustments.clientApprovedBy,
+        clientApprovedAt: contractorAdjustments.clientApprovedAt,
+        clientRejectionReason: contractorAdjustments.clientRejectionReason,
+        adminApprovedBy: contractorAdjustments.adminApprovedBy,
+        adminApprovedAt: contractorAdjustments.adminApprovedAt,
+        adminRejectionReason: contractorAdjustments.adminRejectionReason,
+        createdAt: contractorAdjustments.createdAt,
+        updatedAt: contractorAdjustments.updatedAt,
+        workerFirstName: contractors.firstName,
+        workerLastName: contractors.lastName
+      }).from(contractorAdjustments).innerJoin(contractors, eq45(contractorAdjustments.contractorId, contractors.id)).where(and36(...aorConditions)).orderBy(sql20`${contractorAdjustments.updatedAt} DESC`);
+      for (const item of aorItems) {
+        allItems.push({
+          ...item,
+          category: null,
+          workerType: "contractor",
+          workerLabel: "AOR",
+          employeeFirstName: item.workerFirstName,
+          employeeLastName: item.workerLastName
+        });
+      }
     }
-    if (input.employeeId) {
-      conditions.push(eq43(adjustments.employeeId, input.employeeId));
-    }
-    const where = and34(...conditions);
-    const [totalResult] = await db.select({ count: count11() }).from(adjustments).where(where);
-    const items = await db.select({
-      id: adjustments.id,
-      employeeId: adjustments.employeeId,
-      adjustmentType: adjustments.adjustmentType,
-      category: adjustments.category,
-      amount: adjustments.amount,
-      currency: adjustments.currency,
-      effectiveMonth: adjustments.effectiveMonth,
-      description: adjustments.description,
-      status: adjustments.status,
-      receiptFileUrl: adjustments.receiptFileUrl,
-      clientApprovedBy: adjustments.clientApprovedBy,
-      clientApprovedAt: adjustments.clientApprovedAt,
-      clientRejectionReason: adjustments.clientRejectionReason,
-      adminApprovedBy: adjustments.adminApprovedBy,
-      adminApprovedAt: adjustments.adminApprovedAt,
-      adminRejectionReason: adjustments.adminRejectionReason,
-      createdAt: adjustments.createdAt,
-      updatedAt: adjustments.updatedAt,
-      // Join employee name
-      employeeFirstName: employees.firstName,
-      employeeLastName: employees.lastName
-    }).from(adjustments).innerJoin(employees, eq43(adjustments.employeeId, employees.id)).where(where).orderBy(sql18`${adjustments.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
-    return {
-      items,
-      total: totalResult?.count ?? 0
-    };
+    allItems.sort((a, b) => {
+      const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return tb - ta;
+    });
+    const total = allItems.length;
+    const offset = (input.page - 1) * input.pageSize;
+    const items = allItems.slice(offset, offset + input.pageSize);
+    return { items, total };
   }),
   /**
-   * Create adjustment — only HR managers and admins
+   * Create adjustment — supports both EOR (employee) and AOR (contractor)
+   * workerType + workerId determine which table to insert into
    */
   create: portalHrProcedure.input(
     z34.object({
-      employeeId: z34.number(),
-      adjustmentType: z34.enum(["bonus", "allowance", "reimbursement", "deduction", "other"]),
+      workerType: z34.enum(["employee", "contractor"]),
+      workerId: z34.number(),
+      adjustmentType: z34.enum(["bonus", "allowance", "deduction", "other"]),
       category: z34.enum(["housing", "transport", "meals", "performance_bonus", "year_end_bonus", "overtime", "travel_reimbursement", "equipment_reimbursement", "absence_deduction", "other"]).optional(),
       amount: z34.string(),
       currency: z34.string().default("USD"),
@@ -20643,34 +22650,81 @@ var portalAdjustmentsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and34(eq43(employees.id, input.employeeId), eq43(employees.customerId, cid)));
-    if (!emp) {
-      throw new TRPCError31({ code: "NOT_FOUND", message: "Employee not found" });
-    }
     const parts = input.effectiveMonth.split("-");
+    if (parts.length < 2) {
+      throw new TRPCError31({ code: "BAD_REQUEST", message: "Invalid effective month format" });
+    }
     const normalizedMonth = `${parts[0]}-${parts[1].padStart(2, "0")}-01`;
-    const result = await db.insert(adjustments).values({
-      employeeId: input.employeeId,
-      customerId: cid,
-      // ALWAYS from context
-      adjustmentType: input.adjustmentType,
-      category: input.category || null,
-      amount: input.amount,
-      currency: input.currency,
-      effectiveMonth: new Date(normalizedMonth),
-      description: input.description || null,
-      receiptFileUrl: input.receiptFileUrl || null,
-      receiptFileKey: input.receiptFileKey || null,
-      status: "submitted"
-    });
-    return { success: true, adjustmentId: result[0].insertId };
+    if (input.workerType === "employee") {
+      const [emp] = await db.select({ id: employees.id, country: employees.country, salaryCurrency: employees.salaryCurrency }).from(employees).where(and36(eq45(employees.id, input.workerId), eq45(employees.customerId, cid)));
+      if (!emp) {
+        throw new TRPCError31({ code: "NOT_FOUND", message: "Employee not found" });
+      }
+      const [existingPayroll] = await db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns).innerJoin(payrollItems, eq45(payrollRuns.id, payrollItems.payrollRunId)).where(
+        and36(
+          eq45(payrollRuns.countryCode, emp.country),
+          eq45(payrollRuns.payrollMonth, normalizedMonth),
+          eq45(payrollItems.employeeId, input.workerId)
+        )
+      ).limit(1);
+      if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
+        throw new TRPCError31({
+          code: "BAD_REQUEST",
+          message: `Payroll run for ${normalizedMonth.substring(0, 7)} is already ${existingPayroll.status}. Adjustments cannot be added.`
+        });
+      }
+      await enforceCutoff(normalizedMonth, "portal_hr", "create adjustment");
+      const currency = emp.salaryCurrency || input.currency;
+      await db.insert(adjustments).values({
+        employeeId: input.workerId,
+        customerId: cid,
+        adjustmentType: input.adjustmentType,
+        category: input.category || null,
+        amount: input.amount,
+        currency,
+        effectiveMonth: normalizedMonth,
+        description: input.description || null,
+        receiptFileUrl: input.receiptFileUrl || null,
+        receiptFileKey: input.receiptFileKey || null,
+        status: "submitted"
+      });
+    } else {
+      const [con] = await db.select({ id: contractors.id, currency: contractors.currency }).from(contractors).where(and36(eq45(contractors.id, input.workerId), eq45(contractors.customerId, cid)));
+      if (!con) {
+        throw new TRPCError31({ code: "NOT_FOUND", message: "Contractor not found" });
+      }
+      let aorType = "bonus";
+      if (input.adjustmentType === "deduction") {
+        aorType = "deduction";
+      } else if (input.adjustmentType === "allowance" || input.adjustmentType === "other") {
+        aorType = "expense";
+      } else {
+        aorType = "bonus";
+      }
+      const currency = con.currency;
+      await db.insert(contractorAdjustments).values({
+        contractorId: input.workerId,
+        customerId: cid,
+        type: aorType,
+        description: input.description && input.description.trim() ? input.description.trim() : "Adjustment",
+        amount: input.amount,
+        currency,
+        effectiveMonth: normalizedMonth,
+        attachmentUrl: input.receiptFileUrl && input.receiptFileUrl.trim() ? input.receiptFileUrl.trim() : null,
+        attachmentFileKey: input.receiptFileKey && input.receiptFileKey.trim() ? input.receiptFileKey.trim() : null,
+        status: "submitted"
+      });
+    }
+    return { success: true };
   }),
   /**
    * Update adjustment — only if status is 'submitted' (not locked)
+   * Supports both EOR and AOR
    */
   update: portalHrProcedure.input(
     z34.object({
       id: z34.number(),
+      workerType: z34.enum(["employee", "contractor"]).default("employee"),
       amount: z34.string().optional(),
       description: z34.string().optional(),
       receiptFileUrl: z34.string().optional(),
@@ -20680,59 +22734,85 @@ var portalAdjustmentsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and34(eq43(adjustments.id, input.id), eq43(adjustments.customerId, cid)));
-    if (!adj) {
-      throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
-    }
-    if (adj.status !== "submitted") {
-      throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be edited" });
-    }
-    const updates = {};
-    if (input.amount !== void 0) updates.amount = input.amount;
-    if (input.description !== void 0) updates.description = input.description;
-    if (input.receiptFileUrl !== void 0) updates.receiptFileUrl = input.receiptFileUrl;
-    if (input.receiptFileKey !== void 0) updates.receiptFileKey = input.receiptFileKey;
-    if (Object.keys(updates).length > 0) {
-      await db.update(adjustments).set(updates).where(eq43(adjustments.id, input.id));
+    if (input.workerType === "contractor") {
+      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and36(eq45(contractorAdjustments.id, input.id), eq45(contractorAdjustments.customerId, cid)));
+      if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
+      if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be edited" });
+      const updates = {};
+      if (input.amount !== void 0) updates.amount = input.amount;
+      if (input.description !== void 0) updates.description = input.description;
+      if (input.receiptFileUrl !== void 0) updates.attachmentUrl = input.receiptFileUrl;
+      if (input.receiptFileKey !== void 0) updates.attachmentFileKey = input.receiptFileKey;
+      if (Object.keys(updates).length > 0) {
+        await db.update(contractorAdjustments).set(updates).where(eq45(contractorAdjustments.id, input.id));
+      }
+    } else {
+      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and36(eq45(adjustments.id, input.id), eq45(adjustments.customerId, cid)));
+      if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
+      if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be edited" });
+      const updates = {};
+      if (input.amount !== void 0) updates.amount = input.amount;
+      if (input.description !== void 0) updates.description = input.description;
+      if (input.receiptFileUrl !== void 0) updates.receiptFileUrl = input.receiptFileUrl;
+      if (input.receiptFileKey !== void 0) updates.receiptFileKey = input.receiptFileKey;
+      if (Object.keys(updates).length > 0) {
+        await db.update(adjustments).set(updates).where(eq45(adjustments.id, input.id));
+      }
     }
     return { success: true };
   }),
   /**
    * Delete adjustment — only if status is 'submitted'
    */
-  delete: portalHrProcedure.input(z34.object({ id: z34.number() })).mutation(async ({ input, ctx }) => {
+  delete: portalHrProcedure.input(z34.object({
+    id: z34.number(),
+    workerType: z34.enum(["employee", "contractor"]).default("employee")
+  })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and34(eq43(adjustments.id, input.id), eq43(adjustments.customerId, cid)));
-    if (!adj) {
-      throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
+    if (input.workerType === "contractor") {
+      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and36(eq45(contractorAdjustments.id, input.id), eq45(contractorAdjustments.customerId, cid)));
+      if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
+      if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be deleted" });
+      await db.delete(contractorAdjustments).where(eq45(contractorAdjustments.id, input.id));
+    } else {
+      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and36(eq45(adjustments.id, input.id), eq45(adjustments.customerId, cid)));
+      if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
+      if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be deleted" });
+      await db.delete(adjustments).where(eq45(adjustments.id, input.id));
     }
-    if (adj.status !== "submitted") {
-      throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be deleted" });
-    }
-    await db.delete(adjustments).where(eq43(adjustments.id, input.id));
     return { success: true };
   }),
   /**
    * Client approve adjustment — HR manager / admin approves a submitted adjustment
    */
-  approve: portalHrProcedure.input(z34.object({ id: z34.number() })).mutation(async ({ input, ctx }) => {
+  approve: portalHrProcedure.input(z34.object({
+    id: z34.number(),
+    workerType: z34.enum(["employee", "contractor"]).default("employee")
+  })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and34(eq43(adjustments.id, input.id), eq43(adjustments.customerId, cid)));
-    if (!adj) {
-      throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
+    if (input.workerType === "contractor") {
+      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and36(eq45(contractorAdjustments.id, input.id), eq45(contractorAdjustments.customerId, cid)));
+      if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
+      if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be approved" });
+      await db.update(contractorAdjustments).set({
+        status: "client_approved",
+        clientApprovedBy: ctx.portalUser.contactId,
+        clientApprovedAt: /* @__PURE__ */ new Date()
+      }).where(eq45(contractorAdjustments.id, input.id));
+    } else {
+      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and36(eq45(adjustments.id, input.id), eq45(adjustments.customerId, cid)));
+      if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
+      if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be approved" });
+      await db.update(adjustments).set({
+        status: "client_approved",
+        clientApprovedBy: ctx.portalUser.contactId,
+        clientApprovedAt: /* @__PURE__ */ new Date()
+      }).where(eq45(adjustments.id, input.id));
     }
-    if (adj.status !== "submitted") {
-      throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be approved" });
-    }
-    await db.update(adjustments).set({
-      status: "client_approved",
-      clientApprovedBy: ctx.portalUser.contactId,
-      clientApprovedAt: /* @__PURE__ */ new Date()
-    }).where(eq43(adjustments.id, input.id));
     return { success: true };
   }),
   /**
@@ -20740,24 +22820,33 @@ var portalAdjustmentsRouter = portalRouter({
    */
   reject: portalHrProcedure.input(z34.object({
     id: z34.number(),
+    workerType: z34.enum(["employee", "contractor"]).default("employee"),
     reason: z34.string().optional()
   })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and34(eq43(adjustments.id, input.id), eq43(adjustments.customerId, cid)));
-    if (!adj) {
-      throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
+    if (input.workerType === "contractor") {
+      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and36(eq45(contractorAdjustments.id, input.id), eq45(contractorAdjustments.customerId, cid)));
+      if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
+      if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be rejected" });
+      await db.update(contractorAdjustments).set({
+        status: "client_rejected",
+        clientApprovedBy: ctx.portalUser.contactId,
+        clientApprovedAt: /* @__PURE__ */ new Date(),
+        clientRejectionReason: input.reason || null
+      }).where(eq45(contractorAdjustments.id, input.id));
+    } else {
+      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and36(eq45(adjustments.id, input.id), eq45(adjustments.customerId, cid)));
+      if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
+      if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be rejected" });
+      await db.update(adjustments).set({
+        status: "client_rejected",
+        clientApprovedBy: ctx.portalUser.contactId,
+        clientApprovedAt: /* @__PURE__ */ new Date(),
+        clientRejectionReason: input.reason || null
+      }).where(eq45(adjustments.id, input.id));
     }
-    if (adj.status !== "submitted") {
-      throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be rejected" });
-    }
-    await db.update(adjustments).set({
-      status: "client_rejected",
-      clientApprovedBy: ctx.portalUser.contactId,
-      clientApprovedAt: /* @__PURE__ */ new Date(),
-      clientRejectionReason: input.reason || null
-    }).where(eq43(adjustments.id, input.id));
     return { success: true };
   }),
   /**
@@ -20784,7 +22873,7 @@ var portalAdjustmentsRouter = portalRouter({
 // server/portal/routers/portalLeaveRouter.ts
 import { z as z35 } from "zod";
 import { TRPCError as TRPCError32 } from "@trpc/server";
-import { sql as sql19, eq as eq44, and as and35, count as count12 } from "drizzle-orm";
+import { sql as sql21, eq as eq46, and as and37, count as count12 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalLeaveRouter = portalRouter({
@@ -20802,15 +22891,15 @@ var portalLeaveRouter = portalRouter({
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const conditions = [eq44(employees.customerId, cid)];
+    const conditions = [eq46(employees.customerId, cid)];
     if (input.status) {
-      conditions.push(eq44(leaveRecords.status, input.status));
+      conditions.push(eq46(leaveRecords.status, input.status));
     }
     if (input.employeeId) {
-      conditions.push(eq44(leaveRecords.employeeId, input.employeeId));
+      conditions.push(eq46(leaveRecords.employeeId, input.employeeId));
     }
-    const where = and35(...conditions);
-    const [totalResult] = await db.select({ count: count12() }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(where);
+    const where = and37(...conditions);
+    const [totalResult] = await db.select({ count: count12() }).from(leaveRecords).innerJoin(employees, eq46(leaveRecords.employeeId, employees.id)).where(where);
     const items = await db.select({
       id: leaveRecords.id,
       employeeId: leaveRecords.employeeId,
@@ -20832,7 +22921,7 @@ var portalLeaveRouter = portalRouter({
       employeeLastName: employees.lastName,
       // Leave type info
       leaveTypeName: leaveTypes.leaveTypeName
-    }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).leftJoin(leaveTypes, eq44(leaveRecords.leaveTypeId, leaveTypes.id)).where(where).orderBy(sql19`${leaveRecords.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(leaveRecords).innerJoin(employees, eq46(leaveRecords.employeeId, employees.id)).leftJoin(leaveTypes, eq46(leaveRecords.leaveTypeId, leaveTypes.id)).where(where).orderBy(sql21`${leaveRecords.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return { items, total: totalResult?.count ?? 0 };
   }),
   /**
@@ -20842,7 +22931,7 @@ var portalLeaveRouter = portalRouter({
     const db = await getDb();
     if (!db) return [];
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and35(eq44(employees.id, input.employeeId), eq44(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id }).from(employees).where(and37(eq46(employees.id, input.employeeId), eq46(employees.customerId, cid)));
     if (!emp) return [];
     const balances = await db.select({
       id: leaveBalances.id,
@@ -20852,11 +22941,16 @@ var portalLeaveRouter = portalRouter({
       used: leaveBalances.used,
       remaining: leaveBalances.remaining,
       leaveTypeName: leaveTypes.leaveTypeName
-    }).from(leaveBalances).leftJoin(leaveTypes, eq44(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq44(leaveBalances.employeeId, input.employeeId));
+    }).from(leaveBalances).leftJoin(leaveTypes, eq46(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq46(leaveBalances.employeeId, input.employeeId));
     return balances;
   }),
   /**
    * Submit leave record — only HR managers and admins
+   *
+   * Now includes:
+   * - Cutoff enforcement (matching Admin behavior)
+   * - Cross-month leave auto-splitting (matching Admin behavior)
+   * - Business day calculation for accurate day counts
    */
   create: portalHrProcedure.input(
     z35.object({
@@ -20867,18 +22961,48 @@ var portalLeaveRouter = portalRouter({
       days: z35.string(),
       reason: z35.string().optional(),
       isHalfDay: z35.boolean().default(false)
-      // Bug 13: Support half-day leave
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and35(eq44(employees.id, input.employeeId), eq44(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id, country: employees.country }).from(employees).where(and37(eq46(employees.id, input.employeeId), eq46(employees.customerId, cid)));
     if (!emp) {
       throw new TRPCError32({ code: "NOT_FOUND", message: "Employee not found" });
     }
-    const actualDays = input.isHalfDay ? (parseFloat(input.days) * 0.5).toFixed(1) : input.days;
-    const result = await db.insert(leaveRecords).values({
+    const endPayrollMonth = getLeavePayrollMonth(input.endDate);
+    const endPayrollMonthNormalized = `${endPayrollMonth}-01`;
+    await enforceCutoff(endPayrollMonthNormalized, "portal_hr", "create leave record");
+    const [existingPayroll] = await db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns).innerJoin(payrollItems, eq46(payrollRuns.id, payrollItems.payrollRunId)).where(
+      and37(
+        eq46(payrollRuns.countryCode, emp.country),
+        eq46(payrollRuns.payrollMonth, endPayrollMonthNormalized),
+        eq46(payrollItems.employeeId, input.employeeId)
+      )
+    ).limit(1);
+    if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
+      throw new TRPCError32({
+        code: "BAD_REQUEST",
+        message: `Payroll run for ${endPayrollMonth} is already ${existingPayroll.status}. Leave requests cannot be added.`
+      });
+    }
+    const actualDays = input.isHalfDay ? (parseFloat(input.days) - 0.5).toFixed(1) : input.days;
+    if (isLeavesCrossMonth(input.startDate, input.endDate)) {
+      const splits = splitLeaveByMonth(input.startDate, input.endDate, parseFloat(actualDays));
+      for (const split of splits) {
+        await db.insert(leaveRecords).values({
+          employeeId: input.employeeId,
+          leaveTypeId: input.leaveTypeId,
+          startDate: split.startDate,
+          endDate: split.endDate,
+          days: String(split.days),
+          status: "submitted",
+          reason: input.reason || null
+        });
+      }
+      return { success: true, splits: splits.length };
+    }
+    await db.insert(leaveRecords).values({
       employeeId: input.employeeId,
       leaveTypeId: input.leaveTypeId,
       startDate: input.startDate,
@@ -20887,7 +23011,7 @@ var portalLeaveRouter = portalRouter({
       status: "submitted",
       reason: input.reason || null
     });
-    return { success: true, leaveRecordId: result[0].insertId };
+    return { success: true };
   }),
   /**
    * Delete leave record — only if status is 'submitted'
@@ -20896,14 +23020,22 @@ var portalLeaveRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(and35(eq44(leaveRecords.id, input.id), eq44(employees.customerId, cid)));
+    const records = await db.select({
+      id: leaveRecords.id,
+      status: leaveRecords.status,
+      endDate: leaveRecords.endDate
+    }).from(leaveRecords).innerJoin(employees, eq46(leaveRecords.employeeId, employees.id)).where(and37(eq46(leaveRecords.id, input.id), eq46(employees.customerId, cid)));
     if (records.length === 0) {
       throw new TRPCError32({ code: "NOT_FOUND", message: "Leave record not found" });
     }
     if (records[0].status !== "submitted") {
       throw new TRPCError32({ code: "FORBIDDEN", message: "Leave record is locked and cannot be deleted" });
     }
-    await db.delete(leaveRecords).where(eq44(leaveRecords.id, input.id));
+    if (records[0].endDate) {
+      const payrollMonth = getLeavePayrollMonth(records[0].endDate);
+      await enforceCutoff(`${payrollMonth}-01`, "portal_hr", "delete leave record");
+    }
+    await db.delete(leaveRecords).where(eq46(leaveRecords.id, input.id));
     return { success: true };
   }),
   /**
@@ -20913,7 +23045,7 @@ var portalLeaveRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(and35(eq44(leaveRecords.id, input.id), eq44(employees.customerId, cid)));
+    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq46(leaveRecords.employeeId, employees.id)).where(and37(eq46(leaveRecords.id, input.id), eq46(employees.customerId, cid)));
     if (records.length === 0) {
       throw new TRPCError32({ code: "NOT_FOUND", message: "Leave record not found" });
     }
@@ -20924,7 +23056,7 @@ var portalLeaveRouter = portalRouter({
       status: "client_approved",
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date()
-    }).where(eq44(leaveRecords.id, input.id));
+    }).where(eq46(leaveRecords.id, input.id));
     return { success: true };
   }),
   /**
@@ -20937,7 +23069,7 @@ var portalLeaveRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(and35(eq44(leaveRecords.id, input.id), eq44(employees.customerId, cid)));
+    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq46(leaveRecords.employeeId, employees.id)).where(and37(eq46(leaveRecords.id, input.id), eq46(employees.customerId, cid)));
     if (records.length === 0) {
       throw new TRPCError32({ code: "NOT_FOUND", message: "Leave record not found" });
     }
@@ -20949,7 +23081,7 @@ var portalLeaveRouter = portalRouter({
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date(),
       clientRejectionReason: input.reason || null
-    }).where(eq44(leaveRecords.id, input.id));
+    }).where(eq46(leaveRecords.id, input.id));
     return { success: true };
   }),
   /**
@@ -20959,13 +23091,176 @@ var portalLeaveRouter = portalRouter({
     const db = await getDb();
     if (!db) return [];
     const cid = ctx.portalUser.customerId;
-    const activeCountries = await db.select({ country: employees.country }).from(employees).where(and35(eq44(employees.customerId, cid), eq44(employees.status, "active"))).groupBy(employees.country);
+    const activeCountries = await db.select({ country: employees.country }).from(employees).where(and37(eq46(employees.customerId, cid), eq46(employees.status, "active"))).groupBy(employees.country);
     if (activeCountries.length === 0) return [];
-    const countryCodes = activeCountries.map((c) => c.country);
+    const NAME_TO_CODE = {
+      // A
+      "United Arab Emirates": "AE",
+      "Albania": "AL",
+      "Armenia": "AM",
+      "Argentina": "AR",
+      "Austria": "AT",
+      "Australia": "AU",
+      "Azerbaijan": "AZ",
+      // B
+      "Bosnia and Herzegovina": "BA",
+      "Bangladesh": "BD",
+      "Belgium": "BE",
+      "Bulgaria": "BG",
+      "Bahrain": "BH",
+      "Brunei": "BN",
+      "Bolivia": "BO",
+      "Brazil": "BR",
+      "Belarus": "BY",
+      // C
+      "Canada": "CA",
+      "Switzerland": "CH",
+      "C\xF4te d'Ivoire": "CI",
+      "Chile": "CL",
+      "Cameroon": "CM",
+      "China": "CN",
+      "Colombia": "CO",
+      "Costa Rica": "CR",
+      "Cyprus": "CY",
+      "Czech Republic": "CZ",
+      // D
+      "Germany": "DE",
+      "Denmark": "DK",
+      "Dominican Republic": "DO",
+      "Algeria": "DZ",
+      // E
+      "Ecuador": "EC",
+      "Estonia": "EE",
+      "Egypt": "EG",
+      "Spain": "ES",
+      "Ethiopia": "ET",
+      // F
+      "Finland": "FI",
+      "Fiji": "FJ",
+      "France": "FR",
+      // G
+      "United Kingdom": "GB",
+      "Georgia": "GE",
+      "Ghana": "GH",
+      "Greece": "GR",
+      "Guatemala": "GT",
+      // H
+      "Hong Kong, China": "HK",
+      "Hong Kong": "HK",
+      "Hong Kong S.A.R.": "HK",
+      "Honduras": "HN",
+      "Croatia": "HR",
+      "Hungary": "HU",
+      // I
+      "Indonesia": "ID",
+      "Ireland": "IE",
+      "Israel": "IL",
+      "India": "IN",
+      "Iraq": "IQ",
+      "Iran": "IR",
+      "Iceland": "IS",
+      "Italy": "IT",
+      // J
+      "Jamaica": "JM",
+      "Jordan": "JO",
+      "Japan": "JP",
+      // K
+      "Kenya": "KE",
+      "Cambodia": "KH",
+      "South Korea": "KR",
+      "Kuwait": "KW",
+      "Kazakhstan": "KZ",
+      // L
+      "Laos": "LA",
+      "Lebanon": "LB",
+      "Sri Lanka": "LK",
+      "Lithuania": "LT",
+      "Luxembourg": "LU",
+      "Latvia": "LV",
+      // M
+      "Morocco": "MA",
+      "Moldova": "MD",
+      "Montenegro": "ME",
+      "North Macedonia": "MK",
+      "Myanmar": "MM",
+      "Mongolia": "MN",
+      "Macau, China": "MO",
+      "Macau": "MO",
+      "Malta": "MT",
+      "Mauritius": "MU",
+      "Maldives": "MV",
+      "Mexico": "MX",
+      "Malaysia": "MY",
+      // N
+      "Nigeria": "NG",
+      "Nicaragua": "NI",
+      "Netherlands": "NL",
+      "Norway": "NO",
+      "Nepal": "NP",
+      "New Zealand": "NZ",
+      // O
+      "Oman": "OM",
+      // P
+      "Panama": "PA",
+      "Peru": "PE",
+      "Papua New Guinea": "PG",
+      "Philippines": "PH",
+      "Pakistan": "PK",
+      "Poland": "PL",
+      "Puerto Rico": "PR",
+      "Portugal": "PT",
+      "Paraguay": "PY",
+      // Q
+      "Qatar": "QA",
+      // R
+      "Romania": "RO",
+      "Serbia": "RS",
+      "Russia": "RU",
+      "Rwanda": "RW",
+      // S
+      "Saudi Arabia": "SA",
+      "Sweden": "SE",
+      "Singapore": "SG",
+      "Slovenia": "SI",
+      "Slovakia": "SK",
+      "Senegal": "SN",
+      "El Salvador": "SV",
+      // T
+      "Thailand": "TH",
+      "Timor-Leste": "TL",
+      "Tunisia": "TN",
+      "Turkey": "TR",
+      "Trinidad and Tobago": "TT",
+      "Taiwan, China": "TW",
+      "Taiwan": "TW",
+      "Tanzania": "TZ",
+      // U
+      "Ukraine": "UA",
+      "Uganda": "UG",
+      "United States": "US",
+      "Uruguay": "UY",
+      "Uzbekistan": "UZ",
+      // V
+      "Venezuela": "VE",
+      "Vietnam": "VN",
+      // X
+      "Kosovo": "XK",
+      // Z
+      "South Africa": "ZA",
+      // Common aliases
+      "UAE": "AE"
+    };
+    const countryCodes = activeCountries.map((c) => {
+      const val = c.country;
+      if (!val) return null;
+      if (val.length === 2) return val.toUpperCase();
+      return NAME_TO_CODE[val] || null;
+    }).filter((c) => c !== null);
+    if (countryCodes.length === 0) return [];
     const holidays = await db.select().from(publicHolidays).where(
-      and35(
-        sql19`${publicHolidays.countryCode} IN (${sql19.join(countryCodes.map((c) => sql19`${c}`), sql19`, `)})`,
-        eq44(publicHolidays.year, input.year)
+      and37(
+        sql21`${publicHolidays.countryCode} IN (${sql21.join(countryCodes.map((c) => sql21`${c}`), sql21`, `)})`,
+        eq46(publicHolidays.year, input.year)
       )
     ).orderBy(publicHolidays.holidayDate);
     return holidays;
@@ -20975,7 +23270,7 @@ var portalLeaveRouter = portalRouter({
 // server/portal/routers/portalInvoicesRouter.ts
 import { z as z36 } from "zod";
 import { TRPCError as TRPCError33 } from "@trpc/server";
-import { sql as sql20, eq as eq45, and as and36, count as count13, inArray as inArray12 } from "drizzle-orm";
+import { sql as sql22, eq as eq47, and as and38, count as count13, inArray as inArray14 } from "drizzle-orm";
 init_db2();
 init_schema();
 var PORTAL_INVOICE_FIELDS = {
@@ -20994,6 +23289,7 @@ var PORTAL_INVOICE_FIELDS = {
   paidDate: invoices.paidDate,
   paidAmount: invoices.paidAmount,
   amountDue: invoices.amountDue,
+  walletAppliedAmount: invoices.walletAppliedAmount,
   relatedInvoiceId: invoices.relatedInvoiceId,
   notes: invoices.notes,
   // Client-facing notes only
@@ -21001,8 +23297,8 @@ var PORTAL_INVOICE_FIELDS = {
   createdAt: invoices.createdAt,
   updatedAt: invoices.updatedAt
 };
-var VISIBLE_FILTER = sql20`${invoices.status} NOT IN ('draft', 'pending_review')`;
-var ACTIVE_FILTER = sql20`${invoices.status} NOT IN ('draft', 'pending_review', 'cancelled', 'void')`;
+var VISIBLE_FILTER = sql22`${invoices.status} NOT IN ('draft', 'pending_review')`;
+var ACTIVE_FILTER = sql22`${invoices.status} NOT IN ('draft', 'pending_review', 'cancelled', 'void')`;
 var portalInvoicesRouter = portalRouter({
   /**
    * List invoices — scoped to customerId
@@ -21024,33 +23320,33 @@ var portalInvoicesRouter = portalRouter({
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
     const conditions = [
-      eq45(invoices.customerId, cid),
+      eq47(invoices.customerId, cid),
       VISIBLE_FILTER
     ];
     if (input.excludeCreditNotes) {
-      conditions.push(sql20`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`);
+      conditions.push(sql22`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`);
     }
     if (input.tab === "active") {
-      conditions.push(sql20`${invoices.status} NOT IN ('cancelled', 'void', 'paid')`);
+      conditions.push(sql22`${invoices.status} NOT IN ('cancelled', 'void', 'paid')`);
     } else {
-      conditions.push(sql20`${invoices.status} IN ('paid', 'applied', 'cancelled', 'void')`);
+      conditions.push(sql22`${invoices.status} IN ('paid', 'applied', 'cancelled', 'void')`);
     }
     if (input.status) {
-      conditions.push(eq45(invoices.status, input.status));
+      conditions.push(eq47(invoices.status, input.status));
     }
     if (input.typeCategory === "receivables") {
-      conditions.push(sql20`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`);
+      conditions.push(sql22`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`);
     } else if (input.typeCategory === "credits") {
-      conditions.push(eq45(invoices.invoiceType, "credit_note"));
+      conditions.push(eq47(invoices.invoiceType, "credit_note"));
     } else if (input.typeCategory === "deposits") {
-      conditions.push(sql20`${invoices.invoiceType} IN ('deposit', 'deposit_refund')`);
+      conditions.push(sql22`${invoices.invoiceType} IN ('deposit', 'deposit_refund')`);
     }
     if (input.invoiceMonth) {
-      conditions.push(eq45(invoices.invoiceMonth, input.invoiceMonth));
+      conditions.push(eq47(invoices.invoiceMonth, input.invoiceMonth));
     }
-    const where = and36(...conditions);
+    const where = and38(...conditions);
     const [totalResult] = await db.select({ count: count13() }).from(invoices).where(where);
-    const items = await db.select(PORTAL_INVOICE_FIELDS).from(invoices).where(where).orderBy(sql20`${invoices.createdAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    const items = await db.select(PORTAL_INVOICE_FIELDS).from(invoices).where(where).orderBy(sql22`${invoices.createdAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     const itemIds = items.map((inv) => inv.id);
     let relatedInvoicesMap = {};
     if (itemIds.length > 0) {
@@ -21062,10 +23358,10 @@ var portalInvoicesRouter = portalRouter({
         status: invoices.status,
         relatedInvoiceId: invoices.relatedInvoiceId
       }).from(invoices).where(
-        and36(
-          eq45(invoices.customerId, cid),
+        and38(
+          eq47(invoices.customerId, cid),
           VISIBLE_FILTER,
-          inArray12(invoices.relatedInvoiceId, itemIds)
+          inArray14(invoices.relatedInvoiceId, itemIds)
         )
       );
       for (const rel of relatedInvs) {
@@ -21140,9 +23436,9 @@ var portalInvoicesRouter = portalRouter({
     if (!db) throw new TRPCError33({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     const [invoice] = await db.select(PORTAL_INVOICE_FIELDS).from(invoices).where(
-      and36(
-        eq45(invoices.id, input.id),
-        eq45(invoices.customerId, cid),
+      and38(
+        eq47(invoices.id, input.id),
+        eq47(invoices.customerId, cid),
         VISIBLE_FILTER
       )
     );
@@ -21162,7 +23458,7 @@ var portalInvoicesRouter = portalRouter({
       localAmount: invoiceItems.localAmount,
       exchangeRate: invoiceItems.exchangeRate
       // exchangeRateWithMarkup is NOT included — admin-only field
-    }).from(invoiceItems).where(eq45(invoiceItems.invoiceId, input.id));
+    }).from(invoiceItems).where(eq47(invoiceItems.invoiceId, input.id));
     const childDocuments = await db.select({
       id: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
@@ -21171,9 +23467,9 @@ var portalInvoicesRouter = portalRouter({
       status: invoices.status,
       createdAt: invoices.createdAt
     }).from(invoices).where(
-      and36(
-        eq45(invoices.relatedInvoiceId, input.id),
-        eq45(invoices.customerId, cid),
+      and38(
+        eq47(invoices.relatedInvoiceId, input.id),
+        eq47(invoices.customerId, cid),
         VISIBLE_FILTER
       )
     );
@@ -21186,9 +23482,9 @@ var portalInvoicesRouter = portalRouter({
         total: invoices.total,
         status: invoices.status
       }).from(invoices).where(
-        and36(
-          eq45(invoices.id, invoice.relatedInvoiceId),
-          eq45(invoices.customerId, cid)
+        and38(
+          eq47(invoices.id, invoice.relatedInvoiceId),
+          eq47(invoices.customerId, cid)
         )
       );
       parentDocument = parent || null;
@@ -21245,45 +23541,45 @@ var portalInvoicesRouter = portalRouter({
     const db = await getDb();
     if (!db) return { totalInvoiced: 0, totalPaid: 0, totalCreditNotes: 0, totalDeposits: 0, outstandingBalance: 0 };
     const cid = ctx.portalUser.customerId;
-    const [invoiced] = await db.select({ total: sql20`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and36(
-        eq45(invoices.customerId, cid),
-        sql20`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`,
+    const [invoiced] = await db.select({ total: sql22`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and38(
+        eq47(invoices.customerId, cid),
+        sql22`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`,
         ACTIVE_FILTER
       )
     );
-    const [paid] = await db.select({ total: sql20`COALESCE(SUM(${invoices.paidAmount}), 0)` }).from(invoices).where(
-      and36(
-        eq45(invoices.customerId, cid),
-        eq45(invoices.status, "paid")
+    const [paid] = await db.select({ total: sql22`COALESCE(SUM(${invoices.paidAmount}), 0)` }).from(invoices).where(
+      and38(
+        eq47(invoices.customerId, cid),
+        eq47(invoices.status, "paid")
       )
     );
-    const [credits] = await db.select({ total: sql20`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
-      and36(
-        eq45(invoices.customerId, cid),
-        eq45(invoices.invoiceType, "credit_note"),
+    const [credits] = await db.select({ total: sql22`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+      and38(
+        eq47(invoices.customerId, cid),
+        eq47(invoices.invoiceType, "credit_note"),
         ACTIVE_FILTER
       )
     );
-    const [depositsGross] = await db.select({ total: sql20`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and36(
-        eq45(invoices.customerId, cid),
-        eq45(invoices.invoiceType, "deposit"),
+    const [depositsGross] = await db.select({ total: sql22`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and38(
+        eq47(invoices.customerId, cid),
+        eq47(invoices.invoiceType, "deposit"),
         ACTIVE_FILTER
       )
     );
-    const [depositCreditNotes] = await db.select({ total: sql20`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
-      and36(
-        eq45(invoices.customerId, cid),
-        eq45(invoices.invoiceType, "credit_note"),
+    const [depositCreditNotes] = await db.select({ total: sql22`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+      and38(
+        eq47(invoices.customerId, cid),
+        eq47(invoices.invoiceType, "credit_note"),
         ACTIVE_FILTER,
-        sql20`${invoices.relatedInvoiceId} IN (SELECT id FROM invoices WHERE customerId = ${cid} AND invoiceType = 'deposit')`
+        sql22`${invoices.relatedInvoiceId} IN (SELECT id FROM invoices WHERE customerId = ${cid} AND invoiceType = 'deposit')`
       )
     );
-    const [depositRefunds] = await db.select({ total: sql20`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
-      and36(
-        eq45(invoices.customerId, cid),
-        eq45(invoices.invoiceType, "deposit_refund"),
+    const [depositRefunds] = await db.select({ total: sql22`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+      and38(
+        eq47(invoices.customerId, cid),
+        eq47(invoices.invoiceType, "deposit_refund"),
         ACTIVE_FILTER
       )
     );
@@ -21291,11 +23587,11 @@ var portalInvoicesRouter = portalRouter({
       0,
       Number(depositsGross?.total || 0) - Number(depositCreditNotes?.total || 0) - Number(depositRefunds?.total || 0)
     );
-    const [outstanding] = await db.select({ total: sql20`COALESCE(SUM(COALESCE(${invoices.amountDue}, ${invoices.total})), 0)` }).from(invoices).where(
-      and36(
-        eq45(invoices.customerId, cid),
-        sql20`${invoices.status} IN ('sent', 'overdue')`,
-        sql20`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`
+    const [outstanding] = await db.select({ total: sql22`COALESCE(SUM(COALESCE(${invoices.amountDue}, ${invoices.total})), 0)` }).from(invoices).where(
+      and38(
+        eq47(invoices.customerId, cid),
+        sql22`${invoices.status} IN ('sent', 'overdue')`,
+        sql22`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`
       )
     );
     const totalCreditIssued = Number(credits?.total || 0);
@@ -21313,11 +23609,46 @@ var portalInvoicesRouter = portalRouter({
 // server/portal/routers/portalSettingsRouter.ts
 import { z as z37 } from "zod";
 import { TRPCError as TRPCError34 } from "@trpc/server";
-import { eq as eq46, and as and37 } from "drizzle-orm";
+import { eq as eq48, and as and39 } from "drizzle-orm";
 init_db2();
 init_schema();
 init_portalAuth();
 var portalSettingsRouter = portalRouter({
+  // ── Payroll Period Endpoints (for Portal PayrollCycleIndicator) ──
+  /**
+   * Get the current active payroll period with cutoff info.
+   */
+  currentPayrollPeriod: protectedPortalProcedure.query(async () => {
+    return await getCurrentPayrollPeriod();
+  }),
+  /**
+   * Get payroll period info for a specific month.
+   */
+  payrollPeriodInfo: protectedPortalProcedure.input(z37.object({ month: z37.string().regex(/^\d{4}-\d{2}$/) })).query(async ({ input }) => {
+    return await getPayrollPeriodInfo(input.month);
+  }),
+  /**
+   * Check cutoff status for a specific effective month.
+   */
+  checkCutoff: protectedPortalProcedure.input(z37.object({ effectiveMonth: z37.string() })).query(async ({ input }) => {
+    const result = await checkCutoffPassed(input.effectiveMonth);
+    return {
+      passed: result.passed,
+      cutoffDate: result.cutoffDate.toISOString()
+    };
+  }),
+  /**
+   * Preview how a cross-month leave would be split into monthly portions.
+   */
+  previewLeaveSplit: protectedPortalProcedure.input(z37.object({
+    startDate: z37.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    endDate: z37.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    totalDays: z37.number().positive()
+  })).query(({ input }) => {
+    const crossMonth = isLeavesCrossMonth(input.startDate, input.endDate);
+    const splits = splitLeaveByMonth(input.startDate, input.endDate, input.totalDays);
+    return { crossMonth, splits };
+  }),
   /**
    * Get company profile — scoped to customerId
    */
@@ -21342,7 +23673,7 @@ var portalSettingsRouter = portalRouter({
       settlementCurrency: customers.settlementCurrency,
       language: customers.language
       // Exclude: internalNotes, pricing info, markup data, depositMultiplier
-    }).from(customers).where(eq46(customers.id, cid));
+    }).from(customers).where(eq48(customers.id, cid));
     return company || null;
   }),
   /**
@@ -21384,7 +23715,7 @@ var portalSettingsRouter = portalRouter({
     if (Object.keys(updateData).length === 0) {
       return { success: true };
     }
-    await db.update(customers).set(updateData).where(eq46(customers.id, cid));
+    await db.update(customers).set(updateData).where(eq48(customers.id, cid));
     return { success: true };
   }),
   /**
@@ -21404,7 +23735,7 @@ var portalSettingsRouter = portalRouter({
       leaveTypeName: leaveTypes.leaveTypeName,
       countryName: countriesConfig.countryName,
       statutoryMinimum: leaveTypes.annualEntitlement
-    }).from(customerLeavePolicies).leftJoin(leaveTypes, eq46(customerLeavePolicies.leaveTypeId, leaveTypes.id)).leftJoin(countriesConfig, eq46(customerLeavePolicies.countryCode, countriesConfig.countryCode)).where(eq46(customerLeavePolicies.customerId, cid));
+    }).from(customerLeavePolicies).leftJoin(leaveTypes, eq48(customerLeavePolicies.leaveTypeId, leaveTypes.id)).leftJoin(countriesConfig, eq48(customerLeavePolicies.countryCode, countriesConfig.countryCode)).where(eq48(customerLeavePolicies.customerId, cid));
     return policies;
   }),
   /**
@@ -21421,11 +23752,11 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [policy] = await db.select({ id: customerLeavePolicies.id, leaveTypeId: customerLeavePolicies.leaveTypeId }).from(customerLeavePolicies).where(and37(eq46(customerLeavePolicies.id, input.id), eq46(customerLeavePolicies.customerId, cid)));
+    const [policy] = await db.select({ id: customerLeavePolicies.id, leaveTypeId: customerLeavePolicies.leaveTypeId }).from(customerLeavePolicies).where(and39(eq48(customerLeavePolicies.id, input.id), eq48(customerLeavePolicies.customerId, cid)));
     if (!policy) {
       throw new TRPCError34({ code: "NOT_FOUND", message: "Leave policy not found" });
     }
-    const [leaveType] = await db.select({ annualEntitlement: leaveTypes.annualEntitlement }).from(leaveTypes).where(eq46(leaveTypes.id, policy.leaveTypeId));
+    const [leaveType] = await db.select({ annualEntitlement: leaveTypes.annualEntitlement }).from(leaveTypes).where(eq48(leaveTypes.id, policy.leaveTypeId));
     if (leaveType && leaveType.annualEntitlement && input.annualEntitlement < leaveType.annualEntitlement) {
       throw new TRPCError34({
         code: "BAD_REQUEST",
@@ -21436,7 +23767,7 @@ var portalSettingsRouter = portalRouter({
       annualEntitlement: input.annualEntitlement,
       expiryRule: input.expiryRule,
       carryOverDays: input.carryOverDays
-    }).where(eq46(customerLeavePolicies.id, input.id));
+    }).where(eq48(customerLeavePolicies.id, input.id));
     return { success: true };
   }),
   // ============================================================================
@@ -21461,7 +23792,7 @@ var portalSettingsRouter = portalRouter({
       lastLoginAt: customerContacts.lastLoginAt,
       isPrimary: customerContacts.isPrimary
       // passwordHash is NOT included
-    }).from(customerContacts).where(eq46(customerContacts.customerId, cid)).orderBy(customerContacts.contactName);
+    }).from(customerContacts).where(eq48(customerContacts.customerId, cid)).orderBy(customerContacts.contactName);
     return users3;
   }),
   /**
@@ -21480,7 +23811,7 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const existing = await db.select({ id: customerContacts.id }).from(customerContacts).where(eq46(customerContacts.email, input.email.toLowerCase().trim()));
+    const existing = await db.select({ id: customerContacts.id }).from(customerContacts).where(eq48(customerContacts.email, input.email.toLowerCase().trim()));
     if (existing.length > 0) {
       throw new TRPCError34({ code: "CONFLICT", message: "A user with this email already exists" });
     }
@@ -21521,11 +23852,11 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and37(eq46(customerContacts.id, input.contactId), eq46(customerContacts.customerId, cid)));
+    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and39(eq48(customerContacts.id, input.contactId), eq48(customerContacts.customerId, cid)));
     if (!contact) {
       throw new TRPCError34({ code: "NOT_FOUND", message: "User not found" });
     }
-    await db.update(customerContacts).set({ portalRole: input.portalRole }).where(eq46(customerContacts.id, input.contactId));
+    await db.update(customerContacts).set({ portalRole: input.portalRole }).where(eq48(customerContacts.id, input.contactId));
     return { success: true };
   }),
   /**
@@ -21538,11 +23869,11 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and37(eq46(customerContacts.id, input.contactId), eq46(customerContacts.customerId, cid)));
+    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and39(eq48(customerContacts.id, input.contactId), eq48(customerContacts.customerId, cid)));
     if (!contact) {
       throw new TRPCError34({ code: "NOT_FOUND", message: "User not found" });
     }
-    await db.update(customerContacts).set({ hasPortalAccess: false, isPortalActive: false }).where(eq46(customerContacts.id, input.contactId));
+    await db.update(customerContacts).set({ hasPortalAccess: false, isPortalActive: false }).where(eq48(customerContacts.id, input.contactId));
     return { success: true };
   }),
   /**
@@ -21552,7 +23883,7 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [contact] = await db.select({ id: customerContacts.id, isPortalActive: customerContacts.isPortalActive }).from(customerContacts).where(and37(eq46(customerContacts.id, input.contactId), eq46(customerContacts.customerId, cid)));
+    const [contact] = await db.select({ id: customerContacts.id, isPortalActive: customerContacts.isPortalActive }).from(customerContacts).where(and39(eq48(customerContacts.id, input.contactId), eq48(customerContacts.customerId, cid)));
     if (!contact) {
       throw new TRPCError34({ code: "NOT_FOUND", message: "User not found" });
     }
@@ -21561,7 +23892,7 @@ var portalSettingsRouter = portalRouter({
     }
     const inviteToken = generateInviteToken2();
     const inviteExpiresAt = getInviteExpiryDate2();
-    await db.update(customerContacts).set({ inviteToken, inviteExpiresAt }).where(eq46(customerContacts.id, input.contactId));
+    await db.update(customerContacts).set({ inviteToken, inviteExpiresAt }).where(eq48(customerContacts.id, input.contactId));
     return {
       success: true,
       inviteToken,
@@ -21575,9 +23906,9 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const existing = await db.select({ id: customerLeavePolicies.id }).from(customerLeavePolicies).where(and37(
-      eq46(customerLeavePolicies.customerId, cid),
-      eq46(customerLeavePolicies.countryCode, input.countryCode)
+    const existing = await db.select({ id: customerLeavePolicies.id }).from(customerLeavePolicies).where(and39(
+      eq48(customerLeavePolicies.customerId, cid),
+      eq48(customerLeavePolicies.countryCode, input.countryCode)
     ));
     if (existing.length > 0) {
       throw new TRPCError34({
@@ -21585,7 +23916,7 @@ var portalSettingsRouter = portalRouter({
         message: "Leave policies already exist for this country. Please edit them instead."
       });
     }
-    const statutoryTypes = await db.select().from(leaveTypes).where(eq46(leaveTypes.countryCode, input.countryCode));
+    const statutoryTypes = await db.select().from(leaveTypes).where(eq48(leaveTypes.countryCode, input.countryCode));
     if (statutoryTypes.length === 0) {
       throw new TRPCError34({
         code: "NOT_FOUND",
@@ -21614,7 +23945,7 @@ var portalSettingsRouter = portalRouter({
     const countries = await db.select({
       country: employees.country,
       countryName: countriesConfig.countryName
-    }).from(employees).leftJoin(countriesConfig, eq46(employees.country, countriesConfig.countryCode)).where(eq46(employees.customerId, cid)).groupBy(employees.country, countriesConfig.countryName);
+    }).from(employees).leftJoin(countriesConfig, eq48(employees.country, countriesConfig.countryCode)).where(eq48(employees.customerId, cid)).groupBy(employees.country, countriesConfig.countryName);
     return countries;
   })
 });
@@ -21622,7 +23953,7 @@ var portalSettingsRouter = portalRouter({
 // server/portal/routers/portalPayrollRouter.ts
 import { z as z38 } from "zod";
 import { TRPCError as TRPCError35 } from "@trpc/server";
-import { sql as sql22, eq as eq47, and as and38, count as count15, inArray as inArray13 } from "drizzle-orm";
+import { sql as sql24, eq as eq49, and as and40, count as count15, inArray as inArray15 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalPayrollRouter = portalRouter({
@@ -21640,19 +23971,19 @@ var portalPayrollRouter = portalRouter({
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const subquery = db.select({ payrollRunId: payrollItems.payrollRunId }).from(payrollItems).innerJoin(employees, eq47(payrollItems.employeeId, employees.id)).where(eq47(employees.customerId, cid)).groupBy(payrollItems.payrollRunId);
+    const subquery = db.select({ payrollRunId: payrollItems.payrollRunId }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(eq49(employees.customerId, cid)).groupBy(payrollItems.payrollRunId);
     const runIds = (await subquery).map((r) => r.payrollRunId);
     if (runIds.length === 0) return { items: [], total: 0 };
     const conditions = [
-      inArray13(payrollRuns.id, runIds),
-      eq47(payrollRuns.status, "approved")
+      inArray15(payrollRuns.id, runIds),
+      eq49(payrollRuns.status, "approved")
     ];
     if (input.year) {
       conditions.push(
-        sql22`YEAR(${payrollRuns.payrollMonth}) = ${input.year}`
+        sql24`substr(${payrollRuns.payrollMonth}, 1, 4) = ${String(input.year)}`
       );
     }
-    const where = and38(...conditions);
+    const where = and40(...conditions);
     const [totalResult] = await db.select({ count: count15() }).from(payrollRuns).where(where);
     const runs = await db.select({
       id: payrollRuns.id,
@@ -21665,24 +23996,24 @@ var portalPayrollRouter = portalRouter({
       totalNet: payrollRuns.totalNet,
       approvedAt: payrollRuns.approvedAt,
       notes: payrollRuns.notes
-    }).from(payrollRuns).where(where).orderBy(sql22`${payrollRuns.payrollMonth} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(payrollRuns).where(where).orderBy(sql24`${payrollRuns.payrollMonth} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     const enrichedRuns = await Promise.all(
       runs.map(async (run) => {
-        const [empCount] = await db.select({ count: count15() }).from(payrollItems).innerJoin(employees, eq47(payrollItems.employeeId, employees.id)).where(
-          and38(
-            eq47(payrollItems.payrollRunId, run.id),
-            eq47(employees.customerId, cid)
+        const [empCount] = await db.select({ count: count15() }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(
+          and40(
+            eq49(payrollItems.payrollRunId, run.id),
+            eq49(employees.customerId, cid)
           )
         );
         const [customerTotals] = await db.select({
-          totalGross: sql22`COALESCE(SUM(${payrollItems.gross}), 0)`,
-          totalNet: sql22`COALESCE(SUM(${payrollItems.net}), 0)`,
-          totalDeductions: sql22`COALESCE(SUM(${payrollItems.deductions} + ${payrollItems.taxDeduction} + ${payrollItems.socialSecurityDeduction} + ${payrollItems.unpaidLeaveDeduction}), 0)`,
-          totalEmployerCost: sql22`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`
-        }).from(payrollItems).innerJoin(employees, eq47(payrollItems.employeeId, employees.id)).where(
-          and38(
-            eq47(payrollItems.payrollRunId, run.id),
-            eq47(employees.customerId, cid)
+          totalGross: sql24`COALESCE(SUM(${payrollItems.gross}), 0)`,
+          totalNet: sql24`COALESCE(SUM(${payrollItems.net}), 0)`,
+          totalDeductions: sql24`COALESCE(SUM(${payrollItems.deductions} + ${payrollItems.taxDeduction} + ${payrollItems.socialSecurityDeduction} + ${payrollItems.unpaidLeaveDeduction}), 0)`,
+          totalEmployerCost: sql24`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`
+        }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(
+          and40(
+            eq49(payrollItems.payrollRunId, run.id),
+            eq49(employees.customerId, cid)
           )
         );
         return {
@@ -21717,9 +24048,9 @@ var portalPayrollRouter = portalRouter({
       approvedAt: payrollRuns.approvedAt,
       notes: payrollRuns.notes
     }).from(payrollRuns).where(
-      and38(
-        eq47(payrollRuns.id, input.id),
-        eq47(payrollRuns.status, "approved")
+      and40(
+        eq49(payrollRuns.id, input.id),
+        eq49(payrollRuns.status, "approved")
       )
     );
     if (!run) {
@@ -21728,7 +24059,7 @@ var portalPayrollRouter = portalRouter({
     const items = await db.select({
       id: payrollItems.id,
       employeeId: payrollItems.employeeId,
-      employeeName: sql22`CONCAT(${employees.firstName}, ' ', ${employees.lastName})`,
+      employeeName: sql24`(${employees.firstName} || ' ' || ${employees.lastName})`,
       employeeCode: employees.employeeCode,
       jobTitle: employees.jobTitle,
       baseSalary: payrollItems.baseSalary,
@@ -21746,10 +24077,10 @@ var portalPayrollRouter = portalRouter({
       totalEmploymentCost: payrollItems.totalEmploymentCost,
       currency: payrollItems.currency,
       notes: payrollItems.notes
-    }).from(payrollItems).innerJoin(employees, eq47(payrollItems.employeeId, employees.id)).where(
-      and38(
-        eq47(payrollItems.payrollRunId, input.id),
-        eq47(employees.customerId, cid)
+    }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(
+      and40(
+        eq49(payrollItems.payrollRunId, input.id),
+        eq49(employees.customerId, cid)
       )
     );
     if (items.length === 0) {
@@ -21759,13 +24090,73 @@ var portalPayrollRouter = portalRouter({
       ...run,
       items
     };
+  }),
+  /**
+   * Export all payroll detail for a given year — returns employee-level rows for CSV export
+   */
+  exportData: protectedPortalProcedure.input(z38.object({ year: z38.number() })).query(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) return [];
+    const cid = ctx.portalUser.customerId;
+    const subquery = db.select({ payrollRunId: payrollItems.payrollRunId }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(eq49(employees.customerId, cid)).groupBy(payrollItems.payrollRunId);
+    const runIds = (await subquery).map((r) => r.payrollRunId);
+    if (runIds.length === 0) return [];
+    const runs = await db.select({
+      id: payrollRuns.id,
+      countryCode: payrollRuns.countryCode,
+      payrollMonth: payrollRuns.payrollMonth,
+      currency: payrollRuns.currency,
+      status: payrollRuns.status
+    }).from(payrollRuns).where(
+      and40(
+        inArray15(payrollRuns.id, runIds),
+        eq49(payrollRuns.status, "approved"),
+        sql24`substr(${payrollRuns.payrollMonth}, 1, 4) = ${String(input.year)}`
+      )
+    ).orderBy(sql24`${payrollRuns.payrollMonth} DESC`);
+    if (runs.length === 0) return [];
+    const allItems = await db.select({
+      payrollRunId: payrollItems.payrollRunId,
+      employeeName: sql24`(${employees.firstName} || ' ' || ${employees.lastName})`,
+      employeeCode: employees.employeeCode,
+      jobTitle: employees.jobTitle,
+      baseSalary: payrollItems.baseSalary,
+      bonus: payrollItems.bonus,
+      allowances: payrollItems.allowances,
+      reimbursements: payrollItems.reimbursements,
+      deductions: payrollItems.deductions,
+      taxDeduction: payrollItems.taxDeduction,
+      socialSecurityDeduction: payrollItems.socialSecurityDeduction,
+      unpaidLeaveDeduction: payrollItems.unpaidLeaveDeduction,
+      unpaidLeaveDays: payrollItems.unpaidLeaveDays,
+      gross: payrollItems.gross,
+      net: payrollItems.net,
+      employerSocialContribution: payrollItems.employerSocialContribution,
+      totalEmploymentCost: payrollItems.totalEmploymentCost,
+      currency: payrollItems.currency
+    }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(
+      and40(
+        inArray15(payrollItems.payrollRunId, runs.map((r) => r.id)),
+        eq49(employees.customerId, cid)
+      )
+    );
+    const runMap = new Map(runs.map((r) => [r.id, r]));
+    return allItems.map((item) => {
+      const run = runMap.get(item.payrollRunId);
+      return {
+        payrollMonth: run?.payrollMonth || "",
+        countryCode: run?.countryCode || "",
+        status: run?.status || "",
+        ...item
+      };
+    });
   })
 });
 
 // server/portal/routers/portalReimbursementsRouter.ts
 import { z as z39 } from "zod";
 import { TRPCError as TRPCError36 } from "@trpc/server";
-import { sql as sql23, eq as eq48, and as and39, count as count16 } from "drizzle-orm";
+import { sql as sql25, eq as eq50, and as and41, count as count16 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalReimbursementsRouter = portalRouter({
@@ -21784,17 +24175,17 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const conditions = [eq48(reimbursements.customerId, cid)];
+    const conditions = [eq50(reimbursements.customerId, cid)];
     if (input.status) {
-      conditions.push(eq48(reimbursements.status, input.status));
+      conditions.push(eq50(reimbursements.status, input.status));
     }
     if (input.effectiveMonth) {
-      conditions.push(eq48(reimbursements.effectiveMonth, input.effectiveMonth));
+      conditions.push(eq50(reimbursements.effectiveMonth, input.effectiveMonth));
     }
     if (input.employeeId) {
-      conditions.push(eq48(reimbursements.employeeId, input.employeeId));
+      conditions.push(eq50(reimbursements.employeeId, input.employeeId));
     }
-    const where = and39(...conditions);
+    const where = and41(...conditions);
     const [totalResult] = await db.select({ count: count16() }).from(reimbursements).where(where);
     const items = await db.select({
       id: reimbursements.id,
@@ -21817,7 +24208,7 @@ var portalReimbursementsRouter = portalRouter({
       // Join employee name
       employeeFirstName: employees.firstName,
       employeeLastName: employees.lastName
-    }).from(reimbursements).innerJoin(employees, eq48(reimbursements.employeeId, employees.id)).where(where).orderBy(sql23`${reimbursements.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(reimbursements).innerJoin(employees, eq50(reimbursements.employeeId, employees.id)).where(where).orderBy(sql25`${reimbursements.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return {
       items,
       total: totalResult?.count ?? 0
@@ -21851,27 +24242,47 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and39(eq48(employees.id, input.employeeId), eq48(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id, country: employees.country, salaryCurrency: employees.salaryCurrency }).from(employees).where(and41(eq50(employees.id, input.employeeId), eq50(employees.customerId, cid)));
     if (!emp) {
       throw new TRPCError36({ code: "NOT_FOUND", message: "Employee not found" });
     }
     if (!input.receiptFileUrl) {
       throw new TRPCError36({ code: "BAD_REQUEST", message: "Receipt is required for reimbursement claims" });
     }
-    const result = await db.insert(reimbursements).values({
+    const parts = input.effectiveMonth.split("-");
+    if (parts.length < 2) {
+      throw new TRPCError36({ code: "BAD_REQUEST", message: "Invalid effective month format" });
+    }
+    const normalizedMonth = `${parts[0]}-${parts[1].padStart(2, "0")}-01`;
+    const [existingPayroll] = await db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns).innerJoin(payrollItems, eq50(payrollRuns.id, payrollItems.payrollRunId)).where(
+      and41(
+        eq50(payrollRuns.countryCode, emp.country),
+        eq50(payrollRuns.payrollMonth, normalizedMonth),
+        eq50(payrollItems.employeeId, input.employeeId)
+      )
+    ).limit(1);
+    if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
+      throw new TRPCError36({
+        code: "BAD_REQUEST",
+        message: `Payroll run for ${normalizedMonth.substring(0, 7)} is already ${existingPayroll.status}. Reimbursements cannot be added.`
+      });
+    }
+    await enforceCutoff(normalizedMonth, "portal_hr", "create reimbursement");
+    const currency = emp.salaryCurrency || input.currency;
+    await db.insert(reimbursements).values({
       employeeId: input.employeeId,
       customerId: cid,
       category: input.category,
       amount: input.amount,
-      currency: input.currency,
-      effectiveMonth: input.effectiveMonth,
+      currency,
+      effectiveMonth: normalizedMonth,
       description: input.description || null,
       receiptFileUrl: input.receiptFileUrl || null,
       receiptFileKey: input.receiptFileKey || null,
       status: "submitted",
       submittedBy: ctx.portalUser.contactId
     });
-    return { success: true, reimbursementId: result[0].insertId };
+    return { success: true };
   }),
   /**
    * Update reimbursement — only if status is 'submitted' (not yet approved)
@@ -21888,7 +24299,7 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and39(eq48(reimbursements.id, input.id), eq48(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and41(eq50(reimbursements.id, input.id), eq50(reimbursements.customerId, cid)));
     if (!reimb) {
       throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
@@ -21901,7 +24312,7 @@ var portalReimbursementsRouter = portalRouter({
     if (input.receiptFileUrl !== void 0) updates.receiptFileUrl = input.receiptFileUrl;
     if (input.receiptFileKey !== void 0) updates.receiptFileKey = input.receiptFileKey;
     if (Object.keys(updates).length > 0) {
-      await db.update(reimbursements).set(updates).where(eq48(reimbursements.id, input.id));
+      await db.update(reimbursements).set(updates).where(eq50(reimbursements.id, input.id));
     }
     return { success: true };
   }),
@@ -21912,14 +24323,14 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and39(eq48(reimbursements.id, input.id), eq48(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and41(eq50(reimbursements.id, input.id), eq50(reimbursements.customerId, cid)));
     if (!reimb) {
       throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
     if (reimb.status !== "submitted") {
       throw new TRPCError36({ code: "FORBIDDEN", message: "Reimbursement cannot be deleted after approval" });
     }
-    await db.delete(reimbursements).where(eq48(reimbursements.id, input.id));
+    await db.delete(reimbursements).where(eq50(reimbursements.id, input.id));
     return { success: true };
   }),
   /**
@@ -21929,7 +24340,7 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and39(eq48(reimbursements.id, input.id), eq48(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and41(eq50(reimbursements.id, input.id), eq50(reimbursements.customerId, cid)));
     if (!reimb) {
       throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
@@ -21940,7 +24351,7 @@ var portalReimbursementsRouter = portalRouter({
       status: "client_approved",
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date()
-    }).where(eq48(reimbursements.id, input.id));
+    }).where(eq50(reimbursements.id, input.id));
     return { success: true };
   }),
   /**
@@ -21953,7 +24364,7 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and39(eq48(reimbursements.id, input.id), eq48(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and41(eq50(reimbursements.id, input.id), eq50(reimbursements.customerId, cid)));
     if (!reimb) {
       throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
@@ -21965,7 +24376,7 @@ var portalReimbursementsRouter = portalRouter({
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date(),
       clientRejectionReason: input.reason || null
-    }).where(eq48(reimbursements.id, input.id));
+    }).where(eq50(reimbursements.id, input.id));
     return { success: true };
   }),
   /**
@@ -21991,7 +24402,7 @@ var portalReimbursementsRouter = portalRouter({
 
 // server/portal/routers/portalKnowledgeBaseRouter.ts
 import { z as z40 } from "zod";
-import { and as and40, desc as desc19, eq as eq49, inArray as inArray14, isNull as isNull4, or as or8 } from "drizzle-orm";
+import { and as and42, desc as desc20, eq as eq51, inArray as inArray16, isNull as isNull5, or as or8 } from "drizzle-orm";
 import { TRPCError as TRPCError37 } from "@trpc/server";
 init_db2();
 init_schema();
@@ -22010,13 +24421,13 @@ var portalKnowledgeBaseRouter = portalRouter({
     const customerId = ctx.portalUser.customerId;
     const topics = input?.topics?.length ? input.topics : [...topicEnum];
     const items = await db.select().from(knowledgeItems).where(
-      and40(
-        inArray14(knowledgeItems.topic, topics),
-        eq49(knowledgeItems.language, input?.locale ?? "en"),
-        eq49(knowledgeItems.status, "published"),
-        or8(eq49(knowledgeItems.customerId, customerId), isNull4(knowledgeItems.customerId))
+      and42(
+        inArray16(knowledgeItems.topic, topics),
+        eq51(knowledgeItems.language, input?.locale ?? "en"),
+        eq51(knowledgeItems.status, "published"),
+        or8(eq51(knowledgeItems.customerId, customerId), isNull5(knowledgeItems.customerId))
       )
-    ).orderBy(desc19(knowledgeItems.publishedAt), desc19(knowledgeItems.createdAt)).limit(100);
+    ).orderBy(desc20(knowledgeItems.publishedAt), desc20(knowledgeItems.createdAt)).limit(500);
     const topicCounts = topics.reduce((acc, topic) => {
       acc[topic] = items.filter((item) => item.topic === topic).length;
       return acc;
@@ -22101,7 +24512,7 @@ var portalKnowledgeBaseRouter = portalRouter({
 import { z as z41 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq50, and as and41, asc as asc3, sql as sql24 } from "drizzle-orm";
+import { eq as eq52, and as and43, asc as asc4, sql as sql26 } from "drizzle-orm";
 var portalToolkitRouter = portalRouter({
   // Countries list for dropdowns (with extra fields for At-a-Glance cards)
   listCountries: protectedPortalProcedure.query(async () => {
@@ -22116,7 +24527,7 @@ var portalToolkitRouter = portalRouter({
       statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
       noticePeriodDays: countriesConfig.noticePeriodDays,
       probationPeriodDays: countriesConfig.probationPeriodDays
-    }).from(countriesConfig).where(eq50(countriesConfig.isActive, true));
+    }).from(countriesConfig).where(eq52(countriesConfig.isActive, true));
   }),
   // Cost Calculation
   calculateCost: protectedPortalProcedure.input(
@@ -22138,11 +24549,11 @@ var portalToolkitRouter = portalRouter({
     const db = getDb();
     if (!db) throw new Error("DB error");
     return await db.select().from(countryGuideChapters).where(
-      and41(
-        eq50(countryGuideChapters.countryCode, input.countryCode),
-        eq50(countryGuideChapters.status, "published")
+      and43(
+        eq52(countryGuideChapters.countryCode, input.countryCode),
+        eq52(countryGuideChapters.status, "published")
       )
-    ).orderBy(asc3(countryGuideChapters.sortOrder));
+    ).orderBy(asc4(countryGuideChapters.sortOrder));
   }),
   // Country Guide - list countries that have published guides
   listCountriesWithGuides: protectedPortalProcedure.query(async () => {
@@ -22150,8 +24561,8 @@ var portalToolkitRouter = portalRouter({
     if (!db) throw new Error("DB error");
     const countriesWithGuides = await db.select({
       countryCode: countryGuideChapters.countryCode,
-      chapterCount: sql24`count(*)`.as("chapterCount")
-    }).from(countryGuideChapters).where(eq50(countryGuideChapters.status, "published")).groupBy(countryGuideChapters.countryCode);
+      chapterCount: sql26`count(*)`.as("chapterCount")
+    }).from(countryGuideChapters).where(eq52(countryGuideChapters.status, "published")).groupBy(countryGuideChapters.countryCode);
     const allCountries = await db.select({
       countryCode: countriesConfig.countryCode,
       countryName: countriesConfig.countryName,
@@ -22161,7 +24572,7 @@ var portalToolkitRouter = portalRouter({
       statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
       noticePeriodDays: countriesConfig.noticePeriodDays,
       probationPeriodDays: countriesConfig.probationPeriodDays
-    }).from(countriesConfig).where(eq50(countriesConfig.isActive, true));
+    }).from(countriesConfig).where(eq52(countriesConfig.isActive, true));
     const guideMap = new Map(countriesWithGuides.map((c) => [c.countryCode, c.chapterCount]));
     return allCountries.filter((c) => guideMap.has(c.countryCode)).map((c) => ({
       ...c,
@@ -22179,10 +24590,10 @@ var portalToolkitRouter = portalRouter({
     const db = getDb();
     if (!db) throw new Error("DB error");
     return await db.query.salaryBenchmarks.findFirst({
-      where: and41(
-        eq50(salaryBenchmarks.countryCode, input.countryCode),
-        eq50(salaryBenchmarks.jobCategory, input.jobCategory),
-        eq50(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
+      where: and43(
+        eq52(salaryBenchmarks.countryCode, input.countryCode),
+        eq52(salaryBenchmarks.jobCategory, input.jobCategory),
+        eq52(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
       )
     });
   })
@@ -22192,13 +24603,80 @@ var portalToolkitRouter = portalRouter({
 import { z as z42 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq51, desc as desc20, sql as sql25 } from "drizzle-orm";
+init_financeService();
+import { eq as eq53, desc as desc21, sql as sql27 } from "drizzle-orm";
 import { TRPCError as TRPCError38 } from "@trpc/server";
 var portalWalletRouter = portalRouter({
   get: protectedPortalProcedure.input(z42.object({
     currency: z42.string()
   })).query(async ({ input, ctx }) => {
-    return await walletService.getWallet(ctx.portalUser.customerId, input.currency);
+    const customerId = ctx.portalUser.customerId;
+    const [wallet, frozenWallet] = await Promise.all([
+      walletService.getWallet(customerId, input.currency),
+      walletService.getFrozenWallet(customerId, input.currency)
+    ]);
+    return {
+      ...wallet,
+      frozenBalance: frozenWallet?.balance ?? "0"
+    };
+  }),
+  payWithWallet: protectedPortalProcedure.input(z42.object({
+    invoiceId: z42.number()
+  })).mutation(async ({ input, ctx }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError38({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
+    const customerId = ctx.portalUser.customerId;
+    const invoice = await getInvoiceById(input.invoiceId);
+    if (!invoice) throw new TRPCError38({ code: "NOT_FOUND", message: "Invoice not found" });
+    if (invoice.customerId !== customerId) {
+      throw new TRPCError38({ code: "FORBIDDEN", message: "Access denied" });
+    }
+    if (invoice.status === "paid" || invoice.status === "cancelled" || invoice.status === "void") {
+      throw new TRPCError38({ code: "PRECONDITION_FAILED", message: `Invoice is already ${invoice.status}` });
+    }
+    const total = parseFloat(invoice.total?.toString() || "0");
+    const currentPaid = parseFloat(invoice.paidAmount?.toString() || "0");
+    const currentWalletApplied = parseFloat(invoice.walletAppliedAmount?.toString() || "0");
+    const remainingDue = Math.max(0, total - currentPaid - currentWalletApplied);
+    if (remainingDue <= 0) {
+      throw new TRPCError38({ code: "PRECONDITION_FAILED", message: "No balance due on this invoice" });
+    }
+    const wallet = await walletService.getWallet(customerId, invoice.currency);
+    const walletBal = parseFloat(wallet.balance);
+    if (walletBal <= 0) {
+      throw new TRPCError38({ code: "PRECONDITION_FAILED", message: "Insufficient wallet balance" });
+    }
+    const deductAmount = Math.min(walletBal, remainingDue);
+    const newWalletApplied = currentWalletApplied + deductAmount;
+    const newRemainingDue = Math.max(0, total - currentPaid - newWalletApplied);
+    const newStatus = newRemainingDue <= 0.01 ? "paid" : invoice.status;
+    await db.transaction(async (tx) => {
+      await walletService.transact({
+        walletId: wallet.id,
+        type: "invoice_deduction",
+        amount: deductAmount.toFixed(2),
+        direction: "debit",
+        referenceId: invoice.id,
+        referenceType: "invoice",
+        description: `Wallet payment for Invoice #${invoice.invoiceNumber}`,
+        createdBy: ctx.portalUser.contactId
+      }, tx);
+      const updateData = {
+        walletAppliedAmount: newWalletApplied.toFixed(2),
+        amountDue: newRemainingDue.toFixed(2),
+        status: newStatus
+      };
+      if (newStatus === "paid") {
+        updateData.paidDate = /* @__PURE__ */ new Date();
+      }
+      await tx.update(invoices).set(updateData).where(eq53(invoices.id, invoice.id));
+    });
+    return {
+      success: true,
+      deducted: deductAmount.toFixed(2),
+      newStatus,
+      remainingDue: newRemainingDue.toFixed(2)
+    };
   }),
   listTransactions: protectedPortalProcedure.input(z42.object({
     currency: z42.string(),
@@ -22209,15 +24687,15 @@ var portalWalletRouter = portalRouter({
     if (!db) throw new TRPCError38({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     const wallet = await walletService.getWallet(ctx.portalUser.customerId, input.currency);
     const txs = await db.query.walletTransactions.findMany({
-      where: eq51(walletTransactions.walletId, wallet.id),
-      orderBy: [desc20(walletTransactions.createdAt)],
+      where: eq53(walletTransactions.walletId, wallet.id),
+      orderBy: [desc21(walletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
     });
     const invoiceRefIds = txs.filter((tx) => tx.referenceType === "invoice" && tx.referenceId).map((tx) => tx.referenceId);
     let invoiceNumberMap = {};
     if (invoiceRefIds.length > 0) {
-      const invRows = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber }).from(invoices).where(sql25`${invoices.id} IN (${sql25.join(invoiceRefIds.map((id) => sql25`${id}`), sql25`, `)})`);
+      const invRows = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber }).from(invoices).where(sql27`${invoices.id} IN (${sql27.join(invoiceRefIds.map((id) => sql27`${id}`), sql27`, `)})`);
       for (const row of invRows) {
         invoiceNumberMap[row.id] = row.invoiceNumber;
       }
@@ -22233,7 +24711,7 @@ var portalWalletRouter = portalRouter({
 // server/portal/routers/portalContractorsRouter.ts
 import { z as z43 } from "zod";
 import { TRPCError as TRPCError39 } from "@trpc/server";
-import { eq as eq52, and as and42, like as like12, count as count17, desc as desc21, or as or9 } from "drizzle-orm";
+import { eq as eq54, and as and45, like as like12, count as count17, desc as desc22, or as or9 } from "drizzle-orm";
 init_db2();
 init_schema();
 var PORTAL_CONTRACTOR_LIST_FIELDS = {
@@ -22266,9 +24744,9 @@ var portalContractorsRouter = portalRouter({
     const db = getDb();
     if (!db) return { items: [], total: 0 };
     const customerId = ctx.portalUser.customerId;
-    const conditions = [eq52(contractors.customerId, customerId)];
+    const conditions = [eq54(contractors.customerId, customerId)];
     if (input.status) {
-      conditions.push(eq52(contractors.status, input.status));
+      conditions.push(eq54(contractors.status, input.status));
     }
     if (input.search) {
       conditions.push(
@@ -22280,10 +24758,10 @@ var portalContractorsRouter = portalRouter({
         )
       );
     }
-    const where = and42(...conditions);
+    const where = and45(...conditions);
     const offset = (input.page - 1) * input.pageSize;
     const [items, totalResult] = await Promise.all([
-      db.select(PORTAL_CONTRACTOR_LIST_FIELDS).from(contractors).where(where).limit(input.pageSize).offset(offset).orderBy(desc21(contractors.createdAt)),
+      db.select(PORTAL_CONTRACTOR_LIST_FIELDS).from(contractors).where(where).limit(input.pageSize).offset(offset).orderBy(desc22(contractors.createdAt)),
       db.select({ count: count17() }).from(contractors).where(where)
     ]);
     return {
@@ -22319,10 +24797,11 @@ var portalContractorsRouter = portalRouter({
       currency: contractors.currency,
       paymentFrequency: contractors.paymentFrequency,
       rateAmount: contractors.rateAmount,
+      bankDetails: contractors.bankDetails,
       notes: contractors.notes,
       createdAt: contractors.createdAt,
       updatedAt: contractors.updatedAt
-    }).from(contractors).where(and42(eq52(contractors.id, input.id), eq52(contractors.customerId, customerId))).limit(1);
+    }).from(contractors).where(and45(eq54(contractors.id, input.id), eq54(contractors.customerId, customerId))).limit(1);
     if (result.length === 0) {
       throw new TRPCError39({ code: "NOT_FOUND", message: "Contractor not found" });
     }
@@ -22350,7 +24829,8 @@ var portalContractorsRouter = portalRouter({
       endDate: z43.string().optional(),
       paymentFrequency: z43.enum(["monthly", "semi_monthly", "milestone"]).default("monthly"),
       rateAmount: z43.string().optional(),
-      currency: z43.string().default("USD")
+      currency: z43.string().default("USD"),
+      bankDetails: z43.any().optional()
     })
   ).mutation(async ({ ctx, input }) => {
     const db = getDb();
@@ -22382,16 +24862,37 @@ var portalContractorsRouter = portalRouter({
       status: "pending_review",
       paymentFrequency: input.paymentFrequency,
       rateAmount: input.rateAmount || null,
-      currency: input.currency
+      currency: input.currency,
+      bankDetails: input.bankDetails || null
     }).returning();
     return { contractorId: result[0]?.id };
+  }),
+  // Delete a pending_review contractor (only allowed before admin approval)
+  delete: protectedPortalProcedure.input(z43.object({ id: z43.number() })).mutation(async ({ ctx, input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError39({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
+    const customerId = ctx.portalUser.customerId;
+    const [existing] = await db.select({ id: contractors.id, status: contractors.status }).from(contractors).where(and45(eq54(contractors.id, input.id), eq54(contractors.customerId, customerId))).limit(1);
+    if (!existing) {
+      throw new TRPCError39({ code: "NOT_FOUND", message: "Contractor not found" });
+    }
+    if (existing.status !== "pending_review") {
+      throw new TRPCError39({
+        code: "FORBIDDEN",
+        message: "Only pending_review contractors can be deleted"
+      });
+    }
+    await db.delete(contractorMilestones).where(eq54(contractorMilestones.contractorId, input.id));
+    await db.delete(contractorAdjustments).where(eq54(contractorAdjustments.contractorId, input.id));
+    await db.delete(contractors).where(eq54(contractors.id, input.id));
+    return { success: true };
   })
 });
 
 // server/portal/routers/portalMilestonesRouter.ts
 import { z as z44 } from "zod";
 import { TRPCError as TRPCError40 } from "@trpc/server";
-import { eq as eq53, and as and43, desc as desc22, inArray as inArray15 } from "drizzle-orm";
+import { eq as eq55, and as and46, desc as desc23, inArray as inArray17 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalMilestonesRouter = portalRouter({
@@ -22407,18 +24908,18 @@ var portalMilestonesRouter = portalRouter({
     const db = getDb();
     if (!db) return [];
     const customerId = ctx.portalUser.customerId;
-    const customerContractors = await db.select({ id: contractors.id }).from(contractors).where(eq53(contractors.customerId, customerId));
+    const customerContractors = await db.select({ id: contractors.id }).from(contractors).where(eq55(contractors.customerId, customerId));
     const contractorIds = customerContractors.map((c) => c.id);
     if (contractorIds.length === 0) return [];
-    const conditions = [inArray15(contractorMilestones.contractorId, contractorIds)];
+    const conditions = [inArray17(contractorMilestones.contractorId, contractorIds)];
     if (input.contractorId) {
       if (!contractorIds.includes(input.contractorId)) {
         throw new TRPCError40({ code: "FORBIDDEN", message: "Contractor not found" });
       }
-      conditions.push(eq53(contractorMilestones.contractorId, input.contractorId));
+      conditions.push(eq55(contractorMilestones.contractorId, input.contractorId));
     }
     if (input.status) {
-      conditions.push(eq53(contractorMilestones.status, input.status));
+      conditions.push(eq55(contractorMilestones.status, input.status));
     }
     const milestones = await db.select({
       id: contractorMilestones.id,
@@ -22430,13 +24931,13 @@ var portalMilestonesRouter = portalRouter({
       status: contractorMilestones.status,
       dueDate: contractorMilestones.dueDate,
       completedAt: contractorMilestones.completedAt,
-      approvedAt: contractorMilestones.approvedAt,
+      clientApprovedAt: contractorMilestones.clientApprovedAt,
       createdAt: contractorMilestones.createdAt
-    }).from(contractorMilestones).where(and43(...conditions)).orderBy(desc22(contractorMilestones.createdAt));
+    }).from(contractorMilestones).where(and46(...conditions)).orderBy(desc23(contractorMilestones.createdAt));
     const contractorMap = /* @__PURE__ */ new Map();
     if (milestones.length > 0) {
       const uniqueIds = [...new Set(milestones.map((m) => m.contractorId))];
-      const contractorDetails = await db.select({ id: contractors.id, firstName: contractors.firstName, lastName: contractors.lastName }).from(contractors).where(inArray15(contractors.id, uniqueIds));
+      const contractorDetails = await db.select({ id: contractors.id, firstName: contractors.firstName, lastName: contractors.lastName }).from(contractors).where(inArray17(contractors.id, uniqueIds));
       contractorDetails.forEach((c) => contractorMap.set(c.id, c));
     }
     return milestones.map((m) => ({
@@ -22460,16 +24961,18 @@ var portalMilestonesRouter = portalRouter({
     const db = getDb();
     if (!db) throw new TRPCError40({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
     const customerId = ctx.portalUser.customerId;
-    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and43(eq53(contractors.id, input.contractorId), eq53(contractors.customerId, customerId))).limit(1);
-    if (contractor.length === 0) {
+    const [con] = await db.select({ id: contractors.id, currency: contractors.currency, customerId: contractors.customerId }).from(contractors).where(and46(eq55(contractors.id, input.contractorId), eq55(contractors.customerId, customerId))).limit(1);
+    if (!con) {
       throw new TRPCError40({ code: "FORBIDDEN", message: "Contractor not found" });
     }
+    const currency = con.currency || input.currency;
     const result = await db.insert(contractorMilestones).values({
       contractorId: input.contractorId,
+      customerId: con.customerId,
       title: input.title,
       description: input.description || null,
       amount: input.amount,
-      currency: input.currency,
+      currency,
       dueDate: input.dueDate || null,
       status: "pending"
     }).returning();
@@ -22486,11 +24989,11 @@ var portalMilestonesRouter = portalRouter({
       id: contractorMilestones.id,
       contractorId: contractorMilestones.contractorId,
       status: contractorMilestones.status
-    }).from(contractorMilestones).where(eq53(contractorMilestones.id, input.id)).limit(1);
+    }).from(contractorMilestones).where(eq55(contractorMilestones.id, input.id)).limit(1);
     if (milestone.length === 0) {
       throw new TRPCError40({ code: "NOT_FOUND", message: "Milestone not found" });
     }
-    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and43(eq53(contractors.id, milestone[0].contractorId), eq53(contractors.customerId, customerId))).limit(1);
+    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and46(eq55(contractors.id, milestone[0].contractorId), eq55(contractors.customerId, customerId))).limit(1);
     if (contractor.length === 0) {
       throw new TRPCError40({ code: "FORBIDDEN", message: "Access denied" });
     }
@@ -22498,9 +25001,10 @@ var portalMilestonesRouter = portalRouter({
       throw new TRPCError40({ code: "BAD_REQUEST", message: "Only submitted milestones can be approved" });
     }
     await db.update(contractorMilestones).set({
-      status: "approved",
-      approvedAt: /* @__PURE__ */ new Date()
-    }).where(eq53(contractorMilestones.id, input.id));
+      status: "client_approved",
+      clientApprovedBy: ctx.portalUser.id,
+      clientApprovedAt: /* @__PURE__ */ new Date()
+    }).where(eq55(contractorMilestones.id, input.id));
     return { success: true };
   }),
   /**
@@ -22514,18 +25018,22 @@ var portalMilestonesRouter = portalRouter({
       id: contractorMilestones.id,
       contractorId: contractorMilestones.contractorId,
       status: contractorMilestones.status
-    }).from(contractorMilestones).where(eq53(contractorMilestones.id, input.id)).limit(1);
+    }).from(contractorMilestones).where(eq55(contractorMilestones.id, input.id)).limit(1);
     if (milestone.length === 0) {
       throw new TRPCError40({ code: "NOT_FOUND", message: "Milestone not found" });
     }
-    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and43(eq53(contractors.id, milestone[0].contractorId), eq53(contractors.customerId, customerId))).limit(1);
+    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and46(eq55(contractors.id, milestone[0].contractorId), eq55(contractors.customerId, customerId))).limit(1);
     if (contractor.length === 0) {
       throw new TRPCError40({ code: "FORBIDDEN", message: "Access denied" });
     }
     if (milestone[0].status !== "submitted") {
       throw new TRPCError40({ code: "BAD_REQUEST", message: "Only submitted milestones can be rejected" });
     }
-    await db.update(contractorMilestones).set({ status: "cancelled" }).where(eq53(contractorMilestones.id, input.id));
+    await db.update(contractorMilestones).set({
+      status: "client_rejected",
+      clientApprovedBy: ctx.portalUser.id,
+      clientApprovedAt: /* @__PURE__ */ new Date()
+    }).where(eq55(contractorMilestones.id, input.id));
     return { success: true };
   })
 });
@@ -22558,7 +25066,7 @@ init_connection();
 init_schema();
 import bcrypt3 from "bcryptjs";
 import * as jose3 from "jose";
-import { eq as eq54, and as and44 } from "drizzle-orm";
+import { eq as eq56, and as and47 } from "drizzle-orm";
 var WORKER_COOKIE_NAME = "gea_worker_auth";
 var WORKER_JWT_EXPIRY = "7d";
 var JWT_ISSUER3 = "gea-worker";
@@ -22638,7 +25146,7 @@ async function authenticateWorkerRequest(req) {
     email: workerUsers.email,
     contractorId: workerUsers.contractorId,
     isActive: workerUsers.isActive
-  }).from(workerUsers).where(and44(eq54(workerUsers.id, parseInt(payload.sub)), eq54(workerUsers.isActive, true)));
+  }).from(workerUsers).where(and47(eq56(workerUsers.id, parseInt(payload.sub)), eq56(workerUsers.isActive, true)));
   if (!user) return null;
   return {
     id: user.id,
@@ -22688,7 +25196,7 @@ import { z as z45 } from "zod";
 import { TRPCError as TRPCError42 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq55 } from "drizzle-orm";
+import { eq as eq57 } from "drizzle-orm";
 var workerAuthRouter = workerRouter({
   /**
    * Login with email and password
@@ -22701,7 +25209,7 @@ var workerAuthRouter = workerRouter({
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR" });
-    const [user] = await db.select().from(workerUsers).where(eq55(workerUsers.email, input.email.toLowerCase().trim()));
+    const [user] = await db.select().from(workerUsers).where(eq57(workerUsers.email, input.email.toLowerCase().trim()));
     if (!user) {
       throw new TRPCError42({
         code: "UNAUTHORIZED",
@@ -22734,7 +25242,7 @@ var workerAuthRouter = workerRouter({
       iss: "gea-worker"
     });
     setWorkerCookie(ctx.res, token);
-    await db.update(workerUsers).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq55(workerUsers.id, user.id));
+    await db.update(workerUsers).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq57(workerUsers.id, user.id));
     return {
       success: true,
       user: {
@@ -22768,7 +25276,7 @@ var workerAuthRouter = workerRouter({
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR" });
-    const [user] = await db.select().from(workerUsers).where(eq55(workerUsers.inviteToken, input.token));
+    const [user] = await db.select().from(workerUsers).where(eq57(workerUsers.inviteToken, input.token));
     if (!user) {
       throw new TRPCError42({
         code: "NOT_FOUND",
@@ -22789,7 +25297,7 @@ var workerAuthRouter = workerRouter({
       isEmailVerified: true,
       isActive: true,
       lastLoginAt: /* @__PURE__ */ new Date()
-    }).where(eq55(workerUsers.id, user.id));
+    }).where(eq57(workerUsers.id, user.id));
     const token = await signWorkerToken({
       sub: user.id.toString(),
       email: user.email,
@@ -22806,7 +25314,7 @@ import { z as z46 } from "zod";
 import { TRPCError as TRPCError43 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq56 } from "drizzle-orm";
+import { eq as eq58 } from "drizzle-orm";
 var workerProfileRouter = workerRouter({
   /**
    * Get my profile
@@ -22820,7 +25328,7 @@ var workerProfileRouter = workerRouter({
         message: "No contractor profile linked to this user"
       });
     }
-    const [contractor] = await db.select().from(contractors).where(eq56(contractors.id, ctx.workerUser.contractorId));
+    const [contractor] = await db.select().from(contractors).where(eq58(contractors.id, ctx.workerUser.contractorId));
     if (!contractor) {
       throw new TRPCError43({
         code: "NOT_FOUND",
@@ -22853,7 +25361,7 @@ var workerProfileRouter = workerRouter({
         message: "No contractor profile linked to this user"
       });
     }
-    await db.update(contractors).set(input).where(eq56(contractors.id, ctx.workerUser.contractorId));
+    await db.update(contractors).set(input).where(eq58(contractors.id, ctx.workerUser.contractorId));
     return { success: true };
   })
 });
@@ -22863,7 +25371,7 @@ import { z as z47 } from "zod";
 import { TRPCError as TRPCError44 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq57 } from "drizzle-orm";
+import { eq as eq59 } from "drizzle-orm";
 var workerOnboardingRouter = workerRouter({
   /**
    * Validate invite token and get basic info
@@ -22875,7 +25383,7 @@ var workerOnboardingRouter = workerRouter({
       email: workerUsers.email,
       inviteExpiresAt: workerUsers.inviteExpiresAt,
       isActive: workerUsers.isActive
-    }).from(workerUsers).where(eq57(workerUsers.inviteToken, input.token));
+    }).from(workerUsers).where(eq59(workerUsers.inviteToken, input.token));
     if (!user) {
       throw new TRPCError44({
         code: "NOT_FOUND",
@@ -22906,7 +25414,7 @@ import { z as z48 } from "zod";
 import { TRPCError as TRPCError45 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq58, desc as desc23 } from "drizzle-orm";
+import { eq as eq60, desc as desc24 } from "drizzle-orm";
 var workerInvoicesRouter = workerRouter({
   /**
    * List my invoices
@@ -22927,11 +25435,11 @@ var workerInvoicesRouter = workerRouter({
       });
     }
     const offset = (input.page - 1) * input.pageSize;
-    const conditions = [eq58(contractorInvoices.contractorId, ctx.workerUser.contractorId)];
+    const conditions = [eq60(contractorInvoices.contractorId, ctx.workerUser.contractorId)];
     if (input.status) {
-      conditions.push(eq58(contractorInvoices.status, input.status));
+      conditions.push(eq60(contractorInvoices.status, input.status));
     }
-    const items = await db.select().from(contractorInvoices).where(eq58(contractorInvoices.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc23(contractorInvoices.createdAt));
+    const items = await db.select().from(contractorInvoices).where(eq60(contractorInvoices.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc24(contractorInvoices.createdAt));
     return {
       items,
       total: 0
@@ -22945,7 +25453,7 @@ import { z as z49 } from "zod";
 import { TRPCError as TRPCError46 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq59, desc as desc24 } from "drizzle-orm";
+import { eq as eq61, desc as desc25 } from "drizzle-orm";
 var workerMilestonesRouter = workerRouter({
   /**
    * List my milestones
@@ -22966,7 +25474,7 @@ var workerMilestonesRouter = workerRouter({
       });
     }
     const offset = (input.page - 1) * input.pageSize;
-    const items = await db.select().from(contractorMilestones).where(eq59(contractorMilestones.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc24(contractorMilestones.createdAt));
+    const items = await db.select().from(contractorMilestones).where(eq61(contractorMilestones.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc25(contractorMilestones.createdAt));
     return {
       items,
       total: 0
@@ -22978,7 +25486,7 @@ var workerMilestonesRouter = workerRouter({
 // server/worker/routers/workerDashboardRouter.ts
 init_connection();
 init_schema();
-import { eq as eq60, count as count18, and as and46 } from "drizzle-orm";
+import { eq as eq62, count as count18, and as and49 } from "drizzle-orm";
 var workerDashboardRouter = workerRouter({
   /**
    * Get dashboard stats
@@ -22989,8 +25497,8 @@ var workerDashboardRouter = workerRouter({
     if (!ctx.workerUser.contractorId) {
       return { pendingInvoices: 0, pendingMilestones: 0, totalPaid: 0 };
     }
-    const [pendingInvoices] = await db.select({ count: count18() }).from(contractorInvoices).where(and46(eq60(contractorInvoices.contractorId, ctx.workerUser.contractorId), eq60(contractorInvoices.status, "pending_approval")));
-    const [pendingMilestones] = await db.select({ count: count18() }).from(contractorMilestones).where(and46(eq60(contractorMilestones.contractorId, ctx.workerUser.contractorId), eq60(contractorMilestones.status, "pending")));
+    const [pendingInvoices] = await db.select({ count: count18() }).from(contractorInvoices).where(and49(eq62(contractorInvoices.contractorId, ctx.workerUser.contractorId), eq62(contractorInvoices.status, "pending_approval")));
+    const [pendingMilestones] = await db.select({ count: count18() }).from(contractorMilestones).where(and49(eq62(contractorMilestones.contractorId, ctx.workerUser.contractorId), eq62(contractorMilestones.status, "pending")));
     return {
       pendingInvoices: pendingInvoices?.count || 0,
       pendingMilestones: pendingMilestones?.count || 0,
@@ -23005,7 +25513,7 @@ import { z as z50 } from "zod";
 import { TRPCError as TRPCError47 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq61, and as and47, desc as desc25 } from "drizzle-orm";
+import { eq as eq63, and as and50, desc as desc26 } from "drizzle-orm";
 var workerNotificationsRouter = workerRouter({
   /**
    * Get unread notifications
@@ -23014,12 +25522,12 @@ var workerNotificationsRouter = workerRouter({
     const db = await getDb();
     if (!db) return [];
     return await db.select().from(notifications).where(
-      and47(
-        eq61(notifications.targetPortal, "worker"),
-        eq61(notifications.targetUserId, ctx.workerUser.id),
-        eq61(notifications.isRead, false)
+      and50(
+        eq63(notifications.targetPortal, "worker"),
+        eq63(notifications.targetUserId, ctx.workerUser.id),
+        eq63(notifications.isRead, false)
       )
-    ).orderBy(desc25(notifications.createdAt)).limit(input.limit);
+    ).orderBy(desc26(notifications.createdAt)).limit(input.limit);
   }),
   /**
    * Mark as read
@@ -23028,10 +25536,10 @@ var workerNotificationsRouter = workerRouter({
     const db = await getDb();
     if (!db) throw new TRPCError47({ code: "INTERNAL_SERVER_ERROR" });
     await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(
-      and47(
-        eq61(notifications.id, input.id),
-        eq61(notifications.targetPortal, "worker"),
-        eq61(notifications.targetUserId, ctx.workerUser.id)
+      and50(
+        eq63(notifications.id, input.id),
+        eq63(notifications.targetPortal, "worker"),
+        eq63(notifications.targetUserId, ctx.workerUser.id)
       )
     );
     return { success: true };
@@ -23043,10 +25551,10 @@ var workerNotificationsRouter = workerRouter({
     const db = await getDb();
     if (!db) throw new TRPCError47({ code: "INTERNAL_SERVER_ERROR" });
     await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(
-      and47(
-        eq61(notifications.targetPortal, "worker"),
-        eq61(notifications.targetUserId, ctx.workerUser.id),
-        eq61(notifications.isRead, false)
+      and50(
+        eq63(notifications.targetPortal, "worker"),
+        eq63(notifications.targetUserId, ctx.workerUser.id),
+        eq63(notifications.isRead, false)
       )
     );
     return { success: true };
@@ -23066,18 +25574,18 @@ var appWorkerRouter = workerRouter({
 
 // server/_core/serve-static.ts
 import express from "express";
-import fs2 from "fs";
-import path2 from "path";
+import fs3 from "fs";
+import path3 from "path";
 function serveStatic(app) {
-  const distPath = process.env.NODE_ENV === "development" ? path2.resolve(import.meta.dirname, "../..", "dist", "public") : path2.resolve(import.meta.dirname, "public");
-  if (!fs2.existsSync(distPath)) {
+  const distPath = process.env.NODE_ENV === "development" ? path3.resolve(import.meta.dirname, "../..", "dist", "public") : path3.resolve(import.meta.dirname, "public");
+  if (!fs3.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
   app.use(express.static(distPath));
   app.use("*", (_req, res) => {
-    res.sendFile(path2.resolve(distPath, "index.html"));
+    res.sendFile(path3.resolve(distPath, "index.html"));
   });
 }
 
@@ -23085,7 +25593,7 @@ function serveStatic(app) {
 init_portalAuth();
 init_db2();
 init_schema();
-import { eq as eq62, and as and48 } from "drizzle-orm";
+import { eq as eq64, and as and51 } from "drizzle-orm";
 async function createApp(options = {}) {
   const app = express2();
   const server = createServer(app);
@@ -23168,9 +25676,12 @@ async function createApp(options = {}) {
         res.status(400).json({ error: "Invalid invoice ID" });
         return;
       }
+      const db = getDb();
+      const inv = db ? await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq64(invoices.id, invoiceId)).then((r) => r[0]) : null;
       const pdfBuffer = await generateInvoicePdf({ invoiceId });
+      const filename = inv?.invoiceNumber ? `${inv.invoiceNumber}.pdf` : `invoice-${invoiceId}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="invoice-${invoiceId}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Length", pdfBuffer.length.toString());
       res.send(pdfBuffer);
     } catch (error) {
@@ -23195,14 +25706,15 @@ async function createApp(options = {}) {
         res.status(500).json({ error: "Database unavailable" });
         return;
       }
-      const [invoice] = await db.select({ id: invoices.id }).from(invoices).where(and48(eq62(invoices.id, invoiceId), eq62(invoices.customerId, portalUser.customerId)));
+      const [invoice] = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber }).from(invoices).where(and51(eq64(invoices.id, invoiceId), eq64(invoices.customerId, portalUser.customerId)));
       if (!invoice) {
         res.status(404).json({ error: "Invoice not found" });
         return;
       }
       const pdfBuffer = await generateInvoicePdf({ invoiceId });
+      const filename = invoice.invoiceNumber ? `${invoice.invoiceNumber}.pdf` : `invoice-${invoiceId}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="invoice-${invoiceId}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
       res.setHeader("Content-Length", pdfBuffer.length.toString());
       res.send(pdfBuffer);
     } catch (error) {
@@ -23235,6 +25747,34 @@ async function createApp(options = {}) {
       res.send(pdfBuffer);
     } catch (error) {
       console.error("Country guide PDF error:", error);
+      res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
+    }
+  });
+  app.get("/api/admin-country-guide/:countryCode/pdf", async (req, res) => {
+    try {
+      const user = await authenticateAdminRequest(req);
+      if (!user) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      const { countryCode } = req.params;
+      if (!countryCode || countryCode.length > 3) {
+        res.status(400).json({ error: "Invalid country code" });
+        return;
+      }
+      const locale = req.query.locale === "zh" ? "zh" : "en";
+      const pdfBuffer = await countryGuidePdfService.generatePdf(countryCode.toUpperCase(), locale);
+      if (!pdfBuffer) {
+        res.status(404).json({ error: "Country guide not found" });
+        return;
+      }
+      const langSuffix = locale === "zh" ? "-zh" : "";
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="country-guide-${countryCode}${langSuffix}.pdf"`);
+      res.setHeader("Content-Length", pdfBuffer.length.toString());
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Admin country guide PDF error:", error);
       res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
     }
   });
@@ -23299,7 +25839,7 @@ async function createApp(options = {}) {
 // server/seedAdmin.ts
 init_db2();
 init_schema();
-import { eq as eq63 } from "drizzle-orm";
+import { eq as eq65 } from "drizzle-orm";
 import crypto5 from "crypto";
 function resolveBootstrapPassword() {
   const fromEnv = process.env.ADMIN_BOOTSTRAP_PASSWORD?.trim();
@@ -23326,7 +25866,7 @@ async function seedDefaultAdmin() {
       console.warn("[Seed] ADMIN_BOOTSTRAP_EMAIL not set, skipping admin seed");
       return;
     }
-    const existing = await db.select({ id: users.id }).from(users).where(eq63(users.email, adminEmail)).limit(1);
+    const existing = await db.select({ id: users.id }).from(users).where(eq65(users.email, adminEmail)).limit(1);
     if (existing.length > 0) {
       console.log("[Seed] Default admin already exists, skipping");
       return;
@@ -23357,29 +25897,98 @@ async function seedDefaultAdmin() {
 init_db2();
 init_schema();
 import "dotenv/config";
-import { eq as eq64, and as and49 } from "drizzle-orm";
+import { eq as eq66, and as and52 } from "drizzle-orm";
 
 // server/seed/data/socialInsuranceRules.ts
 var socialInsuranceRules = [
   // =================================================================================
   // APAC (Asia-Pacific)
   // =================================================================================
-  // 1. China (Mainland) - Shanghai (Tier 1)
+  // --- Australia (AU) ---
+  // Expat: 在澳大利亚工作的外籍员工（临时居民）同样适用于强制性的养老金保障（Superannuation
+  //   Guarantee）规定，雇主必须为其缴纳不低于法定比例的养老金。临时居民在永久离开澳大利亚后，可以申请提取其养老金（Departing Australia Superannuation Payment,
+  //   DASP），但需缴纳相应税款。
+  {
+    countryCode: "AU",
+    itemKey: "superannuation",
+    itemNameEn: "Superannuation Guarantee",
+    itemNameZh: "\u517B\u8001\u91D1\u4FDD\u969C",
+    category: "pension",
+    rateEmployer: "0.12",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: "20833.33",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u7387\u81EA2025\u5E747\u67081\u65E5\u8D77\u4ECE11.5%\u4E0A\u8C03\u81F312%\u3002\u5C01\u9876\u57FA\u6570\u4E3A\u5B63\u5EA6\u6700\u9AD8\u7F34\u8D39\u57FA\u6570$62,500\u5BF9\u5E94\u7684\u6708\u5EA6\u91D1\u989D\u3002",
+    legalReference: "https://www.ato.gov.au/tax-rates-and-codes/key-superannuation-rates-and-thresholds/super-guarantee",
+    sortOrder: 1
+  },
+  // --- Bangladesh (BD) ---
+  // Expat: 外籍员工在孟加拉国不是强制性缴纳公积金（Provident Fund）。公积金的参与是自愿的，取决于雇佣合同的条款。如果外籍员工选择参与，其缴费规则与本地员工相同。
+  {
+    countryCode: "BD",
+    itemKey: "provident_fund",
+    itemNameEn: "Provident Fund",
+    itemNameZh: "\u516C\u79EF\u91D1",
+    category: "pension",
+    rateEmployer: "0.10",
+    rateEmployee: "0.10",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u7F34\u8D39\u57FA\u4E8E\u5458\u5DE5\u7684\u57FA\u672C\u5DE5\u8D44\u3002\u6839\u636E\u300A2006\u5E74\u52B3\u52A8\u6CD5\u300B\uFF0C\u8FD9\u662F\u9488\u5BF9\u62E5\u670910\u540D\u6216\u4EE5\u4E0A\u957F\u671F\u96C7\u5458\u7684\u516C\u53F8\u7684\u5F3A\u5236\u6027\u798F\u5229\uFF0C\u4F46\u5458\u5DE5\u5728\u5B8C\u6210\u4E00\u5E74\u670D\u52A1\u540E\u624D\u5F00\u59CB\u7F34\u6B3E\u3002\u5BF9\u4E8E\u5916\u7C4D\u5458\u5DE5\uFF0C\u53C2\u4E0E\u662F\u81EA\u613F\u7684\u3002",
+    legalReference: "Bangladesh Labour Act, 2006",
+    sortOrder: 2
+  },
+  // --- Brunei (BN) ---
+  // Expat:
+  //   根据文莱法律，国民退休计划（SPK）强制适用于所有文莱公民和永久居民。外籍员工（非公民、非永久居民）完全豁免，无需缴纳SPK（包括TAP和SCP）供款。雇主也无需为外籍员工缴纳相应部分的款项。但是，从2025年9月起，雇主必须为所有外籍员工购买强制性私人医疗保险。
+  {
+    countryCode: "BN",
+    itemKey: "SPK_TAP",
+    itemNameEn: "National Retirement Scheme (SPK) - TAP Account",
+    itemNameZh: "\u56FD\u6C11\u9000\u4F11\u8BA1\u5212 - \u96C7\u5458\u4FE1\u6258\u57FA\u91D1\u8D26\u6237",
+    category: "pension",
+    rateEmployer: "0.085",
+    rateEmployee: "0.085",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u516C\u6C11\u548C\u6C38\u4E45\u5C45\u6C11\u3002\u96C7\u4E3B\u8D39\u7387\u6839\u636E\u96C7\u5458\u6708\u85AA\u5206\u7EA7\uFF1A1) BND 500\u53CA\u4EE5\u4E0B\uFF0C\u56FA\u5B9A\u7F34\u7EB3BND 57.50\uFF1B2) BND 500.01-1,500.00\uFF0C\u8D39\u7387\u4E3A10.5%\uFF08\u6700\u4F4EBND 57.50\uFF09\uFF1B3) BND 1,500.01-2,800.00\uFF0C\u8D39\u7387\u4E3A9.5%\uFF1B4) BND 2,800.01\u53CA\u4EE5\u4E0A\uFF0C\u8D39\u7387\u4E3A8.5%\u3002",
+    legalReference: "https://taxsummaries.pwc.com/brunei-darussalam/individual/other-taxes",
+    sortOrder: 3
+  },
+  {
+    countryCode: "BN",
+    itemKey: "SPK_SCP",
+    itemNameEn: "National Retirement Scheme (SPK) - SCP Account",
+    itemNameZh: "\u56FD\u6C11\u9000\u4F11\u8BA1\u5212 - \u8865\u5145\u7F34\u8D39\u578B\u517B\u8001\u91D1\u8D26\u6237",
+    category: "pension",
+    rateEmployer: "0.035",
+    rateEmployee: "0.035",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u516C\u6C11\u548C\u6C38\u4E45\u5C45\u6C11\u3002\u4F5C\u4E3ASPK\u7684\u4E00\u90E8\u5206\uFF0C\u8D39\u7387\u56FA\u5B9A\u4E3A\u96C7\u4E3B\u548C\u96C7\u5458\u54043.5%\u3002",
+    legalReference: "https://www.tap.com.bn/",
+    sortOrder: 4
+  },
+  // --- China (CN) ---
+  // Expat: 外籍员工可以根据与雇主在劳动合同中的约定，选择不参加社会保险。住房公积金对于外籍员工不是强制性的。
   {
     countryCode: "CN",
     regionCode: "CN-SH",
     regionName: "Shanghai",
     itemKey: "pension_sh",
-    itemNameEn: "Pension Insurance",
+    itemNameEn: "Pension",
     itemNameZh: "\u517B\u8001\u4FDD\u9669",
     category: "pension",
     rateEmployer: "0.16",
     rateEmployee: "0.08",
     capType: "fixed_amount",
-    capBase: "36921",
-    // 2024/2025 estimate
+    capBase: "37302",
     effectiveYear: 2025,
-    sortOrder: 1
+    sortOrder: 5
   },
   {
     countryCode: "CN",
@@ -23390,12 +25999,11 @@ var socialInsuranceRules = [
     itemNameZh: "\u533B\u7597\u4FDD\u9669",
     category: "health_insurance",
     rateEmployer: "0.095",
-    // 9.5%
     rateEmployee: "0.02",
     capType: "fixed_amount",
-    capBase: "36921",
+    capBase: "37302",
     effectiveYear: 2025,
-    sortOrder: 2
+    sortOrder: 6
   },
   {
     countryCode: "CN",
@@ -23408,9 +26016,9 @@ var socialInsuranceRules = [
     rateEmployer: "0.005",
     rateEmployee: "0.005",
     capType: "fixed_amount",
-    capBase: "36921",
+    capBase: "37302",
     effectiveYear: 2025,
-    sortOrder: 3
+    sortOrder: 7
   },
   {
     countryCode: "CN",
@@ -23421,12 +26029,11 @@ var socialInsuranceRules = [
     itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
     category: "work_injury",
     rateEmployer: "0.002",
-    // Base rate, variable
     rateEmployee: "0",
     capType: "fixed_amount",
-    capBase: "36921",
+    capBase: "37302",
     effectiveYear: 2025,
-    sortOrder: 4
+    sortOrder: 8
   },
   {
     countryCode: "CN",
@@ -23437,14 +26044,47 @@ var socialInsuranceRules = [
     itemNameZh: "\u4F4F\u623F\u516C\u79EF\u91D1",
     category: "housing_fund",
     rateEmployer: "0.07",
-    // 7% is standard, can be 5-12%
     rateEmployee: "0.07",
     capType: "fixed_amount",
-    capBase: "36921",
+    capBase: "37302",
     effectiveYear: 2025,
-    sortOrder: 5
+    sortOrder: 9
   },
-  // 2. Hong Kong (HK)
+  // --- Fiji (FJ) ---
+  // Expat: 在斐济受雇的外籍员工必须强制性加入斐济国家公积金（FNPF），除非他们是国际机构、使领馆或外国政府的雇员，且其雇主未在斐济注册。如果外籍员工在FNPF有缴款，当他们永久离开斐济时，可以申请全额提取其FNPF账户中的所有资金。
+  {
+    countryCode: "FJ",
+    itemKey: "fnpf",
+    itemNameEn: "Fiji National Provident Fund",
+    itemNameZh: "\u6590\u6D4E\u56FD\u5BB6\u516C\u79EF\u91D1",
+    category: "pension",
+    rateEmployer: "0.10",
+    rateEmployee: "0.08",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Mandatory contribution for all employees.",
+    legalReference: "FNPF Act 2011",
+    sortOrder: 10
+  },
+  {
+    countryCode: "FJ",
+    itemKey: "accf_levy",
+    itemNameEn: "Work Injury Compensation (ACCF Levy)",
+    itemNameZh: "\u5DE5\u4F24\u8D54\u507F\uFF08ACCF\u7A0E\uFF09",
+    category: "work_injury",
+    rateEmployer: "0.01",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employer-only contribution for the Accident Compensation Commission Fiji.",
+    legalReference: "Accident Compensation Act 2017",
+    sortOrder: 11
+  },
+  // --- Hong Kong, China (HK) ---
+  // Expat: Expatriates are exempt from MPF contributions if their employment in Hong Kong is 13 months or less, or if
+  //   they are covered by an overseas retirement scheme.
   {
     countryCode: "HK",
     itemKey: "mpf",
@@ -23461,140 +26101,277 @@ var socialInsuranceRules = [
     effectiveYear: 2025,
     sortOrder: 1
   },
-  // 3. Singapore (SG)
-  // Simplified for < 55 years old
+  // --- Indonesia (ID) ---
+  // Expat: 根据印尼法律，在印尼工作超过六个月的外国公民（外籍员工）必须强制性参加国家社保体系（BPJS），包括健康保险（BPJS Kesehatan）和工人社保（BPJS
+  //   Ketenagakerjaan）的所有项目。缴费费率和规则与印尼本地员工完全相同，没有豁免或特殊规定。
   {
-    countryCode: "SG",
-    itemKey: "cpf_ordinary",
-    itemNameEn: "Central Provident Fund (CPF)",
-    itemNameZh: "\u4E2D\u592E\u516C\u79EF\u91D1",
-    category: "pension",
-    rateEmployer: "0.17",
-    rateEmployee: "0.20",
-    capType: "fixed_amount",
-    capBase: "6800",
-    // Raised ceiling in 2024/2025
-    ageBracketMax: 55,
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  {
-    countryCode: "SG",
-    itemKey: "sdl",
-    itemNameEn: "Skills Development Levy (SDL)",
-    itemNameZh: "\u6280\u80FD\u53D1\u5C55\u7A0E",
-    category: "other_mandatory",
-    rateEmployer: "0.0025",
-    rateEmployee: "0",
-    capType: "fixed_amount",
-    capBase: "4500",
-    // Max levy $11.25
-    effectiveYear: 2025,
-    sortOrder: 2
-  },
-  // 4. Vietnam (VN) - Zone 1
-  {
-    countryCode: "VN",
-    regionCode: "zone_1",
-    itemKey: "social_insurance_vn",
-    itemNameEn: "Social Insurance (BHXH)",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.175",
-    rateEmployee: "0.08",
-    capType: "fixed_amount",
-    capBase: "46800000",
-    // 20x Base Salary (2.34M * 20)
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  {
-    countryCode: "VN",
-    regionCode: "zone_1",
-    itemKey: "health_insurance_vn",
-    itemNameEn: "Health Insurance (BHYT)",
-    itemNameZh: "\u533B\u7597\u4FDD\u9669",
+    countryCode: "ID",
+    itemKey: "bpjs_kesehatan",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
     category: "health_insurance",
-    rateEmployer: "0.03",
-    rateEmployee: "0.015",
+    rateEmployer: "0.04",
+    rateEmployee: "0.01",
     capType: "fixed_amount",
-    capBase: "46800000",
+    capBase: "12000000",
     effectiveYear: 2025,
-    sortOrder: 2
+    notes: "Managed by BPJS Kesehatan. Cap unchanged since 2020.",
+    legalReference: "Perpres No. 64 Tahun 2020",
+    sortOrder: 13
   },
   {
-    countryCode: "VN",
-    regionCode: "zone_1",
-    itemKey: "unemployment_vn",
-    itemNameEn: "Unemployment Insurance (BHTN)",
+    countryCode: "ID",
+    itemKey: "bpjs_ketenagakerjaan_jht",
+    itemNameEn: "Old Age Savings",
+    itemNameZh: "\u517B\u8001\u50A8\u84C4",
+    category: "pension",
+    rateEmployer: "0.037",
+    rateEmployee: "0.02",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Managed by BPJS Ketenagakerjaan. No salary ceiling for this benefit.",
+    legalReference: "Law No. 40/2004",
+    sortOrder: 14
+  },
+  {
+    countryCode: "ID",
+    itemKey: "bpjs_ketenagakerjaan_jp",
+    itemNameEn: "Pension",
+    itemNameZh: "\u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.02",
+    rateEmployee: "0.01",
+    capType: "fixed_amount",
+    capBase: "10547400",
+    effectiveYear: 2025,
+    notes: "Managed by BPJS Ketenagakerjaan. The cap is adjusted annually. The 2025 cap is effective from March 1, 2025.",
+    legalReference: "PP No. 45/2015",
+    sortOrder: 15
+  },
+  {
+    countryCode: "ID",
+    itemKey: "bpjs_ketenagakerjaan_jkk",
+    itemNameEn: "Work Accident Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.0089",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Managed by BPJS Ketenagakerjaan. Rate varies based on the employer's business risk level.",
+    legalReference: "PP No. 44/2015",
+    sortOrder: 16
+  },
+  {
+    countryCode: "ID",
+    itemKey: "bpjs_ketenagakerjaan_jkm",
+    itemNameEn: "Death Insurance",
+    itemNameZh: "\u6B7B\u4EA1\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.003",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Managed by BPJS Ketenagakerjaan.",
+    legalReference: "PP No. 44/2015",
+    sortOrder: 17
+  },
+  {
+    countryCode: "ID",
+    itemKey: "bpjs_ketenagakerjaan_jkp",
+    itemNameEn: "Unemployment Insurance",
     itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
     category: "unemployment",
-    rateEmployer: "0.01",
-    rateEmployee: "0.01",
-    capType: "salary_multiple",
-    capMultiplier: "20",
-    capReferenceBase: "4680000",
-    // Regional min wage Zone 1
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 3
+    notes: "Contribution is funded by the government and reallocation of JKK and JKM funds, no direct contribution from employer or employee.",
+    legalReference: "PP No. 37/2021",
+    sortOrder: 18
+  },
+  // --- India (IN) ---
+  // Expat: 外籍员工（International
+  //   Workers）原则上需在全部工资基础上强制缴纳EPF，无月薪15,000卢比的上限。但如果该员工来自与印度签有社会保障协议（SSA）的国家，并能提供有效的保障证书（Certificate of Coverage -
+  //   CoC），则可以豁免缴纳。
+  {
+    countryCode: "IN",
+    itemKey: "epf",
+    itemNameEn: "Employees' Provident Fund",
+    itemNameZh: "\u96C7\u5458\u516C\u79EF\u91D1",
+    category: "pension",
+    rateEmployer: "0.0367",
+    rateEmployee: "0.12",
+    capType: "fixed_amount",
+    capBase: "15000",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u603B\u7F34\u8D39\u7387\u4E3A12%\uFF0C\u5176\u4E2D8.33%\u8F6C\u5165EPS\uFF0C\u5269\u4F593.67%\u5B58\u5165EPF\u3002",
+    legalReference: "Employees' Provident Funds and Miscellaneous Provisions Act, 1952",
+    sortOrder: 19
   },
   {
-    countryCode: "VN",
-    regionCode: "zone_1",
-    itemKey: "trade_union_vn",
-    itemNameEn: "Trade Union Fee",
-    itemNameZh: "\u5DE5\u4F1A\u8D39",
-    category: "trade_union",
-    rateEmployer: "0.02",
+    countryCode: "IN",
+    itemKey: "eps",
+    itemNameEn: "Employees' Pension Scheme",
+    itemNameZh: "\u96C7\u5458\u517B\u8001\u91D1\u8BA1\u5212",
+    category: "pension",
+    rateEmployer: "0.0833",
     rateEmployee: "0",
     capType: "fixed_amount",
-    capBase: "46800000",
-    // Capped at base salary
+    capBase: "15000",
     effectiveYear: 2025,
-    sortOrder: 4
+    notes: "\u8D44\u91D1\u4ECE\u96C7\u4E3BEPF\u7F34\u8D39\u90E8\u5206\u5212\u8F6C\uFF0C\u96C7\u5458\u4E0D\u76F4\u63A5\u7F34\u8D39\u3002",
+    legalReference: "Employees' Provident Funds and Miscellaneous Provisions Act, 1952",
+    sortOrder: 20
   },
-  // 5. Japan (JP)
+  {
+    countryCode: "IN",
+    itemKey: "edli",
+    itemNameEn: "Employees' Deposit Linked Insurance Scheme",
+    itemNameZh: "\u96C7\u5458\u5B58\u6B3E\u5173\u8054\u4FDD\u9669\u8BA1\u5212",
+    category: "social_insurance",
+    rateEmployer: "0.005",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: "15000",
+    effectiveYear: 2025,
+    notes: "\u96C7\u5458\u4E0D\u7F34\u8D39\u3002",
+    legalReference: "Employees' Provident Funds and Miscellaneous Provisions Act, 1952",
+    sortOrder: 21
+  },
+  // --- Japan (JP) ---
+  // Expat:
+  //   原则上，在日本工作的外籍员工必须参加日本的社会保险体系（健康保险、护理保险、厚生年金、雇佣保险和工伤保险），与日本国民适用相同的规则和费率。但是，与日本签订了社会保障协定（总计化协定）的国家的派遣员工，如果在美国等国的社保体系中继续参保，并能提供相应的参保证明，则可能在最长五年内免于参加日本的健康保险和厚生年金。雇佣保险和工伤保险通常是强制性的，不可豁免。
   {
     countryCode: "JP",
     itemKey: "health_insurance_jp",
-    itemNameEn: "Health Insurance (Kenko Hoken)",
+    itemNameEn: "Health Insurance",
     itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
     category: "health_insurance",
-    rateEmployer: "0.0492",
-    // Tokyo rate ~9.84% split
-    rateEmployee: "0.0492",
-    capType: "none",
-    // Bracket based, simplified as rate
+    rateEmployer: "0.04955",
+    rateEmployee: "0.04955",
+    capType: "fixed_amount",
+    capBase: "1390000",
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "\u9002\u7528\u4E8E\u4E1C\u4EAC\u5730\u533A\u3002\u8D39\u7387\u56E0\u5730\u533A\u800C\u5F02\u3002\u6B64\u8D39\u7387\u4E0D\u5305\u62EC\u62A4\u7406\u4FDD\u9669\u3002",
+    legalReference: "https://www.kyoukaikenpo.or.jp/~/media/Files/shared/hokenryouritu/r7/ippan/13tokyo.pdf",
+    sortOrder: 22
+  },
+  {
+    countryCode: "JP",
+    itemKey: "long_term_care_insurance_jp",
+    itemNameEn: "Long-term Care Insurance",
+    itemNameZh: "\u62A4\u7406\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.00795",
+    rateEmployee: "0.00795",
+    capType: "fixed_amount",
+    capBase: "1390000",
+    effectiveYear: 2025,
+    notes: "\u5F3A\u5236\u9002\u7528\u4E8E40\u81F364\u5C81\u7684\u96C7\u5458\u3002",
+    legalReference: "https://www.kyoukaikenpo.or.jp/~/media/Files/shared/hokenryouritu/r7/ippan/13tokyo.pdf",
+    sortOrder: 23
   },
   {
     countryCode: "JP",
     itemKey: "welfare_pension_jp",
-    itemNameEn: "Welfare Pension (Kosei Nenkin)",
-    itemNameZh: "\u539A\u751F\u5E74\u91D1",
+    itemNameEn: "Welfare Pension Insurance",
+    itemNameZh: "\u539A\u751F\u5E74\u91D1\u4FDD\u9669",
     category: "pension",
     rateEmployer: "0.0915",
-    // 18.3% split
     rateEmployee: "0.0915",
     capType: "fixed_amount",
     capBase: "650000",
-    // Standard monthly remuneration cap
     effectiveYear: 2025,
-    sortOrder: 2
+    notes: "\u8D39\u7387\u81EA2017\u5E749\u6708\u8D77\u56FA\u5B9A\u4E3A18.3%\uFF08\u96C7\u4E3B\u96C7\u5458\u5404\u534A\uFF09\u3002",
+    legalReference: "https://www.nenkin.go.jp/service/kounen/hokenryo/ryogaku/ryogakuhyo/20200825.html",
+    sortOrder: 24
   },
   {
     countryCode: "JP",
-    itemKey: "unemployment_jp",
-    itemNameEn: "Unemployment Insurance (Koyou Hoken)",
-    itemNameZh: "\u96C7\u7528\u4FDD\u9669",
+    itemKey: "unemployment_insurance_jp",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u96C7\u4F63\u4FDD\u9669",
     category: "unemployment",
-    rateEmployer: "0.0095",
-    rateEmployee: "0.006",
+    rateEmployer: "0.009",
+    rateEmployee: "0.0055",
+    capType: "none",
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 3
+    notes: "\u9002\u7528\u4E8E\u4E00\u822C\u4E1A\u52A1\uFF0C\u8D39\u7387\u81EA2025\u5E744\u67081\u65E5\u8D77\u751F\u6548\u3002",
+    legalReference: "https://www.mhlw.go.jp/content/001401966.pdf",
+    sortOrder: 25
   },
-  // 6. South Korea (KR)
+  {
+    countryCode: "JP",
+    itemKey: "work_injury_insurance_jp",
+    itemNameEn: "Work Injury Insurance",
+    itemNameZh: "\u52B3\u52A8\u8005\u707E\u5BB3\u8865\u507F\u4FDD\u9669 (\u5DE5\u4F24\u4FDD\u9669)",
+    category: "work_injury",
+    rateEmployer: "0.003",
+    rateEmployee: "0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u7531\u96C7\u4E3B\u5168\u989D\u627F\u62C5\uFF0C\u5177\u4F53\u8D39\u7387\u56E0\u884C\u4E1A\u98CE\u9669\u800C\u5F02\uFF0C0.3%\u4E3A\u4E00\u822C\u4E1A\u52A1\u7684\u53C2\u8003\u8D39\u7387\u3002",
+    legalReference: "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/roudoukijun/rousai/rousaihoken-seido/hokenryouritu.html",
+    sortOrder: 26
+  },
+  // --- Cambodia (KH) ---
+  // Expat: 外籍员工（Expatriates）与本地员工同样需强制性参加所有国家社保计划（NSSF），包括工伤保险、健康保险和养老金计划，并适用相同的缴费费率和缴费基数上限。
+  {
+    countryCode: "KH",
+    itemKey: "work_injury",
+    itemNameEn: "Occupational Risk Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.008",
+    rateEmployee: "0.0",
+    capType: "salary_multiple",
+    capBase: "1200000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u85AA\u4E0D\u9AD8\u4E8E1,200,000\u745E\u5C14\u7684\u5DE5\u8D44\u90E8\u5206\u3002",
+    legalReference: "Law on Social Security Schemes (2019)",
+    sortOrder: 27
+  },
+  {
+    countryCode: "KH",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.013",
+    rateEmployee: "0.013",
+    capType: "salary_multiple",
+    capBase: "1200000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u85AA\u4E0D\u9AD8\u4E8E1,200,000\u745E\u5C14\u7684\u5DE5\u8D44\u90E8\u5206\u3002",
+    legalReference: "Law on Social Security Schemes (2019)",
+    sortOrder: 28
+  },
+  {
+    countryCode: "KH",
+    itemKey: "pension",
+    itemNameEn: "Pension Scheme",
+    itemNameZh: "\u517B\u8001\u91D1\u8BA1\u5212",
+    category: "pension",
+    rateEmployer: "0.02",
+    rateEmployee: "0.02",
+    capType: "salary_multiple",
+    capBase: "1200000",
+    effectiveYear: 2025,
+    notes: "\u7B2C\u4E00\u9636\u6BB5\u8D39\u7387\uFF082022-2027\uFF09\u3002\u9002\u7528\u4E8E\u6708\u85AA\u4E0D\u9AD8\u4E8E1,200,000\u745E\u5C14\u7684\u5DE5\u8D44\u90E8\u5206\u3002",
+    legalReference: "Sub-Decree No. 32 on the Pension Scheme (2022)",
+    sortOrder: 29
+  },
+  // --- South Korea (KR) ---
+  // Expat: 外籍员工通常需要参加所有社会保险项目。但是，存在以下特殊规定： 1. 国民年金：根据韩国与外籍员工所在国之间的社会保障协定，如果员工仍在原籍国缴纳社保，可能获得豁免。 2.
+  //   国民健康保险：如果外籍员工能证明其拥有不低于韩国国民健康保险保障水平的本国保险、外国商业保险或由雇主提供的医疗保障，可以申请豁免。 3. 雇佣保险：持有特定签证类型（如D-7, D-8,
+  //   D-9）的外籍员工必须参加。但根据互惠原则，如果其母国不强制要求韩国公民参加同类保险，则该国公民可获豁免。
   {
     countryCode: "KR",
     itemKey: "national_pension_kr",
@@ -23604,67 +26381,510 @@ var socialInsuranceRules = [
     rateEmployer: "0.045",
     rateEmployee: "0.045",
     capType: "fixed_amount",
-    capBase: "5900000",
-    // KRW
+    capBase: "6370000",
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "The cap is updated from KRW 5,900,000 to KRW 6,370,000 effective from July 1, 2025.",
+    legalReference: "National Pension Act",
+    sortOrder: 30
   },
   {
     countryCode: "KR",
     itemKey: "health_insurance_kr",
-    itemNameEn: "Health Insurance",
-    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    itemNameEn: "National Health Insurance",
+    itemNameZh: "\u56FD\u6C11\u5065\u5EB7\u4FDD\u9669",
     category: "health_insurance",
     rateEmployer: "0.03545",
-    // ~7.09% split
     rateEmployee: "0.03545",
+    capType: "fixed_amount",
+    capBase: "9008340",
     effectiveYear: 2025,
-    sortOrder: 2
+    notes: "The cap is on the monthly premium, not the base salary.",
+    legalReference: "National Health Insurance Act",
+    sortOrder: 31
+  },
+  {
+    countryCode: "KR",
+    itemKey: "long_term_care_insurance_kr",
+    itemNameEn: "Long-Term Care Insurance",
+    itemNameZh: "\u957F\u671F\u62A4\u7406\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.004591",
+    rateEmployee: "0.004591",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated as 12.95% of the NHI premium. The rate shown is an effective rate on salary (7.09% * 12.95% / 2).",
+    legalReference: "Act on Long-Term Care Insurance for the Elderly",
+    sortOrder: 32
   },
   {
     countryCode: "KR",
     itemKey: "employment_insurance_kr",
     itemNameEn: "Employment Insurance",
-    itemNameZh: "\u96C7\u7528\u4FDD\u9669",
+    itemNameZh: "\u96C7\u4F63\u4FDD\u9669",
     category: "unemployment",
     rateEmployer: "0.0115",
-    // Depends on company size, standard
     rateEmployee: "0.009",
+    capType: "none",
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 3
+    notes: "Employer rate includes 0.9% for unemployment benefits plus 0.25%-0.85% for employment stabilization and vocational competency development programs.",
+    legalReference: "Employment Insurance Act",
+    sortOrder: 33
   },
-  // 7. Australia (AU)
   {
-    countryCode: "AU",
-    itemKey: "superannuation",
-    itemNameEn: "Superannuation Guarantee",
-    itemNameZh: "\u9000\u4F11\u91D1",
-    category: "pension",
-    rateEmployer: "0.115",
-    // Rising to 12% in July 2025
-    rateEmployee: "0",
+    countryCode: "KR",
+    itemKey: "work_injury_insurance_kr",
+    itemNameEn: "Industrial Accident Compensation Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.007",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Fully funded by the employer. Rate varies by industry.",
+    legalReference: "Industrial Accident Compensation Insurance Act",
+    sortOrder: 34
+  },
+  // --- Laos (LA) ---
+  // Expat: 根据《社会保障法》（2018年修订版），在老挝工作的外籍员工，无论合同期限长短，均须强制性参加社会保障体系。其缴费费率和缴费基数上限与老挝本地员工相同，没有特殊豁免或区别待遇。
+  {
+    countryCode: "LA",
+    itemKey: "social_security_la",
+    itemNameEn: "Social Security Fund",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\u57FA\u91D1",
+    category: "social_insurance",
+    rateEmployer: "0.06",
+    rateEmployee: "0.055",
     capType: "fixed_amount",
-    capBase: "260280",
-    // Max contribution base per quarter (simplified as annual/12)
+    capBase: "4500000",
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "\u8BE5\u7F34\u6B3E\u6DB5\u76D6\u4E86\u517B\u8001\u3001\u533B\u7597\u3001\u5DE5\u4F24\u3001\u751F\u80B2\u548C\u6B7B\u4EA1\u7B49\u591A\u9879\u798F\u5229\u3002",
+    legalReference: "Law on Social Security (No. 50/NA, 25 June 2018)",
+    sortOrder: 35
   },
-  // 8. India (IN)
+  // --- Sri Lanka (LK) ---
+  // Expat: 外籍员工通常须与本地员工一样参与EPF和ETF计划。但是，根据《雇员公积金法案》第45条，对于在斯里兰卡受雇于特定项目、由外国政府或国际组织资助且经主管部长批准的外籍人士，可以申请豁免。此外，部分双边社会保障协定可能提供豁免。
   {
-    countryCode: "IN",
-    itemKey: "epf",
+    countryCode: "LK",
+    itemKey: "epf_lk",
     itemNameEn: "Employees' Provident Fund (EPF)",
-    itemNameZh: "\u516C\u79EF\u91D1",
+    itemNameZh: "\u96C7\u5458\u516C\u79EF\u91D1",
     category: "pension",
     rateEmployer: "0.12",
-    rateEmployee: "0.12",
-    capType: "fixed_amount",
-    capBase: "15000",
-    // INR
+    rateEmployee: "0.08",
+    capType: "none",
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "\u7F34\u8D39\u57FA\u6570\u4E3A\u5458\u5DE5\u7684\u6708\u5EA6\u603B\u6536\u5165\uFF0C\u65E0\u4E0A\u9650\u3002",
+    legalReference: "Employees' Provident Fund Act No. 15 of 1958",
+    sortOrder: 36
   },
-  // 9. Thailand (TH)
+  {
+    countryCode: "LK",
+    itemKey: "etf_lk",
+    itemNameEn: "Employees' Trust Fund (ETF)",
+    itemNameZh: "\u96C7\u5458\u4FE1\u6258\u57FA\u91D1",
+    category: "pension",
+    rateEmployer: "0.03",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u7F34\u8D39\u57FA\u6570\u4E3A\u5458\u5DE5\u7684\u6708\u5EA6\u603B\u6536\u5165\uFF0C\u65E0\u4E0A\u9650\u3002\u5B8C\u5168\u7531\u96C7\u4E3B\u627F\u62C5\u3002",
+    legalReference: "Employees' Trust Fund Act No. 46 of 1980",
+    sortOrder: 37
+  },
+  // --- Myanmar (MM) ---
+  // Expat: 外籍员工需和本地员工一样缴纳社保，无豁免政策。
+  {
+    countryCode: "MM",
+    itemKey: "social_security_mm",
+    itemNameEn: "Social Security",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.03",
+    rateEmployee: "0.02",
+    capType: "fixed_amount",
+    capBase: "300000",
+    effectiveYear: 2025,
+    notes: "\u7F34\u8D39\u57FA\u6570\u4E3A\u5458\u5DE5\u6708\u85AA\uFF0C\u4E0A\u9650\u4E3A300,000 MMK\u3002",
+    legalReference: "Social Security Law 2012, VDB Loi Myanmar Tax Booklet 2025-2026",
+    sortOrder: 38
+  },
+  // --- Mongolia (MN) ---
+  // Expat: 根据蒙古国法律，在蒙古国境内根据劳动合同受雇的外国公民和无国籍人士，无论其在蒙古国居住时间长短，均需强制性参加社会保险。他们与蒙古国公民适用相同的缴费率和缴费基数规定，没有特殊的豁免或优惠政策。
+  {
+    countryCode: "MN",
+    itemKey: "pension_insurance",
+    itemNameEn: "Pension Insurance",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.085",
+    rateEmployee: "0.085",
+    capType: "salary_multiple",
+    capBase: "7920000",
+    effectiveYear: 2025,
+    notes: "\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A\u6708\u6700\u4F4E\u5DE5\u8D44\u768410\u500D\u3002\u6839\u636E2025\u5E744\u67081\u65E5\u8D77\u751F\u6548\u7684792,000 MNT\u6700\u4F4E\u6708\u5DE5\u8D44\u8BA1\u7B97\u3002",
+    legalReference: "Law on Social Insurance (Article 15-1.3)",
+    sortOrder: 39
+  },
+  {
+    countryCode: "MN",
+    itemKey: "benefit_insurance",
+    itemNameEn: "Benefit Insurance",
+    itemNameZh: "\u798F\u5229\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.010",
+    rateEmployee: "0.008",
+    capType: "salary_multiple",
+    capBase: "7920000",
+    effectiveYear: 2025,
+    notes: "\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A\u6708\u6700\u4F4E\u5DE5\u8D44\u768410\u500D\u3002\u6839\u636E2025\u5E744\u67081\u65E5\u8D77\u751F\u6548\u7684792,000 MNT\u6700\u4F4E\u6708\u5DE5\u8D44\u8BA1\u7B97\u3002",
+    legalReference: "Law on Social Insurance (Article 15-1.3)",
+    sortOrder: 40
+  },
+  {
+    countryCode: "MN",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.020",
+    rateEmployee: "0.020",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5065\u5EB7\u4FDD\u9669\u7F34\u8D39\u57FA\u6570\u6CA1\u6709\u4E0A\u9650\u3002",
+    legalReference: "Law on Health Insurance (Article 9.3)",
+    sortOrder: 41
+  },
+  {
+    countryCode: "MN",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.005",
+    rateEmployee: "0.002",
+    capType: "salary_multiple",
+    capBase: "7920000",
+    effectiveYear: 2025,
+    notes: "\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A\u6708\u6700\u4F4E\u5DE5\u8D44\u768410\u500D\u3002\u6839\u636E2025\u5E744\u67081\u65E5\u8D77\u751F\u6548\u7684792,000 MNT\u6700\u4F4E\u6708\u5DE5\u8D44\u8BA1\u7B97\u3002",
+    legalReference: "Law on Social Insurance (Article 15-1.3)",
+    sortOrder: 42
+  },
+  {
+    countryCode: "MN",
+    itemKey: "work_injury_insurance",
+    itemNameEn: "Industrial Accident and Occupational Disease Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4E0E\u804C\u4E1A\u75C5\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.005",
+    rateEmployee: "0.000",
+    capType: "salary_multiple",
+    capBase: "7920000",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u8D39\u7387\u6839\u636E\u884C\u4E1A\u98CE\u9669\u7B49\u7EA7\u57280.5%, 1.5%, 2.5%\u4E4B\u95F4\u6D6E\u52A8\uFF0C\u6B64\u5904\u4F7F\u7528\u6700\u4F4E\u8D39\u73870.5%\u3002\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A\u6708\u6700\u4F4E\u5DE5\u8D44\u768410\u500D\u3002",
+    legalReference: "Law on Social Insurance (Article 15-1.3)",
+    sortOrder: 43
+  },
+  // --- Macau, China (MO) ---
+  // Expat: 外籍（非澳门居民）雇员无需缴纳社会保障金。但是，雇主必须为每位外籍雇员每月支付200澳门元的“外地雇员聘用费”。
+  {
+    countryCode: "MO",
+    itemKey: "social_security_contribution_resident",
+    itemNameEn: "Social Security Contribution (Resident Employees)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\u4F9B\u6B3E (\u672C\u5730\u96C7\u5458)",
+    category: "social_insurance",
+    rateEmployer: "0",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: "90",
+    effectiveYear: 2025,
+    notes: "Fixed amount contribution for resident employees, effective since 2017. Total MOP 90/month (Employer: MOP 60, Employee: MOP 30). For casual workers working less than 15 days a month, the total is MOP 45/month (Employer: MOP 30, Employee: MOP 15).",
+    legalReference: "Law 4/2010, Executive Order effective Jan 1, 2017",
+    sortOrder: 44
+  },
+  {
+    countryCode: "MO",
+    itemKey: "employment_fee_non_resident",
+    itemNameEn: "Employment Fee (Non-Resident Employees)",
+    itemNameZh: "\u5916\u5730\u96C7\u5458\u8058\u7528\u8D39 (\u975E\u672C\u5730\u96C7\u5458)",
+    category: "other_mandatory",
+    rateEmployer: "0",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: "200",
+    effectiveYear: 2025,
+    notes: "Fixed amount contribution fully paid by the employer for each non-resident worker. The employee is exempt from social security contributions.",
+    legalReference: "Law 21/2009 - Law for the Employment of Non-resident Workers",
+    sortOrder: 45
+  },
+  // --- Maldives (MV) ---
+  // Expat: 外籍员工可以自愿加入马尔代夫退休金计划（Maldives Retirement Pension Scheme），但并非强制性。雇主和雇员的缴费率与本地员工相同。
+  {
+    countryCode: "MV",
+    itemKey: "maldives_retirement_pension_scheme",
+    itemNameEn: "Maldives Retirement Pension Scheme",
+    itemNameZh: "\u9A6C\u5C14\u4EE3\u592B\u9000\u4F11\u91D1\u8BA1\u5212",
+    category: "pension",
+    rateEmployer: "0.07",
+    rateEmployee: "0.07",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E16\u81F365\u5C81\u7684\u96C7\u5458\u3002",
+    legalReference: "Maldives Pension Act (Law No. 8/2009) and Regulation on Maldives Retirement Pension Scheme (2014/R-20)",
+    sortOrder: 46
+  },
+  // --- Malaysia (MY) ---
+  // Expat: 从2025年10月起，外籍员工（非永久居民）及其雇主必须强制性缴纳公积金（EPF），费率分别为2%。外籍员工同样需要缴纳SOCSO和EIS，费率与本地员工相同。
+  {
+    countryCode: "MY",
+    itemKey: "epf_my",
+    itemNameEn: "Employees Provident Fund (EPF)",
+    itemNameZh: "\u96C7\u5458\u516C\u79EF\u91D1",
+    category: "pension",
+    rateEmployer: "0.13",
+    rateEmployee: "0.11",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u85AA\u8D85\u8FC7RM5,000\u7684\u9A6C\u6765\u897F\u4E9A\u516C\u6C11\u3002\u6708\u85AA\u4F4E\u4E8ERM5,000\u7684\u96C7\u4E3B\u8D39\u7387\u4E3A13%\uFF0C\u7B49\u4E8ERM5,000\u7684\u4E3A12%\u3002\u5916\u7C4D\u5458\u5DE5\uFF08\u975EPR\uFF09\u5F3A\u5236\u7F34\u7EB3\u7387\u4E3A2%\uFF08\u96C7\u4E3B\uFF09\u548C2%\uFF08\u96C7\u5458\uFF09\u3002",
+    legalReference: "EPF Act 1991, Third Schedule",
+    sortOrder: 47
+  },
+  {
+    countryCode: "MY",
+    itemKey: "socso_my",
+    itemNameEn: "Social Security Organisation (SOCSO)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u673A\u6784",
+    category: "social_insurance",
+    rateEmployer: "0.0175",
+    rateEmployee: "0.005",
+    capType: "fixed_amount",
+    capBase: "5000",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u9002\u7528\u4E8E60\u5C81\u4EE5\u4E0B\u5458\u5DE5\u3002\u6DB5\u76D6\u5DE5\u4F24\u4FDD\u9669\u548C\u4F24\u6B8B\u629A\u6064\u91D1\u3002\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A\u6BCF\u6708RM5,000\u3002",
+    legalReference: "Employees\u2019 Social Security Act 1969",
+    sortOrder: 48
+  },
+  {
+    countryCode: "MY",
+    itemKey: "eis_my",
+    itemNameEn: "Employment Insurance System (EIS)",
+    itemNameZh: "\u5C31\u4E1A\u4FDD\u9669\u8BA1\u5212",
+    category: "unemployment",
+    rateEmployer: "0.002",
+    rateEmployee: "0.002",
+    capType: "fixed_amount",
+    capBase: "5000",
+    effectiveYear: 2025,
+    notes: "\u4E00\u9879\u5F3A\u5236\u6027\u7F34\u6B3E\uFF0C\u4E3A\u5931\u4E1A\u5458\u5DE5\u63D0\u4F9B\u8D22\u52A1\u652F\u6301\u3002\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E0ESOCSO\u76F8\u540C\uFF0C\u4E3A\u6BCF\u6708RM5,000\u3002",
+    legalReference: "Employment Insurance System Act 2017",
+    sortOrder: 49
+  },
+  // --- Nepal (NP) ---
+  // Expat: 根据尼泊尔2017年《劳动法》和2018年《社会保障法》，所有在尼泊尔工作的雇员，无论国籍，都必须强制性参加社会保障基金（SSF）。没有针对外籍员工的豁免或特殊费率。
+  {
+    countryCode: "NP",
+    itemKey: "social_security_fund",
+    itemNameEn: "Social Security Fund",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\u57FA\u91D1",
+    category: "social_insurance",
+    rateEmployer: "0.20",
+    rateEmployee: "0.11",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "The contribution includes pension (provident fund and gratuity), medical, accident, and dependent protection. The total employer contribution is 20% of basic salary, and the employee contribution is 11% of basic salary.",
+    legalReference: "Social Security Act, 2018; Labour Act, 2017",
+    sortOrder: 50
+  },
+  // --- New Zealand (NZ) ---
+  // Expat: 外籍员工（持有临时签证，如AEWV）通常没有资格加入KiwiSaver，因为该计划要求成员是新西兰公民或永久居民，并且通常居住在新西兰。然而，所有在新西兰工作的人（包括外籍员工）都必须缴纳ACC Earners'
+  //   Levy（个人意外伤害保险），并受到ACC的保障。雇主也需要为所有员工缴纳ACC Work Account Levy。
+  {
+    countryCode: "NZ",
+    itemKey: "kiwisaver",
+    itemNameEn: "KiwiSaver",
+    itemNameZh: "KiwiSaver\u517B\u8001\u91D1\u8BA1\u5212",
+    category: "pension",
+    rateEmployer: "0.03",
+    rateEmployee: "0.03",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u548C\u96C7\u5458\u76843%\u662F\u6CD5\u5B9A\u6700\u4F4E\u7F34\u8D39\u7387\u3002\u96C7\u5458\u53EF\u4EE5\u9009\u62E9\u66F4\u9AD8\u7684\u7F34\u8D39\u7387\uFF08\u59824%, 6%, 8%, 10%\uFF09\u3002",
+    legalReference: "KiwiSaver Act 2006",
+    sortOrder: 51
+  },
+  {
+    countryCode: "NZ",
+    itemKey: "acc_earners_levy",
+    itemNameEn: "ACC Earners' Levy",
+    itemNameZh: "ACC\u4E2A\u4EBA\u610F\u5916\u4F24\u5BB3\u4FDD\u9669\u7A0E",
+    category: "work_injury",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0167",
+    capType: "none",
+    capBase: "12732.5",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u622A\u81F32026\u5E743\u670831\u65E5\u7684\u8D22\u5E74\u3002\u8D39\u7387\u4E3A\u6BCF$100\u6536\u5165\u7F34\u7EB3$1.67\u3002\u5E74\u5EA6\u6700\u9AD8\u5E94\u7A0E\u6536\u5165\u4E0A\u9650\u4E3A$152,790\u3002",
+    legalReference: "Accident Compensation Act 2001",
+    sortOrder: 52
+  },
+  {
+    countryCode: "NZ",
+    itemKey: "acc_work_levy",
+    itemNameEn: "ACC Work Account Levy",
+    itemNameZh: "ACC\u96C7\u4E3B\u5DE5\u4F24\u4FDD\u9669\u7A0E",
+    category: "work_injury",
+    rateEmployer: "0.0067",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: "12732.5",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u8D39\u7387\u6839\u636E\u5176\u4E1A\u52A1\u7684\u884C\u4E1A\u5206\u7C7B\u5355\u4F4D\uFF08CU\uFF09\u98CE\u9669\u7B49\u7EA7\u800C\u53D8\u5316\uFF0C\u5E76\u975E\u56FA\u5B9A\u8D39\u7387\u3002\u5E74\u5EA6\u6700\u9AD8\u5E94\u7A0E\u6536\u5165\u4E0A\u9650\u4E3A$152,790\u3002",
+    legalReference: "Accident Compensation Act 2001",
+    sortOrder: 53
+  },
+  // --- Papua New Guinea (PG) ---
+  // Expat: 外籍员工（非公民）无需强制缴纳养老金（Superannuation）。但是，如果外籍员工在巴布亚新几内亚工作超过三年，他们可以选择自愿加入养老金计划。
+  {
+    countryCode: "PG",
+    itemKey: "superannuation",
+    itemNameEn: "Superannuation",
+    itemNameZh: "\u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.084",
+    rateEmployee: "0.06",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u4E3A\u540C\u4E00\u96C7\u4E3B\u8FDE\u7EED\u5DE5\u4F5C\u8D85\u8FC7\u4E09\u4E2A\u6708\u7684\u516C\u6C11\u96C7\u5458\u3002\u5916\u7C4D\u5458\u5DE5\u53EF\u8C41\u514D\u3002",
+    legalReference: "Superannuation (General Provisions) Act 2000",
+    sortOrder: 54
+  },
+  // --- Philippines (PH) ---
+  // Expat: Expatriates are generally required to contribute to SSS, PhilHealth, and Pag-IBIG, same as local employees.
+  //   However, they may be exempt from SSS contributions if they are covered by a social security system in their home
+  //   country that has a reciprocal agreement with the Philippines. There are no general exemptions for PhilHealth or
+  //   Pag-IBIG based on nationality.
+  {
+    countryCode: "PH",
+    itemKey: "sss",
+    itemNameEn: "Social Security System (SSS)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\u7CFB\u7EDF",
+    category: "social_insurance",
+    rateEmployer: "0.10",
+    rateEmployee: "0.05",
+    capType: "fixed_amount",
+    capBase: "35000",
+    effectiveYear: 2025,
+    notes: "The total contribution rate is 15% for 2025. The employer covers 10% and the employee covers 5%. The cap refers to the Maximum Monthly Salary Credit (MSC).",
+    legalReference: "Republic Act No. 11199",
+    sortOrder: 55
+  },
+  {
+    countryCode: "PH",
+    itemKey: "philhealth",
+    itemNameEn: "Philippine Health Insurance Corporation (PhilHealth)",
+    itemNameZh: "\u83F2\u5F8B\u5BBE\u5065\u5EB7\u4FDD\u9669\u516C\u53F8",
+    category: "health_insurance",
+    rateEmployer: "0.025",
+    rateEmployee: "0.025",
+    capType: "fixed_amount",
+    capBase: "100000",
+    effectiveYear: 2025,
+    notes: "The total contribution rate is 5% for 2025, shared equally between employer and employee.",
+    legalReference: "Republic Act No. 11223",
+    sortOrder: 56
+  },
+  {
+    countryCode: "PH",
+    itemKey: "pag_ibig",
+    itemNameEn: "Home Development Mutual Fund (Pag-IBIG Fund)",
+    itemNameZh: "\u4F4F\u623F\u53D1\u5C55\u4E92\u52A9\u57FA\u91D1",
+    category: "housing_fund",
+    rateEmployer: "0.02",
+    rateEmployee: "0.02",
+    capType: "fixed_amount",
+    capBase: "10000",
+    effectiveYear: 2025,
+    notes: "Contribution is 2% for both employer and employee on monthly compensation up to PHP 5,000. For compensation over PHP 5,000, the rate is 2% each, but the maximum mandatory contribution is capped at PHP 200 per party (2% of the PHP 10,000 cap base).",
+    legalReference: "Republic Act No. 9679",
+    sortOrder: 57
+  },
+  // --- Pakistan (PK) ---
+  // Expat: 外籍员工和巴基斯坦公民一样，必须参加省级社保体系（如SESSI、PESSI），但通常可以豁免EOBI养老金缴款。豁免资格取决于该外籍员工是否在其本国参加了类似的社会保障计划。
+  {
+    countryCode: "PK",
+    itemKey: "eobi",
+    itemNameEn: "Employees Old-Age Benefits Institution (EOBI)",
+    itemNameZh: "\u96C7\u5458\u8001\u5E74\u798F\u5229\u534F\u4F1A",
+    category: "pension",
+    rateEmployer: "0.05",
+    rateEmployee: "0.01",
+    capType: "fixed_amount",
+    capBase: "40000",
+    effectiveYear: 2025,
+    notes: "\u7F34\u8D39\u57FA\u6570\u57FA\u4E8E\u653F\u5E9C\u8BBE\u5B9A\u7684\u6700\u4F4E\u5DE5\u8D44\uFF0C\u81EA2025\u5E747\u67081\u65E5\u8D77\uFF0C\u5728\u4E3B\u8981\u7701\u4EFD\uFF08\u65C1\u906E\u666E\u3001\u4FE1\u5FB7\u3001\u5F00\u4F2F\u5C14-\u666E\u8D6B\u56FE\u8D6B\u74E6\uFF09\u53CA\u9996\u90FD\u5730\u533A\u4E3A40,000\u5DF4\u57FA\u65AF\u5766\u5362\u6BD4\u3002\u96C7\u4E3B\u7F34\u8D39\u4E3A\u57FA\u6570\u76845%\uFF082000\u5362\u6BD4\uFF09\uFF0C\u96C7\u5458\u7F34\u8D39\u4E3A1%\uFF08400\u5362\u6BD4\uFF09\u3002",
+    legalReference: "https://www.ramco.com/payce/payroll-compliance-pakistan",
+    sortOrder: 58
+  },
+  {
+    countryCode: "PK",
+    itemKey: "sessi",
+    itemNameEn: "Provincial Social Security (e.g., SESSI/PESSI)",
+    itemNameZh: "\u7701\u7EA7\u793E\u4F1A\u4FDD\u969C",
+    category: "social_insurance",
+    rateEmployer: "0.06",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: "25000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u5404\u7701\u7684\u793E\u4F1A\u4FDD\u969C\u8BA1\u5212\uFF0C\u5982\u4FE1\u5FB7\u7701\u7684SESSI\u548C\u65C1\u906E\u666E\u7701\u7684PESSI\u3002\u8D39\u7387\u548C\u89C4\u5B9A\u53EF\u80FD\u56E0\u7701\u800C\u5F02\uFF0C\u4F46\u901A\u5E38\u96C7\u4E3B\u7F34\u8D39\u7387\u4E3A6%\uFF0C\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A25,000\u5DF4\u57FA\u65AF\u5766\u5362\u6BD4\u3002\u6B64\u7F34\u6B3E\u6DB5\u76D6\u533B\u7597\u3001\u75BE\u75C5\u3001\u751F\u80B2\u3001\u5DE5\u4F24\u548C\u6B7B\u4EA1\u7B49\u591A\u9879\u798F\u5229\u3002",
+    legalReference: "Sindh Employees Social Security Act, 2016",
+    sortOrder: 59
+  },
+  // --- Singapore (SG) ---
+  // Expat: Foreign employees (non-Permanent Residents) are exempt from CPF contributions. There are no special
+  //   provisions for the Skills Development Levy (SDL), which is payable for all employees.
+  {
+    countryCode: "SG",
+    itemKey: "cpf_ordinary",
+    itemNameEn: "Central Provident Fund (Ordinary Account)",
+    itemNameZh: "\u4E2D\u592E\u516C\u79EF\u91D1\uFF08\u666E\u901A\u8D26\u6237\uFF09",
+    category: "pension",
+    rateEmployer: "0.17",
+    rateEmployee: "0.20",
+    capType: "fixed_amount",
+    capBase: "7400",
+    effectiveYear: 2025,
+    notes: "Applies to employees aged 55 and below. The monthly salary ceiling is scheduled to increase to $7,400 from 1 Jan 2025, and to $8,000 from 1 Jan 2026. The annual salary ceiling is $102,000.",
+    legalReference: "https://www.cpf.gov.sg/employer/employer-obligations/how-much-cpf-contributions-to-pay",
+    sortOrder: 60
+  },
+  {
+    countryCode: "SG",
+    itemKey: "sdl",
+    itemNameEn: "Skills Development Levy",
+    itemNameZh: "\u6280\u80FD\u53D1\u5C55\u7A0E",
+    category: "other_mandatory",
+    rateEmployer: "0.0025",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: "4500",
+    effectiveYear: 2025,
+    notes: "A minimum of S$2 is payable for employees earning S$800 or less per month. The maximum levy is S$11.25 (0.25% of the first S$4,500 of gross monthly remuneration).",
+    legalReference: "https://www.cpf.gov.sg/employer/employer-obligations/skills-development-levy",
+    sortOrder: 61
+  },
+  // --- Thailand (TH) ---
+  // Expat: 外籍员工与泰国国民适用相同的社保规定，必须强制参加。无特殊豁免或不同费率。
   {
     countryCode: "TH",
     itemKey: "social_security_th",
@@ -23679,153 +26899,5580 @@ var socialInsuranceRules = [
     effectiveYear: 2025,
     sortOrder: 1
   },
-  // 10. Malaysia (MY)
+  // --- Timor-Leste (TL) ---
+  // Expat: 外籍员工与本地员工同样需要强制性参加社保。根据东帝汶社保官网信息，在“CIDADÃOS/TRABALHADORES”（公民/工人）部分，明确指出“Trabalhadores por Conta de Outrem
+  //   (Adesão Obrigatória)”（雇员（强制性加入））适用于所有雇员。而针对特定类别的外籍工作者，如个体经营者、家政服务人员、经理和行政人员，则为“Adesão
+  //   Facultativa”（自愿加入）。因此，对于EOR场景下的标准雇员，社保是强制性的。
   {
-    countryCode: "MY",
-    itemKey: "epf_my",
-    itemNameEn: "Employees Provident Fund (EPF)",
-    itemNameZh: "\u516C\u79EF\u91D1",
-    category: "pension",
-    rateEmployer: "0.13",
-    // 13% for wage < 5000, 12% for > 5000
-    rateEmployee: "0.11",
-    capType: "none",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  {
-    countryCode: "MY",
-    itemKey: "socso_my",
-    itemNameEn: "SOCSO (Employment Injury)",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "work_injury",
-    rateEmployer: "0.0175",
-    rateEmployee: "0.005",
-    capType: "fixed_amount",
-    capBase: "5000",
-    // MYR
-    effectiveYear: 2025,
-    sortOrder: 2
-  },
-  // 11. Indonesia (ID)
-  {
-    countryCode: "ID",
-    itemKey: "bpjs_health",
-    itemNameEn: "BPJS Health",
-    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
-    category: "health_insurance",
-    rateEmployer: "0.04",
-    rateEmployee: "0.01",
-    capType: "fixed_amount",
-    capBase: "12000000",
-    // IDR
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  {
-    countryCode: "ID",
-    itemKey: "bpjs_tk_jht",
-    itemNameEn: "BPJS Old Age Security (JHT)",
-    itemNameZh: "\u517B\u8001\u4FDD\u9669",
-    category: "pension",
-    rateEmployer: "0.037",
-    rateEmployee: "0.02",
-    effectiveYear: 2025,
-    sortOrder: 2
-  },
-  // 12. Philippines (PH)
-  {
-    countryCode: "PH",
-    itemKey: "sss",
-    itemNameEn: "Social Security System (SSS)",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    countryCode: "TL",
+    itemKey: "social_security_contribution",
+    itemNameEn: "Social Security Contribution",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\u7F34\u6B3E",
     category: "social_insurance",
-    rateEmployer: "0.095",
-    rateEmployee: "0.045",
-    capType: "fixed_amount",
-    capBase: "30000",
-    // PHP
+    rateEmployer: "0.06",
+    rateEmployee: "0.04",
+    capType: "none",
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "\u6DB5\u76D6\u517B\u8001\u3001\u6B8B\u75BE\u548C\u9057\u5C5E\u798F\u5229\u3002\u6CA1\u6709\u5355\u72EC\u7684\u5931\u4E1A\u3001\u5BB6\u5EAD\u6216\u5065\u5EB7\u57FA\u91D1\u3002",
+    legalReference: "Decree-Law No. 43/2016",
+    sortOrder: 63
   },
-  {
-    countryCode: "PH",
-    itemKey: "philhealth",
-    itemNameEn: "PhilHealth",
-    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
-    category: "health_insurance",
-    rateEmployer: "0.025",
-    // 5% total
-    rateEmployee: "0.025",
-    capType: "fixed_amount",
-    capBase: "100000",
-    // PHP
-    effectiveYear: 2025,
-    sortOrder: 2
-  },
-  // 13. Taiwan (TW)
+  // --- Taiwan, China (TW) ---
+  // Expat: 外籍员工与本地员工适用相同的社保规定，无特殊豁免或不同费率。
   {
     countryCode: "TW",
     itemKey: "labor_insurance",
-    itemNameEn: "Labor Insurance",
-    itemNameZh: "\u52B3\u5DE5\u4FDD\u9669",
+    itemNameEn: "Labor Insurance (Ordinary Accidents)",
+    itemNameZh: "\u52B3\u5DE5\u4FDD\u9669\uFF08\u666E\u901A\u4E8B\u6545\uFF09",
     category: "social_insurance",
-    rateEmployer: "0.084",
-    // Approx 70% of 12%
-    rateEmployee: "0.024",
-    // Approx 20% of 12%
+    rateEmployer: "0.0805",
+    rateEmployee: "0.023",
     capType: "fixed_amount",
     capBase: "45800",
-    // TWD
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "\u8D39\u7387\u81EA2025\u5E741\u67081\u65E5\u8D77\u8C03\u6574\u4E3A11.5%\uFF08\u4E0D\u542B\u5C31\u4E1A\u4FDD\u9669\uFF09\u3002\u96C7\u4E3B\u8D1F\u62C570%\uFF0C\u5458\u5DE5\u8D1F\u62C520%\u3002",
+    legalReference: "\u52B3\u5DE5\u4FDD\u9669\u6761\u4F8B",
+    sortOrder: 64
+  },
+  {
+    countryCode: "TW",
+    itemKey: "employment_insurance",
+    itemNameEn: "Employment Insurance",
+    itemNameZh: "\u5C31\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.007",
+    rateEmployee: "0.002",
+    capType: "fixed_amount",
+    capBase: "45800",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u4E3A1%\uFF0C\u4F5C\u4E3A\u52B3\u5DE5\u4FDD\u9669\u7684\u4E00\u90E8\u5206\u5F81\u6536\u3002\u96C7\u4E3B\u8D1F\u62C570%\uFF0C\u5458\u5DE5\u8D1F\u62C520%\u3002",
+    legalReference: "\u5C31\u4E1A\u4FDD\u9669\u6CD5",
+    sortOrder: 65
   },
   {
     countryCode: "TW",
     itemKey: "health_insurance_tw",
     itemNameEn: "National Health Insurance",
-    itemNameZh: "\u5168\u6C11\u5065\u4FDD",
+    itemNameZh: "\u5168\u6C11\u5065\u5EB7\u4FDD\u9669",
     category: "health_insurance",
-    rateEmployer: "0.031",
-    // Approx
+    rateEmployer: "0.03154",
+    rateEmployee: "0.01577",
+    capType: "fixed_amount",
+    capBase: "219500",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u7EF4\u63015.17%\u3002\u96C7\u4E3B\u8D1F\u62C560%\uFF0C\u5458\u5DE5\u8D1F\u62C530%\u3002\u96C7\u4E3B\u8FD8\u9700\u4E3A\u6BCF\u4F4D\u7737\u5C5E\uFF08\u5E73\u57470.56\u4EBA\uFF09\u989D\u5916\u7F34\u8D39\u3002",
+    legalReference: "\u5168\u6C11\u5065\u5EB7\u4FDD\u9669\u6CD5",
+    sortOrder: 66
+  },
+  // --- Vietnam (VN) ---
+  // Expat: 外籍员工必须参加强制性的社会保险和医疗保险，但豁免参加失业保险。参保条件包括：持有有效期至少一年的工作许可或执业证书、签订至少一年的劳动合同，且未达到法定退休年龄。
+  {
+    countryCode: "VN",
+    regionCode: "zone_1",
+    regionName: "Zone 1 (Hanoi/HCMC)",
+    itemKey: "social_insurance_vn",
+    itemNameEn: "Social Insurance",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.175",
+    rateEmployee: "0.08",
+    capType: "fixed_amount",
+    capBase: "46800000",
+    effectiveYear: 2025,
+    notes: "Includes 0.5% for Occupational Accident and Disease Insurance. Applies to both local and foreign employees.",
+    legalReference: "Law on Social Insurance 2024",
+    sortOrder: 67
+  },
+  {
+    countryCode: "VN",
+    regionCode: "zone_1",
+    regionName: "Zone 1 (Hanoi/HCMC)",
+    itemKey: "health_insurance_vn",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u533B\u7597\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.03",
     rateEmployee: "0.015",
     capType: "fixed_amount",
-    capBase: "182000",
+    capBase: "46800000",
     effectiveYear: 2025,
-    sortOrder: 2
+    notes: "Applies to both local and foreign employees.",
+    legalReference: "Law on Health Insurance",
+    sortOrder: 68
   },
-  // 14. New Zealand (NZ)
   {
-    countryCode: "NZ",
-    itemKey: "kiwisaver",
-    itemNameEn: "KiwiSaver",
-    itemNameZh: "KiwiSaver",
+    countryCode: "VN",
+    regionCode: "zone_1",
+    regionName: "Zone 1 (Hanoi/HCMC)",
+    itemKey: "unemployment_vn",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.01",
+    rateEmployee: "0.01",
+    capType: "fixed_amount",
+    capBase: "93600000",
+    effectiveYear: 2025,
+    notes: "Cap is 20 times the regional minimum wage (Zone 1: 4,680,000 VND). Applies to Vietnamese employees only.",
+    legalReference: "Law on Employment 2013",
+    sortOrder: 69
+  },
+  {
+    countryCode: "VN",
+    regionCode: "zone_1",
+    regionName: "Zone 1 (Hanoi/HCMC)",
+    itemKey: "trade_union_vn",
+    itemNameEn: "Trade Union Fee",
+    itemNameZh: "\u5DE5\u4F1A\u7ECF\u8D39",
+    category: "other_mandatory",
+    rateEmployer: "0.02",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "46800000",
+    effectiveYear: 2025,
+    notes: "Employee contribution is voluntary (1%) if they are a union member. Cap is based on the social insurance salary base.",
+    legalReference: "Decree No. 191/2013/ND-CP",
+    sortOrder: 70
+  },
+  // =================================================================================
+  // Middle East & Central Asia
+  // =================================================================================
+  // --- United Arab Emirates (AE) ---
+  // Expat: 外籍员工（非GCC国民）及其雇主无需缴纳养老金（Pension）。但所有在私营和联邦政府部门工作的员工，包括外籍员工，都必须强制参加失业保险计划（Unemployment Insurance Scheme）。
+  {
+    countryCode: "AE",
+    itemKey: "pension_ae",
+    itemNameEn: "Pension Contribution (GPSSA)",
+    itemNameZh: "\u517B\u8001\u91D1 (GPSSA)",
+    category: "pension",
+    rateEmployer: "0.125",
+    rateEmployee: "0.05",
+    capType: "fixed_amount",
+    capBase: "70000",
+    effectiveYear: 2025,
+    notes: "\u4EC5\u9002\u7528\u4E8E\u963F\u8054\u914B\u7C4D\u5458\u5DE5\u3002\u96C7\u4E3B\u7F34\u8D39\u90E8\u5206\u7684\u53E6\u59162.5%\u7531\u653F\u5E9C\u627F\u62C5\u3002\u6708\u5EA6\u85AA\u8D44\u4E0B\u9650\u4E3AAED 3,000\u3002",
+    legalReference: "Federal Law No. 57 of 2023 on Pension and Social Security",
+    sortOrder: 71
+  },
+  {
+    countryCode: "AE",
+    itemKey: "unemployment_insurance_ae",
+    itemNameEn: "Unemployment Insurance (ILOE)",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669 (ILOE)",
+    category: "unemployment",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "bracket",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5F3A\u5236\u9002\u7528\u4E8E\u6240\u6709\u79C1\u8425\u548C\u8054\u90A6\u653F\u5E9C\u90E8\u95E8\u7684\u5458\u5DE5\uFF0C\u5305\u62EC\u5916\u7C4D\u5458\u5DE5\u3002\u7F34\u8D39\u4E3A\u56FA\u5B9A\u91D1\u989D\uFF0C\u7531\u5458\u5DE5\u627F\u62C5\u3002\u7B2C\u4E00\u7C7B\uFF1A\u57FA\u7840\u6708\u85AA\u2264AED 16,000\uFF0C\u5458\u5DE5\u7F34\u8D39AED 5/\u6708\u3002\u7B2C\u4E8C\u7C7B\uFF1A\u57FA\u7840\u6708\u85AA>AED 16,000\uFF0C\u5458\u5DE5\u7F34\u8D39AED 10/\u6708\u3002\u6B64\u4E3A\u56FA\u5B9A\u91D1\u989D\u7F34\u6B3E\uFF0C\u975E\u767E\u5206\u6BD4\u8D39\u7387\uFF0C\u56E0\u6B64rate\u5B57\u6BB5\u4E3A0\u3002",
+    legalReference: "Federal Decree-Law No. 13 of 2022 Regarding Unemployment Insurance Scheme",
+    sortOrder: 72
+  },
+  // --- Azerbaijan (AZ) ---
+  // Expat:
+  //   外籍员工和无国籍人士，除了在技术园区及其承包商工作的特定高管和专家外，通常需按标准费率缴纳所有强制性社会保险、失业保险和健康保险。根据《社会保险法》，在特定条件下（例如，在阿塞拜疆有永久居留权或受双边社会保障协议保护），可能会有豁免或特殊规定，但一般规则是全面参与。
+  {
+    countryCode: "AZ",
+    itemKey: "social_insurance_private_sector_employee_up_to_200_azn",
+    itemNameEn: "Social Insurance (Private, Non-Oil/Gas) - Employee up to 200 AZN",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\uFF08\u79C1\u8425\u975E\u6CB9\u6C14\u90E8\u95E8\uFF09- \u96C7\u5458\u90E8\u5206\uFF08200 AZN\u53CA\u4EE5\u4E0B\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.03",
+    capType: "bracket",
+    capBase: "200",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u975E\u6CB9\u6C14\u3001\u975E\u56FD\u6709\u90E8\u95E8\u3002",
+    legalReference: "Law on Social Insurance, Article 14.5.1",
+    sortOrder: 73
+  },
+  {
+    countryCode: "AZ",
+    itemKey: "social_insurance_private_sector_employer_up_to_200_azn",
+    itemNameEn: "Social Insurance (Private, Non-Oil/Gas) - Employer up to 200 AZN",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\uFF08\u79C1\u8425\u975E\u6CB9\u6C14\u90E8\u95E8\uFF09- \u96C7\u4E3B\u90E8\u5206\uFF08200 AZN\u53CA\u4EE5\u4E0B\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.22",
+    rateEmployee: "0.0",
+    capType: "bracket",
+    capBase: "200",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u975E\u6CB9\u6C14\u3001\u975E\u56FD\u6709\u90E8\u95E8\u3002",
+    legalReference: "Law on Social Insurance, Article 14.5.1",
+    sortOrder: 74
+  },
+  {
+    countryCode: "AZ",
+    itemKey: "social_insurance_private_sector_employee_200_to_8000_azn",
+    itemNameEn: "Social Insurance (Private, Non-Oil/Gas) - Employee 200 to 8000 AZN",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\uFF08\u79C1\u8425\u975E\u6CB9\u6C14\u90E8\u95E8\uFF09- \u96C7\u5458\u90E8\u5206\uFF08200\u81F38000 AZN\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.10",
+    capType: "bracket",
+    capBase: "8000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u975E\u6CB9\u6C14\u3001\u975E\u56FD\u6709\u90E8\u95E8\u3002\u6708\u6536\u5165\u8D85\u8FC7200 AZN\u7684\u90E8\u5206\u630910%\u8BA1\u7B97\uFF0C\u603B\u989D\u4E3A 6 AZN + (\u6708\u6536\u5165 - 200 AZN) * 10%\u3002",
+    legalReference: "Law on Social Insurance, Article 14.5.1",
+    sortOrder: 75
+  },
+  {
+    countryCode: "AZ",
+    itemKey: "social_insurance_private_sector_employer_200_to_8000_azn",
+    itemNameEn: "Social Insurance (Private, Non-Oil/Gas) - Employer 200 to 8000 AZN",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\uFF08\u79C1\u8425\u975E\u6CB9\u6C14\u90E8\u95E8\uFF09- \u96C7\u4E3B\u90E8\u5206\uFF08200\u81F38000 AZN\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.15",
+    rateEmployee: "0.0",
+    capType: "bracket",
+    capBase: "8000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u975E\u6CB9\u6C14\u3001\u975E\u56FD\u6709\u90E8\u95E8\u3002\u6708\u6536\u5165\u8D85\u8FC7200 AZN\u7684\u90E8\u5206\u630915%\u8BA1\u7B97\uFF0C\u603B\u989D\u4E3A 44 AZN + (\u6708\u6536\u5165 - 200 AZN) * 15%\u3002",
+    legalReference: "Law on Social Insurance, Article 14.5.1",
+    sortOrder: 76
+  },
+  {
+    countryCode: "AZ",
+    itemKey: "social_insurance_private_sector_over_8000_azn",
+    itemNameEn: "Social Insurance (Private, Non-Oil/Gas) - Over 8000 AZN",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\uFF08\u79C1\u8425\u975E\u6CB9\u6C14\u90E8\u95E8\uFF09- 8000 AZN\u4EE5\u4E0A",
+    category: "social_insurance",
+    rateEmployer: "0.11",
+    rateEmployee: "0.10",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u975E\u6CB9\u6C14\u3001\u975E\u56FD\u6709\u90E8\u95E8\u3002\u96C7\u4E3B\u548C\u96C7\u5458\u5408\u8BA1\u8D39\u7387\u4E3A21%\u3002",
+    legalReference: "Law on Social Insurance, Article 14.5.1",
+    sortOrder: 77
+  },
+  {
+    countryCode: "AZ",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.005",
+    rateEmployee: "0.005",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "Law on Unemployment Insurance",
+    sortOrder: 78
+  },
+  {
+    countryCode: "AZ",
+    itemKey: "health_insurance_up_to_8000_azn",
+    itemNameEn: "Mandatory Health Insurance up to 8000 AZN",
+    itemNameZh: "\u5F3A\u5236\u5065\u5EB7\u4FDD\u9669\uFF088000 AZN\u53CA\u4EE5\u4E0B\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.02",
+    rateEmployee: "0.02",
+    capType: "bracket",
+    capBase: "8000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u975E\u6CB9\u6C14\u3001\u975E\u56FD\u6709\u90E8\u95E8\u3002",
+    legalReference: "Law on Medical Insurance",
+    sortOrder: 79
+  },
+  {
+    countryCode: "AZ",
+    itemKey: "health_insurance_over_8000_azn",
+    itemNameEn: "Mandatory Health Insurance over 8000 AZN",
+    itemNameZh: "\u5F3A\u5236\u5065\u5EB7\u4FDD\u9669\uFF088000 AZN\u4EE5\u4E0A\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.005",
+    rateEmployee: "0.005",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u975E\u6CB9\u6C14\u3001\u975E\u56FD\u6709\u90E8\u95E8\u3002\u8D85\u8FC78000 AZN\u7684\u90E8\u5206\u63090.5%\u8D39\u7387\u8BA1\u7B97\u3002",
+    legalReference: "Law on Medical Insurance",
+    sortOrder: 80
+  },
+  // --- Bahrain (BH) ---
+  // Expat: 外籍员工需缴纳社会保险，费率为雇主3%、雇员1%，主要覆盖工伤保险。缴费基数上限与巴林公民相同，为每月4000巴林第纳尔。
+  {
+    countryCode: "BH",
+    itemKey: "sio_bahraini_social_insurance",
+    itemNameEn: "Social Insurance (Bahraini)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\uFF08\u5DF4\u6797\u7C4D\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.17",
+    rateEmployee: "0.08",
+    capType: "fixed_amount",
+    capBase: "4000",
+    effectiveYear: 2025,
+    notes: "Covers pension, work injury, and unemployment insurance for Bahraini nationals.",
+    legalReference: "https://taxsummaries.pwc.com/bahrain/individual/other-taxes",
+    sortOrder: 81
+  },
+  {
+    countryCode: "BH",
+    itemKey: "sio_expat_work_injury",
+    itemNameEn: "Work Injury Insurance (Expat)",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669\uFF08\u5916\u7C4D\uFF09",
+    category: "work_injury",
+    rateEmployer: "0.03",
+    rateEmployee: "0.01",
+    capType: "fixed_amount",
+    capBase: "4000",
+    effectiveYear: 2025,
+    notes: "Mandatory contribution for expatriate employees, primarily for work injury insurance.",
+    legalReference: "https://taxsummaries.pwc.com/bahrain/individual/other-taxes",
+    sortOrder: 82
+  },
+  // --- Georgia (GE) ---
+  // Expat: The mandatory funded pension scheme applies to foreign citizens and stateless persons who are permanently
+  //   residing and employed in Georgia. They are subject to the same contribution rules as Georgian citizens.
+  {
+    countryCode: "GE",
+    itemKey: "pension_employee",
+    itemNameEn: "Pension - Employee Contribution",
+    itemNameZh: "\u517B\u8001\u91D1 - \u4E2A\u4EBA\u7F34\u8D39",
+    category: "pension",
+    rateEmployer: "0.00",
+    rateEmployee: "0.02",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employee contributes 2% of gross salary.",
+    legalReference: "Law of Georgia on Funded Pensions (2018)",
+    sortOrder: 83
+  },
+  {
+    countryCode: "GE",
+    itemKey: "pension_employer",
+    itemNameEn: "Pension - Employer Contribution",
+    itemNameZh: "\u517B\u8001\u91D1 - \u96C7\u4E3B\u7F34\u8D39",
+    category: "pension",
+    rateEmployer: "0.02",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employer contributes 2% of the employee's gross salary.",
+    legalReference: "Law of Georgia on Funded Pensions (2018)",
+    sortOrder: 84
+  },
+  {
+    countryCode: "GE",
+    itemKey: "pension_government",
+    itemNameEn: "Pension - Government Contribution",
+    itemNameZh: "\u517B\u8001\u91D1 - \u653F\u5E9C\u7F34\u8D39",
+    category: "pension",
+    rateEmployer: "0.00",
+    rateEmployee: "0.00",
+    capType: "bracket",
+    capBase: "60000",
+    effectiveYear: 2025,
+    notes: "Government contribution is based on employee's annual income: 2% for income up to GEL 24,000; 1% for income between GEL 24,000 and GEL 60,000. No government contribution for income exceeding GEL 60,000. The capBase of GEL 60,000 is an annual amount.",
+    legalReference: "Law of Georgia on Funded Pensions (2018)",
+    sortOrder: 85
+  },
+  // --- Israel (IL) ---
+  // Expat: 在以色列工作的外籍员工通常需要缴纳国民保险和健康税，具体规则取决于其签证类型和雇佣结构。某些签证类型或根据双边社保协定可能存在豁免或特殊规定，但一般情况下，受雇于以色列雇主的外籍员工与本地员工适用相同的缴费规则。
+  {
+    countryCode: "IL",
+    itemKey: "national_insurance",
+    itemNameEn: "National Insurance",
+    itemNameZh: "\u56FD\u6C11\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.076",
+    rateEmployee: "0.12",
+    capType: "bracket",
+    capBase: "50695",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u5206\u4E3A\u4E24\u6863\uFF1A\u6708\u6536\u51657,522 ILS\u53CA\u4EE5\u4E0B\u90E8\u5206\u9002\u7528\u4F4E\u8D39\u7387\uFF0C\u8D85\u51FA\u90E8\u5206\u9002\u7528\u9AD8\u8D39\u7387\u3002",
+    legalReference: "https://www.cwsisrael.com/national-insurance-bituach-leumi-and-health-tax-in-2025/",
+    sortOrder: 86
+  },
+  {
+    countryCode: "IL",
+    itemKey: "health_tax",
+    itemNameEn: "Health Tax",
+    itemNameZh: "\u5065\u5EB7\u7A0E",
+    category: "health_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0517",
+    capType: "bracket",
+    capBase: "50695",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u5206\u4E3A\u4E24\u6863\uFF1A\u6708\u6536\u51657,522 ILS\u53CA\u4EE5\u4E0B\u90E8\u5206\u9002\u7528\u4F4E\u8D39\u7387\uFF0C\u8D85\u51FA\u90E8\u5206\u9002\u7528\u9AD8\u8D39\u7387\u3002\u96C7\u4E3B\u4E0D\u627F\u62C5\u6B64\u9879\u7F34\u8D39\u3002",
+    legalReference: "https://www.cwsisrael.com/national-insurance-bituach-leumi-and-health-tax-in-2025/",
+    sortOrder: 87
+  },
+  // --- Iraq (IQ) ---
+  // Expat:
+  //   根据2023年第18号《社会保障法》（2024年12月1日生效），外籍员工不再豁免社保缴款。如果外籍员工在本国已参加社保，雇主需为其缴纳较低费率的社保（非油气行业为3%，油气行业为7%），员工无需缴纳。如果外籍员工在本国未参加社保，则需按照与伊拉克国民相同的费率（雇主12%，雇员5%）全额缴纳社保。
+  {
+    countryCode: "IQ",
+    itemKey: "pension_iraqi_non_oil_gas",
+    itemNameEn: "Social Security (Non-Oil & Gas)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\uFF08\u975E\u6CB9\u6C14\u884C\u4E1A\uFF09",
+    category: "pension",
+    rateEmployer: "0.12",
+    rateEmployee: "0.05",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u4F0A\u62C9\u514B\u56FD\u6C11\u53CA\u672A\u5728\u672C\u56FD\u53C2\u4FDD\u7684\u5916\u7C4D\u5458\u5DE5\u3002",
+    legalReference: "Social Security Law No. 18 of 2023",
+    sortOrder: 88
+  },
+  {
+    countryCode: "IQ",
+    itemKey: "pension_iraqi_oil_gas",
+    itemNameEn: "Social Security (Oil & Gas)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\uFF08\u6CB9\u6C14\u884C\u4E1A\uFF09",
+    category: "pension",
+    rateEmployer: "0.25",
+    rateEmployee: "0.05",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u5728\u6CB9\u6C14\u884C\u4E1A\u5DE5\u4F5C\u7684\u4F0A\u62C9\u514B\u56FD\u6C11\u3002",
+    legalReference: "Social Security Law No. 18 of 2023",
+    sortOrder: 89
+  },
+  {
+    countryCode: "IQ",
+    itemKey: "pension_expat_covered_non_oil_gas",
+    itemNameEn: "Social Security for Expats covered elsewhere (Non-Oil & Gas)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\uFF08\u5DF2\u5728\u522B\u56FD\u53C2\u4FDD\u7684\u5916\u7C4D\u4EBA\u58EB - \u975E\u6CB9\u6C14\u884C\u4E1A\uFF09",
     category: "pension",
     rateEmployer: "0.03",
-    // Min 3%
-    rateEmployee: "0.03",
-    // Min 3%
+    rateEmployee: "0.00",
     capType: "none",
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "\u9002\u7528\u4E8E\u5DF2\u5728\u672C\u56FD\u53C2\u52A0\u793E\u4FDD\u7684\u5916\u7C4D\u5458\u5DE5\u3002\u4EC5\u96C7\u4E3B\u7F34\u8D39\u3002",
+    legalReference: "Social Security Law No. 18 of 2023",
+    sortOrder: 90
+  },
+  {
+    countryCode: "IQ",
+    itemKey: "pension_expat_covered_oil_gas",
+    itemNameEn: "Social Security for Expats covered elsewhere (Oil & Gas)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\uFF08\u5DF2\u5728\u522B\u56FD\u53C2\u4FDD\u7684\u5916\u7C4D\u4EBA\u58EB - \u6CB9\u6C14\u884C\u4E1A\uFF09",
+    category: "pension",
+    rateEmployer: "0.07",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u5DF2\u5728\u672C\u56FD\u53C2\u52A0\u793E\u4FDD\u7684\u5916\u7C4D\u5458\u5DE5\u3002\u4EC5\u96C7\u4E3B\u7F34\u8D39\u3002",
+    legalReference: "Social Security Law No. 18 of 2023",
+    sortOrder: 91
+  },
+  // --- Iran (IR) ---
+  // Expat: 根据2025年底生效的新政策，所有在伊朗合法居住和工作的外籍员工，无论其国籍，都必须强制性参加伊朗的社会保险和基础健康保险。雇主有责任为外籍雇员办理参保手续。外籍员工的缴费费率和缴费基数上下限与伊朗本国员工相同，没有特殊豁免或优惠政策。
+  {
+    countryCode: "IR",
+    itemKey: "social_security",
+    itemNameEn: "Social Security Contribution",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u8D39",
+    category: "social_insurance",
+    rateEmployer: "0.23",
+    rateEmployee: "0.07",
+    capType: "fixed_amount",
+    capBase: "727367760",
+    effectiveYear: 2025,
+    notes: "\u603B\u8D39\u7387\u4E3A30%\uFF0C\u5305\u542B\u517B\u8001\u3001\u6B8B\u75BE\u3001\u9057\u5C5E\u3001\u533B\u7597\u3001\u5931\u4E1A\u3001\u5DE5\u4F24\u3001\u751F\u80B2\u7B49\u5F85\u9047\u3002\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A\u6700\u9AD8\u5DE5\u8D44\u59D4\u5458\u4F1A\u8BBE\u5B9A\u7684\u6CD5\u5B9A\u6700\u9AD8\u5DE5\u8D44\u76847\u500D\uFF0C2025\u5E74\uFF08\u4F0A\u6717\u53861404\u5E74\uFF09\u4E3A\u6BCF\u6708727,367,760\u91CC\u4E9A\u5C14\u3002",
+    legalReference: "Iran Social Security Law",
+    sortOrder: 92
+  },
+  {
+    countryCode: "IR",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment Insurance Fund",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669\u57FA\u91D1",
+    category: "unemployment",
+    rateEmployer: "0.03",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "727367760",
+    effectiveYear: 2025,
+    notes: "\u6B64\u4E3A\u5305\u542B\u572823%\u96C7\u4E3B\u603B\u7F34\u8D39\u4E2D\u76843%\uFF0C\u7531\u793E\u4FDD\u7EC4\u7EC7\uFF08SSO\uFF09\u4EE3\u6536\u3002",
+    legalReference: "Iran Social Security Law",
+    sortOrder: 93
+  },
+  // --- Jordan (JO) ---
+  // Expat: 外籍员工（无论是否为阿拉伯国家国民）与约旦国民适用相同的社保缴费规则，强制缴纳。无豁免或特殊费率。
+  {
+    countryCode: "JO",
+    itemKey: "old_age_disability_death",
+    itemNameEn: "Old-age, Disability, and Death Insurance",
+    itemNameZh: "\u517B\u8001\u3001\u4F24\u6B8B\u4E0E\u6B7B\u4EA1\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.11",
+    rateEmployee: "0.075",
+    capType: "fixed_amount",
+    capBase: "3536",
+    effectiveYear: 2025,
+    notes: "Covers pension, disability, and death benefits.",
+    legalReference: "Social Security Law No. 1 of 2014",
+    sortOrder: 94
+  },
+  {
+    countryCode: "JO",
+    itemKey: "work_injury",
+    itemNameEn: "Work Injury Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.02",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "3536",
+    effectiveYear: 2025,
+    notes: "Mandatory for all establishments.",
+    legalReference: "Social Security Law No. 1 of 2014",
+    sortOrder: 95
+  },
+  {
+    countryCode: "JO",
+    itemKey: "maternity",
+    itemNameEn: "Maternity Insurance",
+    itemNameZh: "\u751F\u80B2\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0075",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "3536",
+    effectiveYear: 2025,
+    legalReference: "Social Security Law No. 1 of 2014",
+    sortOrder: 96
+  },
+  {
+    countryCode: "JO",
+    itemKey: "unemployment",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.005",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "3536",
+    effectiveYear: 2025,
+    legalReference: "Social Security Law No. 1 of 2014",
+    sortOrder: 97
+  },
+  // --- Kuwait (KW) ---
+  // Expat: 外籍员工（Expatriates）不参与科威特的社会保险计划，因此无需缴纳任何社保费用。该计划仅适用于科威特国民。
+  {
+    countryCode: "KW",
+    itemKey: "kw_social_insurance_national",
+    itemNameEn: "Social Insurance",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.115",
+    rateEmployee: "0.105",
+    capType: "fixed_amount",
+    capBase: "2750",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u79D1\u5A01\u7279\u56FD\u6C11\u3002\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A\u6BCF\u67082,750\u79D1\u5A01\u7279\u7B2C\u7EB3\u5C14\u3002",
+    legalReference: "https://taxsummaries.pwc.com/kuwait/individual/other-taxes",
+    sortOrder: 98
+  },
+  // --- Kazakhstan (KZ) ---
+  // Expat: 外籍员工与本地员工同样需要缴纳社保，无特殊豁免。
+  {
+    countryCode: "KZ",
+    itemKey: "social_tax",
+    itemNameEn: "Social Tax",
+    itemNameZh: "\u793E\u4F1A\u7A0E",
+    category: "social_insurance",
+    rateEmployer: "0.11",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "https://taxsummaries.pwc.com/kazakhstan/individual/other-taxes",
+    sortOrder: 99
+  },
+  {
+    countryCode: "KZ",
+    itemKey: "social_contributions",
+    itemNameEn: "Social Contributions",
+    itemNameZh: "\u793E\u4F1A\u7F34\u6B3E",
+    category: "social_insurance",
+    rateEmployer: "0.05",
+    rateEmployee: "0.00",
+    capType: "salary_multiple",
+    capBase: "595000",
+    effectiveYear: 2025,
+    notes: "The maximum limit for calculating social contributions is 7 MMW (KZT 595,000).",
+    legalReference: "https://www.pwc.com/kz/en/pwc-news/ta-reports/tax-legal-alert-fy19/257-january-2025.html",
+    sortOrder: 100
+  },
+  {
+    countryCode: "KZ",
+    itemKey: "pension_employee",
+    itemNameEn: "Mandatory Pension Contributions",
+    itemNameZh: "\u5F3A\u5236\u6027\u517B\u8001\u91D1\u7F34\u6B3E",
+    category: "pension",
+    rateEmployer: "0.00",
+    rateEmployee: "0.10",
+    capType: "salary_multiple",
+    capBase: "4250000",
+    effectiveYear: 2025,
+    notes: "The cap is 50 times the minimum monthly wage (85,000 KZT in 2025).",
+    sortOrder: 101
+  },
+  {
+    countryCode: "KZ",
+    itemKey: "health_insurance_employer",
+    itemNameEn: "Mandatory Social Health Insurance",
+    itemNameZh: "\u5F3A\u5236\u6027\u793E\u4F1A\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.03",
+    rateEmployee: "0.00",
+    capType: "salary_multiple",
+    capBase: "850000",
+    effectiveYear: 2025,
+    notes: "The cap is 10 times the minimum monthly wage (85,000 KZT in 2025).",
+    sortOrder: 102
+  },
+  {
+    countryCode: "KZ",
+    itemKey: "health_insurance_employee",
+    itemNameEn: "Mandatory Social Health Insurance",
+    itemNameZh: "\u5F3A\u5236\u6027\u793E\u4F1A\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.02",
+    capType: "salary_multiple",
+    capBase: "850000",
+    effectiveYear: 2025,
+    notes: "The cap is 10 times the minimum monthly wage (85,000 KZT in 2025).",
+    sortOrder: 103
+  },
+  // --- Lebanon (LB) ---
+  // Expat: 在黎巴嫩工作的非居民雇员，如果其与外国公司签订了雇佣合同，并且其雇主能证明该雇员在其居住国有权享受至少与黎巴嫩所提供的社会保障福利相当的福利，则可免除其在黎巴嫩的社会保障缴款。
+  {
+    countryCode: "LB",
+    itemKey: "sickness_maternity",
+    itemNameEn: "Sickness and Maternity",
+    itemNameZh: "\u75BE\u75C5\u4E0E\u751F\u80B2",
+    category: "social_insurance",
+    rateEmployer: "0.08",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "120000000",
+    effectiveYear: 2025,
+    legalReference: "NSSF Memo #801 dated 1st August 2025",
+    sortOrder: 104
+  },
+  {
+    countryCode: "LB",
+    itemKey: "family_allowances",
+    itemNameEn: "Family Allowances",
+    itemNameZh: "\u5BB6\u5EAD\u6D25\u8D34",
+    category: "social_insurance",
+    rateEmployer: "0.06",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "18000000",
+    effectiveYear: 2025,
+    legalReference: "Decree #422 dated 10 June 2025",
+    sortOrder: 105
+  },
+  {
+    countryCode: "LB",
+    itemKey: "end_of_service_indemnity",
+    itemNameEn: "End of Service Indemnity",
+    itemNameZh: "\u670D\u52A1\u7EC8\u4E86\u8865\u507F\u91D1",
+    category: "pension",
+    rateEmployer: "0.085",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Based on total annual earnings.",
+    legalReference: "Social Security Law",
+    sortOrder: 106
+  },
+  {
+    countryCode: "LB",
+    itemKey: "medical_scheme",
+    itemNameEn: "Medical Scheme",
+    itemNameZh: "\u533B\u7597\u8BA1\u5212",
+    category: "health_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.03",
+    capType: "fixed_amount",
+    capBase: "120000000",
+    effectiveYear: 2025,
+    legalReference: "NSSF Memo #801 dated 1st August 2025",
+    sortOrder: 107
+  },
+  // --- Oman (OM) ---
+  // Expat:
+  //   根据2023年颁布的《社会保护法》，外籍员工（Expatriates）通常不参与阿曼的国民社保体系（如养老金、失业保险等）。然而，自2025年7月1日起，雇主必须为外籍员工缴纳一项新的强制性保险，即“疾病和特殊假期保险”，费率为员工月薪的1%，缴费基数上限为3000阿曼里亚尔。除此之外，外籍员工豁免其他所有社保缴费。
+  {
+    countryCode: "OM",
+    itemKey: "oman_social_insurance_omani_oasdi",
+    itemNameEn: "Social Insurance - Old-Age, Disability, and Death (Omani)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 - \u517B\u8001\u3001\u6B8B\u75BE\u548C\u6B7B\u4EA1\u4FDD\u9669\uFF08\u963F\u66FC\u7C4D\uFF09",
+    category: "pension",
+    rateEmployer: "0.11",
+    rateEmployee: "0.075",
+    capType: "fixed_amount",
+    capBase: "3000",
+    effectiveYear: 2025,
+    notes: "Applicable to Omani nationals only.",
+    legalReference: "Social Protection Law (Sultani Decree No. 52/2023)",
+    sortOrder: 108
+  },
+  {
+    countryCode: "OM",
+    itemKey: "oman_social_insurance_omani_work_injury",
+    itemNameEn: "Social Insurance - Work Injuries and Occupational Diseases (Omani)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 - \u5DE5\u4F24\u548C\u804C\u4E1A\u75C5\u4FDD\u9669\uFF08\u963F\u66FC\u7C4D\uFF09",
+    category: "work_injury",
+    rateEmployer: "0.01",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "3000",
+    effectiveYear: 2025,
+    notes: "Applicable to Omani nationals only.",
+    legalReference: "Social Protection Law (Sultani Decree No. 52/2023)",
+    sortOrder: 109
+  },
+  {
+    countryCode: "OM",
+    itemKey: "oman_social_insurance_omani_employment_security",
+    itemNameEn: "Social Insurance - Employment Security (Omani)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 - \u5C31\u4E1A\u4FDD\u969C\u4FDD\u9669\uFF08\u963F\u66FC\u7C4D\uFF09",
+    category: "unemployment",
+    rateEmployer: "0.005",
+    rateEmployee: "0.005",
+    capType: "fixed_amount",
+    capBase: "3000",
+    effectiveYear: 2025,
+    notes: "Applicable to Omani nationals only.",
+    legalReference: "Social Protection Law (Sultani Decree No. 52/2023)",
+    sortOrder: 110
+  },
+  {
+    countryCode: "OM",
+    itemKey: "oman_social_insurance_expat_sickness_leave",
+    itemNameEn: "Social Insurance - Sickness and Other Leaves (Expat)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 - \u75BE\u75C5\u548C\u7279\u6B8A\u5047\u671F\u4FDD\u9669\uFF08\u5916\u7C4D\u5458\u5DE5\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.01",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "3000",
+    effectiveYear: 2025,
+    notes: "Applicable to expatriate employees only. Effective from 1 July 2025.",
+    legalReference: "Social Protection Law (Sultani Decree No. 52/2023)",
+    sortOrder: 111
+  },
+  // --- Qatar (QA) ---
+  // Expat: Expatriates are exempt from the national pension scheme. However, employers are mandated by law to provide
+  //   all employees, including expatriates, with mandatory health insurance coverage and work injury compensation.
+  {
+    countryCode: "QA",
+    itemKey: "qatar_pension_qatari_nationals",
+    itemNameEn: "Pension for Qatari Nationals",
+    itemNameZh: "\u5361\u5854\u5C14\u516C\u6C11\u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.14",
+    rateEmployee: "0.07",
+    capType: "fixed_amount",
+    capBase: "100000",
+    effectiveYear: 2025,
+    notes: "Contribution is mandatory only for Qatari nationals. The contribution is calculated based on the basic salary plus social allowance.",
+    legalReference: "Social Insurance Law No. (1) of 2022",
+    sortOrder: 112
+  },
+  {
+    countryCode: "QA",
+    itemKey: "qatar_mandatory_health_insurance",
+    itemNameEn: "Mandatory Health Insurance",
+    itemNameZh: "\u5F3A\u5236\u6027\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0",
+    rateEmployee: "0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employers are required to provide basic health insurance coverage for all their employees, including expatriates. The cost is borne by the employer.",
+    legalReference: "Law No. (22) of 2021 Regulating Healthcare Services",
+    sortOrder: 113
+  },
+  {
+    countryCode: "QA",
+    itemKey: "qatar_work_injury_insurance",
+    itemNameEn: "Work Injury Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0",
+    rateEmployee: "0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employers are liable for covering work-related injuries for all employees as per the Labour Law. This is typically covered by purchasing a workmen's compensation insurance policy. No direct contribution rate from salary.",
+    legalReference: "Labour Law No. (14) of 2004",
+    sortOrder: 114
+  },
+  // --- Saudi Arabia (SA) ---
+  // Expat: 外籍员工（Expatriates）仅需缴纳工伤保险（Occupational Hazards Branch），费率为雇主承担2%，员工不承担任何缴费。外籍员工不参与养老金（Annuities Branch）和失业保险（SANED）。
+  {
+    countryCode: "SA",
+    itemKey: "gosi_annuities",
+    itemNameEn: "GOSI - Annuities Branch",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 - \u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.09",
+    rateEmployee: "0.09",
+    capType: "fixed_amount",
+    capBase: "45000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6C99\u7279\u516C\u6C11\u3002",
+    legalReference: "Social Insurance Law",
+    sortOrder: 115
+  },
+  {
+    countryCode: "SA",
+    itemKey: "gosi_unemployment",
+    itemNameEn: "GOSI - Unemployment Insurance (SANED)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 - \u5931\u4E1A\u4FDD\u9669 (SANED)",
+    category: "unemployment",
+    rateEmployer: "0.0075",
+    rateEmployee: "0.0075",
+    capType: "fixed_amount",
+    capBase: "45000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6C99\u7279\u516C\u6C11\u3002",
+    legalReference: "Social Insurance Law",
+    sortOrder: 116
+  },
+  {
+    countryCode: "SA",
+    itemKey: "gosi_work_injury",
+    itemNameEn: "GOSI - Occupational Hazards Branch",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 - \u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.02",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "45000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6240\u6709\u5458\u5DE5\uFF08\u5305\u62EC\u6C99\u7279\u516C\u6C11\u548C\u5916\u7C4D\u5458\u5DE5\uFF09\u3002",
+    legalReference: "Social Insurance Law",
+    sortOrder: 117
+  },
+  // --- Uzbekistan (UZ) ---
+  // Expat: 外籍员工与本地员工同样需要缴纳社保，没有特殊豁免政策。强制性的医疗保险不是法定要求，但许多雇主会为外籍员工提供作为额外福利。
+  {
+    countryCode: "UZ",
+    itemKey: "employer_social_tax",
+    itemNameEn: "Social Tax",
+    itemNameZh: "\u793E\u4F1A\u7A0E",
+    category: "social_insurance",
+    rateEmployer: "0.12",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u7531\u96C7\u4E3B\u627F\u62C5\u7684\u7EDF\u4E00\u793E\u4F1A\u7F34\u8D39\u3002",
+    legalReference: "Tax Code of the Republic of Uzbekistan",
+    sortOrder: 118
+  },
+  {
+    countryCode: "UZ",
+    itemKey: "employer_pension_contribution",
+    itemNameEn: "Individual Pension Fund Contribution",
+    itemNameZh: "\u4E2A\u4EBA\u517B\u8001\u91D1\u50A8\u84C4\u8D26\u6237\u7F34\u8D39",
+    category: "pension",
+    rateEmployer: "0.001",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u4E3A\u5458\u5DE5\u7684\u4E2A\u4EBA\u517B\u8001\u91D1\u8D26\u6237\u7F34\u8D39\u3002",
+    legalReference: "Tax Code of the Republic of Uzbekistan",
+    sortOrder: 119
+  },
+  {
+    countryCode: "UZ",
+    itemKey: "employee_social_tax",
+    itemNameEn: "Social Security Contribution",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\u7F34\u8D39",
+    category: "social_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.04",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5458\u5DE5\u627F\u62C5\u7684\u4E3B\u8981\u793E\u4F1A\u4FDD\u969C\u7F34\u8D39\u3002",
+    legalReference: "Tax Code of the Republic of Uzbekistan",
+    sortOrder: 120
+  },
+  {
+    countryCode: "UZ",
+    itemKey: "employee_unemployment_insurance",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.00",
+    rateEmployee: "0.005",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5458\u5DE5\u4E3A\u5931\u4E1A\u4FDD\u9669\u57FA\u91D1\u7F34\u8D39\u3002",
+    legalReference: "Tax Code of the Republic of Uzbekistan",
+    sortOrder: 121
+  },
+  {
+    countryCode: "UZ",
+    itemKey: "employee_housing_loan_scheme",
+    itemNameEn: "Housing Loan Scheme",
+    itemNameZh: "\u4F4F\u623F\u8D37\u6B3E\u8BA1\u5212",
+    category: "other_mandatory",
+    rateEmployer: "0.00",
+    rateEmployee: "0.01",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5458\u5DE5\u4E3A\u4F4F\u623F\u8D37\u6B3E\u8BA1\u5212\u7F34\u8D39\u3002",
+    legalReference: "Tax Code of the Republic of Uzbekistan",
+    sortOrder: 122
+  },
+  {
+    countryCode: "UZ",
+    itemKey: "employee_training_fund",
+    itemNameEn: "Employee Training Fund (INCES)",
+    itemNameZh: "\u5458\u5DE5\u57F9\u8BAD\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.00",
+    rateEmployee: "0.005",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5458\u5DE5\u4E3A\u57F9\u8BAD\u57FA\u91D1\u7F34\u8D39\u3002",
+    legalReference: "Tax Code of the Republic of Uzbekistan",
+    sortOrder: 123
+  },
+  // =================================================================================
+  // Europe
+  // =================================================================================
+  // --- Albania (AL) ---
+  // Expat: 根据现有法规，外籍员工与本地员工适用相同的社保缴费规则，无特殊豁免或不同费率。
+  {
+    countryCode: "AL",
+    itemKey: "social_insurance",
+    itemNameEn: "Social Insurance",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.15",
+    rateEmployee: "0.095",
+    capType: "fixed_amount",
+    capBase: "176416",
+    effectiveYear: 2025,
+    notes: "Calculated on monthly salary between minimum ALL 40,000 and maximum ALL 176,416.",
+    legalReference: "Law No. 7703, dated 11.05.1993, 'On Social Insurance in the Republic of Albania'",
+    sortOrder: 124
+  },
+  {
+    countryCode: "AL",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.017",
+    rateEmployee: "0.017",
+    capType: "fixed_amount",
+    capBase: "176416",
+    effectiveYear: 2025,
+    notes: "Calculated on monthly salary between minimum ALL 40,000 and maximum ALL 176,416.",
+    legalReference: "Law No. 10383, dated 24.2.2011, 'On Compulsory Health Care Insurance in the Republic of Albania'",
+    sortOrder: 125
+  },
+  // --- Armenia (AM) ---
+  // Expat: 强制性养老金缴款适用于1974年1月1日后出生的外籍公民。自2025年12月25日起生效的强制性健康保险仅适用于亚美尼亚公民，外籍员工不强制参与。
+  {
+    countryCode: "AM",
+    itemKey: "pension_employee",
+    itemNameEn: "Pension Contribution",
+    itemNameZh: "\u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.0",
+    rateEmployee: "0.05",
+    capType: "bracket",
+    capBase: "500000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E1974\u5E741\u67081\u65E5\u540E\u51FA\u751F\u7684\u96C7\u5458\u3002\u6708\u85AA\u8D85\u8FC7500,000 AMD\u7684\u90E8\u5206\uFF0C\u8D39\u7387\u4E3A10%\uFF0C\u4F46\u9700\u51CF\u53BB25,000 AMD\uFF0C\u4E14\u603B\u7F34\u7EB3\u989D\u4E0A\u9650\u4E3A87,500 AMD\u3002",
+    legalReference: "https://taxsummaries.pwc.com/armenia/individual/other-taxes",
+    sortOrder: 126
+  },
+  {
+    countryCode: "AM",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u81EA2025\u5E7412\u670825\u65E5\u8D77\u751F\u6548\u3002\u6708\u85AA200,001-500,000 AMD\uFF0C\u56FA\u5B9A\u7F34\u7EB34,800 AMD\uFF1B\u6708\u85AA>500,000 AMD\uFF0C\u56FA\u5B9A\u7F34\u7EB310,800 AMD\u3002\u4EC5\u9002\u7528\u4E8E\u4E9A\u7F8E\u5C3C\u4E9A\u516C\u6C11\u3002",
+    legalReference: "https://taxsummaries.pwc.com/armenia/individual/other-taxes",
+    sortOrder: 127
+  },
+  {
+    countryCode: "AM",
+    itemKey: "stamp_duty",
+    itemNameEn: "Stamp Duty",
+    itemNameZh: "\u5370\u82B1\u7A0E\uFF08\u793E\u4F1A\u4FDD\u969C\u91D1\uFF09",
+    category: "other_mandatory",
+    rateEmployer: "0.0",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u81EA2025\u5E7412\u6708\u8D77\u751F\u6548\u3002\u6708\u85AA<=1,000,000 AMD\uFF0C\u56FA\u5B9A\u7F34\u7EB31,000 AMD\uFF1B\u6708\u85AA>1,000,000 AMD\uFF0C\u56FA\u5B9A\u7F34\u7EB315,000 AMD\u3002",
+    legalReference: "https://taxsummaries.pwc.com/armenia/individual/other-taxes",
+    sortOrder: 128
+  },
+  // --- Austria (AT) ---
+  // Expat:
+  //   外籍员工通常需缴纳奥地利社保。但是，根据欧盟/欧洲经济区法规或奥地利签订的双边社保协定（如与美国、加拿大、澳大利亚等国），派遣员工在满足特定条件（如派遣期限不超过5年）的情况下，可以申请豁免，继续在其母国缴纳社保。非协定国家的公民则必须在奥地利参保。
+  {
+    countryCode: "AT",
+    itemKey: "health_insurance_at",
+    itemNameEn: "Sickness Insurance",
+    itemNameZh: "\u75BE\u75C5\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0378",
+    rateEmployee: "0.0387",
+    capType: "salary_multiple",
+    capBase: "6930",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u6536\u5165\u8D85\u8FC7518.44\u6B27\u5143\u7684\u60C5\u51B5\u3002",
+    legalReference: "PwC 2026 Tax Summary",
+    sortOrder: 129
+  },
+  {
+    countryCode: "AT",
+    itemKey: "unemployment_insurance_at",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.0295",
+    rateEmployee: "0.0295",
+    capType: "salary_multiple",
+    capBase: "6930",
+    effectiveYear: 2025,
+    legalReference: "PwC 2026 Tax Summary",
+    sortOrder: 130
+  },
+  {
+    countryCode: "AT",
+    itemKey: "pension_insurance_at",
+    itemNameEn: "Pension Insurance",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.1255",
+    rateEmployee: "0.1025",
+    capType: "salary_multiple",
+    capBase: "6930",
+    effectiveYear: 2025,
+    legalReference: "PwC 2026 Tax Summary",
+    sortOrder: 131
+  },
+  {
+    countryCode: "AT",
+    itemKey: "accident_insurance_at",
+    itemNameEn: "Accident Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.011",
+    rateEmployee: "0.00",
+    capType: "salary_multiple",
+    capBase: "6930",
+    effectiveYear: 2025,
+    notes: "\u5B8C\u5168\u7531\u96C7\u4E3B\u627F\u62C5\u3002",
+    legalReference: "PwC 2026 Tax Summary",
+    sortOrder: 132
+  },
+  {
+    countryCode: "AT",
+    itemKey: "misc_contributions_at",
+    itemNameEn: "Miscellaneous Contributions",
+    itemNameZh: "\u6742\u9879\u7F34\u6B3E",
+    category: "other_mandatory",
+    rateEmployer: "0.006",
+    rateEmployee: "0.01",
+    capType: "salary_multiple",
+    capBase: "6930",
+    effectiveYear: 2025,
+    notes: "\u5305\u62EC\u4F4F\u5B85\u5EFA\u8BBE\u4FC3\u8FDB\u8D39\uFF08Wohnbauf\xF6rderungsbeitrag\uFF09\u7B49\u3002",
+    legalReference: "PwC 2026 Tax Summary",
+    sortOrder: 133
+  },
+  {
+    countryCode: "AT",
+    itemKey: "family_fund_at",
+    itemNameEn: "Family Burdens Equalisation Levy",
+    itemNameZh: "\u5BB6\u5EAD\u8D1F\u62C5\u5E73\u8861\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.037",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5B8C\u5168\u7531\u96C7\u4E3B\u627F\u62C5\uFF0C\u65E0\u5C01\u9876\u3002",
+    legalReference: "PwC 2026 Tax Summary",
+    sortOrder: 134
+  },
+  {
+    countryCode: "AT",
+    itemKey: "municipal_tax_at",
+    itemNameEn: "Municipal Tax on Payroll",
+    itemNameZh: "\u5E02\u653F\u5DE5\u8D44\u7A0E",
+    category: "other_mandatory",
+    rateEmployer: "0.03",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5B8C\u5168\u7531\u96C7\u4E3B\u627F\u62C5\uFF0C\u65E0\u5C01\u9876\u3002",
+    legalReference: "PwC 2026 Tax Summary",
+    sortOrder: 135
+  },
+  {
+    countryCode: "AT",
+    itemKey: "chamber_of_commerce_at",
+    itemNameEn: "Chamber of Commerce Contribution",
+    itemNameZh: "\u5546\u4F1A\u7F34\u6B3E",
+    category: "other_mandatory",
+    rateEmployer: "0.00355",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u57280.31%\u52300.40%\u4E4B\u95F4\uFF0C\u6B64\u5904\u53D6\u4E2D\u95F4\u503C\u4F30\u7B97\u3002\u5B8C\u5168\u7531\u96C7\u4E3B\u627F\u62C5\u3002",
+    legalReference: "PwC 2026 Tax Summary",
+    sortOrder: 136
+  },
+  {
+    countryCode: "AT",
+    itemKey: "employee_pension_fund_at",
+    itemNameEn: "Mandatory Employee Pension Fund",
+    itemNameZh: "\u5F3A\u5236\u6027\u5458\u5DE5\u517B\u8001\u57FA\u91D1",
+    category: "pension",
+    rateEmployer: "0.0153",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Mitarbeitervorsorgekasse (MVK)\u3002\u5B8C\u5168\u7531\u96C7\u4E3B\u627F\u62C5\u3002",
+    legalReference: "PwC 2026 Tax Summary",
+    sortOrder: 137
+  },
+  // --- Bosnia and Herzegovina (BA) ---
+  // Expat: 根据现有法规，外籍员工在波斯尼亚和黑塞哥维那（包括FBiH和RS实体）与本地员工一样，需强制性缴纳所有标准的社会保险。目前没有针对外籍员工的特殊豁免或优惠费率。
+  {
+    countryCode: "BA",
+    itemKey: "fbih_pension",
+    itemNameEn: "Pension and Invalid Insurance (FBiH)",
+    itemNameZh: "\u517B\u8001\u53CA\u4F24\u6B8B\u4FDD\u9669 (FBiH)",
+    category: "pension",
+    rateEmployer: "0.025",
+    rateEmployee: "0.170",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated on gross salary.",
+    legalReference: "https://taxsummaries.pwc.com/bosnia-and-herzegovina/individual/other-taxes",
+    sortOrder: 138
+  },
+  {
+    countryCode: "BA",
+    itemKey: "fbih_health_insurance",
+    itemNameEn: "Health Insurance (FBiH)",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669 (FBiH)",
+    category: "health_insurance",
+    rateEmployer: "0.020",
+    rateEmployee: "0.125",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated on gross salary.",
+    legalReference: "https://taxsummaries.pwc.com/bosnia-and-herzegovina/individual/other-taxes",
+    sortOrder: 139
+  },
+  {
+    countryCode: "BA",
+    itemKey: "fbih_unemployment_insurance",
+    itemNameEn: "Unemployment Insurance (FBiH)",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669 (FBiH)",
+    category: "unemployment",
+    rateEmployer: "0.005",
+    rateEmployee: "0.015",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated on gross salary.",
+    legalReference: "https://taxsummaries.pwc.com/bosnia-and-herzegovina/individual/other-taxes",
+    sortOrder: 140
+  },
+  {
+    countryCode: "BA",
+    itemKey: "fbih_disaster_protection",
+    itemNameEn: "Protection from Natural and Other Disasters (FBiH)",
+    itemNameZh: "\u81EA\u7136\u53CA\u5176\u4ED6\u707E\u5BB3\u9632\u62A4 (FBiH)",
+    category: "other_mandatory",
+    rateEmployer: "0.005",
+    rateEmployee: "0.000",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated on net salary.",
+    legalReference: "https://taxsummaries.pwc.com/bosnia-and-herzegovina/individual/other-taxes",
+    sortOrder: 141
+  },
+  {
+    countryCode: "BA",
+    itemKey: "fbih_water_protection",
+    itemNameEn: "Water Protection Charge (FBiH)",
+    itemNameZh: "\u6C34\u8D44\u6E90\u4FDD\u62A4\u8D39 (FBiH)",
+    category: "other_mandatory",
+    rateEmployer: "0.005",
+    rateEmployee: "0.000",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated on net salary.",
+    legalReference: "https://taxsummaries.pwc.com/bosnia-and-herzegovina/individual/other-taxes",
+    sortOrder: 142
+  },
+  {
+    countryCode: "BA",
+    itemKey: "rs_pension",
+    itemNameEn: "Pension and Invalid Insurance (RS)",
+    itemNameZh: "\u517B\u8001\u53CA\u4F24\u6B8B\u4FDD\u9669 (RS)",
+    category: "pension",
+    rateEmployer: "0.000",
+    rateEmployee: "0.185",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated on gross salary. No employer contributions in Republika Srpska.",
+    legalReference: "https://taxsummaries.pwc.com/bosnia-and-herzegovina/individual/other-taxes",
+    sortOrder: 143
+  },
+  {
+    countryCode: "BA",
+    itemKey: "rs_health_insurance",
+    itemNameEn: "Health Insurance (RS)",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669 (RS)",
+    category: "health_insurance",
+    rateEmployer: "0.000",
+    rateEmployee: "0.120",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated on gross salary. No employer contributions in Republika Srpska.",
+    legalReference: "https://taxsummaries.pwc.com/bosnia-and-herzegovina/individual/other-taxes",
+    sortOrder: 144
+  },
+  {
+    countryCode: "BA",
+    itemKey: "rs_unemployment_insurance",
+    itemNameEn: "Unemployment Insurance (RS)",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669 (RS)",
+    category: "unemployment",
+    rateEmployer: "0.000",
+    rateEmployee: "0.006",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated on gross salary. No employer contributions in Republika Srpska.",
+    legalReference: "https://taxsummaries.pwc.com/bosnia-and-herzegovina/individual/other-taxes",
+    sortOrder: 145
+  },
+  {
+    countryCode: "BA",
+    itemKey: "rs_child_protection",
+    itemNameEn: "Child Protection (RS)",
+    itemNameZh: "\u513F\u7AE5\u4FDD\u62A4 (RS)",
+    category: "other_mandatory",
+    rateEmployer: "0.000",
+    rateEmployee: "0.017",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated on gross salary. No employer contributions in Republika Srpska.",
+    legalReference: "https://taxsummaries.pwc.com/bosnia-and-herzegovina/individual/other-taxes",
+    sortOrder: 146
+  },
+  // --- Belgium (BE) ---
+  // Expat:
+  //   外籍员工通常与本地员工一样需缴纳比利时社保。然而，在特定的“外籍人士税务制度”下，雇主可以向员工支付免税和免社保的津贴，以补偿因在比利时工作而产生的额外费用。但其应税薪资部分的社保缴费规则与本地员工相同。持有A1证明或来自有双边社保协定国家的外籍员工可豁免比利时社保。
+  {
+    countryCode: "BE",
+    itemKey: "social_security",
+    itemNameEn: "Social Security (ONSS/RSZ)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\u91D1",
+    category: "social_insurance",
+    rateEmployer: "0.25",
+    rateEmployee: "0.1307",
+    capType: "bracket",
+    capBase: "28333.33",
+    effectiveYear: 2025,
+    notes: "\u81EA2025\u5E747\u67081\u65E5\u8D77\uFF0C\u96C7\u4E3B\u7F34\u8D39\u90E8\u5206\u7684\u8BA1\u7B97\u57FA\u6570\u8BBE\u7F6E\u4E0A\u9650\uFF0C\u4E3A\u6BCF\u5B63\u5EA685,000\u6B27\u5143\uFF08\u5373\u6BCF\u6708\u7EA628,333.33\u6B27\u5143\uFF09\u3002\u5458\u5DE5\u7F34\u8D39\u90E8\u5206\u65E0\u57FA\u6570\u4E0A\u9650\u3002\u6B64\u9879\u7EFC\u5408\u7F34\u6B3E\u6DB5\u76D6\u517B\u8001\u91D1\u3001\u533B\u7597\u4FDD\u9669\u3001\u5931\u4E1A\u4FDD\u9669\u3001\u5BB6\u5EAD\u6D25\u8D34\u7B49\u3002",
+    legalReference: "https://kpmg.com/xx/en/our-insights/gms-flash-alert/flash-alert-2025-184.html",
+    sortOrder: 147
+  },
+  // --- Bulgaria (BG) ---
+  // Expat: 根据欧盟法规 (EC) No
+  //   883/2004，来自欧盟、欧洲经济区成员国或瑞士的派遣员工，如果持有其本国颁发的A1证明，可以继续在其母国缴纳社保，从而免除在保加利亚的社保缴费义务。对于来自与保加利亚签有双边社会保障协定的国家（如加拿大、韩国、乌克兰等）的员工，协定条款将决定其社保责任。非协定国家的第三国国民通常需要在保加利亚全额缴纳社保。
+  {
+    countryCode: "BG",
+    itemKey: "pension_first_pillar",
+    itemNameEn: "Pension Fund - First Pillar",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669\u57FA\u91D1\uFF08\u7B2C\u4E00\u652F\u67F1\uFF09",
+    category: "pension",
+    rateEmployer: "0.0822",
+    rateEmployee: "0.0658",
+    capType: "fixed_amount",
+    capBase: "4130",
+    effectiveYear: 2025,
+    notes: "Provides pensions for retirement, disability, and survivors. The maximum monthly insurance income is BGN 4,130, effective from April 1, 2025.",
+    legalReference: "Bulgarian Social Security Code",
+    sortOrder: 148
+  },
+  {
+    countryCode: "BG",
+    itemKey: "pension_second_pillar",
+    itemNameEn: "Pension Fund - Second Pillar",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669\u57FA\u91D1\uFF08\u7B2C\u4E8C\u652F\u67F1\uFF09",
+    category: "pension",
+    rateEmployer: "0.028",
+    rateEmployee: "0.022",
+    capType: "fixed_amount",
+    capBase: "4130",
+    effectiveYear: 2025,
+    notes: "Applies to individuals born after 31 December 1959. Managed by private insurance companies. The maximum monthly insurance income is BGN 4,130, effective from April 1, 2025.",
+    legalReference: "Bulgarian Social Security Code",
+    sortOrder: 149
+  },
+  {
+    countryCode: "BG",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.048",
+    rateEmployee: "0.032",
+    capType: "fixed_amount",
+    capBase: "4130",
+    effectiveYear: 2025,
+    notes: "Covers medical care and services. The maximum monthly insurance income is BGN 4,130, effective from April 1, 2025.",
+    legalReference: "Health Insurance Act",
+    sortOrder: 150
+  },
+  {
+    countryCode: "BG",
+    itemKey: "general_disease_maternity",
+    itemNameEn: "General Disease and Maternity Fund",
+    itemNameZh: "\u666E\u901A\u75BE\u75C5\u4E0E\u751F\u80B2\u57FA\u91D1",
+    category: "social_insurance",
+    rateEmployer: "0.021",
+    rateEmployee: "0.014",
+    capType: "fixed_amount",
+    capBase: "4130",
+    effectiveYear: 2025,
+    notes: "Provides compensation in periods of illness or maternity leave. The maximum monthly insurance income is BGN 4,130, effective from April 1, 2025.",
+    legalReference: "Bulgarian Social Security Code",
+    sortOrder: 151
+  },
+  {
+    countryCode: "BG",
+    itemKey: "unemployment_fund",
+    itemNameEn: "Unemployment Fund",
+    itemNameZh: "\u5931\u4E1A\u57FA\u91D1",
+    category: "unemployment",
+    rateEmployer: "0.006",
+    rateEmployee: "0.004",
+    capType: "fixed_amount",
+    capBase: "4130",
+    effectiveYear: 2025,
+    notes: "Offers financial support during unemployment. The maximum monthly insurance income is BGN 4,130, effective from April 1, 2025.",
+    legalReference: "Bulgarian Social Security Code",
+    sortOrder: 152
+  },
+  {
+    countryCode: "BG",
+    itemKey: "work_injury_occupational_diseases",
+    itemNameEn: "Work Injury and Occupational Diseases Fund",
+    itemNameZh: "\u5DE5\u4F24\u4E0E\u804C\u4E1A\u75C5\u57FA\u91D1",
+    category: "work_injury",
+    rateEmployer: "0.004",
+    rateEmployee: "0.000",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Rate ranges from 0.4% to 1.1% depending on the economic activity risk category of the employer. 0.4% is the minimum rate.",
+    legalReference: "Bulgarian Social Security Code",
+    sortOrder: 153
+  },
+  // --- Belarus (BY) ---
+  // Expat: 外籍员工与白俄罗斯国民需缴纳相同的社会保险费，没有特殊豁免或不同费率。
+  {
+    countryCode: "BY",
+    itemKey: "pension_and_social_insurance_employer",
+    itemNameEn: "Pension and Social Insurance",
+    itemNameZh: "\u517B\u8001\u53CA\u793E\u4F1A\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.34",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "229916.67",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u90E8\u5206\uFF0C\u8D39\u7387\u5408\u5E76\u81EA\u517B\u8001\u4FDD\u9669(28%)\u548C\u793E\u4F1A\u4FDD\u9669(6%)\u30022025\u5E74\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A\u5E74\u85AA5\u500D\u7684\u5E73\u5747\u5DE5\u8D44\uFF0C\u5177\u4F53\u91D1\u989D\u5F85\u5B98\u65B9\u53D1\u5E03\uFF0C\u6B64\u5904\u6682\u7528\u6839\u636E\u5386\u53F2\u6570\u636E\u4F30\u7B97\u503C\u3002",
+    legalReference: "Decree of the President of the Republic of Belarus No. 454 of December 30, 2025",
+    sortOrder: 154
+  },
+  {
+    countryCode: "BY",
+    itemKey: "work_injury_employer",
+    itemNameEn: "Work Injury Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.006",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u56E0\u884C\u4E1A\u98CE\u9669\u7B49\u7EA7\u800C\u5F02\uFF0C0.6%\u4E3A\u57FA\u51C6\u8D39\u7387\u3002\u6B64\u9879\u7F34\u8D39\u6CA1\u6709\u5C01\u9876\u57FA\u6570\u3002",
+    legalReference: "Council of Ministers Resolution No. 1297 of 10.10.2003",
+    sortOrder: 155
+  },
+  {
+    countryCode: "BY",
+    itemKey: "social_insurance_employee",
+    itemNameEn: "Social Insurance",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.01",
+    capType: "fixed_amount",
+    capBase: "229916.67",
+    effectiveYear: 2025,
+    notes: "2025\u5E74\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A\u5E74\u85AA5\u500D\u7684\u5E73\u5747\u5DE5\u8D44\uFF0C\u5177\u4F53\u91D1\u989D\u5F85\u5B98\u65B9\u53D1\u5E03\uFF0C\u6B64\u5904\u6682\u7528\u6839\u636E\u5386\u53F2\u6570\u636E\u4F30\u7B97\u503C\u3002",
+    legalReference: "Decree of the President of the Republic of Belarus No. 454 of December 30, 2025",
+    sortOrder: 156
+  },
+  // --- Switzerland (CH) ---
+  // Expat: 外籍员工（无C类许可证）需缴纳预扣税（withholding
+  //   tax）。瑞士与欧盟/欧洲自由贸易联盟国家以及其他20多个国家签订了社会保障协议，以避免双重缴费。来自非协议国家的外籍员工通常需要全额缴纳瑞士社保，但在某些条件下（例如，临时派驻），可能有豁免或特殊安排，具体取决于国籍和雇佣合同。
+  {
+    countryCode: "CH",
+    itemKey: "avs_ai_apg",
+    itemNameEn: "Old-Age and Survivors' Insurance / Disability Insurance / Income Compensation",
+    itemNameZh: "\u517B\u8001\u548C\u9057\u5C5E\u4FDD\u9669/\u4F24\u6B8B\u4FDD\u9669/\u6536\u5165\u8865\u507F\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.053",
+    rateEmployee: "0.053",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "No salary cap.",
+    legalReference: "https://www.findea.ch/en/faq-fiduciary/social-security-contributions-switzerland-employers",
+    sortOrder: 157
+  },
+  {
+    countryCode: "CH",
+    itemKey: "alv",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.011",
+    rateEmployee: "0.011",
+    capType: "fixed_amount",
+    capBase: "148200",
+    effectiveYear: 2025,
+    notes: "Rate applies to annual salary up to CHF 148,200. An additional solidarity contribution of 1.0% (0.5% ER, 0.5% EE) applies to salary portions exceeding this cap.",
+    legalReference: "https://www.findea.ch/en/faq-fiduciary/social-security-contributions-switzerland-employers",
+    sortOrder: 158
+  },
+  {
+    countryCode: "CH",
+    itemKey: "bvg",
+    itemNameEn: "Occupational Pension",
+    itemNameZh: "\u804C\u4E1A\u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.035",
+    rateEmployee: "0.035",
+    capType: "bracket",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Mandatory for salaries between CHF 22,050 and CHF 88,200 annually. Contribution rates are age-dependent (7% to 18% of coordinated salary). Employer must contribute at least 50%. The provided rate is an estimated minimum for the youngest age bracket.",
+    legalReference: "https://www.findea.ch/en/faq-fiduciary/social-security-contributions-switzerland-employers",
+    sortOrder: 159
+  },
+  {
+    countryCode: "CH",
+    itemKey: "uvg_bu",
+    itemNameEn: "Occupational Accident Insurance",
+    itemNameZh: "\u804C\u4E1A\u4E8B\u6545\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.01",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Rate varies by industry and risk (approx. 0.1-2%). Fully paid by the employer.",
+    legalReference: "https://www.findea.ch/en/faq-fiduciary/social-security-contributions-switzerland-employers",
+    sortOrder: 160
+  },
+  {
+    countryCode: "CH",
+    itemKey: "uvg_nbu",
+    itemNameEn: "Non-Occupational Accident Insurance",
+    itemNameZh: "\u975E\u804C\u4E1A\u4E8B\u6545\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.0",
+    rateEmployee: "0.02",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Mandatory for employees working 8+ hours/week. Rate varies by risk (approx. 1-3%). Fully paid by the employee.",
+    legalReference: "https://www.findea.ch/en/faq-fiduciary/social-security-contributions-switzerland-employers",
+    sortOrder: 161
+  },
+  {
+    countryCode: "CH",
+    itemKey: "fak",
+    itemNameEn: "Family Allowance Fund",
+    itemNameZh: "\u5BB6\u5EAD\u6D25\u8D34\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.02",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Rate varies by canton (approx. 1.7-3.5%). Fully paid by the employer.",
+    legalReference: "https://www.findea.ch/en/faq-fiduciary/social-security-contributions-switzerland-employers",
+    sortOrder: 162
+  },
+  // --- Cyprus (CY) ---
+  // Expat:
+  //   在塞浦路斯工作的外籍员工通常必须参加当地的社保体系。但是，对于来自欧盟、欧洲经济区（EEA）国家和瑞士的派遣员工，如果他们持有由其母国社保机构签发的A1便携式文件，可以证明其在母国继续缴纳社保，从而在规定期限内（通常最长24个月）豁免在塞浦路斯的社保缴费。此外，塞浦路斯与一些非欧盟国家（如英国、加拿大、美国、澳大利亚等）签订了双边社会保障协定，这些协定可能包含特殊规定，允许员工在特定条件下免除在其中一国的缴费义务。因此，需要根据员工的国籍和派遣情况，具体查阅相关协定或法规来确定其缴费义务。
+  {
+    countryCode: "CY",
+    itemKey: "social_insurance",
+    itemNameEn: "Social Insurance",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.088",
+    rateEmployee: "0.088",
+    capType: "fixed_amount",
+    capBase: "5551",
+    effectiveYear: 2025,
+    notes: "Maximum insurable earnings for 2025 is \u20AC5,551 per month.",
+    legalReference: "PwC Tax Facts & Figures 2025 (p.73-74), Evidentrust",
+    sortOrder: 163
+  },
+  {
+    countryCode: "CY",
+    itemKey: "general_health_system",
+    itemNameEn: "General Health System",
+    itemNameZh: "\u5168\u6C11\u533B\u7597\u7CFB\u7EDF",
+    category: "health_insurance",
+    rateEmployer: "0.029",
+    rateEmployee: "0.0265",
+    capType: "fixed_amount",
+    capBase: "15000",
+    effectiveYear: 2025,
+    notes: "The contributions are calculated on the employee's entire remuneration up to an annual cap of \u20AC180,000 (\u20AC15,000 per month).",
+    legalReference: "PwC Tax Facts & Figures 2025 (p.75)",
+    sortOrder: 164
+  },
+  {
+    countryCode: "CY",
+    itemKey: "social_cohesion_fund",
+    itemNameEn: "Social Cohesion Fund",
+    itemNameZh: "\u793E\u4F1A\u51DD\u805A\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.02",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated on total emoluments without a maximum cap.",
+    legalReference: "PwC Tax Facts & Figures 2025 (p.74), Evidentrust",
+    sortOrder: 165
+  },
+  {
+    countryCode: "CY",
+    itemKey: "redundancy_fund",
+    itemNameEn: "Redundancy Fund",
+    itemNameZh: "\u88C1\u5458\u57FA\u91D1",
+    category: "unemployment",
+    rateEmployer: "0.012",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "5551",
+    effectiveYear: 2025,
+    notes: "The contribution is calculated on the same insurable earnings as the Social Insurance, capped at \u20AC5,551 per month.",
+    legalReference: "PwC Tax Facts & Figures 2025 (p.74), Evidentrust",
+    sortOrder: 166
+  },
+  {
+    countryCode: "CY",
+    itemKey: "industrial_training_fund",
+    itemNameEn: "Industrial Training Fund",
+    itemNameZh: "\u4EA7\u4E1A\u57F9\u8BAD\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.005",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "5551",
+    effectiveYear: 2025,
+    notes: "The contribution is calculated on the same insurable earnings as the Social Insurance, capped at \u20AC5,551 per month.",
+    legalReference: "PwC Tax Facts & Figures 2025 (p.74), Evidentrust",
+    sortOrder: 167
+  },
+  // --- Czech Republic (CZ) ---
+  // Expat: 对于在捷克共和国工作的外籍员工，社保规则通常与本地员工相同，特别是对于欧盟/欧洲经济区公民。对于来自与捷克签有双边社保协定的国家的非欧盟公民，可能存在豁免，允许他们继续在其母国缴纳社保。没有此类协定的国家的公民则必须参加捷克的社保体系。
+  {
+    countryCode: "CZ",
+    itemKey: "social_security",
+    itemNameEn: "Social Security",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.248",
+    rateEmployee: "0.071",
+    capType: "salary_multiple",
+    capBase: "186228",
+    effectiveYear: 2025,
+    notes: "2025\u5E74\u7684\u5E74\u5EA6\u6700\u9AD8\u7F34\u8D39\u57FA\u6570\u4E3ACZK 2,234,736\uFF0C\u5373\u6708\u5EA6\u4E0A\u9650\u4E3ACZK 186,228\u3002",
+    legalReference: "https://danovky.cz/en/news/detail/1576",
+    sortOrder: 168
+  },
+  {
+    countryCode: "CZ",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.09",
+    rateEmployee: "0.045",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5065\u5EB7\u4FDD\u9669\u7F34\u8D39\u6CA1\u6709\u4E0A\u9650\u3002",
+    legalReference: "https://expat-tax.cz/czech-payroll-taxes-and-insurance-contributions-in-2025/",
+    sortOrder: 169
+  },
+  // --- Germany (DE) ---
+  // Expat:
+  //   外籍员工通常与德国本地员工一样，需全额缴纳所有强制性社会保险。但在特定条件下（如短期派遣、持有特定协议国国籍等），可能根据欧盟/欧洲经济区法规或双边社保协定（Sozialversicherungsabkommen）申请豁免（A1证明），从而免除在德国的社保义务，继续在原籍国参保。具体适用情况需根据员工国籍、派遣时长和性质单独评估。
+  {
+    countryCode: "DE",
+    itemKey: "pension_de",
+    itemNameEn: "Pension Insurance",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.093",
+    rateEmployee: "0.093",
+    capType: "fixed_amount",
+    capBase: "8050.0",
+    effectiveYear: 2025,
+    notes: "Rentenversicherung. Cap is for West Germany (Rechtskreis West), which becomes the unified rate for all of Germany from 2025.",
+    legalReference: "\xA7 159 SGB VI",
+    sortOrder: 170
+  },
+  {
+    countryCode: "DE",
+    itemKey: "health_de",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u533B\u7597\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0815",
+    rateEmployee: "0.0815",
+    capType: "fixed_amount",
+    capBase: "5512.5",
+    effectiveYear: 2025,
+    notes: "Krankenversicherung. Rate includes the general rate (14.6%) and the average additional contribution (Zusatzbeitrag) of 1.7% for 2025, split equally. The actual additional rate varies by insurance fund.",
+    legalReference: "\xA7 241, \xA7 242a SGB V",
+    sortOrder: 171
+  },
+  {
+    countryCode: "DE",
+    itemKey: "unemployment_de",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.013",
+    rateEmployee: "0.013",
+    capType: "fixed_amount",
+    capBase: "8050.0",
+    effectiveYear: 2025,
+    notes: "Arbeitslosenversicherung. Cap is for West Germany (Rechtskreis West), which becomes the unified rate for all of Germany from 2025.",
+    legalReference: "\xA7 341 SGB III",
+    sortOrder: 172
+  },
+  {
+    countryCode: "DE",
+    itemKey: "care_insurance_de",
+    itemNameEn: "Long-Term Care Insurance",
+    itemNameZh: "\u62A4\u7406\u4FDD\u9669",
+    category: "other_mandatory",
+    rateEmployer: "0.017",
+    rateEmployee: "0.017",
+    capType: "fixed_amount",
+    capBase: "5512.5",
+    effectiveYear: 2025,
+    notes: "Pflegeversicherung. Employee rate is higher (0.023) for childless individuals over 23. The employer share remains 1.7% regardless. The rate shown is for employees with children.",
+    legalReference: "\xA7 55 SGB XI",
+    sortOrder: 173
+  },
+  // --- Denmark (DK) ---
+  // Expat: 外籍员工需和丹麦本地员工一样，缴纳强制性的社会保险费。目前没有针对外籍员工的特殊豁免或优惠政策。
+  {
+    countryCode: "DK",
+    itemKey: "atp",
+    itemNameEn: "Labour Market Supplementary Pension (ATP)",
+    itemNameZh: "\u52B3\u52A8\u5E02\u573A\u9644\u52A0\u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "198.00",
+    rateEmployee: "99.00",
+    capType: "fixed_amount",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Fixed amount contribution for full-time monthly paid employees. The rates shown are for A-bidrag.",
+    legalReference: "https://virk.dk/assets/w0RWx39wM8JZffglMMKyb/Alle%20ATP-satserne%20fra%20A%20til%20F_2025.pdf",
+    sortOrder: 174
+  },
+  {
+    countryCode: "DK",
+    itemKey: "aub",
+    itemNameEn: "Employers' Training Contribution (AUB)",
+    itemNameZh: "\u96C7\u4E3B\u57F9\u8BAD\u7F34\u6B3E",
+    category: "other_mandatory",
+    rateEmployer: "262.13",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Approximate monthly contribution for a full-time employee (EUR 422/year).",
+    legalReference: "https://www.bdo.dk/getmedia/7b381fc4-173a-45d8-96f2-ef9958d68817/Danish-social-security-contributions.pdf",
+    sortOrder: 175
+  },
+  {
+    countryCode: "DK",
+    itemKey: "aes",
+    itemNameEn: "Labour Market Occupational Diseases Insurance (AES)",
+    itemNameZh: "\u52B3\u52A8\u5E02\u573A\u804C\u4E1A\u75C5\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0",
+    rateEmployee: "0",
+    capType: "bracket",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Contribution varies based on the employer's industry and risk profile, ranging from approximately EUR 22 to EUR 1,130 per year per full-time employee.",
+    legalReference: "https://www.bdo.dk/getmedia/7b381fc4-173a-45d8-96f2-ef9958d68817/Danish-social-security-contributions.pdf",
+    sortOrder: 176
+  },
+  {
+    countryCode: "DK",
+    itemKey: "barsel",
+    itemNameEn: "Maternity Leave Fund",
+    itemNameZh: "\u4EA7\u5047\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "112.44",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Approximate monthly contribution for a full-time employee (EUR 181/year).",
+    legalReference: "https://www.bdo.dk/getmedia/7b381fc4-173a-45d8-96f2-ef9958d68817/Danish-social-security-contributions.pdf",
+    sortOrder: 177
+  },
+  {
+    countryCode: "DK",
+    itemKey: "finansieringsbidrag",
+    itemNameEn: "Pension Finance Contribution",
+    itemNameZh: "\u517B\u8001\u91D1\u878D\u7F34\u6B3E",
+    category: "pension",
+    rateEmployer: "36.63",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Approximate monthly contribution for a full-time employee (EUR 59/year).",
+    legalReference: "https://www.bdo.dk/getmedia/7b381fc4-173a-45d8-96f2-ef9958d68817/Danish-social-security-contributions.pdf",
+    sortOrder: 178
+  },
+  {
+    countryCode: "DK",
+    itemKey: "afu",
+    itemNameEn: "Labour Market Fund for Posted Workers (AFU)",
+    itemNameZh: "\u52B3\u52A8\u5E02\u573A\u5916\u6D3E\u5DE5\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Contribution is currently zero.",
+    legalReference: "https://www.bdo.dk/getmedia/7b381fc4-173a-45d8-96f2-ef9958d68817/Danish-social-security-contributions.pdf",
+    sortOrder: 179
+  },
+  {
+    countryCode: "DK",
+    itemKey: "work_injury_insurance",
+    itemNameEn: "Industrial Injury Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0",
+    rateEmployee: "0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Mandatory for all employers. The premium varies depending on the insurance provider and the risk classification of the work.",
+    legalReference: "https://www.bdo.dk/getmedia/7b381fc4-173a-45d8-96f2-ef9958d68817/Danish-social-security-contributions.pdf",
+    sortOrder: 180
+  },
+  // --- Estonia (EE) ---
+  // Expat:
+  //   在爱沙尼亚工作的外籍员工通常需遵守与本地员工相同的社保规定。但是，如果该员工能通过A1证明等文件，证实其已在另一个欧盟/欧洲经济区成员国或与爱沙尼亚有双边社保协定的国家缴纳社保，则可以豁免在爱沙尼亚缴纳社保费。无常设机构的非居民雇主若向在爱沙尼亚工作的员工支付薪水，必须在爱沙尼亚注册并缴纳社会税。
+  {
+    countryCode: "EE",
+    itemKey: "social_tax",
+    itemNameEn: "Social Tax",
+    itemNameZh: "\u793E\u4F1A\u7A0E",
+    category: "social_insurance",
+    rateEmployer: "0.33",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u5305\u542B\u517B\u8001\u91D1\u90E8\u5206\uFF0820%\uFF09\u548C\u5065\u5EB7\u4FDD\u9669\u90E8\u5206\uFF0813%\uFF09\u30022025\u5E74\u6708\u5EA6\u6700\u4F4E\u7F34\u8D39\u57FA\u6570\u4E3A820\u6B27\u5143\u3002",
+    legalReference: "Social Tax Act",
+    sortOrder: 181
+  },
+  {
+    countryCode: "EE",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.008",
+    rateEmployee: "0.016",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "Unemployment Insurance Act",
+    sortOrder: 182
+  },
+  {
+    countryCode: "EE",
+    itemKey: "mandatory_funded_pension",
+    itemNameEn: "Mandatory Funded Pension (II pillar)",
+    itemNameZh: "\u5F3A\u5236\u6027\u8865\u5145\u517B\u8001\u91D1\uFF08\u7B2C\u4E8C\u652F\u67F1\uFF09",
+    category: "pension",
+    rateEmployer: "0.00",
+    rateEmployee: "0.02",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5458\u5DE5\u53EF\u4EE5\u9009\u62E9\u5C06\u8D39\u7387\u63D0\u9AD8\u52304%\u62166%\u3002\u8BE5\u8BA1\u5212\u5BF91983\u5E74\u53CA\u4EE5\u540E\u51FA\u751F\u7684\u4E2A\u4EBA\u5F3A\u5236\u6267\u884C\u3002",
+    legalReference: "Funded Pensions Act",
+    sortOrder: 183
+  },
+  // --- Spain (ES) ---
+  // Expat:
+  //   在西班牙工作的外籍员工通常必须参加并缴纳社保。但是，根据欧盟法规或与西班牙签订的双边协议（例如与美国签订的全面化协议），某些外籍员工（如派遣员工）可能有资格在一定期限内豁免缴纳西班牙社保，前提是他们继续在其本国的社保体系中缴费。非欧盟/欧洲经济区公民在获得工作和居留许可后，通常与西班牙公民一样有强制性的社保缴费义务。
+  {
+    countryCode: "ES",
+    itemKey: "social_security_contingencies",
+    itemNameEn: "Common Contingencies",
+    itemNameZh: "\u4E00\u822C\u6027\u4E8B\u52A1",
+    category: "social_insurance",
+    rateEmployer: "0.236",
+    rateEmployee: "0.047",
+    capType: "salary_multiple",
+    capBase: "4909.5",
+    effectiveYear: 2025,
+    notes: "Covers illness, non-work accidents, maternity, paternity, etc. Includes the Intergenerational Equity Mechanism (MEI) contribution.",
+    legalReference: "Order PJC/178/2025",
+    sortOrder: 184
+  },
+  {
+    countryCode: "ES",
+    itemKey: "unemployment",
+    itemNameEn: "Unemployment",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.055",
+    rateEmployee: "0.0155",
+    capType: "salary_multiple",
+    capBase: "4909.5",
+    effectiveYear: 2025,
+    notes: "Contribution for unemployment benefits.",
+    legalReference: "Order PJC/178/2025",
+    sortOrder: 185
+  },
+  {
+    countryCode: "ES",
+    itemKey: "work_injury",
+    itemNameEn: "Work Accident Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4E8B\u6545\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.015",
+    rateEmployee: "0.0",
+    capType: "salary_multiple",
+    capBase: "4909.5",
+    effectiveYear: 2025,
+    notes: "Rate varies by industry risk. 1.5% is a common average rate.",
+    legalReference: "Order PJC/178/2025",
+    sortOrder: 186
+  },
+  {
+    countryCode: "ES",
+    itemKey: "wage_guarantee_fund",
+    itemNameEn: "Wage Guarantee Fund (FOGASA)",
+    itemNameZh: "\u5DE5\u8D44\u4FDD\u969C\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.002",
+    rateEmployee: "0.0",
+    capType: "salary_multiple",
+    capBase: "4909.5",
+    effectiveYear: 2025,
+    notes: "Fund to cover unpaid wages in case of employer insolvency.",
+    legalReference: "Order PJC/178/2025",
+    sortOrder: 187
+  },
+  {
+    countryCode: "ES",
+    itemKey: "professional_training",
+    itemNameEn: "Professional Training",
+    itemNameZh: "\u804C\u4E1A\u57F9\u8BAD",
+    category: "other_mandatory",
+    rateEmployer: "0.006",
+    rateEmployee: "0.001",
+    capType: "salary_multiple",
+    capBase: "4909.5",
+    effectiveYear: 2025,
+    notes: "Contribution for vocational training programs.",
+    legalReference: "Order PJC/178/2025",
+    sortOrder: 188
+  },
+  {
+    countryCode: "ES",
+    itemKey: "solidarity_contribution",
+    itemNameEn: "Solidarity Contribution",
+    itemNameZh: "\u56E2\u7ED3\u4E92\u52A9\u6350",
+    category: "other_mandatory",
+    rateEmployer: "0.0092",
+    rateEmployee: "0.0016",
+    capType: "bracket",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Applies to earnings exceeding the maximum contribution base. The rate is progressive based on income brackets above the cap. The provided rate is for the first bracket (up to 10% above the cap).",
+    legalReference: "Order PJC/178/2025",
+    sortOrder: 189
+  },
+  // --- Finland (FI) ---
+  // Expat: 外籍员工如果适用“关键雇员税收制度”（expat tax regime），则无需缴纳个人健康保险费。但是，除非有A1证书，雇主仍需为其缴纳所有法定的芬兰社保费（养老金、工伤、失业保险等）。
+  {
+    countryCode: "FI",
+    itemKey: "tyel",
+    itemNameEn: "Earnings-related pension insurance",
+    itemNameZh: "\u517B\u8001\u91D1\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.1738",
+    rateEmployee: "0.0715",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5458\u5DE5\u8D39\u7387\uFF1A53\u5C81\u4EE5\u4E0B\u53CA62\u5C81\u4EE5\u4E0A\u4E3A7.15%\uFF0C53-62\u5C81\u4E4B\u95F4\u4E3A8.65%\u3002\u96C7\u4E3B\u5E73\u5747\u8D39\u7387\u4E3A17.38%\u3002",
+    legalReference: "https://www.etk.fi/wp-content/uploads/2025/01/lakisaateiset-sosiaalivakuutusmaksut-suomessa-2025-englanti.pdf",
+    sortOrder: 190
+  },
+  {
+    countryCode: "FI",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.0027",
+    rateEmployee: "0.0079",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u8D39\u7387\uFF1A\u5DE5\u8D44\u603B\u989D\u4E0D\u8D85\u8FC72,337,500\u6B27\u5143\u7684\u90E8\u5206\u4E3A0.27%\uFF0C\u8D85\u8FC7\u90E8\u5206\u4E3A1.09%\u3002",
+    legalReference: "https://www.etk.fi/wp-content/uploads/2025/01/lakisaateiset-sosiaalivakuutusmaksut-suomessa-2025-englanti.pdf",
+    sortOrder: 191
+  },
+  {
+    countryCode: "FI",
+    itemKey: "health_insurance",
+    itemNameEn: "Health insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0116",
+    rateEmployee: "0.0051",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5458\u5DE5\u8D39\u7387\u5305\u542B0.51%\u7684\u533B\u7597\u4FDD\u5065\u8D39\u3002\u6B64\u5916\uFF0C\u5E74\u6536\u5165\u8D85\u8FC716,499\u6B27\u5143\u7684\u5458\u5DE5\u8FD8\u9700\u7F34\u7EB30.60%\u7684\u6BCF\u65E5\u6D25\u8D34\u8D39\u3002",
+    legalReference: "https://www.etk.fi/wp-content/uploads/2025/01/lakisaateiset-sosiaalivakuutusmaksut-suomessa-2025-englanti.pdf",
+    sortOrder: 192
+  },
+  {
+    countryCode: "FI",
+    itemKey: "work_injury_insurance",
+    itemNameEn: "Workers' compensation insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.0057",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u4E3A\u5E73\u5747\u503C\uFF0C\u5177\u4F53\u53D6\u51B3\u4E8E\u884C\u4E1A\u98CE\u9669\u7B49\u7EA7\u3002",
+    legalReference: "https://www.etk.fi/wp-content/uploads/2025/01/lakisaateiset-sosiaalivakuutusmaksut-suomessa-2025-englanti.pdf",
+    sortOrder: 193
+  },
+  {
+    countryCode: "FI",
+    itemKey: "group_life_insurance",
+    itemNameEn: "Group life insurance",
+    itemNameZh: "\u56E2\u4F53\u4EBA\u5BFF\u4FDD\u9669",
+    category: "other_mandatory",
+    rateEmployer: "0.0006",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5E73\u5747\u8D39\u7387\u3002",
+    legalReference: "https://www.etk.fi/wp-content/uploads/2025/01/lakisaateiset-sosiaalivakuutusmaksut-suomessa-2025-englanti.pdf",
+    sortOrder: 194
+  },
+  // --- France (FR) ---
+  // Expat: 在法国无税务居所的外籍员工不需缴纳普遍社会贡献金（CSG）和社会债务偿还贡献金（CRDS）。但是，他们需要缴纳一个税率为5.5%的个人健康保险费，该费用基于其全部工资计算。
+  {
+    countryCode: "FR",
+    itemKey: "health_maternity_disability_death",
+    itemNameEn: "Health, maternity, disability, death",
+    itemNameZh: "\u5065\u5EB7\u3001\u751F\u80B2\u3001\u6B8B\u75BE\u3001\u6B7B\u4EA1\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.13",
+    rateEmployee: "0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u8D39\u7387\u5728\u7279\u5B9A\u6761\u4EF6\u4E0B\u53EF\u964D\u81F37% (\u5458\u5DE5\u85AA\u916C\u4E0D\u8D85\u8FC7\u6700\u4F4E\u5DE5\u8D44\u76842.25\u500D)\u3002",
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 195
+  },
+  {
+    countryCode: "FR",
+    itemKey: "autonomy_solidarity_contribution",
+    itemNameEn: "Autonomy solidarity contribution (CSA)",
+    itemNameZh: "\u56E2\u7ED3\u81EA\u6CBB\u8D21\u732E\u91D1",
+    category: "social_insurance",
+    rateEmployer: "0.003",
+    rateEmployee: "0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 196
+  },
+  {
+    countryCode: "FR",
+    itemKey: "old_age_insurance_capped",
+    itemNameEn: "Old-age insurance (capped)",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669 (\u6709\u4E0A\u9650\u90E8\u5206)",
+    category: "pension",
+    rateEmployer: "0.0855",
+    rateEmployee: "0.069",
+    capType: "fixed_amount",
+    capBase: "3925",
+    effectiveYear: 2025,
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 197
+  },
+  {
+    countryCode: "FR",
+    itemKey: "old_age_insurance_uncapped",
+    itemNameEn: "Old-age insurance (uncapped)",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669 (\u65E0\u4E0A\u9650\u90E8\u5206)",
+    category: "pension",
+    rateEmployer: "0.0202",
+    rateEmployee: "0.004",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 198
+  },
+  {
+    countryCode: "FR",
+    itemKey: "accidents_at_work",
+    itemNameEn: "Accidents at work",
+    itemNameZh: "\u5DE5\u4F24\u4E8B\u6545\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0",
+    rateEmployee: "0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u56E0\u516C\u53F8\u89C4\u6A21\u548C\u98CE\u9669\u800C\u5F02\uFF0C\u4E3A\u53EF\u53D8\u8D39\u7387\u3002\u6B64\u5904\u6682\u8BBE\u4E3A0\uFF0C\u9700\u6839\u636E\u5177\u4F53\u516C\u53F8\u60C5\u51B5\u786E\u5B9A\u3002",
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 199
+  },
+  {
+    countryCode: "FR",
+    itemKey: "family_benefits",
+    itemNameEn: "Family benefits",
+    itemNameZh: "\u5BB6\u5EAD\u8865\u52A9",
+    category: "other_mandatory",
+    rateEmployer: "0.0525",
+    rateEmployee: "0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5728\u7279\u5B9A\u6761\u4EF6\u4E0B\uFF0C\u7B26\u5408\u8D44\u683C\u7684\u516C\u53F8\u8D39\u7387\u53EF\u964D\u81F33.45%\u3002",
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 200
+  },
+  {
+    countryCode: "FR",
+    itemKey: "csg",
+    itemNameEn: "General Social Contribution (CSG)",
+    itemNameZh: "\u666E\u904D\u793E\u4F1A\u8D21\u732E\u91D1",
+    category: "social_insurance",
+    rateEmployer: "0",
+    rateEmployee: "0.092",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E98.25%\u7684\u5DE5\u8D44\u603B\u989D\uFF0C\u4E0A\u9650\u4E3A4\u500D\u793E\u4FDD\u5C01\u9876\u57FA\u6570\u3002\u5916\u7C4D\u975E\u7A0E\u52A1\u5C45\u6C11\u8C41\u514D\u3002",
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 201
+  },
+  {
+    countryCode: "FR",
+    itemKey: "crds",
+    itemNameEn: "Social Debt Repayment Contribution (CRDS)",
+    itemNameZh: "\u793E\u4F1A\u503A\u52A1\u507F\u8FD8\u8D21\u732E\u91D1",
+    category: "social_insurance",
+    rateEmployer: "0",
+    rateEmployee: "0.005",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E98.25%\u7684\u5DE5\u8D44\u603B\u989D\u3002\u5916\u7C4D\u975E\u7A0E\u52A1\u5C45\u6C11\u8C41\u514D\u3002",
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 202
+  },
+  {
+    countryCode: "FR",
+    itemKey: "unemployment",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.0405",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: "15700",
+    effectiveYear: 2025,
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 203
+  },
+  {
+    countryCode: "FR",
+    itemKey: "ags",
+    itemNameEn: "AGS (Wage Guarantee Scheme)",
+    itemNameZh: "\u5DE5\u8D44\u4FDD\u969C\u8BA1\u5212",
+    category: "other_mandatory",
+    rateEmployer: "0.002",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: "15700",
+    effectiveYear: 2025,
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 204
+  },
+  {
+    countryCode: "FR",
+    itemKey: "supplementary_pension_bracket1",
+    itemNameEn: "Supplementary Pension (Agirc-Arrco) - Bracket 1",
+    itemNameZh: "\u8865\u5145\u517B\u8001\u91D1 (Agirc-Arrco) - \u7B49\u7EA71",
+    category: "pension",
+    rateEmployer: "0.0472",
+    rateEmployee: "0.0315",
+    capType: "fixed_amount",
+    capBase: "3925",
+    effectiveYear: 2025,
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 205
+  },
+  {
+    countryCode: "FR",
+    itemKey: "ceg_bracket1",
+    itemNameEn: "Overall Balance Contribution (CEG) - Bracket 1",
+    itemNameZh: "\u603B\u4F53\u5E73\u8861\u8D21\u732E\u91D1 (CEG) - \u7B49\u7EA71",
+    category: "pension",
+    rateEmployer: "0.0129",
+    rateEmployee: "0.0086",
+    capType: "fixed_amount",
+    capBase: "3925",
+    effectiveYear: 2025,
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 206
+  },
+  {
+    countryCode: "FR",
+    itemKey: "supplementary_pension_bracket2",
+    itemNameEn: "Supplementary Pension (Agirc-Arrco) - Bracket 2",
+    itemNameZh: "\u8865\u5145\u517B\u8001\u91D1 (Agirc-Arrco) - \u7B49\u7EA72",
+    category: "pension",
+    rateEmployer: "0.1295",
+    rateEmployee: "0.0864",
+    capType: "bracket",
+    capBase: "31400",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u85AA3925\u6B27\u5143\u81F331400\u6B27\u5143\u7684\u90E8\u5206\u3002",
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 207
+  },
+  {
+    countryCode: "FR",
+    itemKey: "ceg_bracket2",
+    itemNameEn: "Overall Balance Contribution (CEG) - Bracket 2",
+    itemNameZh: "\u603B\u4F53\u5E73\u8861\u8D21\u732E\u91D1 (CEG) - \u7B49\u7EA72",
+    category: "pension",
+    rateEmployer: "0.0162",
+    rateEmployee: "0.0108",
+    capType: "bracket",
+    capBase: "31400",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u85AA3925\u6B27\u5143\u81F331400\u6B27\u5143\u7684\u90E8\u5206\u3002",
+    legalReference: "https://www.cleiss.fr/docs/regimes/regime_france/an_a2.html",
+    sortOrder: 208
+  },
+  // --- United Kingdom (GB) ---
+  // Expat:
+  //   外籍员工通常需要缴纳国民保险（NI）。但是，如果员工来自与英国有社会保障协议的国家（如欧盟、欧洲经济区国家或双边协议国），并且持有有效的覆盖证明（如A1证明），他们可能在特定期限内（通常最长24个月）豁免缴纳英国NI，并继续在其母国缴纳社保。工作场所养老金（Workplace
+  //   Pension）的规则通常同样适用于符合条件的在英外籍员工。
+  {
+    countryCode: "GB",
+    itemKey: "national_insurance",
+    itemNameEn: "National Insurance",
+    itemNameZh: "\u56FD\u6C11\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.15",
+    rateEmployee: "0.08",
+    capType: "bracket",
+    capBase: "4189",
+    effectiveYear: 2025,
+    notes: "Employee rate is 8% for earnings between the Primary Threshold (\xA31,048/month) and the Upper Earnings Limit (\xA34,189/month). A 2% rate applies to earnings above the UEL. Employer rate is 15% on earnings above the Secondary Threshold (\xA3417/month).",
+    legalReference: "https://www.gov.uk/guidance/rates-and-thresholds-for-employers-2025-to-2026",
+    sortOrder: 209
+  },
+  {
+    countryCode: "GB",
+    itemKey: "workplace_pension",
+    itemNameEn: "Workplace Pension",
+    itemNameZh: "\u5DE5\u4F5C\u573A\u6240\u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.03",
+    rateEmployee: "0.05",
+    capType: "bracket",
+    capBase: "4189",
+    effectiveYear: 2025,
+    notes: "Contributions apply to 'qualifying earnings' between the lower (\xA3520/month) and upper (\xA34,189/month) earnings limits. Employee's 5% contribution includes 1% tax relief.",
+    legalReference: "https://www.gov.uk/workplace-pensions/what-you-your-employer-and-the-government-pay",
+    sortOrder: 210
+  },
+  // --- Greece (GR) ---
+  // Expat: 外籍员工与本地员工同样需要参加e-EFKA国家社保体系，适用相同的费率和缴费规则。欧盟法规确保了在社保权利方面的平等待遇。
+  {
+    countryCode: "GR",
+    itemKey: "e-EFKA",
+    itemNameEn: "National Social Security Fund (e-EFKA)",
+    itemNameZh: "\u56FD\u5BB6\u793E\u4FDD\u57FA\u91D1 (e-EFKA)",
+    category: "social_insurance",
+    rateEmployer: "0.2179",
+    rateEmployee: "0.1337",
+    capType: "fixed_amount",
+    capBase: "7572.62",
+    effectiveYear: 2025,
+    notes: "\u8BE5\u8D39\u7387\u6DB5\u76D6\u4E86\u517B\u8001\u91D1\u3001\u533B\u7597\u4FDD\u5065\u3001\u5931\u4E1A\u548C\u5DE5\u4F24\u7B49\u4E3B\u8981\u793E\u4F1A\u4FDD\u9669\u9879\u76EE\u3002",
+    legalReference: "Law 5178/2025, PwC Tax Summaries 2025",
+    sortOrder: 211
+  },
+  // --- Croatia (HR) ---
+  // Expat: 根据欧盟法规 (EC) No
+  //   883/2004，来自欧盟/欧洲经济区成员国和瑞士的国民，如果在其本国已经缴纳社保，可以豁免在克罗地亚缴纳社保。其他国家（如美国、加拿大、澳大利亚等）与克罗地亚签有双边社保协议，其公民可能适用特殊规定，通常允许在母国继续缴费最多5年而免除在克罗地亚缴费。没有协议国家的公民则必须在克罗地亚参加社保。
+  {
+    countryCode: "HR",
+    itemKey: "pension_first_pillar",
+    itemNameEn: "Pension Insurance (1st Pillar)",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669\uFF08\u7B2C\u4E00\u652F\u67F1\uFF09",
+    category: "pension",
+    rateEmployer: "0.0",
+    rateEmployee: "0.15",
+    capType: "salary_multiple",
+    capBase: "11958.0",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u85AA\u8D85\u8FC71300\u6B27\u5143\u7684\u60C5\u51B5\u3002\u6708\u85AA\u4E0A\u9650\u4E3A11,958.00\u6B27\u5143\u3002",
+    legalReference: "PwC Croatia Tax Summary 2025",
+    sortOrder: 212
+  },
+  {
+    countryCode: "HR",
+    itemKey: "pension_second_pillar",
+    itemNameEn: "Pension Insurance (2nd Pillar)",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669\uFF08\u7B2C\u4E8C\u652F\u67F1\uFF09",
+    category: "pension",
+    rateEmployer: "0.0",
+    rateEmployee: "0.05",
+    capType: "salary_multiple",
+    capBase: "11958.0",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u85AA\u8D85\u8FC71300\u6B27\u5143\u7684\u60C5\u51B5\u3002\u6708\u85AA\u4E0A\u9650\u4E3A11,958.00\u6B27\u5143\u3002",
+    legalReference: "PwC Croatia Tax Summary 2025",
+    sortOrder: 213
+  },
+  {
+    countryCode: "HR",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.165",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u57FA\u6570\u65E0\u4E0A\u9650\u3002",
+    legalReference: "PwC Croatia Tax Summary 2025",
+    sortOrder: 214
+  },
+  // --- Hungary (HU) ---
+  // Expat:
+  //   根据欧盟/欧洲经济区法规和双边社会保障协议，外籍员工可能有资格获得社会保障缴款豁免。通常情况下，如果外籍员工在匈牙利工作期间仍在母国强制性社会保障体系内缴费，并能提供A1证明（适用于欧盟/欧洲经济区公民）或相应的协议国证明，则可以豁免在匈牙利缴纳社会保险费。此豁免通常有时间限制。对于没有资格获得豁免的外籍员工，适用与本地员工相同的社会保障缴费规则。
+  {
+    countryCode: "HU",
+    itemKey: "social_contribution_tax",
+    itemNameEn: "Social Contribution Tax",
+    itemNameZh: "\u793E\u4F1A\u8D21\u732E\u7A0E",
+    category: "social_insurance",
+    rateEmployer: "0.13",
+    rateEmployee: "0.0",
+    capType: "salary_multiple",
+    capBase: "583600",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A\u6700\u4F4E\u5DE5\u8D44\u768424\u500D\uFF0C\u6309\u5E74\u8BA1\u7B97\u30022025\u5E74\u6700\u4F4E\u5DE5\u8D44\u4E3A291800\u798F\u6797\uFF0C\u5E74\u4E0A\u9650\u4E3A6979200\u798F\u6797\uFF0C\u6708\u5EA6\u4E0A\u9650\u4E3A581600\u798F\u6797\u3002\u6B64\u7A0E\u79CD\u6DB5\u76D6\u4E86\u517B\u8001\u91D1\u3001\u533B\u7597\u4FDD\u5065\u548C\u5931\u4E1A\u6551\u6D4E\u91D1\u7684\u96C7\u4E3B\u90E8\u5206\u3002",
+    legalReference: "Act LII of 2018 on Social Contribution Tax",
+    sortOrder: 215
+  },
+  {
+    countryCode: "HU",
+    itemKey: "social_security_contribution",
+    itemNameEn: "Social Security Contribution",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\u8D39",
+    category: "social_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.185",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u96C7\u5458\u7F34\u8D39\uFF0C\u65E0\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u3002\u6B64\u7F34\u8D39\u6DB5\u76D6\u4E8610%\u7684\u517B\u8001\u4FDD\u9669\u30017%\u7684\u533B\u7597\u4FDD\u9669\u548C1.5%\u7684\u5931\u4E1A\u4FDD\u9669\u3002",
+    legalReference: "Act CXXII of 2019 on the Social Security System and its Benefits",
+    sortOrder: 216
+  },
+  // --- Ireland (IE) ---
+  // Expat: 在爱尔兰，就业通常需要缴纳PRSI（Pay-Related Social
+  //   Insurance）。外籍员工通常与爱尔兰公民一样，根据其收入和就业类别缴纳PRSI。然而，根据欧盟法规或双边社会保障协议，临时派往爱尔兰工作的员工（通常最多24个月）可能可以继续在其本国缴纳社保而免除爱尔兰的PRSI。这需要从其本国社保机构获得A1证明（适用于欧盟/欧洲经济区/瑞士公民）或相应的“覆盖证明”。
+  {
+    countryCode: "IE",
+    itemKey: "prsi_standard_rate_before_oct_2025",
+    itemNameEn: "Pay Related Social Insurance (PRSI) - Standard Rate (Jan-Sep 2025)",
+    itemNameZh: "\u85AA\u916C\u76F8\u5173\u793E\u4F1A\u4FDD\u9669 (PRSI) - \u6807\u51C6\u8D39\u7387 (2025\u5E741\u6708-9\u6708)",
+    category: "social_insurance",
+    rateEmployer: "0.1115",
+    rateEmployee: "0.041",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u5468\u85AA\u8D85\u8FC7\u20AC441\u7684A\u7C7B\u96C7\u5458\u3002\u5BF9\u4E8E\u5468\u85AA\u5728\u20AC38\u81F3\u20AC441\u4E4B\u95F4\u7684\u96C7\u5458\uFF0C\u9002\u7528\u8F83\u4F4E\u7684\u96C7\u4E3B\u8D39\u7387(8.8%)\u548C\u4E0D\u540C\u7684\u96C7\u5458\u8D39\u7387\u89C4\u5219\u3002",
+    legalReference: "gov.ie - PRSI Contribution Rates and User Guide 2025 (SW14)",
+    sortOrder: 217
+  },
+  {
+    countryCode: "IE",
+    itemKey: "prsi_standard_rate_from_oct_2025",
+    itemNameEn: "Pay Related Social Insurance (PRSI) - Standard Rate (Oct-Dec 2025)",
+    itemNameZh: "\u85AA\u916C\u76F8\u5173\u793E\u4F1A\u4FDD\u9669 (PRSI) - \u6807\u51C6\u8D39\u7387 (2025\u5E7410\u6708-12\u6708)",
+    category: "social_insurance",
+    rateEmployer: "0.1125",
+    rateEmployee: "0.042",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u81EA2025\u5E7410\u67081\u65E5\u8D77\u751F\u6548\u3002\u9002\u7528\u4E8E\u5468\u85AA\u8D85\u8FC7\u20AC441\u7684A\u7C7B\u96C7\u5458\u3002\u5BF9\u4E8E\u5468\u85AA\u5728\u20AC38\u81F3\u20AC441\u4E4B\u95F4\u7684\u96C7\u5458\uFF0C\u9002\u7528\u8F83\u4F4E\u7684\u96C7\u4E3B\u8D39\u7387(9.0%)\u548C\u4E0D\u540C\u7684\u96C7\u5458\u8D39\u7387\u89C4\u5219\u3002",
+    legalReference: "gov.ie - PRSI Contribution Rates and User Guide 2025 (SW14)",
+    sortOrder: 218
+  },
+  // --- Iceland (IS) ---
+  // Expat: 外籍员工如持有有效的A1证明文件，可豁免在冰岛缴纳社保及养老金。否则，需按本地规定正常缴纳。
+  {
+    countryCode: "IS",
+    itemKey: "employer_social_security",
+    itemNameEn: "Employer Social Security Contribution",
+    itemNameZh: "\u96C7\u4E3B\u793E\u4FDD\u7F34\u8D39",
+    category: "social_insurance",
+    rateEmployer: "0.0635",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "The total social security tax rate is 6.35% for 2025, paid entirely by the employer.",
+    legalReference: "Icelandic Directorate of Internal Revenue",
+    sortOrder: 219
+  },
+  {
+    countryCode: "IS",
+    itemKey: "employee_pension_contribution",
+    itemNameEn: "Employee Pension Contribution",
+    itemNameZh: "\u96C7\u5458\u517B\u8001\u91D1\u7F34\u8D39",
+    category: "pension",
+    rateEmployer: "0.00",
+    rateEmployee: "0.04",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Mandatory minimum employee pension contribution is 4%.",
+    legalReference: "OECD",
+    sortOrder: 220
+  },
+  {
+    countryCode: "IS",
+    itemKey: "employer_pension_contribution",
+    itemNameEn: "Employer Pension Contribution",
+    itemNameZh: "\u96C7\u4E3B\u517B\u8001\u91D1\u7F34\u8D39",
+    category: "pension",
+    rateEmployer: "0.115",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Mandatory minimum employer pension contribution is 11.5%, complementing the 4% from the employee to reach the total 15.5%.",
+    legalReference: "OECD",
+    sortOrder: 221
+  },
+  // --- Italy (IT) ---
+  // Expat: 外籍员工与意大利公民承担相同的社保缴费义务，需在意大利国家社保局（INPS）注册并缴费。根据欧盟法规或意大利与其他国家（如美国）签订的双边社保协议，特定情况下的外派人员可申请豁免，以避免双重缴费。
+  {
+    countryCode: "IT",
+    itemKey: "social_insurance_inps",
+    itemNameEn: "Social Security (INPS)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 (INPS)",
+    category: "social_insurance",
+    rateEmployer: "0.30",
+    rateEmployee: "0.0919",
+    capType: "bracket",
+    capBase: "10050.58",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u9002\u7528\u4E8E\u5927\u591A\u6570\u5546\u4E1A\u548C\u5DE5\u4E1A\u90E8\u95E8\u7684\u5458\u5DE5\uFF0C\u6DB5\u76D6\u517B\u8001\u3001\u4F24\u6B8B\u3001\u9057\u5C5E\uFF08IVS\uFF09\u3001\u5931\u4E1A\u3001\u75BE\u75C5\u548C\u751F\u80B2\u7B49\u591A\u4E2A\u9879\u76EE\u3002\u5458\u5DE5\u8D39\u7387\u901A\u5E38\u4E3A9.19%\uFF0C\u7279\u5B9A\u60C5\u51B5\u4E0B\u53EF\u80FD\u4E3A9.49%\u3002\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u9002\u7528\u4E8E1996\u5E741\u67081\u65E5\u4E4B\u540E\u9996\u6B21\u5728\u610F\u5927\u5229\u7F34\u8D39\u7684\u5458\u5DE5\u3002",
+    legalReference: "INPS Circular No. 21 of February 20, 2025",
+    sortOrder: 222
+  },
+  // --- Lithuania (LT) ---
+  // Expat:
+  //   外籍员工（包括从欧盟/欧洲经济区/瑞士派遣的员工，如果持有A1证书）以及与立陶宛有互惠社保协议的国家（如白俄罗斯、加拿大、摩尔多瓦、乌克兰）的派遣员工，在满足特定条件的情况下可以豁免在立陶宛缴纳社保费。对于来自无协议第三国的暂派员工，如果派驻时间不超过一年且永久工作地未变更为立陶宛，也可能豁免缴费。
+  {
+    countryCode: "LT",
+    itemKey: "social_insurance_employer",
+    itemNameEn: "Social Insurance (Employer)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\uFF08\u96C7\u4E3B\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.0177",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u603B\u8D39\u7387\u5305\u62EC1.45%\u7684\u57FA\u672C\u8D39\u7387\uFF08\u6839\u636E\u98CE\u9669\u7C7B\u522B\u53EF\u9AD8\u8FBE2.71%\uFF09\uFF0C\u52A0\u4E0A0.16%\u7684\u4FDD\u969C\u57FA\u91D1\u548C0.16%\u7684\u957F\u671F\u5C31\u4E1A\u57FA\u91D1\u3002\u6B64\u5904\u4F7F\u75281.45% + 0.16% + 0.16% = 1.77%\u4F5C\u4E3A\u6807\u51C6\u8D39\u7387\u3002\u5BF9\u4E8E\u5B9A\u671F\u5408\u540C\uFF0C\u57FA\u672C\u8D39\u7387\u4ECE2.17%\u8D77\u3002",
+    legalReference: "https://taxsummaries.pwc.com/lithuania/individual/other-taxes",
+    sortOrder: 223
+  },
+  {
+    countryCode: "LT",
+    itemKey: "social_and_health_insurance_employee",
+    itemNameEn: "Social and Health Insurance (Employee)",
+    itemNameZh: "\u793E\u4F1A\u53CA\u5065\u5EB7\u4FDD\u9669\uFF08\u96C7\u5458\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.195",
+    capType: "fixed_amount",
+    capBase: "10544.33",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u85AA\u4E0D\u8D85\u8FC710,544.33\u6B27\u5143\uFF08\u5373\u5E74\u5EA6\u4E0A\u9650126,532\u6B27\u5143\uFF09\u7684\u90E8\u5206\u3002\u6B64\u8D39\u7387\u5305\u542B6.98%\u7684\u5065\u5EB7\u4FDD\u9669\u3002",
+    legalReference: "https://taxsummaries.pwc.com/lithuania/individual/other-taxes",
+    sortOrder: 224
+  },
+  {
+    countryCode: "LT",
+    itemKey: "health_insurance_employee_above_cap",
+    itemNameEn: "Health Insurance (Employee, above cap)",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669\uFF08\u96C7\u5458\uFF0C\u8D85\u51FA\u4E0A\u9650\u90E8\u5206\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.0698",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u4EC5\u9002\u7528\u4E8E\u6708\u85AA\u8D85\u8FC710,544.33\u6B27\u5143\uFF08\u5373\u5E74\u5EA6\u4E0A\u9650126,532\u6B27\u5143\uFF09\u7684\u6536\u5165\u90E8\u5206\u3002",
+    legalReference: "https://taxsummaries.pwc.com/lithuania/individual/other-taxes",
+    sortOrder: 225
+  },
+  // --- Luxembourg (LU) ---
+  // Expat:
+  //   在卢森堡工作的外籍员工通常必须参加当地的社保体系。但是，根据欧盟规定，从欧盟/欧洲经济区成员国或瑞士派遣到卢森堡工作的员工，在满足特定条件下，最多可以在24个月内继续参加其母国的社保体系。此外，卢森堡与一些非欧盟国家（如美国、加拿大、印度等）签订了双边社保协定，以避免双重缴费并保障双方国民的社保权利。这些协定通常允许派遣员工在一定期限内（通常最长5年）免于在工作国缴纳社保费。具体规则需参照相关协定。
+  {
+    countryCode: "LU",
+    itemKey: "health_insurance_illness_health_expense",
+    itemNameEn: "Health Insurance - Sickness (in-kind benefits)",
+    itemNameZh: "\u533B\u7597\u4FDD\u9669\uFF08\u5B9E\u7269\u798F\u5229\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.0280",
+    rateEmployee: "0.0280",
+    capType: "fixed_amount",
+    capBase: "13518.68",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6240\u6709\u85AA\u916C\uFF0C\u96C7\u4E3B\u548C\u96C7\u5458\u5404\u627F\u62C5\u4E00\u534A\u3002\u5C01\u9876\u57FA\u6570\u81EA2025\u5E745\u67081\u65E5\u8D77\u751F\u6548\u3002",
+    legalReference: "https://ccss.public.lu/en/parametres-sociaux.html",
+    sortOrder: 226
+  },
+  {
+    countryCode: "LU",
+    itemKey: "health_insurance_illness_cash_benefits",
+    itemNameEn: "Health Insurance - Sickness (cash benefits)",
+    itemNameZh: "\u533B\u7597\u4FDD\u9669\uFF08\u73B0\u91D1\u798F\u5229\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.0025",
+    rateEmployee: "0.0025",
+    capType: "fixed_amount",
+    capBase: "13518.68",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6240\u6709\u85AA\u916C\uFF0C\u96C7\u4E3B\u548C\u96C7\u5458\u5404\u627F\u62C5\u4E00\u534A\u3002\u5C01\u9876\u57FA\u6570\u81EA2025\u5E745\u67081\u65E5\u8D77\u751F\u6548\u3002",
+    legalReference: "https://ccss.public.lu/en/parametres-sociaux.html",
+    sortOrder: 227
+  },
+  {
+    countryCode: "LU",
+    itemKey: "pension",
+    itemNameEn: "Pension Insurance",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.0800",
+    rateEmployee: "0.0800",
+    capType: "fixed_amount",
+    capBase: "13518.68",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u548C\u96C7\u5458\u5404\u627F\u62C58%\u3002\u5C01\u9876\u57FA\u6570\u81EA2025\u5E745\u67081\u65E5\u8D77\u751F\u6548\u3002",
+    legalReference: "https://ccss.public.lu/en/parametres-sociaux.html",
+    sortOrder: 228
+  },
+  {
+    countryCode: "LU",
+    itemKey: "dependence_insurance",
+    itemNameEn: "Dependence Insurance",
+    itemNameZh: "\u957F\u671F\u62A4\u7406\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.0000",
+    rateEmployee: "0.0140",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u7531\u96C7\u5458\u5168\u989D\u627F\u62C5\uFF0C\u65E0\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u3002",
+    legalReference: "https://ccss.public.lu/en/parametres-sociaux.html",
+    sortOrder: 229
+  },
+  {
+    countryCode: "LU",
+    itemKey: "work_accident_insurance",
+    itemNameEn: "Work Accident Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4E8B\u6545\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.0070",
+    rateEmployee: "0.0000",
+    capType: "fixed_amount",
+    capBase: "13518.68",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u7531\u5DE5\u4F24\u4E8B\u6545\u4FDD\u9669\u534F\u4F1A(AAA)\u6839\u636E\u98CE\u9669\u7B49\u7EA7\u786E\u5B9A\uFF0C\u57FA\u51C6\u8D39\u7387\u4E3A0.70%\uFF0C\u5E76\u4E58\u4EE5\u4E00\u4E2A\u57280.85\u52301.5\u4E4B\u95F4\u7684\u5956\u60E9\u7CFB\u6570\u3002\u5C01\u9876\u57FA\u6570\u81EA2025\u5E745\u67081\u65E5\u8D77\u751F\u6548\u3002",
+    legalReference: "https://www.pwc.lu/en/newsletter/2025/social-parameters-on-1st-january-2025.html",
+    sortOrder: 230
+  },
+  {
+    countryCode: "LU",
+    itemKey: "health_at_work",
+    itemNameEn: "Occupational Health Service",
+    itemNameZh: "\u804C\u4E1A\u5065\u5EB7\u670D\u52A1",
+    category: "other_mandatory",
+    rateEmployer: "0.0014",
+    rateEmployee: "0.0000",
+    capType: "fixed_amount",
+    capBase: "13518.68",
+    effectiveYear: 2025,
+    notes: "\u7531\u96C7\u4E3B\u5168\u989D\u627F\u62C5\u3002\u5C01\u9876\u57FA\u6570\u81EA2025\u5E745\u67081\u65E5\u8D77\u751F\u6548\u3002",
+    legalReference: "https://www.pwc.lu/en/newsletter/2025/social-parameters-on-1st-january-2025.html",
+    sortOrder: 231
+  },
+  {
+    countryCode: "LU",
+    itemKey: "employer_mutuality",
+    itemNameEn: "Employer's Mutuality Insurance",
+    itemNameZh: "\u96C7\u4E3B\u4E92\u52A9\u4FDD\u9669",
+    category: "other_mandatory",
+    rateEmployer: "0.0007",
+    rateEmployee: "0.0000",
+    capType: "fixed_amount",
+    capBase: "13518.68",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u6839\u636E\u516C\u53F8\u7684\u8D22\u52A1\u7F3A\u52E4\u7387\u5206\u4E3A\u56DB\u4E2A\u7B49\u7EA7\u3002\u6B64\u5904\u4E3A\u7B2C1\u7C7B\u8D39\u7387(0%-<0.65%)\u3002\u5C01\u9876\u57FA\u6570\u81EA2025\u5E745\u67081\u65E5\u8D77\u751F\u6548\u3002\u5B9E\u9645\u8D39\u7387\u9700\u6839\u636E\u516C\u53F8\u5177\u4F53\u5206\u7C7B\u786E\u5B9A\u3002",
+    legalReference: "https://ccss.public.lu/en/parametres-sociaux.html",
+    sortOrder: 232
+  },
+  // --- Latvia (LV) ---
+  // Expat:
+  //   外籍员工通常需在拉脱维亚缴纳社保，除非来源国与拉脱维亚签有双边社保协议。根据欧盟规定，在欧盟/欧洲经济区/瑞士成员国之间移动的员工通常只在一个国家（通常是工作国）缴纳社保。值得注意的是，拉脱维亚与美国之间没有有效的社保全面化协议（Totalization
+  //   Agreement），因此美国公民在拉脱维亚工作可能面临在美国和拉脱维亚双重缴纳社保的风险。
+  {
+    countryCode: "LV",
+    itemKey: "social_insurance_general",
+    itemNameEn: "Mandatory State Social Insurance Contributions (VSAOI)",
+    itemNameZh: "\u5F3A\u5236\u6027\u56FD\u5BB6\u793E\u4F1A\u4FDD\u9669\u7F34\u6B3E",
+    category: "social_insurance",
+    rateEmployer: "0.2359",
+    rateEmployee: "0.1050",
+    capType: "fixed_amount",
+    capBase: "8775.00",
+    capMultiplier: null,
+    capReferenceBase: "annual gross income",
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "Law on State Social Insurance",
+    notes: "Total rate 34.09% (23.59% employer, 10.50% employee). Annual cap EUR 105,300, converted to monthly cap of EUR 8,775."
+  },
+  // --- Moldova (MD) ---
+  // Expat:
+  //   外籍员工和摩尔多瓦公民一样，必须强制性缴纳社会保险和医疗保险。根据摩尔多瓦与其他国家签订的国际社会保障协议，可能存在特殊规定。例如，与意大利的协议自2025年9月1日起生效，旨在协调两国间的社保福利。外籍员工应查阅其国籍国与摩尔多瓦之间是否存在此类协议以确定具体适用规则。
+  {
+    countryCode: "MD",
+    itemKey: "social_insurance_employer_general_private",
+    itemNameEn: "Social Insurance Contribution (General Regime) - Employer (Private Sector)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u7F34\u6B3E\uFF08\u4E00\u822C\u5236\u5EA6\uFF09- \u96C7\u4E3B\uFF08\u79C1\u8425\u90E8\u95E8\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.24",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "PwC Tax Summaries, IntelCont.md",
+    notes: "Applicable to private employers, universities, medical institutions."
+  },
+  {
+    countryCode: "MD",
+    itemKey: "social_insurance_employer_general_public",
+    itemNameEn: "Social Insurance Contribution (General Regime) - Employer (Public Sector)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u7F34\u6B3E\uFF08\u4E00\u822C\u5236\u5EA6\uFF09- \u96C7\u4E3B\uFF08\u516C\u5171\u90E8\u95E8\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.29",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "IntelCont.md",
+    notes: "Applicable to public employers (authorities/institutions)."
+  },
+  {
+    countryCode: "MD",
+    itemKey: "health_insurance_employee_percentage",
+    itemNameEn: "Mandatory Health Insurance Contribution - Employee (Percentage)",
+    itemNameZh: "\u5F3A\u5236\u6027\u533B\u7597\u4FDD\u9669\u7F34\u6B3E - \u96C7\u5458\uFF08\u767E\u5206\u6BD4\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.09",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "PwC Tax Summaries, IntelCont.md",
+    notes: "Computed as a percentage of wages and other remuneration, fully borne by employees."
+  },
+  {
+    countryCode: "MD",
+    itemKey: "social_insurance_employer_agriculture",
+    itemNameEn: "Social Insurance Contribution - Employer (Agriculture)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u7F34\u6B3E - \u96C7\u4E3B\uFF08\u519C\u4E1A\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.18",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "PwC Tax Summaries, IntelCont.md",
+    notes: "Applicable to employers in agriculture (\u226595% CAEM activities 01.1\u201301.6). 6% is paid from the state budget."
+  },
+  {
+    countryCode: "MD",
+    itemKey: "social_insurance_individual_fixed",
+    itemNameEn: "Social Insurance Contribution - Individual (Special Categories) - Fixed Amount",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u7F34\u6B3E - \u4E2A\u4EBA\uFF08\u7279\u6B8A\u7C7B\u522B\uFF09- \u56FA\u5B9A\u91D1\u989D",
+    category: "social_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "1.00",
+    capType: "fixed_amount",
+    capBase: "20518",
+    capMultiplier: null,
+    capReferenceBase: "Annual Fixed Amount",
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "IntelCont.md",
+    notes: "Applicable to founders of individual enterprises, persons carrying out independent retail trade activities, etc."
+  },
+  {
+    countryCode: "MD",
+    itemKey: "social_insurance_legal_professions_fixed",
+    itemNameEn: "Social Insurance Contribution - Legal Professions (Not Employed) - Fixed Amount",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u7F34\u6B3E - \u6CD5\u5F8B\u4E13\u4E1A\u4EBA\u58EB\uFF08\u975E\u53D7\u96C7\uFF09- \u56FA\u5B9A\u91D1\u989D",
+    category: "social_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "1.00",
+    capType: "fixed_amount",
+    capBase: "27772",
+    capMultiplier: null,
+    capReferenceBase: "Annual Amount",
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "IntelCont.md",
+    notes: "Applicable to legal professions in the justice sector who are not employed."
+  },
+  {
+    countryCode: "MD",
+    itemKey: "social_insurance_business_patent_fixed",
+    itemNameEn: "Social Insurance Contribution - Business Patent Holders - Fixed Amount",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u7F34\u6B3E - \u5546\u4E1A\u4E13\u5229\u6301\u6709\u4EBA - \u56FA\u5B9A\u91D1\u989D",
+    category: "social_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "1.00",
+    capType: "fixed_amount",
+    capBase: "20518",
+    capMultiplier: null,
+    capReferenceBase: "Annual Contribution",
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "IntelCont.md",
+    notes: "Payment is made depending on the duration of activity under the patent: for each month \u2014 not less than 1/12 of the annual amount."
+  },
+  {
+    countryCode: "MD",
+    itemKey: "social_insurance_taxi_employers_fixed",
+    itemNameEn: "Social Insurance Contribution - Employers in Passenger Road Transport (Taxi) - Fixed Amount",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u7F34\u6B3E - \u9053\u8DEF\u5BA2\u8FD0\uFF08\u51FA\u79DF\u8F66\uFF09\u96C7\u4E3B - \u56FA\u5B9A\u91D1\u989D",
+    category: "social_insurance",
+    rateEmployer: "1.00",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "20518",
+    capMultiplier: null,
+    capReferenceBase: "Annual Contribution",
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "IntelCont.md",
+    notes: "Note: starting from 01.07.2026, this regime will be abolished."
+  },
+  {
+    countryCode: "MD",
+    itemKey: "social_insurance_day_laborers",
+    itemNameEn: "Social Insurance Contribution - Day Laborers (Zilieri)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u7F34\u6B3E - \u65E5\u5DE5\uFF08Zilieri\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.06",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "IntelCont.md (Law No. 22/2018)",
+    notes: "6% of the daily remuneration."
+  },
+  {
+    countryCode: "MD",
+    itemKey: "health_insurance_unemployed_fixed",
+    itemNameEn: "Mandatory Health Insurance Contribution - Unemployed Individuals (Special Categories) - Fixed Amount",
+    itemNameZh: "\u5F3A\u5236\u6027\u533B\u7597\u4FDD\u9669\u7F34\u6B3E - \u5931\u4E1A\u4EBA\u5458\uFF08\u7279\u6B8A\u7C7B\u522B\uFF09- \u56FA\u5B9A\u91D1\u989D",
+    category: "health_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "1.00",
+    capType: "fixed_amount",
+    capBase: "12636",
+    capMultiplier: null,
+    capReferenceBase: "Annual Fixed Premium",
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "IntelCont.md",
+    notes: "Applicable to owners of agricultural land, founders of individual enterprises, business patent holders, etc."
+  },
+  {
+    countryCode: "MD",
+    itemKey: "social_insurance_employer_special_conditions_public",
+    itemNameEn: "Social Insurance Contribution - Employer (Work in Special Conditions) - Public Sector",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u7F34\u6B3E - \u96C7\u4E3B\uFF08\u7279\u6B8A\u5DE5\u4F5C\u6761\u4EF6\uFF09- \u516C\u5171\u90E8\u95E8",
+    category: "social_insurance",
+    rateEmployer: "0.39",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "IntelCont.md (Annex No. 2)",
+    notes: "Contributions for Work in Special Conditions."
+  },
+  {
+    countryCode: "MD",
+    itemKey: "social_insurance_employer_special_conditions_private",
+    itemNameEn: "Social Insurance Contribution - Employer (Work in Special Conditions) - Private Sector",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u7F34\u6B3E - \u96C7\u4E3B\uFF08\u7279\u6B8A\u5DE5\u4F5C\u6761\u4EF6\uFF09- \u79C1\u8425\u90E8\u95E8",
+    category: "social_insurance",
+    rateEmployer: "0.32",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "IntelCont.md (Annex No. 2)",
+    notes: "Contributions for Work in Special Conditions."
+  },
+  // --- Montenegro (ME) ---
+  // Expat: 外籍员工和本地员工一样，需要缴纳相同的社保费。在黑山工作的外籍人士必须获得工作和居留许可。社保缴费适用于在黑山获得的收入。
+  {
+    countryCode: "ME",
+    itemKey: "pension_disability_insurance",
+    itemNameEn: "Pension and Disability Insurance",
+    itemNameZh: "\u517B\u8001\u548C\u6B8B\u75BE\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.00",
+    rateEmployee: "0.10",
+    capType: "fixed_amount",
+    capBase: "6287.75",
+    effectiveYear: 2025,
+    notes: "The employer contribution was reduced to 0% as per recent changes. Annual cap is \u20AC75,453.00.",
+    legalReference: "Zakon o doprinosima za obavezno socijalno osiguranje; Pravilnik o uskla\u0111ivanju iznosa najvi\u0161e godi\u0161nje osnovice za pla\u0107anje doprinosa za 2025. godinu (Slu\u017Ebeni list Crne Gore, broj 134/2025)",
+    sortOrder: 246
+  },
+  {
+    countryCode: "ME",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Contribution rates for health insurance have been set to 0%.",
+    legalReference: "Law on compulsory social security contributions",
+    sortOrder: 247
+  },
+  {
+    countryCode: "ME",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.005",
+    rateEmployee: "0.005",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "Law on compulsory social security contributions",
+    sortOrder: 248
+  },
+  {
+    countryCode: "ME",
+    itemKey: "labor_fund_contributions",
+    itemNameEn: "Labor Fund Contributions",
+    itemNameZh: "\u52B3\u52A8\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.002",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employer only contribution.",
+    legalReference: "Law on compulsory social security contributions",
+    sortOrder: 249
+  },
+  {
+    countryCode: "ME",
+    itemKey: "chamber_of_commerce_contribution",
+    itemNameEn: "Chamber of Commerce Contribution",
+    itemNameZh: "\u5546\u4F1A\u4F1A\u8D39",
+    category: "other_mandatory",
+    rateEmployer: "0.0027",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employer only contribution.",
+    legalReference: "Law on compulsory social security contributions",
+    sortOrder: 250
+  },
+  // --- North Macedonia (MK) ---
+  // Expat:
+  //   在北马其顿工作的外籍员工，如果其国籍所在国与北马其顿签订了社会保障协议，则可能免除在当地缴纳社保费。为了获得豁免，该员工必须提供其母国社保机构出具的有效参保证明（例如A1证明）。与北马其顿签有此类协议的国家包括奥地利、澳大利亚、比利时、波斯尼亚和黑塞哥维那、保加利亚、加拿大、克罗地亚、捷克共和国、丹麦、法国、德国、匈牙利、意大利、卢森堡、黑山、荷兰、波兰、罗马尼亚、塞尔维亚、斯洛伐克共和国、斯洛文尼亚、瑞士和土耳其等。
+  {
+    countryCode: "MK",
+    itemKey: "pension_disability_insurance",
+    itemNameEn: "Pension and Disability Insurance",
+    itemNameZh: "\u517B\u8001\u53CA\u4F24\u6B8B\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.00",
+    rateEmployee: "0.188",
+    capType: "salary_multiple",
+    capBase: "1010464",
+    effectiveYear: 2025,
+    notes: "The contribution cap is 16 times the national average monthly gross salary. For 2025, the average salary is MKD 63,154, resulting in a monthly cap of MKD 1,010,464. Contributions are fully borne by the employee.",
+    legalReference: "Law on Mandatory Social Insurance Contributions",
+    sortOrder: 251
+  },
+  {
+    countryCode: "MK",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.075",
+    capType: "salary_multiple",
+    capBase: "1010464",
+    effectiveYear: 2025,
+    notes: "The contribution cap is 16 times the national average monthly gross salary. For 2025, the average salary is MKD 63,154, resulting in a monthly cap of MKD 1,010,464. Contributions are fully borne by the employee.",
+    legalReference: "Law on Mandatory Social Insurance Contributions",
+    sortOrder: 252
+  },
+  {
+    countryCode: "MK",
+    itemKey: "additional_health_insurance",
+    itemNameEn: "Additional Health Insurance",
+    itemNameZh: "\u9644\u52A0\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.005",
+    capType: "salary_multiple",
+    capBase: "1010464",
+    effectiveYear: 2025,
+    notes: "The contribution cap is 16 times the national average monthly gross salary. For 2025, the average salary is MKD 63,154, resulting in a monthly cap of MKD 1,010,464. Contributions are fully borne by the employee.",
+    legalReference: "Law on Mandatory Social Insurance Contributions",
+    sortOrder: 253
+  },
+  {
+    countryCode: "MK",
+    itemKey: "employment_insurance",
+    itemNameEn: "Employment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.00",
+    rateEmployee: "0.012",
+    capType: "salary_multiple",
+    capBase: "1010464",
+    effectiveYear: 2025,
+    notes: "The contribution cap is 16 times the national average monthly gross salary. For 2025, the average salary is MKD 63,154, resulting in a monthly cap of MKD 1,010,464. Contributions are fully borne by the employee.",
+    legalReference: "Law on Mandatory Social Insurance Contributions",
+    sortOrder: 254
+  },
+  // --- Malta (MT) ---
+  // Expat: 根据欧盟规定 (EC
+  //   883/2004)，在马耳他受雇的个人通常需在马耳他缴纳社保。对于非欧盟/欧洲经济区/瑞士公民，除非存在双边社保协定（马耳他与澳大利亚、加拿大、新西兰、英国签有此类协定），否则必须在马耳他缴纳社保。对于临时派驻到马耳他的员工，如果满足特定条件并持有A1证明（适用于欧盟/欧洲经济区/瑞士）或相应互惠协定下的原属国参保证书，可以豁免在马耳他缴纳社保。
+  {
+    countryCode: "MT",
+    itemKey: "social_security_class1_catA",
+    itemNameEn: "Social Security Class 1 Category A",
+    itemNameZh: "\u7B2C\u4E00\u7C7B\u793E\u4FDD\u8D21\u732E - A\u7C7B",
+    category: "social_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "57.37",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u5468\u85AA\u4E0D\u8D85\u8FC7\u20AC221.78\u768418\u5C81\u4EE5\u4E0B\u96C7\u5458\u3002\u96C7\u4E3B\u548C\u96C7\u5458\u6BCF\u5468\u5404\u56FA\u5B9A\u7F34\u7EB3\u20AC6.62\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u6839\u636E\u5468\u56FA\u5B9A\u91D1\u989D\u8BA1\u7B97\u5F97\u51FA\uFF1A\u20AC13.24 * 52 / 12 \u2248 \u20AC57.37\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 255
+  },
+  {
+    countryCode: "MT",
+    itemKey: "mlf_class1_catA",
+    itemNameEn: "Maternity Leave Fund Class 1 Category A",
+    itemNameZh: "\u4EA7\u5047\u57FA\u91D1 - A\u7C7B",
+    category: "other_mandatory",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "0.87",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u4E3AA\u7C7B\u96C7\u5458\u56FA\u5B9A\u7F34\u7EB3\u20AC0.20/\u5468\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u8BA1\u7B97\uFF1A\u20AC0.20 * 52 / 12 \u2248 \u20AC0.87\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 256
+  },
+  {
+    countryCode: "MT",
+    itemKey: "social_security_class1_catB",
+    itemNameEn: "Social Security Class 1 Category B",
+    itemNameZh: "\u7B2C\u4E00\u7C7B\u793E\u4FDD\u8D21\u732E - B\u7C7B",
+    category: "social_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "192.23",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u5468\u85AA\u4E0D\u8D85\u8FC7\u20AC221.78\u768418\u5C81\u53CA\u4EE5\u4E0A\u96C7\u5458\u3002\u96C7\u4E3B\u548C\u96C7\u5458\u6BCF\u5468\u5404\u56FA\u5B9A\u7F34\u7EB3\u20AC22.18\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u8BA1\u7B97\uFF1A\u20AC44.36 * 52 / 12 \u2248 \u20AC192.23\u3002\u96C7\u5458\u53EF\u9009\u62E9\u6309\u57FA\u672C\u5468\u85AA\u768410%\u7F34\u7EB3\u4EE5\u83B7\u53D6\u6309\u6BD4\u4F8B\u8BA1\u7B97\u7684\u798F\u5229\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 257
+  },
+  {
+    countryCode: "MT",
+    itemKey: "mlf_class1_catB",
+    itemNameEn: "Maternity Leave Fund Class 1 Category B",
+    itemNameZh: "\u4EA7\u5047\u57FA\u91D1 - B\u7C7B",
+    category: "other_mandatory",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "2.9",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u4E3AB\u7C7B\u96C7\u5458\u56FA\u5B9A\u7F34\u7EB3\u20AC0.67/\u5468\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u8BA1\u7B97\uFF1A\u20AC0.67 * 52 / 12 \u2248 \u20AC2.90\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 258
+  },
+  {
+    countryCode: "MT",
+    itemKey: "social_security_class1_catC_pre1962",
+    itemNameEn: "Social Security Class 1 Category C (Born before 1962)",
+    itemNameZh: "\u7B2C\u4E00\u7C7B\u793E\u4FDD\u8D21\u732E - C\u7C7B (1962\u5E74\u524D\u51FA\u751F)",
+    category: "social_insurance",
+    rateEmployer: "0.10",
+    rateEmployee: "0.10",
+    capType: "bracket",
+    capBase: "1958.32",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E1962\u5E74\u524D\u51FA\u751F\uFF0C\u5468\u85AA\u5728\u20AC221.78\u81F3\u20AC451.92\u4E4B\u95F4\u7684\u96C7\u5458\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u57FA\u4E8E\u5468\u85AA\u4E0A\u9650\u8BA1\u7B97\uFF1A\u20AC451.92 * 52 / 12 = \u20AC1958.32\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 259
+  },
+  {
+    countryCode: "MT",
+    itemKey: "mlf_class1_catC_pre1962",
+    itemNameEn: "Maternity Leave Fund Class 1 Category C (Born before 1962)",
+    itemNameZh: "\u4EA7\u5047\u57FA\u91D1 - C\u7C7B (1962\u5E74\u524D\u51FA\u751F)",
+    category: "other_mandatory",
+    rateEmployer: "0.003",
+    rateEmployee: "0.0",
+    capType: "bracket",
+    capBase: "1958.32",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u7387\u4E3A0.3%\uFF0C\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u4E0E\u793E\u4FDDC\u7C7B\u4E00\u81F4\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 260
+  },
+  {
+    countryCode: "MT",
+    itemKey: "social_security_class1_catD_pre1962",
+    itemNameEn: "Social Security Class 1 Category D (Born before 1962)",
+    itemNameZh: "\u7B2C\u4E00\u7C7B\u793E\u4FDD\u8D21\u732E - D\u7C7B (1962\u5E74\u524D\u51FA\u751F)",
+    category: "social_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "391.65",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E1962\u5E74\u524D\u51FA\u751F\uFF0C\u5468\u85AA\u7B49\u4E8E\u6216\u8D85\u8FC7\u20AC451.92\u7684\u96C7\u5458\u3002\u96C7\u4E3B\u548C\u96C7\u5458\u6BCF\u5468\u5404\u56FA\u5B9A\u7F34\u7EB3\u20AC45.19\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u8BA1\u7B97\uFF1A\u20AC90.38 * 52 / 12 = \u20AC391.65\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 261
+  },
+  {
+    countryCode: "MT",
+    itemKey: "mlf_class1_catD_pre1962",
+    itemNameEn: "Maternity Leave Fund Class 1 Category D (Born before 1962)",
+    itemNameZh: "\u4EA7\u5047\u57FA\u91D1 - D\u7C7B (1962\u5E74\u524D\u51FA\u751F)",
+    category: "other_mandatory",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "5.9",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u4E3AD\u7C7B\uFF081962\u5E74\u524D\u51FA\u751F\uFF09\u96C7\u5458\u56FA\u5B9A\u7F34\u7EB3\u20AC1.36/\u5468\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u8BA1\u7B97\uFF1A\u20AC1.36 * 52 / 12 \u2248 \u20AC5.90\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 262
+  },
+  {
+    countryCode: "MT",
+    itemKey: "social_security_class1_catC_post1962",
+    itemNameEn: "Social Security Class 1 Category C (Born 1962 onwards)",
+    itemNameZh: "\u7B2C\u4E00\u7C7B\u793E\u4FDD\u8D21\u732E - C\u7C7B (1962\u5E74\u540E\u51FA\u751F)",
+    category: "social_insurance",
+    rateEmployer: "0.10",
+    rateEmployee: "0.10",
+    capType: "bracket",
+    capBase: "2358.92",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E1962\u5E74\u53CA\u4EE5\u540E\u51FA\u751F\uFF0C\u5468\u85AA\u5728\u20AC221.78\u81F3\u20AC544.29\u4E4B\u95F4\u7684\u96C7\u5458\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u57FA\u4E8E\u5468\u85AA\u4E0A\u9650\u8BA1\u7B97\uFF1A\u20AC544.29 * 52 / 12 = \u20AC2358.92\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 263
+  },
+  {
+    countryCode: "MT",
+    itemKey: "mlf_class1_catC_post1962",
+    itemNameEn: "Maternity Leave Fund Class 1 Category C (Born 1962 onwards)",
+    itemNameZh: "\u4EA7\u5047\u57FA\u91D1 - C\u7C7B (1962\u5E74\u540E\u51FA\u751F)",
+    category: "other_mandatory",
+    rateEmployer: "0.003",
+    rateEmployee: "0.0",
+    capType: "bracket",
+    capBase: "2358.92",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u7387\u4E3A0.3%\uFF0C\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u4E0E\u793E\u4FDDC\u7C7B\u4E00\u81F4\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 264
+  },
+  {
+    countryCode: "MT",
+    itemKey: "social_security_class1_catD_post1962",
+    itemNameEn: "Social Security Class 1 Category D (Born 1962 onwards)",
+    itemNameZh: "\u7B2C\u4E00\u7C7B\u793E\u4FDD\u8D21\u732E - D\u7C7B (1962\u5E74\u540E\u51FA\u751F)",
+    category: "social_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "471.73",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E1962\u5E74\u53CA\u4EE5\u540E\u51FA\u751F\uFF0C\u5468\u85AA\u7B49\u4E8E\u6216\u8D85\u8FC7\u20AC544.29\u7684\u96C7\u5458\u3002\u96C7\u4E3B\u548C\u96C7\u5458\u6BCF\u5468\u5404\u56FA\u5B9A\u7F34\u7EB3\u20AC54.43\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u8BA1\u7B97\uFF1A\u20AC108.86 * 52 / 12 = \u20AC471.73\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 265
+  },
+  {
+    countryCode: "MT",
+    itemKey: "mlf_class1_catD_post1962",
+    itemNameEn: "Maternity Leave Fund Class 1 Category D (Born 1962 onwards)",
+    itemNameZh: "\u4EA7\u5047\u57FA\u91D1 - D\u7C7B (1962\u5E74\u540E\u51FA\u751F)",
+    category: "other_mandatory",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "7.06",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u4E3AD\u7C7B\uFF081962\u5E74\u540E\u51FA\u751F\uFF09\u96C7\u5458\u56FA\u5B9A\u7F34\u7EB3\u20AC1.63/\u5468\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u8BA1\u7B97\uFF1A\u20AC1.63 * 52 / 12 \u2248 \u20AC7.06\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 266
+  },
+  {
+    countryCode: "MT",
+    itemKey: "social_security_class1_catE",
+    itemNameEn: "Social Security Class 1 Category E (Students <18)",
+    itemNameZh: "\u7B2C\u4E00\u7C7B\u793E\u4FDD\u8D21\u732E - E\u7C7B (\u5B66\u751F <18\u5C81)",
+    category: "social_insurance",
+    rateEmployer: "0.10",
+    rateEmployee: "0.10",
+    capType: "bracket",
+    capBase: "190.0",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E18\u5C81\u4EE5\u4E0B\u7684\u5B66\u751F\u3002\u96C7\u4E3B\u548C\u96C7\u5458\u7F34\u8D39\u7387\u5404\u4E3A10%\uFF0C\u6BCF\u5468\u6700\u9AD8\u7F34\u7EB3\u20AC4.38\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u8BA1\u7B97\uFF1A\u20AC4.38 * 2 * 52 / 12 \u2248 \u20AC38.00\uFF0C\u4F46\u5B98\u65B9\u6587\u4EF6\u663E\u793A\u5468\u85AA\u4E0A\u9650\u4E3A\u20AC43.8\uFF0C\u6708\u85AA\u4E0A\u9650\u4E3A\u20AC190\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 267
+  },
+  {
+    countryCode: "MT",
+    itemKey: "mlf_class1_catE",
+    itemNameEn: "Maternity Leave Fund Class 1 Category E (Students <18)",
+    itemNameZh: "\u4EA7\u5047\u57FA\u91D1 - E\u7C7B (\u5B66\u751F <18\u5C81)",
+    category: "other_mandatory",
+    rateEmployer: "0.003",
+    rateEmployee: "0.0",
+    capType: "bracket",
+    capBase: "190.0",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u7387\u4E3A0.3%\uFF0C\u6BCF\u5468\u6700\u9AD8\u7F34\u7EB3\u20AC0.13\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u4E0E\u793E\u4FDDE\u7C7B\u4E00\u81F4\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 268
+  },
+  {
+    countryCode: "MT",
+    itemKey: "social_security_class1_catF",
+    itemNameEn: "Social Security Class 1 Category F (Students 18+)",
+    itemNameZh: "\u7B2C\u4E00\u7C7B\u793E\u4FDD\u8D21\u732E - F\u7C7B (\u5B66\u751F 18+\u5C81)",
+    category: "social_insurance",
+    rateEmployer: "0.10",
+    rateEmployee: "0.10",
+    capType: "bracket",
+    capBase: "344.07",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E18\u5C81\u53CA\u4EE5\u4E0A\u7684\u5B66\u751F\u3002\u96C7\u4E3B\u548C\u96C7\u5458\u7F34\u8D39\u7387\u5404\u4E3A10%\uFF0C\u6BCF\u5468\u6700\u9AD8\u7F34\u7EB3\u20AC7.94\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u8BA1\u7B97\uFF1A\u20AC7.94 * 2 * 52 / 12 \u2248 \u20AC68.81\uFF0C\u4F46\u5B98\u65B9\u6587\u4EF6\u663E\u793A\u5468\u85AA\u4E0A\u9650\u4E3A\u20AC79.4\uFF0C\u6708\u85AA\u4E0A\u9650\u4E3A\u20AC344.07\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 269
+  },
+  {
+    countryCode: "MT",
+    itemKey: "mlf_class1_catF",
+    itemNameEn: "Maternity Leave Fund Class 1 Category F (Students 18+)",
+    itemNameZh: "\u4EA7\u5047\u57FA\u91D1 - F\u7C7B (\u5B66\u751F 18+\u5C81)",
+    category: "other_mandatory",
+    rateEmployer: "0.003",
+    rateEmployee: "0.0",
+    capType: "bracket",
+    capBase: "344.07",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u7387\u4E3A0.3%\uFF0C\u6BCF\u5468\u6700\u9AD8\u7F34\u7EB3\u20AC0.24\u3002\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u4E0E\u793E\u4FDDF\u7C7B\u4E00\u81F4\u3002",
+    legalReference: "https://socialsecurity.gov.mt/en/information-and-applications-for-benefits-and-services/social-security-contributions/social-security-contributions-class-1-2025/",
+    sortOrder: 270
+  },
+  // --- Netherlands (NL) ---
+  // Expat:
+  //   荷兰为符合条件的特定外籍员工提供“30%裁定”税收优惠。根据该规定，雇主可以向员工支付高达其工资30%的免税津贴，以补偿在荷兰工作的额外开支。此规定不直接豁免强制性社会保险缴款，但由于应税工资基数降低，可能会间接减少个人所得税和社会保险（国民保险部分）的负担。自2025年1月1日起，适用30%裁定的员工不能再选择“部分非居民纳税人”身份，意味着他们需要就其全球的储蓄和投资（Box
+  //   3资产）在荷兰纳税。
+  {
+    countryCode: "NL",
+    itemKey: "unemployment_insurance_low",
+    itemNameEn: "Unemployment Insurance (AWf low)",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669\uFF08\u666E\u901A\u8D39\u7387\uFF09",
+    category: "unemployment",
+    rateEmployer: "0.0274",
+    rateEmployee: "0.00",
+    capType: "salary_multiple",
+    capBase: "71628",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u7B7E\u8BA2\u6C38\u4E45\u5408\u540C\u7684\u5458\u5DE5\u3002\u5C01\u9876\u57FA\u6570\u4E0E\u9AD8\u8D39\u7387\u5171\u4EAB\u3002",
+    legalReference: "Belastingdienst (Dutch Tax and Customs Administration)",
+    sortOrder: 271
+  },
+  {
+    countryCode: "NL",
+    itemKey: "unemployment_insurance_high",
+    itemNameEn: "Unemployment Insurance (AWf high)",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669\uFF08\u9AD8\u8D39\u7387\uFF09",
+    category: "unemployment",
+    rateEmployer: "0.0774",
+    rateEmployee: "0.00",
+    capType: "salary_multiple",
+    capBase: "71628",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u7B7E\u8BA2\u4E34\u65F6\u6216\u7075\u6D3B\u5408\u540C\u7684\u5458\u5DE5\u3002\u5C01\u9876\u57FA\u6570\u4E0E\u4F4E\u8D39\u7387\u5171\u4EAB\u3002",
+    legalReference: "Belastingdienst (Dutch Tax and Customs Administration)",
+    sortOrder: 272
+  },
+  {
+    countryCode: "NL",
+    itemKey: "disability_insurance_aof_low",
+    itemNameEn: "Disability Insurance (Aof low)",
+    itemNameZh: "\u6B8B\u75BE\u4FDD\u9669\uFF08Aof\u4F4E\u8D39\u7387\uFF09",
+    category: "work_injury",
+    rateEmployer: "0.0628",
+    rateEmployee: "0.00",
+    capType: "salary_multiple",
+    capBase: "71628",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u5C0F\u578B\u96C7\u4E3B\uFF082023\u5E74\u603B\u5DE5\u8D44\u4E0D\u8D85\u8FC7\u20AC990,000\uFF09\u3002",
+    legalReference: "Belastingdienst (Dutch Tax and Customs Administration)",
+    sortOrder: 273
+  },
+  {
+    countryCode: "NL",
+    itemKey: "disability_insurance_aof_high",
+    itemNameEn: "Disability Insurance (Aof high)",
+    itemNameZh: "\u6B8B\u75BE\u4FDD\u9669\uFF08Aof\u9AD8\u8D39\u7387\uFF09",
+    category: "work_injury",
+    rateEmployer: "0.0764",
+    rateEmployee: "0.00",
+    capType: "salary_multiple",
+    capBase: "71628",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u4E2D\u578B\u548C\u5927\u578B\u96C7\u4E3B\uFF082023\u5E74\u603B\u5DE5\u8D44\u8D85\u8FC7\u20AC990,000\uFF09\u3002",
+    legalReference: "Belastingdienst (Dutch Tax and Customs Administration)",
+    sortOrder: 274
+  },
+  {
+    countryCode: "NL",
+    itemKey: "return_to_work_fund_whk",
+    itemNameEn: "Return to Work Fund (Whk)",
+    itemNameZh: "\u91CD\u8FD4\u5DE5\u4F5C\u57FA\u91D1\uFF08Whk\uFF09",
+    category: "work_injury",
+    rateEmployer: "0.0087",
+    rateEmployee: "0.00",
+    capType: "salary_multiple",
+    capBase: "71628",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u56E0\u884C\u4E1A\u548C\u516C\u53F8\u89C4\u6A21\u800C\u5F02\uFF0C\u6B64\u5904\u4F7F\u75282025\u5E74\u5E73\u5747\u8D39\u73871.22%\uFF08WGA\u90E8\u52060.87% + ZW-flex\u90E8\u52060.35%\uFF09\u4F5C\u4E3A\u53C2\u8003\u3002\u5B9E\u9645\u8D39\u7387\u7531\u7A0E\u52A1\u90E8\u95E8\u5355\u72EC\u786E\u5B9A\u3002",
+    legalReference: "Belastingdienst (Dutch Tax and Customs Administration)",
+    sortOrder: 275
+  },
+  {
+    countryCode: "NL",
+    itemKey: "childcare_allowance_surcharge",
+    itemNameEn: "Childcare Allowance Surcharge (Wko)",
+    itemNameZh: "\u80B2\u513F\u6D25\u8D34\u9644\u52A0\u8D39\uFF08Wko\uFF09",
+    category: "other_mandatory",
+    rateEmployer: "0.0050",
+    rateEmployee: "0.00",
+    capType: "salary_multiple",
+    capBase: "71628",
+    effectiveYear: 2025,
+    notes: "\u6B64\u4E3A\u96C7\u4E3B\u7F34\u8D39\uFF0C\u7528\u4E8E\u8D44\u52A9\u80B2\u513F\u6D25\u8D34\u3002",
+    legalReference: "Belastingdienst (Dutch Tax and Customs Administration)",
+    sortOrder: 276
+  },
+  {
+    countryCode: "NL",
+    itemKey: "public_sector_redundancy_fund_ufo",
+    itemNameEn: "Public Sector Redundancy Fund (Ufo)",
+    itemNameZh: "\u516C\u5171\u90E8\u95E8\u5197\u4F59\u57FA\u91D1\uFF08Ufo\uFF09",
+    category: "other_mandatory",
+    rateEmployer: "0.0068",
+    rateEmployee: "0.00",
+    capType: "salary_multiple",
+    capBase: "71628",
+    effectiveYear: 2025,
+    notes: "\u4EC5\u9002\u7528\u4E8E\u56FD\u6709\u548C\u6559\u80B2\u90E8\u95E8\u7684\u96C7\u4E3B\u3002",
+    legalReference: "Belastingdienst (Dutch Tax and Customs Administration)",
+    sortOrder: 277
+  },
+  {
+    countryCode: "NL",
+    itemKey: "national_insurance",
+    itemNameEn: "National Insurance (Volksverzekeringen)",
+    itemNameZh: "\u56FD\u6C11\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.2765",
+    capType: "salary_multiple",
+    capBase: "38883",
+    effectiveYear: 2025,
+    notes: "\u5305\u542B\u666E\u901A\u517B\u8001\u91D1(AOW)\u3001\u9057\u5C5E\u517B\u8001\u91D1(Anw)\u548C\u957F\u671F\u62A4\u7406(Wlz)\u3002\u4EC5\u5728\u4E2A\u4EBA\u6240\u5F97\u7A0E\u7B2C\u4E00\u6863\u5185\u5F81\u6536\u3002",
+    legalReference: "PwC Tax Summaries",
+    sortOrder: 278
+  },
+  {
+    countryCode: "NL",
+    itemKey: "health_insurance_zvw",
+    itemNameEn: "Health Insurance Act (Zvw)",
+    itemNameZh: "\u533B\u7597\u4FDD\u9669\u6CD5\uFF08Zvw\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.0610",
+    rateEmployee: "0.00",
+    capType: "salary_multiple",
+    capBase: "79409",
+    effectiveYear: 2025,
+    notes: "\u8FD9\u662F\u96C7\u4E3B\u4E3A\u5458\u5DE5\u652F\u4ED8\u7684\u4E0E\u6536\u5165\u76F8\u5173\u7684\u90E8\u5206\u3002\u5458\u5DE5\u8FD8\u9700\u81EA\u884C\u5411\u4FDD\u9669\u516C\u53F8\u652F\u4ED8\u540D\u4E49\u4FDD\u8D39\uFF08nominal contribution\uFF09\u3002",
+    legalReference: "PwC Tax Summaries",
+    sortOrder: 279
+  },
+  // --- Norway (NO) ---
+  // Expat: 外籍员工通常需要加入挪威国家保险计划。但是，对于来自欧洲经济区（EEA）或与挪威有社会保障协议的国家的派遣员工，可能存在豁免，允许他们在特定期限内继续留在其本国的社保体系中。
+  {
+    countryCode: "NO",
+    itemKey: "national_insurance_contribution",
+    itemNameEn: "National Insurance Contributions",
+    itemNameZh: "\u56FD\u5BB6\u4FDD\u9669\u7F34\u8D39",
+    category: "social_insurance",
+    rateEmployer: "0.141",
+    rateEmployee: "0.077",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u7387\u662F\u6807\u51C6\u8D39\u7387\u3002\u6839\u636E\u5730\u7406\u4F4D\u7F6E\uFF0C\u8D39\u7387\u53EF\u80FD\u6709\u6240\u4E0D\u540C\u3002\u81EA2025\u5E741\u67081\u65E5\u8D77\uFF0C\u53D6\u6D88\u4E86\u5BF9\u8D85\u8FC7750,000\u632A\u5A01\u514B\u6717\u7684\u5DE5\u8D44\u5F81\u6536\u76845%\u989D\u5916\u96C7\u4E3B\u7A0E\u3002",
+    legalReference: "https://www.skatteetaten.no/en/rates/employers-national-insurance-contributions/",
+    sortOrder: 280
+  },
+  // --- Poland (PL) ---
+  // Expat:
+  //   在波兰工作的外籍员工通常必须参加波兰的社会保险体系（ZUS）。对于欧盟、欧洲经济区和瑞士的公民，如果他们可以出示由其母国社保机构签发的A1表格，证明他们在母国缴纳社保，则可以豁免在波兰的缴费义务。对于来自与波兰签订了双边社保协议的非欧盟国家的公民（如美国、加拿大、韩国），协议条款将决定其缴费义务，可能允许他们继续在其母国缴费。没有此类协议的国家的公民必须在波兰全额缴纳社保。
+  {
+    countryCode: "PL",
+    itemKey: "pension_insurance",
+    itemNameEn: "Pension Insurance",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.0976",
+    rateEmployee: "0.0976",
+    capType: "salary_multiple",
+    capBase: "21682.5",
+    effectiveYear: 2025,
+    notes: "Part of the Social Insurance Institution (ZUS) contributions. Capped annually at PLN 260,190 for 2025.",
+    legalReference: "https://taxsummaries.pwc.com/poland/individual/other-taxes",
+    sortOrder: 281
+  },
+  {
+    countryCode: "PL",
+    itemKey: "disability_insurance",
+    itemNameEn: "Disability Insurance",
+    itemNameZh: "\u4F24\u6B8B\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.0650",
+    rateEmployee: "0.0150",
+    capType: "salary_multiple",
+    capBase: "21682.5",
+    effectiveYear: 2025,
+    notes: "Part of the Social Insurance Institution (ZUS) contributions. Capped annually at PLN 260,190 for 2025.",
+    legalReference: "https://taxsummaries.pwc.com/poland/individual/other-taxes",
+    sortOrder: 282
+  },
+  {
+    countryCode: "PL",
+    itemKey: "sickness_insurance",
+    itemNameEn: "Sickness Insurance",
+    itemNameZh: "\u75BE\u75C5\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0245",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Part of the Social Insurance Institution (ZUS) contributions. Paid entirely by the employee.",
+    legalReference: "https://taxsummaries.pwc.com/poland/individual/other-taxes",
+    sortOrder: 283
+  },
+  {
+    countryCode: "PL",
+    itemKey: "accident_insurance",
+    itemNameEn: "Accident Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.0167",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Part of ZUS. Rate varies (0.67% to 3.33%) depending on business sector and number of insured employees. 1.67% is the standard flat rate for employers with up to 9 employees.",
+    legalReference: "https://taxsummaries.pwc.com/poland/individual/other-taxes",
+    sortOrder: 284
+  },
+  {
+    countryCode: "PL",
+    itemKey: "labour_fund",
+    itemNameEn: "Labour Fund",
+    itemNameZh: "\u52B3\u52A8\u57FA\u91D1",
+    category: "unemployment",
+    rateEmployer: "0.0245",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Part of ZUS contributions, paid by the employer.",
+    legalReference: "https://taxsummaries.pwc.com/poland/individual/other-taxes",
+    sortOrder: 285
+  },
+  {
+    countryCode: "PL",
+    itemKey: "guaranteed_employee_benefits_fund",
+    itemNameEn: "Guaranteed Employee Benefits Fund (FG\u015AP)",
+    itemNameZh: "\u96C7\u5458\u4FDD\u969C\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.0010",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Part of ZUS contributions, paid by the employer.",
+    legalReference: "https://taxsummaries.pwc.com/poland/individual/other-taxes",
+    sortOrder: 286
+  },
+  {
+    countryCode: "PL",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.09",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Calculated on gross salary less the employee's share of social security contributions (13.71%). There is no cap on the assessment base.",
+    legalReference: "https://taxsummaries.pwc.com/poland/individual/other-taxes",
+    sortOrder: 287
+  },
+  // --- Portugal (PT) ---
+  // Expat: 外籍员工在葡萄牙进行短期工作可能可以豁免缴纳葡萄牙的社保，前提是他们继续在其母国缴纳社保。
+  {
+    countryCode: "PT",
+    itemKey: "social_security_pt",
+    itemNameEn: "Social Security",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.2375",
+    rateEmployee: "0.11",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u5927\u591A\u6570\u666E\u901A\u5458\u5DE5\u3002",
+    legalReference: "https://www.pwc.pt/en/pwcinforfisco/tax-guide/2025/social-security.html",
+    sortOrder: 288
+  },
+  // --- Romania (RO) ---
+  // Expat: 欧盟/欧洲经济区/瑞士公民以及与罗马尼亚签订了双边社会保障协议的国家的公民，如果能提供A1证明或其他等效文件，可以豁免在罗马尼亚缴纳社会保险费。其他外籍员工通常需要按照与本地员工相同的规则缴纳社会保险。
+  {
+    countryCode: "RO",
+    itemKey: "pension_insurance",
+    itemNameEn: "Pension Insurance",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.00",
+    rateEmployee: "0.25",
+    capType: "salary_multiple",
+    capBase: "97200",
+    effectiveYear: 2025,
+    notes: "\u6B63\u5E38\u5DE5\u4F5C\u6761\u4EF6\u4E0B\u7684\u8D39\u7387\u3002\u5728\u7279\u6B8A\u5DE5\u4F5C\u6761\u4EF6\u4E0B\uFF0C\u96C7\u4E3B\u9700\u989D\u5916\u7F34\u7EB34%\u62168%\u3002\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A24\u500D\u56FD\u5BB6\u6700\u4F4E\u5DE5\u8D44\u603B\u989D\uFF0824 * 4050 RON\uFF09\u3002",
+    legalReference: "Romanian Fiscal Code - Law no. 227/2015",
+    sortOrder: 289
+  },
+  {
+    countryCode: "RO",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.10",
+    capType: "salary_multiple",
+    capBase: "97200",
+    effectiveYear: 2025,
+    notes: "\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A24\u500D\u56FD\u5BB6\u6700\u4F4E\u5DE5\u8D44\u603B\u989D\uFF0824 * 4050 RON\uFF09\u3002",
+    legalReference: "Romanian Fiscal Code - Law no. 227/2015",
+    sortOrder: 290
+  },
+  {
+    countryCode: "RO",
+    itemKey: "work_insurance_contribution",
+    itemNameEn: "Work Insurance Contribution",
+    itemNameZh: "\u52B3\u52A8\u4FDD\u9669\u7F34\u8D39",
+    category: "unemployment",
+    rateEmployer: "0.0225",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u6B64\u9879\u7F34\u8D39\u6DB5\u76D6\u5931\u4E1A\u3001\u5DE5\u4F24\u3001\u75C5\u5047\u6D25\u8D34\u7B49\u98CE\u9669\u3002",
+    legalReference: "Romanian Fiscal Code - Law no. 227/2015",
+    sortOrder: 291
+  },
+  // --- Serbia (RS) ---
+  // Expat:
+  //   根据塞尔维亚与部分国家（包括中国）签订的社会保障协定，派遣员工在满足特定条件下可以申请豁免在塞尔维亚缴纳部分或全部社会保险。通常，如果该员工在其本国继续缴纳社保，并能提供相应的证明文件（如A1证明），则在协定规定的期限内（通常最长为5年）可以免除在塞尔维亚的缴费义务。企业在雇佣外籍员工前应核实具体协定内容并办理相关手续。
+  {
+    countryCode: "RS",
+    itemKey: "pension_insurance",
+    itemNameEn: "Pension and Disability Insurance",
+    itemNameZh: "\u517B\u8001\u53CA\u4F24\u6B8B\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.10",
+    rateEmployee: "0.14",
+    capType: "salary_multiple",
+    capBase: "656425",
+    effectiveYear: 2025,
+    notes: "The minimum monthly contribution base is RSD 45,950 for 2025. The maximum monthly contribution base is 5 times the national average monthly salary.",
+    legalReference: "Law on Contributions for Mandatory Social Insurance",
+    sortOrder: 292
+  },
+  {
+    countryCode: "RS",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0515",
+    rateEmployee: "0.0515",
+    capType: "salary_multiple",
+    capBase: "656425",
+    effectiveYear: 2025,
+    notes: "The minimum monthly contribution base is RSD 45,950 for 2025. The maximum monthly contribution base is 5 times the national average monthly salary.",
+    legalReference: "Law on Contributions for Mandatory Social Insurance",
+    sortOrder: 293
+  },
+  {
+    countryCode: "RS",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0075",
+    capType: "salary_multiple",
+    capBase: "656425",
+    effectiveYear: 2025,
+    notes: "The minimum monthly contribution base is RSD 45,950 for 2025. The maximum monthly contribution base is 5 times the national average monthly salary.",
+    legalReference: "Law on Contributions for Mandatory Social Insurance",
+    sortOrder: 294
+  },
+  // --- Russia (RU) ---
+  // Expat:
+  //   外籍员工的社保缴纳规则取决于其在俄罗斯的身份。长期居住（持有居留许可）的外籍员工与俄罗斯公民一样，需全额缴纳所有强制性社会保险。临时逗留/居住的外籍员工（如持有工作签证）通常也需要缴纳统一费率的社保，但根据双边协议或特定身份（如高技能专家），可能享有部分豁免（例如养老金部分）。雇主必须为所有外籍员工缴纳工伤事故保险。
+  {
+    countryCode: "RU",
+    itemKey: "social_insurance_unified_rate",
+    itemNameEn: "Unified Social Insurance Contribution",
+    itemNameZh: "\u7EDF\u4E00\u793E\u4F1A\u4FDD\u9669\u8D39",
+    category: "social_insurance",
+    rateEmployer: "0.30",
+    rateEmployee: "0.00",
+    capType: "bracket",
+    capBase: "229916.67",
+    effectiveYear: 2025,
+    notes: "\u7EDF\u4E00\u8D39\u7387\u9002\u7528\u4E8E\u517B\u8001\u91D1\u3001\u793E\u4F1A\u4FDD\u9669\u548C\u533B\u7597\u4FDD\u9669\u3002\u9002\u7528\u4E8E\u6708\u5EA6\u603B\u6536\u5165\u4E0D\u8D85\u8FC7229,916.67\u5362\u5E03\uFF08\u5E74\u5EA6\u57FA\u65702,759,000\u5362\u5E03\uFF09\u7684\u90E8\u5206\u3002",
+    legalReference: "Russian Tax Code, Chapter 34",
+    sortOrder: 295
+  },
+  {
+    countryCode: "RU",
+    itemKey: "social_insurance_unified_rate_above_cap",
+    itemNameEn: "Unified Social Insurance Contribution (Above Cap)",
+    itemNameZh: "\u7EDF\u4E00\u793E\u4F1A\u4FDD\u9669\u8D39\uFF08\u8D85\u989D\u90E8\u5206\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.151",
+    rateEmployee: "0.00",
+    capType: "bracket",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u5EA6\u603B\u6536\u5165\u8D85\u8FC7229,916.67\u5362\u5E03\uFF08\u5E74\u5EA6\u57FA\u65702,759,000\u5362\u5E03\uFF09\u7684\u90E8\u5206\u3002",
+    legalReference: "Russian Tax Code, Chapter 34",
+    sortOrder: 296
+  },
+  {
+    countryCode: "RU",
+    itemKey: "work_injury_insurance",
+    itemNameEn: "Insurance against Accidents at Work and Occupational Diseases",
+    itemNameZh: "\u5DE5\u4F24\u548C\u804C\u4E1A\u75C5\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.002",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u6839\u636E\u516C\u53F8\u7684\u4E3B\u8981\u7ECF\u6D4E\u6D3B\u52A8\u98CE\u9669\u7B49\u7EA7\u786E\u5B9A\uFF0C\u8303\u56F4\u4E3A0.2%\u81F38.5%\u3002\u6B64\u5904\u4F7F\u7528\u6700\u4F4E\u8D39\u73870.2%\u4F5C\u4E3A\u4EE3\u8868\u3002\u6B64\u9879\u4E3A\u5F3A\u5236\u6027\u7F34\u6B3E\uFF0C\u4F46\u672A\u5728\u539F\u59CB\u6570\u636E\u4E2D\u63D0\u4F9B\u3002",
+    legalReference: "Federal Law No. 125-FZ of 24.07.1998",
+    sortOrder: 297
+  },
+  // --- Sweden (SE) ---
+  // Expat:
+  //   在瑞典工作的外籍员工通常与本地员工一样，需缴纳标准的社会保障费。但是，瑞典与许多国家（包括欧盟/欧洲经济区国家和美国、加拿大等）签订了双边社会保障协定。根据这些协定，被派遣到瑞典临时工作的外籍员工（通常最多5年）可能可以豁免在瑞典缴纳社保，前提是他们继续在其母国缴纳社保。具体豁免情况需根据员工国籍和相关协定来确定。
+  {
+    countryCode: "SE",
+    itemKey: "health_insurance_contributions",
+    itemNameEn: "Health Insurance Contributions",
+    itemNameZh: "\u533B\u7597\u4FDD\u9669\u8D39",
+    category: "health_insurance",
+    rateEmployer: "0.0355",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Part of the statutory employer contributions (Arbetsgivaravgifter).",
+    legalReference: "https://www.skatteverket.se/servicelankar/otherlanguages/englishengelska/businessesandemployers/startingandrunningaswedishbusiness/declaringtaxesbusinesses/filingapayereturn/employercontributions.4.2fb39afe18dabf1e4d24a3d.html",
+    sortOrder: 298
+  },
+  {
+    countryCode: "SE",
+    itemKey: "parental_insurance_contributions",
+    itemNameEn: "Parental Insurance Contributions",
+    itemNameZh: "\u7236\u6BCD\u4FDD\u9669\u8D39",
+    category: "other_mandatory",
+    rateEmployer: "0.0260",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Part of the statutory employer contributions (Arbetsgivaravgifter).",
+    legalReference: "https://www.skatteverket.se/servicelankar/otherlanguages/englishengelska/businessesandemployers/startingandrunningaswedishbusiness/declaringtaxesbusinesses/filingapayereturn/employercontributions.4.2fb39afe18dabf1e4d24a3d.html",
+    sortOrder: 299
+  },
+  {
+    countryCode: "SE",
+    itemKey: "pension_contributions",
+    itemNameEn: "Pension Contributions",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669\u8D39",
+    category: "pension",
+    rateEmployer: "0.1021",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Part of the statutory employer contributions (Arbetsgivaravgifter).",
+    legalReference: "https://www.skatteverket.se/servicelankar/otherlanguages/englishengelska/businessesandemployers/startingandrunningaswedishbusiness/declaringtaxesbusinesses/filingapayereturn/employercontributions.4.2fb39afe18dabf1e4d24a3d.html",
+    sortOrder: 300
+  },
+  {
+    countryCode: "SE",
+    itemKey: "survivors_pension_contributions",
+    itemNameEn: "Survivor\u2019s Pension Contributions",
+    itemNameZh: "\u9057\u5C5E\u517B\u8001\u91D1\u8D39",
+    category: "pension",
+    rateEmployer: "0.0060",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Part of the statutory employer contributions (Arbetsgivaravgifter).",
+    legalReference: "https://www.skatteverket.se/servicelankar/otherlanguages/englishengelska/businessesandemployers/startingandrunningaswedishbusiness/declaringtaxesbusinesses/filingapayereturn/employercontributions.4.2fb39afe18dabf1e4d24a3d.html",
+    sortOrder: 301
+  },
+  {
+    countryCode: "SE",
+    itemKey: "labour_market_contributions",
+    itemNameEn: "Labour Market Contributions",
+    itemNameZh: "\u52B3\u52A8\u529B\u5E02\u573A\u8D39",
+    category: "unemployment",
+    rateEmployer: "0.0264",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Part of the statutory employer contributions (Arbetsgivaravgifter).",
+    legalReference: "https://www.skatteverket.se/servicelankar/otherlanguages/englishengelska/businessesandemployers/startingandrunningaswedishbusiness/declaringtaxesbusinesses/filingapayereturn/employercontributions.4.2fb39afe18dabf1e4d24a3d.html",
+    sortOrder: 302
+  },
+  {
+    countryCode: "SE",
+    itemKey: "work_injury_contributions",
+    itemNameEn: "Work Injury Contributions",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669\u8D39",
+    category: "work_injury",
+    rateEmployer: "0.0020",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Part of the statutory employer contributions (Arbetsgivaravgifter).",
+    legalReference: "https://www.skatteverket.se/servicelankar/otherlanguages/englishengelska/businessesandemployers/startingandrunningaswedishbusiness/declaringtaxesbusinesses/filingapayereturn/employercontributions.4.2fb39afe18dabf1e4d24a3d.html",
+    sortOrder: 303
+  },
+  {
+    countryCode: "SE",
+    itemKey: "general_payroll_tax",
+    itemNameEn: "General Payroll Tax",
+    itemNameZh: "\u4E00\u822C\u5DE5\u8D44\u7A0E",
+    category: "other_mandatory",
+    rateEmployer: "0.1162",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Part of the statutory employer contributions (Arbetsgivaravgifter). This is a tax and not linked to social benefits.",
+    legalReference: "https://www.skatteverket.se/servicelankar/otherlanguages/englishengelska/businessesandemployers/startingandrunningaswedishbusiness/declaringtaxesbusinesses/filingapayereturn/employercontributions.4.2fb39afe18dabf1e4d24a3d.html",
+    sortOrder: 304
+  },
+  // --- Slovenia (SI) ---
+  // Expat: 在斯洛文尼亚被视为税务居民的外籍员工需遵守与斯洛文尼亚公民相同的社保规定。然而，斯洛文尼亚与包括美国和欧盟成员国在内的多个国家签订了社保互免协议（Totalization
+  //   Agreements）。这些协议旨在避免双重征收社保费用。来自协议国家的外籍员工，如果在一定期限内继续向其母国社保系统缴费，则可能豁免在斯洛文尼亚的缴费义务。
+  {
+    countryCode: "SI",
+    itemKey: "pension_disability_insurance",
+    itemNameEn: "Pension and Disability Insurance",
+    itemNameZh: "\u517B\u8001\u548C\u6B8B\u75BE\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.0885",
+    rateEmployee: "0.1550",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Based on gross income",
+    legalReference: "https://taxsummaries.pwc.com/slovenia/individual/other-taxes",
+    sortOrder: 305
+  },
+  {
+    countryCode: "SI",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0656",
+    rateEmployee: "0.0636",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Based on gross income",
+    legalReference: "https://taxsummaries.pwc.com/slovenia/individual/other-taxes",
+    sortOrder: 306
+  },
+  {
+    countryCode: "SI",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.0006",
+    rateEmployee: "0.0014",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Based on gross income",
+    legalReference: "https://taxsummaries.pwc.com/slovenia/individual/other-taxes",
+    sortOrder: 307
+  },
+  {
+    countryCode: "SI",
+    itemKey: "work_injury_insurance",
+    itemNameEn: "Work Injury Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.0053",
+    rateEmployee: "0.0000",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Based on gross income",
+    legalReference: "https://taxsummaries.pwc.com/slovenia/individual/other-taxes",
+    sortOrder: 308
+  },
+  {
+    countryCode: "SI",
+    itemKey: "parental_insurance",
+    itemNameEn: "Parental Insurance",
+    itemNameZh: "\u80B2\u513F\u4FDD\u9669",
+    category: "other_mandatory",
+    rateEmployer: "0.0010",
+    rateEmployee: "0.0010",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Based on gross income",
+    legalReference: "https://taxsummaries.pwc.com/slovenia/individual/other-taxes",
+    sortOrder: 309
+  },
+  {
+    countryCode: "SI",
+    itemKey: "compulsory_health_contribution",
+    itemNameEn: "Compulsory Health Contribution",
+    itemNameZh: "\u5F3A\u5236\u6027\u5065\u5EB7\u7F34\u6B3E",
+    category: "health_insurance",
+    rateEmployer: "0.0000",
+    rateEmployee: "0.0000",
+    capType: "fixed_amount",
+    capBase: "35.0",
+    effectiveYear: 2025,
+    notes: "Fixed amount contribution. Paid by individuals.",
+    legalReference: "https://taxsummaries.pwc.com/slovenia/individual/other-taxes",
+    sortOrder: 310
+  },
+  {
+    countryCode: "SI",
+    itemKey: "long_term_care",
+    itemNameEn: "Long-Term Care",
+    itemNameZh: "\u957F\u671F\u62A4\u7406",
+    category: "other_mandatory",
+    rateEmployer: "0.01",
+    rateEmployee: "0.01",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Effective from 1 July 2025.",
+    legalReference: "https://kpmg.com/xx/en/our-insights/gms-flash-alert/flash-alert-2025-133.html",
+    sortOrder: 311
+  },
+  // --- Slovakia (SK) ---
+  // Expat: EU, EEA, and Swiss nationals may be exempt from Slovak social security contributions if they hold a valid A1
+  //   portable document, indicating they are subject to the social security system of another member state. Other
+  //   foreign nationals may be subject to bilateral social security agreements, which can affect their contribution
+  //   obligations.
+  {
+    countryCode: "SK",
+    itemKey: "employee_sickness_insurance",
+    itemNameEn: "Sickness Insurance (Employee)",
+    itemNameZh: "\u75BE\u75C5\u4FDD\u9669\uFF08\u96C7\u5458\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.014",
+    capType: "fixed_amount",
+    capBase: "15730",
+    effectiveYear: 2025,
+    notes: "The maximum monthly assessment base for social security contributions is EUR 15,730 for 2025.",
+    legalReference: "Act on Social Insurance No. 461/2003 Coll.",
+    sortOrder: 312
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employee_old_age_pension_insurance",
+    itemNameEn: "Old-Age Pension Insurance (Employee)",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669\uFF08\u96C7\u5458\uFF09",
+    category: "pension",
+    rateEmployer: "0.0",
+    rateEmployee: "0.04",
+    capType: "fixed_amount",
+    capBase: "15730",
+    effectiveYear: 2025,
+    notes: "The maximum monthly assessment base for social security contributions is EUR 15,730 for 2025.",
+    legalReference: "Act on Social Insurance No. 461/2003 Coll.",
+    sortOrder: 313
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employee_invalidity_insurance",
+    itemNameEn: "Invalidity Insurance (Employee)",
+    itemNameZh: "\u4F24\u6B8B\u4FDD\u9669\uFF08\u96C7\u5458\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.03",
+    capType: "fixed_amount",
+    capBase: "15730",
+    effectiveYear: 2025,
+    notes: "The maximum monthly assessment base for social security contributions is EUR 15,730 for 2025.",
+    legalReference: "Act on Social Insurance No. 461/2003 Coll.",
+    sortOrder: 314
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employee_unemployment_insurance",
+    itemNameEn: "Unemployment Insurance (Employee)",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669\uFF08\u96C7\u5458\uFF09",
+    category: "unemployment",
+    rateEmployer: "0.0",
+    rateEmployee: "0.01",
+    capType: "fixed_amount",
+    capBase: "15730",
+    effectiveYear: 2025,
+    notes: "The maximum monthly assessment base for social security contributions is EUR 15,730 for 2025.",
+    legalReference: "Act on Social Insurance No. 461/2003 Coll.",
+    sortOrder: 315
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employee_health_insurance",
+    itemNameEn: "Health Insurance (Employee)",
+    itemNameZh: "\u533B\u7597\u4FDD\u9669\uFF08\u96C7\u5458\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.05",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "The employee health insurance rate increased to 5% in 2025. There is no cap on the assessment base for health insurance.",
+    legalReference: "Act on Health Insurance No. 580/2004 Coll.",
+    sortOrder: 316
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employer_sickness_insurance",
+    itemNameEn: "Sickness Insurance (Employer)",
+    itemNameZh: "\u75BE\u75C5\u4FDD\u9669\uFF08\u96C7\u4E3B\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.014",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "15730",
+    effectiveYear: 2025,
+    notes: "The maximum monthly assessment base for social security contributions is EUR 15,730 for 2025.",
+    legalReference: "Act on Social Insurance No. 461/2003 Coll.",
+    sortOrder: 317
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employer_old_age_pension_insurance",
+    itemNameEn: "Old-Age Pension Insurance (Employer)",
+    itemNameZh: "\u517B\u8001\u4FDD\u9669\uFF08\u96C7\u4E3B\uFF09",
+    category: "pension",
+    rateEmployer: "0.14",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "15730",
+    effectiveYear: 2025,
+    notes: "The maximum monthly assessment base for social security contributions is EUR 15,730 for 2025.",
+    legalReference: "Act on Social Insurance No. 461/2003 Coll.",
+    sortOrder: 318
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employer_invalidity_insurance",
+    itemNameEn: "Invalidity Insurance (Employer)",
+    itemNameZh: "\u4F24\u6B8B\u4FDD\u9669\uFF08\u96C7\u4E3B\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.03",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "15730",
+    effectiveYear: 2025,
+    notes: "The maximum monthly assessment base for social security contributions is EUR 15,730 for 2025.",
+    legalReference: "Act on Social Insurance No. 461/2003 Coll.",
+    sortOrder: 319
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employer_unemployment_insurance",
+    itemNameEn: "Unemployment Insurance (Employer)",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669\uFF08\u96C7\u4E3B\uFF09",
+    category: "unemployment",
+    rateEmployer: "0.01",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "15730",
+    effectiveYear: 2025,
+    notes: "The maximum monthly assessment base for social security contributions is EUR 15,730 for 2025.",
+    legalReference: "Act on Social Insurance No. 461/2003 Coll.",
+    sortOrder: 320
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employer_guarantee_insurance",
+    itemNameEn: "Guarantee Insurance (Employer)",
+    itemNameZh: "\u62C5\u4FDD\u4FDD\u9669\uFF08\u96C7\u4E3B\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.0025",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "15730",
+    effectiveYear: 2025,
+    notes: "The maximum monthly assessment base for social security contributions is EUR 15,730 for 2025.",
+    legalReference: "Act on Social Insurance No. 461/2003 Coll.",
+    sortOrder: 321
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employer_accident_insurance",
+    itemNameEn: "Accident Insurance (Employer)",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669\uFF08\u96C7\u4E3B\uFF09",
+    category: "work_injury",
+    rateEmployer: "0.008",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "There is no cap on the assessment base for accident insurance.",
+    legalReference: "Act on Social Insurance No. 461/2003 Coll.",
+    sortOrder: 322
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employer_reserve_fund",
+    itemNameEn: "Reserve Fund (Employer)",
+    itemNameZh: "\u50A8\u5907\u57FA\u91D1\uFF08\u96C7\u4E3B\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.0475",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "15730",
+    effectiveYear: 2025,
+    notes: "The maximum monthly assessment base for social security contributions is EUR 15,730 for 2025.",
+    legalReference: "Act on Social Insurance No. 461/2003 Coll.",
+    sortOrder: 323
+  },
+  {
+    countryCode: "SK",
+    itemKey: "employer_health_insurance",
+    itemNameEn: "Health Insurance (Employer)",
+    itemNameZh: "\u533B\u7597\u4FDD\u9669\uFF08\u96C7\u4E3B\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.11",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "There is no cap on the assessment base for health insurance.",
+    legalReference: "Act on Health Insurance No. 580/2004 Coll.",
+    sortOrder: 324
+  },
+  // --- Turkey (TR) ---
+  // Expat: 在土耳其工作的外籍员工通常必须参加土耳其的社保体系（SGK）。与土耳其签订了社保协议的国家的公民，如果在其本国继续参保，则可能获得豁免。外籍员工与本地员工适用相同的缴费费率和基数上下限。
+  {
+    countryCode: "TR",
+    itemKey: "social_security_premium",
+    itemNameEn: "Social Security Premium (Pension, Disability, Death, Health)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\u8D39\uFF08\u517B\u8001\u3001\u6B8B\u75BE\u3001\u6B7B\u4EA1\u3001\u5065\u5EB7\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.205",
+    rateEmployee: "0.14",
+    capType: "salary_multiple",
+    capBase: "195041.25",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u8D39\u7387\u5728\u6EE1\u8DB3\u7279\u5B9A\u6FC0\u52B1\u6761\u4EF6\u65F6\u53EF\u964D\u4F4E5\u4E2A\u767E\u5206\u70B9\u81F30.155\u3002\u6708\u5EA6\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A2025\u5E74\u6700\u4F4E\u6708\u5DE5\u8D44\uFF0826005.50 TRY\uFF09\u76847.5\u500D\u3002",
+    legalReference: "Law No. 5510",
+    sortOrder: 325
+  },
+  {
+    countryCode: "TR",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.02",
+    rateEmployee: "0.01",
+    capType: "salary_multiple",
+    capBase: "195041.25",
+    effectiveYear: 2025,
+    notes: "\u6708\u5EA6\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E0E\u793E\u4FDD\u8D39\uFF08SGK\uFF09\u76F8\u540C\u3002",
+    legalReference: "Law No. 4447",
+    sortOrder: 326
+  },
+  // --- Ukraine (UA) ---
+  // Expat: 外籍员工与乌克兰公民一样，必须缴纳统一社会贡献（USC），没有普遍的豁免政策。在乌克兰境内为外国公司代表处工作且未与该代表处签订雇佣合同的外国人，如果直接从外国雇主处获得报酬，则其薪酬不作为在乌克兰缴纳USC的基数。
+  {
+    countryCode: "UA",
+    itemKey: "unified_social_contribution",
+    itemNameEn: "Unified Social Contribution (USC)",
+    itemNameZh: "\u7EDF\u4E00\u793E\u4F1A\u8D21\u732E",
+    category: "social_insurance",
+    rateEmployer: "0.22",
+    rateEmployee: "0.00",
+    capType: "bracket",
+    capBase: "160000",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u652F\u4ED8\u5DE5\u8D44\u768422%\u3002\u8BE5\u7F34\u6B3E\u6DB5\u76D6\u517B\u8001\u91D1\u3001\u5931\u4E1A\u3001\u5DE5\u4F24\u548C\u5176\u4ED6\u793E\u4F1A\u4FDD\u9669\u30022025\u5E74\u7684\u6708\u5EA6\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A160,000\u4E4C\u514B\u5170\u683C\u91CC\u592B\u7EB3\u3002",
+    legalReference: 'Law of Ukraine "On Collection and Accounting of the Unified Contribution for Mandatory State Social Insurance"',
+    sortOrder: 327
+  },
+  // --- Kosovo (XK) ---
+  // Expat: 外籍员工与本地员工适用相同的社保规定，无特殊豁免或不同费率。
+  {
+    countryCode: "XK",
+    itemKey: "pension_contribution",
+    itemNameEn: "Pension Contribution",
+    itemNameZh: "\u517B\u8001\u91D1\u7F34\u6B3E",
+    category: "pension",
+    rateEmployer: "0.05",
+    rateEmployee: "0.05",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "Kosovo law",
+    notes: "Mandatory pension contributions, equally split between employer and employee."
   },
   // =================================================================================
   // Americas
   // =================================================================================
-  // 15. United States (US)
+  // --- Argentina (AR) ---
+  // Expat: 外籍技术人员或专业人员，如果因不超过两年的临时工作合同而来阿根廷，并且在其居住国或来源国有充分的社会保障覆盖，可以申请豁免在阿根廷缴纳社保。此豁免需要向相关社保机构申请批准。若无豁免，则与本地员工适用相同规则。
+  {
+    countryCode: "AR",
+    itemKey: "pension_sipa",
+    itemNameEn: "Argentine Integrated Pension System (SIPA)",
+    itemNameZh: "\u963F\u6839\u5EF7\u7EFC\u5408\u517B\u8001\u91D1\u4F53\u7CFB",
+    category: "pension",
+    rateEmployer: "0.1077",
+    rateEmployee: "0.11",
+    capType: "none",
+    capBase: "3731212.01",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u8D39\u7387\u6839\u636E\u516C\u53F8\u89C4\u6A21\u548C\u670D\u52A1/\u751F\u4EA7\u6027\u8D28\u572810.77%\u523012.71%\u4E4B\u95F4\u53D8\u52A8\uFF0C\u6B64\u5904\u91C7\u7528\u4E2D\u7B49\u8D39\u7387\u3002",
+    legalReference: "Ley 24.241, Resoluci\xF3n ANSES 381/2025",
+    sortOrder: 329
+  },
+  {
+    countryCode: "AR",
+    itemKey: "health_insurance_inssjp",
+    itemNameEn: "National Institute of Social Services for Retirees and Pensioners (INSSJP)",
+    itemNameZh: "\u56FD\u5BB6\u9000\u4F11\u53CA\u517B\u8001\u4EBA\u5458\u793E\u4F1A\u670D\u52A1\u5C40 (PAMI)",
+    category: "health_insurance",
+    rateEmployer: "0.0206",
+    rateEmployee: "0.03",
+    capType: "none",
+    capBase: "3731212.01",
+    effectiveYear: 2025,
+    legalReference: "Ley 19.032, Resoluci\xF3n ANSES 381/2025",
+    sortOrder: 330
+  },
+  {
+    countryCode: "AR",
+    itemKey: "health_insurance_obra_social",
+    itemNameEn: "Social Work (Health Insurance)",
+    itemNameZh: "\u793E\u4F1A\u533B\u7597\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0621",
+    rateEmployee: "0.03",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u6B64\u9879\u7F34\u6B3E\u6CA1\u6709\u85AA\u8D44\u4E0A\u9650\u3002",
+    legalReference: "Ley 23.660",
+    sortOrder: 331
+  },
+  {
+    countryCode: "AR",
+    itemKey: "unemployment_fund",
+    itemNameEn: "Unemployment Fund",
+    itemNameZh: "\u5931\u4E1A\u57FA\u91D1",
+    category: "unemployment",
+    rateEmployer: "0.0264",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u6B64\u9879\u7F34\u6B3E\u6CA1\u6709\u85AA\u8D44\u4E0A\u9650\u3002",
+    legalReference: "Ley 24.013",
+    sortOrder: 332
+  },
+  {
+    countryCode: "AR",
+    itemKey: "family_allowances_fund",
+    itemNameEn: "Family Allowances Fund",
+    itemNameZh: "\u5BB6\u5EAD\u6D25\u8D34\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.0482",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u6B64\u9879\u7F34\u6B3E\u6CA1\u6709\u85AA\u8D44\u4E0A\u9650\u3002",
+    legalReference: "Ley 24.714",
+    sortOrder: 333
+  },
+  {
+    countryCode: "AR",
+    itemKey: "work_risk_insurance_art",
+    itemNameEn: "Work Risk Insurance (ART)",
+    itemNameZh: "\u5DE5\u4F24\u98CE\u9669\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.025",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u662F\u57FA\u4E8E\u516C\u53F8\u98CE\u9669\u6C34\u5E73\u7684\u5E73\u5747\u503C\uFF0C\u53EF\u80FD\u57281.5%\u52304%\u4E4B\u95F4\u53D8\u52A8\u3002",
+    legalReference: "Ley 24.557",
+    sortOrder: 334
+  },
+  // --- Bolivia (BO) ---
+  // Expat: 外籍员工与本地员工适用相同的社保规定，没有豁免或特殊费率。
+  {
+    countryCode: "BO",
+    itemKey: "employee_pension",
+    itemNameEn: "Pension Fund Contribution",
+    itemNameZh: "\u517B\u8001\u57FA\u91D1\u7F34\u6B3E",
+    category: "pension",
+    rateEmployer: "0.00",
+    rateEmployee: "0.1271",
+    capType: "salary_multiple",
+    capBase: "165000.00",
+    effectiveYear: 2025,
+    notes: "\u5458\u5DE5\u7F34\u6B3E\u7387\u4E3A12.71%\uFF0C\u5728\u603B\u6536\u5165\u4E0A\u8BA1\u7B97\u3002\u7F34\u6B3E\u57FA\u6570\u4E0A\u9650\u4E3A60\u4E2A\u56FD\u5BB6\u6700\u4F4E\u5DE5\u8D44\uFF082025\u5E74\u6700\u4F4E\u5DE5\u8D44\u4E3A2,750\u73BB\u5229\u7EF4\u4E9A\u8BFA\uFF0C\u5373 60 * 2750 = 165,000\uFF09\u3002",
+    legalReference: "Ley de Pensiones No. 065",
+    sortOrder: 335
+  },
+  {
+    countryCode: "BO",
+    itemKey: "employee_solidarity_contribution",
+    itemNameEn: "National Solidarity Contribution",
+    itemNameZh: "\u56FD\u5BB6\u56E2\u7ED3\u8D21\u732E\u91D1",
+    category: "pension",
+    rateEmployer: "0.00",
+    rateEmployee: "0.01",
+    capType: "bracket",
+    capBase: "13000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u6536\u5165\u8D85\u8FC713,000\u73BB\u5229\u7EF4\u4E9A\u8BFA\u7684\u5458\u5DE5\u3002\u8D39\u7387\u6839\u636E\u6536\u5165\u5206\u7EA7\uFF0C\u4ECE1%\u523010%\u4E0D\u7B49\u300213,000-25,000 BOB\u4E3A1%\uFF0C25,000-35,000 BOB\u4E3A5%\uFF0C35,000 BOB\u4EE5\u4E0A\u4E3A10%\u3002",
+    legalReference: "Ley de Pensiones No. 065",
+    sortOrder: 336
+  },
+  {
+    countryCode: "BO",
+    itemKey: "employer_health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.10",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u5F3A\u5236\u6027\u7F34\u6B3E\u3002",
+    legalReference: "C\xF3digo de Seguridad Social",
+    sortOrder: 337
+  },
+  {
+    countryCode: "BO",
+    itemKey: "employer_solidarity_pension_fund",
+    itemNameEn: "Employer Solidarity Pension Fund",
+    itemNameZh: "\u96C7\u4E3B\u56E2\u7ED3\u517B\u8001\u57FA\u91D1",
+    category: "pension",
+    rateEmployer: "0.03",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u5F3A\u5236\u6027\u7F34\u6B3E\u3002",
+    legalReference: "Ley de Pensiones No. 065",
+    sortOrder: 338
+  },
+  {
+    countryCode: "BO",
+    itemKey: "employer_professional_risk_insurance",
+    itemNameEn: "Professional Risk Insurance",
+    itemNameZh: "\u804C\u4E1A\u98CE\u9669\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.0171",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u53D6\u51B3\u4E8E\u98CE\u9669\u7B49\u7EA7\uFF0C\u6B64\u5904\u4F7F\u7528\u901A\u7528\u8D39\u7387\u3002",
+    legalReference: "Ley de Pensiones No. 065",
+    sortOrder: 339
+  },
+  {
+    countryCode: "BO",
+    itemKey: "employer_housing_fund",
+    itemNameEn: "Housing Fund",
+    itemNameZh: "\u4F4F\u623F\u57FA\u91D1",
+    category: "housing_fund",
+    rateEmployer: "0.02",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u5F3A\u5236\u6027\u7F34\u6B3E\u3002",
+    legalReference: "Ley 31 de octubre de 1945",
+    sortOrder: 340
+  },
+  // --- Brazil (BR) ---
+  // Expat:
+  //   在巴西持有有效工作签证并根据正式雇佣合同（CLT）工作的外籍员工，通常与巴西本地员工一样，必须强制性参加巴西的社会保障体系（INSS）并由雇主为其缴纳服务时间保障基金（FGTS）。但是，如果外籍员工来自与巴西签订了国际社保协定的国家（例如美国、法国、德国、日本等），他们可能有资格在一定期限内（通常最长为5年）豁免缴纳巴西的社保费用，前提是他们继续在其母国的社保体系中缴费。申请豁免需要获得母国社保机构出具的派遣证明（Certificate
+  //   of Coverage）。
+  {
+    countryCode: "BR",
+    itemKey: "inss",
+    itemNameEn: "National Institute of Social Security",
+    itemNameZh: "\u56FD\u5BB6\u793E\u4F1A\u4FDD\u969C\u5C40",
+    category: "social_insurance",
+    rateEmployer: "0.20",
+    rateEmployee: "0.14",
+    capType: "bracket",
+    capBase: "8157.41",
+    effectiveYear: 2025,
+    notes: "Employee contributions are progressive. Rates for 2025: 7.5% up to BRL 1,518.00; 9% for salaries between BRL 1,518.01 and BRL 2,793.88; 12% for salaries between BRL 2,793.89 and BRL 4,190.83; and 14% for salaries between BRL 4,190.84 and BRL 8,157.41. The employer rate is generally 20%, but can be 22.5% depending on the industry sector.",
+    legalReference: "Ordinance n. 6/2025",
+    sortOrder: 341
+  },
+  {
+    countryCode: "BR",
+    itemKey: "fgts",
+    itemNameEn: "Time of Service Guarantee Fund",
+    itemNameZh: "\u670D\u52A1\u65F6\u95F4\u4FDD\u969C\u57FA\u91D1",
+    category: "unemployment",
+    rateEmployer: "0.08",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Mandatory contribution for all employees under a formal employment contract.",
+    legalReference: "Law No. 8,036/90",
+    sortOrder: 342
+  },
+  // --- Canada (CA) ---
+  // Expat: 外籍员工通常需要缴纳CPP和EI，除非其原籍国与加拿大签订了社会保障协议，并且他们持有有效的豁免证明。具体豁免规则依据双边协议而定。
+  {
+    countryCode: "CA",
+    itemKey: "cpp",
+    itemNameEn: "Canada Pension Plan",
+    itemNameZh: "\u52A0\u62FF\u5927\u517B\u8001\u91D1\u8BA1\u5212",
+    category: "pension",
+    rateEmployer: "0.0595",
+    rateEmployee: "0.0595",
+    capType: "fixed_amount",
+    capBase: "5941.67",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u5E74\u6536\u5165\u8D85\u8FC7$3,500\u7684\u90E8\u5206\u30022025\u5E74\u5EA6\u6700\u9AD8\u5E94\u8BA1\u85AA\u8D44\u4E0A\u9650(YMPE)\u4E3A$71,300\uFF0C\u6708\u5EA6\u4E0A\u9650\u4E3A$5941.67\u3002",
+    legalReference: "https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/payroll/payroll-deductions-contributions/canada-pension-plan-cpp/cpp-contribution-rates-maximums-exemptions.html",
+    sortOrder: 343
+  },
+  {
+    countryCode: "CA",
+    itemKey: "cpp2",
+    itemNameEn: "Second Additional Canada Pension Plan",
+    itemNameZh: "\u7B2C\u4E8C\u9644\u52A0\u52A0\u62FF\u5927\u517B\u8001\u91D1\u8BA1\u5212",
+    category: "pension",
+    rateEmployer: "0.04",
+    rateEmployee: "0.04",
+    capType: "bracket",
+    capBase: "6766.67",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u5E74\u6536\u5165\u5728$71,300 (YMPE) \u548C $81,200 (YAMPE) \u4E4B\u95F4\u7684\u90E8\u5206\u3002\u6708\u5EA6\u4E0A\u9650\u4E3A$6766.67\u3002",
+    legalReference: "https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/payroll/payroll-deductions-contributions/canada-pension-plan-cpp/cpp-contribution-rates-maximums-exemptions.html",
+    sortOrder: 344
+  },
+  {
+    countryCode: "CA",
+    itemKey: "ei",
+    itemNameEn: "Employment Insurance",
+    itemNameZh: "\u5C31\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.02296",
+    rateEmployee: "0.0164",
+    capType: "fixed_amount",
+    capBase: "5475.00",
+    effectiveYear: 2025,
+    notes: "2025\u5E74\u5EA6\u6700\u9AD8\u53EF\u4FDD\u6536\u5165\u4E0A\u9650\u4E3A$65,700\uFF0C\u6708\u5EA6\u4E0A\u9650\u4E3A$5475.00\u3002\u96C7\u4E3B\u8D39\u7387\u662F\u96C7\u5458\u8D39\u7387\u76841.4\u500D\u3002",
+    legalReference: "https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/payroll/payroll-deductions-contributions/employment-insurance-ei/ei-premium-rates-maximums.html",
+    sortOrder: 345
+  },
+  // --- Chile (CL) ---
+  // Expat: 外籍员工如果加入了覆盖养老、残疾、疾病和死亡的外国社保体系，可以申请豁免缴纳智利的养老金(AFP)和健康保险(FONASA/ISAPRE)。然而，失业保险和工伤事故保险是强制性的，不可豁免，所有员工（包括符合条件的外籍员工）都必须缴纳。
+  {
+    countryCode: "CL",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.024",
+    rateEmployee: "0.006",
+    capType: "none",
+    capBase: "4884800",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u4E2D1.6%\u8FDB\u5165\u4E2A\u4EBA\u8D26\u6237\uFF0C0.8%\u8FDB\u5165\u96C6\u4F53\u56E2\u7ED3\u57FA\u91D1\u3002\u96C7\u5458\u7F34\u8D39\u5168\u90E8\u8FDB\u5165\u4E2A\u4EBA\u8D26\u6237\u3002\u7F34\u8D39\u4E0A\u9650\u4E3A\u6708\u85AA122.6 UF\u3002",
+    legalReference: "https://taxsummaries.pwc.com/chile/individual/other-taxes",
+    sortOrder: 346
+  },
+  {
+    countryCode: "CL",
+    itemKey: "pension_afp",
+    itemNameEn: "Pension (AFP)",
+    itemNameZh: "\u517B\u8001\u91D1 (AFP)",
+    category: "pension",
+    rateEmployer: "0.0",
+    rateEmployee: "0.10",
+    capType: "none",
+    capBase: "3251100",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u7EA6\u4E3A10%\uFF0C\u989D\u5916\u9700\u52A0\u4E0A\u5404\u517B\u8001\u57FA\u91D1\u7BA1\u7406\u516C\u53F8(AFP)\u6536\u53D6\u7684\u7BA1\u7406\u8D39\uFF08\u7EA60.58%\u81F31.45%\u4E0D\u7B49\uFF09\u3002\u7F34\u8D39\u4E0A\u9650\u4E3A\u6708\u85AA81.6 UF\u3002",
+    legalReference: "https://www.skuad.io/global-payroll/chile",
+    sortOrder: 347
+  },
+  {
+    countryCode: "CL",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance (FONASA or ISAPRE)",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.07",
+    capType: "none",
+    capBase: "3251100",
+    effectiveYear: 2025,
+    notes: "\u96C7\u5458\u53EF\u9009\u62E9\u56FD\u5BB6\u5065\u5EB7\u57FA\u91D1(FONASA)\u6216\u79C1\u4EBA\u4FDD\u9669\u673A\u6784(ISAPRE)\u3002\u7F34\u8D39\u4E0A\u9650\u4E3A\u6708\u85AA81.6 UF\u3002",
+    legalReference: "https://www.skuad.io/global-payroll/chile",
+    sortOrder: 348
+  },
+  {
+    countryCode: "CL",
+    itemKey: "work_accident_insurance",
+    itemNameEn: "Work Accident Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4E8B\u6545\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.0093",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: "3251100",
+    effectiveYear: 2025,
+    notes: "\u57FA\u7840\u8D39\u7387\u4E3A0.93%\uFF0C\u96C7\u4E3B\u9700\u989D\u5916\u6839\u636E\u516C\u53F8\u98CE\u9669\u7B49\u7EA7\u652F\u4ED8\u9644\u52A0\u8D39\u7387\uFF080%\u81F36.8%\uFF09\u3002\u7F34\u8D39\u4E0A\u9650\u4E3A\u6708\u85AA81.6 UF\u3002",
+    legalReference: "https://marcopayroll.cn/countries/%E6%99%BA%E5%88%A9/",
+    sortOrder: 349
+  },
+  // --- Colombia (CO) ---
+  // Expat: 外籍员工通常需要参与哥伦比亚的社保体系。然而，对于养老金部分，部分外籍员工可以选择自愿性加入，这意味着养老金缴款可能不是强制性的，具体取决于其签证类型和双边协议。建议根据个人情况进行确认。
+  {
+    countryCode: "CO",
+    itemKey: "health_co",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.085",
+    rateEmployee: "0.04",
+    capType: "salary_multiple",
+    capBase: "35587500",
+    effectiveYear: 2025,
+    notes: "\u5BF9\u4E8E\u6536\u5165\u4F4E\u4E8E10\u500D\u6700\u4F4E\u5DE5\u8D44\u7684\u5458\u5DE5\uFF0C\u96C7\u4E3B\u514D\u7F348.5%\u7684\u5065\u5EB7\u4FDD\u9669\u8D39\u3002",
+    legalReference: "Ley 100 de 1993",
+    sortOrder: 350
+  },
+  {
+    countryCode: "CO",
+    itemKey: "pension_co",
+    itemNameEn: "Pension",
+    itemNameZh: "\u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.12",
+    rateEmployee: "0.04",
+    capType: "salary_multiple",
+    capBase: "35587500",
+    effectiveYear: 2025,
+    notes: "\u6536\u5165\u8D85\u8FC74\u500D\u6700\u4F4E\u5DE5\u8D44\u7684\u5458\u5DE5\u9700\u989D\u5916\u7F34\u7EB31%\u81F3\u56E2\u7ED3\u517B\u8001\u57FA\u91D1\u3002\u6536\u5165\u8D85\u8FC716\u500D\u6700\u4F4E\u5DE5\u8D44\u7684\u5458\u5DE5\uFF0C\u9644\u52A0\u8D39\u7387\u57280.2%\u52301%\u4E4B\u95F4\u3002",
+    legalReference: "Ley 100 de 1993",
+    sortOrder: 351
+  },
+  {
+    countryCode: "CO",
+    itemKey: "work_injury_co",
+    itemNameEn: "Work Injury Insurance (ARL)",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669 (ARL)",
+    category: "work_injury",
+    rateEmployer: "0.00522",
+    rateEmployee: "0.0",
+    capType: "salary_multiple",
+    capBase: "35587500",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u6839\u636E\u98CE\u9669\u7B49\u7EA7\u4ECE0.522%\u52306.96%\u4E0D\u7B49\uFF0C\u6B64\u5904\u4F7F\u7528\u6700\u4F4E\u8D39\u7387\u3002",
+    legalReference: "Decreto 1295 de 1994",
+    sortOrder: 352
+  },
+  {
+    countryCode: "CO",
+    itemKey: "parafiscales_caja_co",
+    itemNameEn: "Family Compensation Fund",
+    itemNameZh: "\u5BB6\u5EAD\u798F\u5229\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.04",
+    rateEmployee: "0.0",
+    capType: "salary_multiple",
+    capBase: "35587500",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u3002",
+    legalReference: "Ley 21 de 1982",
+    sortOrder: 353
+  },
+  {
+    countryCode: "CO",
+    itemKey: "parafiscales_icbf_co",
+    itemNameEn: "ICBF Contribution",
+    itemNameZh: "\u54E5\u4F26\u6BD4\u4E9A\u5BB6\u5EAD\u798F\u5229\u534F\u4F1A\u7F34\u6B3E",
+    category: "other_mandatory",
+    rateEmployer: "0.03",
+    rateEmployee: "0.0",
+    capType: "salary_multiple",
+    capBase: "35587500",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u3002\u5BF9\u4E8E\u6536\u5165\u4F4E\u4E8E10\u500D\u6700\u4F4E\u5DE5\u8D44\u7684\u5458\u5DE5\uFF0C\u96C7\u4E3B\u514D\u7F34\u6B64\u9879\u3002",
+    legalReference: "Ley 27 de 1974",
+    sortOrder: 354
+  },
+  {
+    countryCode: "CO",
+    itemKey: "parafiscales_sena_co",
+    itemNameEn: "SENA Contribution",
+    itemNameZh: "\u56FD\u5BB6\u5B66\u5F92\u670D\u52A1\u5C40\u7F34\u6B3E",
+    category: "other_mandatory",
+    rateEmployer: "0.02",
+    rateEmployee: "0.0",
+    capType: "salary_multiple",
+    capBase: "35587500",
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u7F34\u8D39\u3002\u5BF9\u4E8E\u6536\u5165\u4F4E\u4E8E10\u500D\u6700\u4F4E\u5DE5\u8D44\u7684\u5458\u5DE5\uFF0C\u96C7\u4E3B\u514D\u7F34\u6B64\u9879\u3002",
+    legalReference: "Ley 119 de 1994",
+    sortOrder: 355
+  },
+  // --- Costa Rica (CR) ---
+  // Expat: 在哥斯达黎加，持有有效工作许可的合法受雇外籍员工，与本地员工一样，必须强制性参加社会保障体系（CCSS）。其缴费费率、规则和福利与哥斯达黎加公民完全相同，没有特殊的豁免或优惠政策。
+  {
+    countryCode: "CR",
+    itemKey: "CCSS_SEM",
+    itemNameEn: "Sickness and Maternity Insurance (SEM)",
+    itemNameZh: "\u75BE\u75C5\u548C\u751F\u80B2\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0925",
+    rateEmployee: "0.0550",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "BLP Legal article: Learn about the new contribution rates and payroll deduction priorities in Costa Rica",
+    notes: ""
+  },
+  {
+    countryCode: "CR",
+    itemKey: "CCSS_IVM",
+    itemNameEn: "Disability, Old Age and Death (IVM)",
+    itemNameZh: "\u6B8B\u75BE\u3001\u8001\u5E74\u548C\u6B7B\u4EA1\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.0542",
+    rateEmployee: "0.0417",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "BLP Legal article: Learn about the new contribution rates and payroll deduction priorities in Costa Rica",
+    notes: ""
+  },
+  {
+    countryCode: "CR",
+    itemKey: "Banco_Popular_Employer",
+    itemNameEn: "Employer Contribution to Banco Popular",
+    itemNameZh: "\u96C7\u4E3B\u5BF9\u4EBA\u6C11\u94F6\u884C\u7684\u7F34\u6B3E",
+    category: "other_mandatory",
+    rateEmployer: "0.0025",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "BLP Legal article: Learn about the new contribution rates and payroll deduction priorities in Costa Rica",
+    notes: ""
+  },
+  {
+    countryCode: "CR",
+    itemKey: "Family_Allowances",
+    itemNameEn: "Family Allowances",
+    itemNameZh: "\u5BB6\u5EAD\u6D25\u8D34",
+    category: "other_mandatory",
+    rateEmployer: "0.0500",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "BLP Legal article: Learn about the new contribution rates and payroll deduction priorities in Costa Rica",
+    notes: ""
+  },
+  {
+    countryCode: "CR",
+    itemKey: "IMAS",
+    itemNameEn: "IMAS",
+    itemNameZh: "\u793E\u4F1A\u63F4\u52A9\u673A\u6784",
+    category: "other_mandatory",
+    rateEmployer: "0.0050",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "BLP Legal article: Learn about the new contribution rates and payroll deduction priorities in Costa Rica",
+    notes: ""
+  },
+  {
+    countryCode: "CR",
+    itemKey: "INA",
+    itemNameEn: "INA",
+    itemNameZh: "\u56FD\u5BB6\u5B66\u4E60\u673A\u6784",
+    category: "other_mandatory",
+    rateEmployer: "0.0150",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "BLP Legal article: Learn about the new contribution rates and payroll deduction priorities in Costa Rica",
+    notes: ""
+  },
+  {
+    countryCode: "CR",
+    itemKey: "FCL",
+    itemNameEn: "Labor Capitalization Fund (FCL)",
+    itemNameZh: "\u52B3\u52A8\u8D44\u672C\u5316\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.0150",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "BLP Legal article: Learn about the new contribution rates and payroll deduction priorities in Costa Rica",
+    notes: ""
+  },
+  {
+    countryCode: "CR",
+    itemKey: "Complementary_Pension_Fund",
+    itemNameEn: "Complementary Pension Fund",
+    itemNameZh: "\u8865\u5145\u517B\u8001\u57FA\u91D1",
+    category: "pension",
+    rateEmployer: "0.0200",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "BLP Legal article: Learn about the new contribution rates and payroll deduction priorities in Costa Rica",
+    notes: ""
+  },
+  {
+    countryCode: "CR",
+    itemKey: "Banco_Popular_Employee",
+    itemNameEn: "Banco Popular (employee contribution)",
+    itemNameZh: "\u4EBA\u6C11\u94F6\u884C\uFF08\u96C7\u5458\u7F34\u6B3E\uFF09",
+    category: "other_mandatory",
+    rateEmployer: "0.00",
+    rateEmployee: "0.0100",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "BLP Legal article: Learn about the new contribution rates and payroll deduction priorities in Costa Rica",
+    notes: ""
+  },
+  {
+    countryCode: "CR",
+    itemKey: "INS_Occupational_Risk_Insurance",
+    itemNameEn: "INS (Occupational Risk Insurance)",
+    itemNameZh: "\u56FD\u5BB6\u4FDD\u9669\u534F\u4F1A\uFF08\u804C\u4E1A\u98CE\u9669\u4FDD\u9669\uFF09",
+    category: "work_injury",
+    rateEmployer: "0.0100",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "BLP Legal article: Learn about the new contribution rates and payroll deduction priorities in Costa Rica",
+    notes: ""
+  },
+  // --- Dominican Republic (DO) ---
+  // Expat: 外籍员工必须和本地员工一样强制性参加家庭健康保险 (SFS) 和工伤风险保险 (SRL)。对于养老保险
+  //   (AFP)，外籍员工在缴纳期间与本地员工规定相同。但是，如果外籍员工决定永久离开多米尼加共和国，他们有权根据养老金监管局 (SIPEN)
+  //   的规定，申请一次性退还其个人养老金账户中的全部累积资金。申请人需要证明他们将定居在另一个国家并且不会返回多米尼加共和国居住。此规定不适用于与多米尼加共和国签订了社会保障互惠协议的国家的公民（例如西班牙）。
+  {
+    countryCode: "DO",
+    itemKey: "pension",
+    itemNameEn: "Pension, Disability and Survivorship Insurance",
+    itemNameZh: "\u517B\u8001\u3001\u6B8B\u75BE\u548C\u5E78\u5B58\u8005\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.0710",
+    rateEmployee: "0.0287",
+    capType: "fixed_amount",
+    capBase: "387050.00",
+    effectiveYear: 2025,
+    notes: "Contribution to the AFP (Administradoras de Fondos de Pensiones). Cap base updated as per TSS Resolution 01-2024, effective Feb 2024.",
+    legalReference: "Law 87-01, TSS Resolution 01-2024",
+    sortOrder: 366
+  },
+  {
+    countryCode: "DO",
+    itemKey: "health_insurance",
+    itemNameEn: "Family Health Insurance",
+    itemNameZh: "\u5BB6\u5EAD\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0709",
+    rateEmployee: "0.0304",
+    capType: "fixed_amount",
+    capBase: "193525.00",
+    effectiveYear: 2025,
+    notes: "Contribution to the SFS (Seguro Familiar de Salud). Cap base updated as per TSS Resolution 01-2024, effective Feb 2024.",
+    legalReference: "Law 87-01, TSS Resolution 01-2024",
+    sortOrder: 367
+  },
+  {
+    countryCode: "DO",
+    itemKey: "work_injury",
+    itemNameEn: "Occupational Risk Insurance",
+    itemNameZh: "\u5DE5\u4F24\u98CE\u9669\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.0120",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "77410.00",
+    effectiveYear: 2025,
+    notes: "Contribution to the SRL (Seguro de Riesgos Laborales). The rate is an average and can vary from 0.6% to 1.8% depending on the company's risk category. Cap base updated as per TSS Resolution 01-2024, effective Feb 2024.",
+    legalReference: "Law 87-01, TSS Resolution 01-2024",
+    sortOrder: 368
+  },
+  // --- Ecuador (EC) ---
+  // Expat: 外籍员工和厄瓜多尔公民一样，必须从第一天起加入厄瓜多尔社会保障体系（IESS），并缴纳相同的缴款。没有豁免或特殊费率。
+  {
+    countryCode: "EC",
+    itemKey: "iess_employer_contribution",
+    itemNameEn: "Ecuadorian Social Security Institute (IESS) Contribution",
+    itemNameZh: "\u5384\u74DC\u591A\u5C14\u793E\u4F1A\u4FDD\u969C\u534F\u4F1A (IESS) \u7F34\u6B3E",
+    category: "social_insurance",
+    rateEmployer: "0.1215",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "Ecuadorian Social Security Institute (IESS) regulations",
+    notes: "Covers pensions, health, and occupational risks."
+  },
+  {
+    countryCode: "EC",
+    itemKey: "iess_employee_contribution",
+    itemNameEn: "Ecuadorian Social Security Institute (IESS) Contribution",
+    itemNameZh: "\u5384\u74DC\u591A\u5C14\u793E\u4F1A\u4FDD\u969C\u534F\u4F1A (IESS) \u7F34\u6B3E",
+    category: "social_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.0945",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "Ecuadorian Social Security Institute (IESS) regulations",
+    notes: "Covers pensions, health, and occupational risks."
+  },
+  // --- Guatemala (GT) ---
+  // Expat:
+  //   外籍员工通常与本地员工一样需要缴纳社保。但是，根据《伊比利亚-美洲社会保障多边协议》，来自其他成员国（如西班牙、葡萄牙、巴西、阿根廷、智利等）并已在其本国参保的员工，可能通过提供原籍国的参保证明（Certificate of
+  //   Coverage）来申请豁免在危地马拉的社保缴费。具体豁免资格需根据员工国籍和双边/多边协议细节进行个案确认。
+  {
+    countryCode: "GT",
+    itemKey: "social_security_employer",
+    itemNameEn: "Social Security (IGSS)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 (IGSS)",
+    category: "social_insurance",
+    rateEmployer: "0.1067",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employer contribution to the Guatemalan Social Security Institute.",
+    legalReference: "Acuerdo 1124 del IGSS",
+    sortOrder: 371
+  },
+  {
+    countryCode: "GT",
+    itemKey: "recreation_institute_employer",
+    itemNameEn: "Recreation Institute (IRTRA)",
+    itemNameZh: "\u5A31\u4E50\u534F\u4F1A (IRTRA)",
+    category: "other_mandatory",
+    rateEmployer: "0.01",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employer contribution for worker's recreation.",
+    legalReference: "Decreto 1528 del Congreso",
+    sortOrder: 372
+  },
+  {
+    countryCode: "GT",
+    itemKey: "technical_training_employer",
+    itemNameEn: "Technical Training Institute (INTECAP)",
+    itemNameZh: "\u6280\u672F\u57F9\u8BAD\u534F\u4F1A (INTECAP)",
+    category: "other_mandatory",
+    rateEmployer: "0.01",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employer contribution for technical training and productivity.",
+    legalReference: "Decreto 17-72 del Congreso",
+    sortOrder: 373
+  },
+  {
+    countryCode: "GT",
+    itemKey: "social_security_employee",
+    itemNameEn: "Social Security (IGSS)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 (IGSS)",
+    category: "social_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.0483",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employee contribution to the Guatemalan Social Security Institute.",
+    legalReference: "Acuerdo 1124 del IGSS",
+    sortOrder: 374
+  },
+  // --- Honduras (HN) ---
+  // Expat: 外籍员工与洪都拉斯国民承担相同的社保缴费义务，没有特殊的豁免或优惠费率。
+  {
+    countryCode: "HN",
+    itemKey: "social_security_health",
+    itemNameEn: "Sickness and Maternity",
+    itemNameZh: "\u75BE\u75C5\u4E0E\u751F\u80B2\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.05",
+    rateEmployee: "0.025",
+    capType: "fixed_amount",
+    capBase: "11903.13",
+    effectiveYear: 2025,
+    notes: "\u6839\u636E2024\u5E74\u6279\u51C6\u5E76\u4E8E2025\u5E74\u751F\u6548\u7684\u300A\u793E\u4F1A\u4FDD\u62A4\u4F53\u7CFB\u6CD5\u300B\uFF0C\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u5DF2\u66F4\u65B0\u3002",
+    legalReference: "Ley del Sistema de Protecci\xF3n Social (Decreto 25-2024), IHSS Comunicado Enero 2025",
+    sortOrder: 375
+  },
+  {
+    countryCode: "HN",
+    itemKey: "social_security_pension",
+    itemNameEn: "Disability, Old-age and Death",
+    itemNameZh: "\u4F24\u6B8B\u3001\u517B\u8001\u53CA\u6B7B\u4EA1\u4FDD\u9669",
+    category: "pension",
+    rateEmployer: "0.035",
+    rateEmployee: "0.01",
+    capType: "fixed_amount",
+    capBase: "11903.13",
+    effectiveYear: 2025,
+    notes: "\u6839\u636E2024\u5E74\u6279\u51C6\u5E76\u4E8E2025\u5E74\u751F\u6548\u7684\u300A\u793E\u4F1A\u4FDD\u62A4\u4F53\u7CFB\u6CD5\u300B\uFF0C\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u5DF2\u66F4\u65B0\u3002",
+    legalReference: "Ley del Sistema de Protecci\xF3n Social (Decreto 25-2024), IHSS Comunicado Enero 2025",
+    sortOrder: 376
+  },
+  {
+    countryCode: "HN",
+    itemKey: "occupational_risk",
+    itemNameEn: "Occupational Risk Insurance",
+    itemNameZh: "\u804C\u4E1A\u98CE\u9669\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.01",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u56E0\u884C\u4E1A\u548C\u98CE\u9669\u7B49\u7EA7\u800C\u5F02\uFF0C\u6B64\u5904\u4E3A\u5E73\u5747\u8D39\u7387\u3002",
+    legalReference: "Ley del Seguro Social",
+    sortOrder: 377
+  },
+  {
+    countryCode: "HN",
+    itemKey: "training_fund",
+    itemNameEn: "Professional Training Institute (INFOP)",
+    itemNameZh: "\u56FD\u5BB6\u804C\u4E1A\u57F9\u8BAD\u4E2D\u5FC3\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.01",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5BF9\u56FD\u5BB6\u804C\u4E1A\u57F9\u8BAD\u4E2D\u5FC3\u7684\u5F3A\u5236\u6027\u7F34\u6B3E\u3002",
+    legalReference: "Ley del Instituto Nacional de Formaci\xF3n Profesional (INFOP)",
+    sortOrder: 378
+  },
+  // --- Jamaica (JM) ---
+  // Expat: 外籍员工在永久离开牙买加时，可申请退还其缴纳的国民住房信托（NHT）款项。其他强制性缴款（NIS、教育税）没有特殊规定。
+  {
+    countryCode: "JM",
+    itemKey: "nis",
+    itemNameEn: "National Insurance Scheme",
+    itemNameZh: "\u56FD\u5BB6\u4FDD\u9669\u8BA1\u5212",
+    category: "pension",
+    rateEmployer: "0.03",
+    rateEmployee: "0.03",
+    capType: "salary_multiple",
+    capBase: "416666.67",
+    effectiveYear: 2025,
+    notes: "\u5C01\u9876\u57FA\u6570\u4E3A\u6BCF\u5E745,000,000\u7259\u4E70\u52A0\u5143\uFF0C\u5373\u6BCF\u6708\u7EA6416,666.67\u7259\u4E70\u52A0\u5143\u3002",
+    legalReference: "https://taxsummaries.pwc.com/jamaica/individual/other-taxes",
+    sortOrder: 379
+  },
+  {
+    countryCode: "JM",
+    itemKey: "nht",
+    itemNameEn: "National Housing Trust",
+    itemNameZh: "\u56FD\u6C11\u4F4F\u623F\u4FE1\u6258",
+    category: "housing_fund",
+    rateEmployer: "0.03",
+    rateEmployee: "0.02",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6240\u6709\u5E94\u7A0E\u62A5\u916C\u3002\u5916\u7C4D\u5458\u5DE5\u79BB\u5883\u65F6\u53EF\u7533\u8BF7\u9000\u6B3E\u3002",
+    legalReference: "https://taxsummaries.pwc.com/jamaica/individual/other-taxes",
+    sortOrder: 380
+  },
+  {
+    countryCode: "JM",
+    itemKey: "education_tax",
+    itemNameEn: "Education Tax",
+    itemNameZh: "\u6559\u80B2\u7A0E",
+    category: "other_mandatory",
+    rateEmployer: "0.035",
+    rateEmployee: "0.0225",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5728\u6263\u9664NIS\u548C\u6279\u51C6\u7684\u517B\u8001\u91D1\u8BA1\u5212\u7F34\u6B3E\u540E\u8BA1\u7B97\u3002",
+    legalReference: "https://taxsummaries.pwc.com/jamaica/individual/other-taxes",
+    sortOrder: 381
+  },
+  {
+    countryCode: "JM",
+    itemKey: "heart",
+    itemNameEn: "Human Employment and Resource Training (HEART) Trust",
+    itemNameZh: "\u4EBA\u529B\u96C7\u4F63\u4E0E\u8D44\u6E90\u57F9\u8BAD\u4FE1\u6258",
+    category: "other_mandatory",
+    rateEmployer: "0.03",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u4EC5\u7531\u96C7\u4E3B\u7F34\u7EB3\u3002",
+    legalReference: "https://taxsummaries.pwc.com/jamaica/individual/other-taxes",
+    sortOrder: 382
+  },
+  // --- Mexico (MX) ---
+  // Expat: En general, los expatriados con una visa de trabajo en México están sujetos a las mismas reglas de seguridad
+  //   social (IMSS) que los ciudadanos mexicanos. No existen exenciones generales ni tasas diferentes para ellos. Sin
+  //   embargo, bajo ciertos tratados de seguridad social entre México y otros países (ej. España, Canadá), un empleado
+  //   enviado temporalmente a México puede permanecer bajo el sistema de seguridad social de su país de origen y estar
+  //   exento de las contribuciones al IMSS, siempre que se presente un Certificado de Cobertura válido.
+  {
+    countryCode: "MX",
+    itemKey: "imss_fixed_fee",
+    itemNameEn: "Sickness and Maternity - Fixed Fee",
+    itemNameZh: "\u75BE\u75C5\u4E0E\u751F\u80B2\u4FDD\u9669 - \u56FA\u5B9A\u8D39\u7528",
+    category: "health_insurance",
+    rateEmployer: "0",
+    rateEmployee: "0",
+    capType: "fixed_amount",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Contribuci\xF3n de monto fijo por empleado, equivalente al 15% del valor UMA mensual. Para 2025: 3439.46 * 0.15 = 515.92 MXN. Esta cuota es pagada \xEDntegramente por el empleador.",
+    legalReference: "Ley del Seguro Social, Art. 106, Fracc. I",
+    sortOrder: 383
+  },
+  {
+    countryCode: "MX",
+    itemKey: "imss_sickness_maternity_additional",
+    itemNameEn: "Sickness and Maternity - Additional Fee",
+    itemNameZh: "\u75BE\u75C5\u4E0E\u751F\u80B2\u4FDD\u9669 - \u989D\u5916\u8D39\u7528",
+    category: "health_insurance",
+    rateEmployer: "0.011",
+    rateEmployee: "0.004",
+    capType: "salary_multiple",
+    capBase: "85986.50",
+    effectiveYear: 2025,
+    notes: "Se aplica sobre la diferencia entre el Salario Base de Cotizaci\xF3n (SBC) y 3 veces el valor UMA. El tope del SBC es 25 veces el UMA diario (113.14 * 25 * 30.4 = 85986.50).",
+    legalReference: "Ley del Seguro Social, Art. 106, Fracc. II",
+    sortOrder: 384
+  },
+  {
+    countryCode: "MX",
+    itemKey: "imss_disability_life",
+    itemNameEn: "Disability and Life Insurance",
+    itemNameZh: "\u4F24\u6B8B\u4E0E\u4EBA\u5BFF\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.0175",
+    rateEmployee: "0.00625",
+    capType: "salary_multiple",
+    capBase: "85986.50",
+    effectiveYear: 2025,
+    notes: "Tope de 25 UMA.",
+    legalReference: "Ley del Seguro Social, Art. 147",
+    sortOrder: 385
+  },
+  {
+    countryCode: "MX",
+    itemKey: "imss_retirement_oldage_advanced",
+    itemNameEn: "Retirement, Severance and Old Age (RCV) - Retirement",
+    itemNameZh: "\u9000\u4F11\u3001\u5931\u4E1A\u53CA\u9AD8\u9F84\u4FDD\u9669 (RCV) - \u9000\u4F11\u91D1",
+    category: "pension",
+    rateEmployer: "0.02",
+    rateEmployee: "0",
+    capType: "salary_multiple",
+    capBase: "85986.50",
+    effectiveYear: 2025,
+    notes: "Tope de 25 UMA. Pagado \xEDntegramente por el empleador.",
+    legalReference: "Ley del Seguro Social, Art. 168, Fracc. I",
+    sortOrder: 386
+  },
+  {
+    countryCode: "MX",
+    itemKey: "imss_retirement_oldage_advanced_main",
+    itemNameEn: "Retirement, Severance and Old Age (RCV) - Main",
+    itemNameZh: "\u9000\u4F11\u3001\u5931\u4E1A\u53CA\u9AD8\u9F84\u4FDD\u9669 (RCV) - \u4E3B\u4F53\u90E8\u5206",
+    category: "pension",
+    rateEmployer: "0.04276",
+    rateEmployee: "0.01125",
+    capType: "salary_multiple",
+    capBase: "85986.50",
+    effectiveYear: 2025,
+    notes: "La cuota patronal es progresiva y aumenta anualmente desde 2023 hasta 2030. El valor de 4.276% corresponde a 2025. Tope de 25 UMA.",
+    legalReference: "Ley del Seguro Social, Art. 168, Fracc. II",
+    sortOrder: 387
+  },
+  {
+    countryCode: "MX",
+    itemKey: "imss_nursery_social_benefits",
+    itemNameEn: "Nursery and Social Benefits",
+    itemNameZh: "\u6258\u513F\u6240\u4E0E\u793E\u4F1A\u798F\u5229",
+    category: "other_mandatory",
+    rateEmployer: "0.01",
+    rateEmployee: "0",
+    capType: "salary_multiple",
+    capBase: "85986.50",
+    effectiveYear: 2025,
+    notes: "Tope de 25 UMA. Pagado \xEDntegramente por el empleador.",
+    legalReference: "Ley del Seguro Social, Art. 211",
+    sortOrder: 388
+  },
+  {
+    countryCode: "MX",
+    itemKey: "imss_work_risk",
+    itemNameEn: "Occupational Risk Insurance",
+    itemNameZh: "\u5DE5\u4F24\u98CE\u9669\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.005",
+    rateEmployee: "0",
+    capType: "salary_multiple",
+    capBase: "85986.50",
+    effectiveYear: 2025,
+    notes: "La tasa var\xEDa seg\xFAn la clase de riesgo de la empresa (Clase I a V, desde 0.5% hasta 7.58875%). La tasa inicial para nuevas empresas es la media de su actividad. 0.5% es la tasa m\xEDnima para la Clase I. Pagado \xEDntegramente por el empleador. Tope de 25 UMA.",
+    legalReference: "Ley del Seguro Social, Art. 73, 74",
+    sortOrder: 389
+  },
+  {
+    countryCode: "MX",
+    itemKey: "infonavit",
+    itemNameEn: "Housing Fund (INFONAVIT)",
+    itemNameZh: "\u4F4F\u623F\u57FA\u91D1 (INFONAVIT)",
+    category: "housing_fund",
+    rateEmployer: "0.05",
+    rateEmployee: "0",
+    capType: "salary_multiple",
+    capBase: "85986.50",
+    effectiveYear: 2025,
+    notes: "Aportaci\xF3n para la vivienda. Pagado \xEDntegramente por el empleador. Tope de 25 UMA.",
+    legalReference: "Ley del INFONAVIT, Art. 29, Fracc. II",
+    sortOrder: 390
+  },
+  // --- Nicaragua (NI) ---
+  // Expat: 外籍员工与本地员工适用相同的社保规定，没有特殊的豁免或优惠费率。
+  {
+    countryCode: "NI",
+    itemKey: "nicaragua_social_security_employee",
+    itemNameEn: "Social Security (Employee)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\uFF08\u96C7\u5458\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.07",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u603B\u7F34\u8D39\u7387\uFF0C\u6DB5\u76D6\u517B\u8001\u3001\u4F24\u6B8B\u3001\u5065\u5EB7\u7B49\u6240\u6709\u5F3A\u5236\u6027\u793E\u4F1A\u4FDD\u9669\u9879\u76EE\u3002",
+    legalReference: "PwC Nicaragua Tax Summary 2026",
+    sortOrder: 391
+  },
+  {
+    countryCode: "NI",
+    itemKey: "nicaragua_social_security_employer_less_50",
+    itemNameEn: "Social Security (Employer, <=50 employees)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\uFF08\u96C7\u4E3B\uFF0C\u226450\u540D\u96C7\u5458\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.215",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u96C7\u5458\u6570\u5C11\u4E8E\u6216\u7B49\u4E8E50\u4EBA\u7684\u96C7\u4E3B\u3002\u603B\u7F34\u8D39\u7387\uFF0C\u6DB5\u76D6\u517B\u8001\u3001\u4F24\u6B8B\u3001\u5065\u5EB7\u3001\u5DE5\u4F24\u3001\u6218\u4E89\u53D7\u5BB3\u8005\u57FA\u91D1\u7B49\u6240\u6709\u5F3A\u5236\u6027\u793E\u4F1A\u4FDD\u9669\u9879\u76EE\u3002",
+    legalReference: "PwC Nicaragua Tax Summary 2026",
+    sortOrder: 392
+  },
+  {
+    countryCode: "NI",
+    itemKey: "nicaragua_social_security_employer_more_50",
+    itemNameEn: "Social Security (Employer, >50 employees)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669\uFF08\u96C7\u4E3B\uFF0C>50\u540D\u96C7\u5458\uFF09",
+    category: "social_insurance",
+    rateEmployer: "0.225",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u96C7\u5458\u6570\u8D85\u8FC750\u4EBA\u7684\u96C7\u4E3B\u3002\u603B\u7F34\u8D39\u7387\uFF0C\u6DB5\u76D6\u517B\u8001\u3001\u4F24\u6B8B\u3001\u5065\u5EB7\u3001\u5DE5\u4F24\u3001\u6218\u4E89\u53D7\u5BB3\u8005\u57FA\u91D1\u7B49\u6240\u6709\u5F3A\u5236\u6027\u793E\u4F1A\u4FDD\u9669\u9879\u76EE\u3002",
+    legalReference: "PwC Nicaragua Tax Summary 2026",
+    sortOrder: 393
+  },
+  {
+    countryCode: "NI",
+    itemKey: "nicaragua_training_fund_inatec",
+    itemNameEn: "National Technological Institute (INATEC)",
+    itemNameZh: "\u56FD\u5BB6\u6280\u672F\u57F9\u8BAD\u5C40\u57FA\u91D1 (INATEC)",
+    category: "other_mandatory",
+    rateEmployer: "0.02",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6240\u6709\u96C7\u4E3B\uFF0C\u72EC\u7ACB\u4E8E\u6838\u5FC3\u793E\u4FDD\u7F34\u8D39\u3002",
+    legalReference: "Nicaraguan Labor Code",
+    sortOrder: 394
+  },
+  // --- Panama (PA) ---
+  // Expat: 外籍员工与巴拿马公民承担相同的社会保险和教育保险缴费义务，没有特殊豁免或优惠费率。
+  {
+    countryCode: "PA",
+    itemKey: "social_insurance_2025",
+    itemNameEn: "Social Security",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.1325",
+    rateEmployee: "0.0975",
+    capType: "salary_multiple",
+    capBase: "2653.00",
+    effectiveYear: 2025,
+    notes: "\u6DB5\u76D6\u75BE\u75C5\u3001\u751F\u80B2\u3001\u4F24\u6B8B\u3001\u517B\u8001\u548C\u6B7B\u4EA1\u7B49\u7EFC\u5408\u98CE\u9669\u3002\u96C7\u4E3B\u8D39\u7387\u81EA2025\u5E744\u67081\u65E5\u8D77\u6839\u636E2025\u5E74\u7B2C462\u53F7\u6CD5\u6848\u8C03\u6574\u4E3A13.25%\u3002\u6708\u5EA6\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A2653.00\u7F8E\u5143/\u5DF4\u6CE2\u4E9A\u3002",
+    legalReference: "Law 51 of 2005, Law 462 of 2025",
+    sortOrder: 395
+  },
+  {
+    countryCode: "PA",
+    itemKey: "educational_insurance_2025",
+    itemNameEn: "Educational Insurance",
+    itemNameZh: "\u6559\u80B2\u4FDD\u9669",
+    category: "other_mandatory",
+    rateEmployer: "0.015",
+    rateEmployee: "0.0125",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u7528\u4E8E\u8D44\u52A9\u6559\u80B2\u9879\u76EE\u548C\u5956\u5B66\u91D1\u3002\u65E0\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u3002",
+    legalReference: "Law 13 of 1986",
+    sortOrder: 396
+  },
+  // --- Peru (PE) ---
+  // Expat: 外籍员工（Expatriates）在秘鲁工作，通常必须和本地员工一样，强制性参加秘鲁的社会保障体系，包括养老金（ONP或AFP）和健康保险（EsSalud）。不存在针对外籍员工的普遍性豁免或特殊优惠费率。其缴费规则与秘鲁公民相同。
+  {
+    countryCode: "PE",
+    itemKey: "pension_employee",
+    itemNameEn: "Pension",
+    itemNameZh: "\u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.00",
+    rateEmployee: "0.13",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employee contribution to either the National Pension System (ONP) at a fixed 13% rate, or the Private Pension System (AFP) where the rate is approx. 13% (breakdown: ~10% for retirement account + variable commission + insurance premium). No maximum cap.",
+    legalReference: "Decreto Ley N\xB0 19990, Ley N\xB0 29903",
+    sortOrder: 397
+  },
+  {
+    countryCode: "PE",
+    itemKey: "health_insurance_employer",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.09",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employer contribution to the Public Social Insurance in Health (EsSalud). There is no maximum cap, but the contribution is calculated on a minimum base of the Minimum Vital Remuneration (RMV), which is S/ 1,130 per month for 2025.",
+    legalReference: "Ley N\xB0 26790",
+    sortOrder: 398
+  },
+  // --- Puerto Rico (PR) ---
+  // Expat: 外籍员工通常需缴纳美国联邦社保（Social Security & Medicare）和波多黎各本地强制保险（失业、残疾等），除非根据美国与其他国家签订的社会保障总协议（Totalization
+  //   Agreement）获得豁免。豁免情况取决于国籍和在美/波多黎各的居留时间。
+  {
+    countryCode: "PR",
+    itemKey: "social_security_oasdi",
+    itemNameEn: "Social Security (OASDI)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\u7A0E (OASDI)",
+    category: "pension",
+    rateEmployer: "0.062",
+    rateEmployee: "0.062",
+    capType: "fixed_amount",
+    capBase: "184500.0",
+    effectiveYear: 2025,
+    notes: "Puerto Rico is covered under the US social security system. The cap is the annual maximum taxable earnings.",
+    legalReference: "US Social Security Administration (SSA)",
+    sortOrder: 399
+  },
+  {
+    countryCode: "PR",
+    itemKey: "medicare_hi",
+    itemNameEn: "Medicare (HI)",
+    itemNameZh: "\u533B\u7597\u4FDD\u9669 (HI)",
+    category: "health_insurance",
+    rateEmployer: "0.0145",
+    rateEmployee: "0.0145",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Puerto Rico is covered under the US social security system. There is no wage base limit for Medicare contributions.",
+    legalReference: "US Social Security Administration (SSA)",
+    sortOrder: 400
+  },
+  {
+    countryCode: "PR",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.01",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "7000.0",
+    effectiveYear: 2025,
+    notes: "Employer rate for new employers is 1.0% on the first $7,000 of annual wages. Rate for experienced employers varies based on their experience rating.",
+    legalReference: "Puerto Rico Department of Labor and Human Resources",
+    sortOrder: 401
+  },
+  {
+    countryCode: "PR",
+    itemKey: "temporary_disability_insurance",
+    itemNameEn: "Temporary Non-Occupational Disability Insurance (SINOT)",
+    itemNameZh: "\u4E34\u65F6\u975E\u804C\u4E1A\u6B8B\u75BE\u4FDD\u9669 (SINOT)",
+    category: "health_insurance",
+    rateEmployer: "0.003",
+    rateEmployee: "0.003",
+    capType: "fixed_amount",
+    capBase: "9000.0",
+    effectiveYear: 2025,
+    notes: "Contribution is on the first $9,000 of annual wages.",
+    legalReference: "Puerto Rico Disability Benefits Law",
+    sortOrder: 402
+  },
+  {
+    countryCode: "PR",
+    itemKey: "chauffeurs_insurance",
+    itemNameEn: "Chauffeurs' and Other Employees' Insurance",
+    itemNameZh: "\u53F8\u673A\u53CA\u5176\u4ED6\u96C7\u5458\u793E\u4F1A\u4FDD\u969C",
+    category: "social_insurance",
+    rateEmployer: "0.30",
+    rateEmployee: "0.50",
+    capType: "fixed_amount",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Fixed amount contribution per week. Employer pays $0.30/week, Employee pays $0.50/week. Applies to all employees, not just chauffeurs.",
+    legalReference: "Act No. 428 of May 15, 1950",
+    sortOrder: 403
+  },
+  // --- Paraguay (PY) ---
+  // Expat: Foreign workers residing in Paraguay for more than 120 days are subject to the same social security (IPS)
+  //   rules as local employees. There are no general exemptions or different rates for expatriates.
+  {
+    countryCode: "PY",
+    itemKey: "ips_social_security",
+    itemNameEn: "Social Security (IPS)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C (IPS)",
+    category: "social_insurance",
+    rateEmployer: "0.165",
+    rateEmployee: "0.09",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: "Every wage item, in cash or goods, except the annual mandatory bonus and family allowance.",
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "Instituto de Previsi\xF3n Social (IPS)",
+    notes: "Rates for commercial entities. Employer contribution covers healthcare, retirement, and injury benefits. No explicit cap found in research."
+  },
+  // --- El Salvador (SV) ---
+  // Expat: 外籍员工与萨尔瓦多公民适用相同的社会保障和养老金缴费规定，没有豁免或特殊费率。
+  {
+    countryCode: "SV",
+    itemKey: "social_security_isss",
+    itemNameEn: "Social Security (ISSS)",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 (ISSS)",
+    category: "social_insurance",
+    rateEmployer: "0.075",
+    rateEmployee: "0.03",
+    capType: "fixed_amount",
+    capBase: "1000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u85AA\u4E0D\u8D85\u8FC71000\u7F8E\u5143\u7684\u5458\u5DE5\u3002\u5BF9\u4E8E\u6708\u85AA\u8D85\u8FC71000\u7F8E\u5143\u7684\u5458\u5DE5\uFF0C\u7F34\u6B3E\u4E3A\u56FA\u5B9A\u91D1\u989D\uFF1A\u96C7\u4E3B75\u7F8E\u5143\uFF0C\u96C7\u545830\u7F8E\u5143\u3002",
+    legalReference: "Reglamento para la Aplicaci\xF3n del R\xE9gimen del Seguro Social",
+    sortOrder: 405
+  },
+  {
+    countryCode: "SV",
+    itemKey: "pension_fund_afp",
+    itemNameEn: "Pension Fund (AFP)",
+    itemNameZh: "\u517B\u8001\u57FA\u91D1 (AFP)",
+    category: "pension",
+    rateEmployer: "0.0875",
+    rateEmployee: "0.0725",
+    capType: "salary_multiple",
+    capBase: "7593.48",
+    effectiveYear: 2025,
+    notes: "\u7531\u79C1\u4EBA\u517B\u8001\u57FA\u91D1\u7BA1\u7406\u4EBA (AFP) \u7BA1\u7406\u30022023\u5E74\u6CD5\u5F8B\u6539\u9769\u5C06\u96C7\u4E3B\u8D39\u7387\u4ECE7.75%\u63D0\u9AD8\u52308.75%\u3002\u5C01\u9876\u57FA\u6570\u6839\u636E2025\u5E741\u67081\u65E5\u8D77\u751F\u6548\u7684\u6700\u9AD8\u7F34\u8D39\u5DE5\u8D44\uFF08Salario M\xE1ximo Cotizable\uFF09\u8BBE\u5B9A\u3002",
+    legalReference: "Ley del Sistema de Ahorro para Pensiones",
+    sortOrder: 406
+  },
+  {
+    countryCode: "SV",
+    itemKey: "professional_training_institute_insaforp",
+    itemNameEn: "Professional Training Institute (INSAFORP)",
+    itemNameZh: "\u4E13\u4E1A\u57F9\u8BAD\u534F\u4F1A (INSAFORP)",
+    category: "other_mandatory",
+    rateEmployer: "0.01",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u62E5\u670910\u540D\u6216\u4EE5\u4E0A\u5458\u5DE5\u7684\u516C\u53F8\u3002\u7F34\u8D39\u57FA\u6570\u6CA1\u6709\u5C01\u9876\u3002",
+    legalReference: "Ley del Instituto Salvadore\xF1o de Formaci\xF3n Profesional",
+    sortOrder: 407
+  },
+  // --- Trinidad and Tobago (TT) ---
+  // Expat: 在特立尼达和多巴哥工作的外籍员工通常需要全额缴纳国家保险制度（NIS）的款项。然而，如果其原籍国与特立尼达和多巴哥之间存在双边社会保障协议，可能适用特殊规定或豁免。在此次审查中，未发现针对所有外籍员工的通用豁免或特殊费率。
+  {
+    countryCode: "TT",
+    itemKey: "nis_contribution",
+    itemNameEn: "National Insurance System (NIS)",
+    itemNameZh: "\u56FD\u5BB6\u4FDD\u9669\u5236\u5EA6",
+    category: "social_insurance",
+    rateEmployer: "0.088",
+    rateEmployee: "0.044",
+    capType: "fixed_amount",
+    capBase: "13600",
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "National Insurance Act, Finance Bill 2025",
+    notes: "Rate for 2025 is 13.2% total (8.8% employer, 4.4% employee). A separate Health Surcharge also applies."
+  },
+  {
+    countryCode: "TT",
+    itemKey: "health_surcharge",
+    itemNameEn: "Health Surcharge",
+    itemNameZh: "\u5065\u5EB7\u9644\u52A0\u8D39",
+    category: "health_insurance",
+    rateEmployer: "0",
+    rateEmployee: "0",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
+    effectiveYear: 2025,
+    legalReference: "Health Surcharge Act",
+    notes: "Fixed amount, not a percentage. Max TTD 8.25/week for income > TTD 470/month. To be handled as a fixed deduction in payroll logic."
+  },
+  // --- United States (US) ---
+  // Expat: 外籍员工的社保缴纳义务根据其国籍和签证类型而定。美国与多个国家签订了社会保障协定（Totalization
+  //   Agreements），以避免双重征税。来自这些协定国家且在美国临时工作的员工，如果继续在其母国缴纳社保，通常可以豁免美国的社会保障税（FICA）。此外，持有特定非移民签证（如F-1, J-1, M-1,
+  //   Q-1）的非居民外籍人士（Nonresident Alien）通常也豁免FICA税。雇主需核实员工的具体情况以确定是否适用豁免。
   {
     countryCode: "US",
     itemKey: "social_security_us",
     itemNameEn: "Social Security (OASDI)",
-    itemNameZh: "\u793E\u4F1A\u5B89\u5168\u7A0E",
-    category: "social_insurance",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\u7A0E (OASDI)",
+    category: "pension",
     rateEmployer: "0.062",
     rateEmployee: "0.062",
     capType: "fixed_amount",
-    capBase: "176100",
-    // 2025 wage base projection
+    capBase: "14675",
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "2025\u5E74\u5EA6\u5C01\u9876\u57FA\u6570\u4E3A$176,100\uFF0C\u6708\u5EA6\u5C01\u9876\u57FA\u6570\u4E3A$14,675",
+    legalReference: "Social Security Administration",
+    sortOrder: 410
   },
   {
     countryCode: "US",
@@ -23836,432 +32483,358 @@ var socialInsuranceRules = [
     rateEmployer: "0.0145",
     rateEmployee: "0.0145",
     capType: "none",
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 2
+    notes: "\u6CA1\u6709\u5DE5\u8D44\u57FA\u6570\u5C01\u9876\u9650\u5236\u3002",
+    legalReference: "Internal Revenue Service",
+    sortOrder: 411
   },
   {
     countryCode: "US",
     itemKey: "futa",
-    itemNameEn: "Federal Unemployment (FUTA)",
+    itemNameEn: "Federal Unemployment Tax Act (FUTA)",
     itemNameZh: "\u8054\u90A6\u5931\u4E1A\u7A0E",
     category: "unemployment",
     rateEmployer: "0.006",
-    // Net rate after credit
-    rateEmployee: "0",
+    rateEmployee: "0.0",
     capType: "fixed_amount",
-    capBase: "7000",
+    capBase: "583.33",
     effectiveYear: 2025,
-    sortOrder: 3
+    notes: "\u8D39\u7387\u4E3A6.0%\uFF0C\u4F46\u5927\u591A\u6570\u96C7\u4E3B\u53EF\u83B7\u5F97\u9AD8\u8FBE5.4%\u7684\u7A0E\u6536\u62B5\u514D\uFF0C\u5B9E\u9645\u8D39\u7387\u4E3A0.6%\u3002\u5C01\u9876\u57FA\u6570\u4E3A\u6BCF\u4F4D\u5458\u5DE5\u5DE5\u8D44\u7684\u524D$7,000\u3002",
+    legalReference: "Internal Revenue Service",
+    sortOrder: 412
   },
-  // 16. Canada (CA) - Ontario
+  // --- Uruguay (UY) ---
+  // Expat: 外籍员工与乌拉圭本地员工承担相同的社保缴费义务。但是，根据乌拉圭与部分国家（如美国、芬兰等）签订的双边社保协议，在乌拉圭临时工作的外籍员工如果继续在其母国缴纳社保，可能得以豁免在乌拉圭的缴费义务。具体豁免情况需根据相应的社保协议确定。
   {
-    countryCode: "CA",
-    regionCode: "ON",
-    itemKey: "cpp",
-    itemNameEn: "Canada Pension Plan (CPP)",
-    itemNameZh: "\u52A0\u62FF\u5927\u517B\u8001\u91D1",
+    countryCode: "UY",
+    itemKey: "retirement_pension",
+    itemNameEn: "Retirement Pension",
+    itemNameZh: "\u9000\u4F11\u517B\u8001\u91D1",
     category: "pension",
-    rateEmployer: "0.0595",
-    rateEmployee: "0.0595",
+    rateEmployer: "0.075",
+    rateEmployee: "0.15",
     capType: "fixed_amount",
-    capBase: "68500",
-    // YMPE
+    capBase: "288836.00",
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "The contribution is mandatory up to a monthly salary of UYU 288,836. For income exceeding this amount, the contribution is voluntary.",
+    legalReference: "Ley N\xB0 16.713, Art. 7 & 8, updated by Ley N\xB0 20.130",
+    sortOrder: 413
   },
   {
-    countryCode: "CA",
-    regionCode: "ON",
-    itemKey: "ei",
-    itemNameEn: "Employment Insurance (EI)",
-    itemNameZh: "\u5C31\u4E1A\u4FDD\u9669",
-    category: "unemployment",
-    rateEmployer: "0.0228",
-    // 1.4x employee rate
-    rateEmployee: "0.0163",
-    capType: "fixed_amount",
-    capBase: "63200",
-    effectiveYear: 2025,
-    sortOrder: 2
-  },
-  // 17. Mexico (MX)
-  {
-    countryCode: "MX",
-    itemKey: "imss",
-    itemNameEn: "Social Security (IMSS)",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.25",
-    // Estimate ~20-30%
-    rateEmployee: "0.027",
-    capType: "salary_multiple",
-    capMultiplier: "25",
-    // 25x UMA
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 18. Brazil (BR)
-  {
-    countryCode: "BR",
-    itemKey: "inss",
-    itemNameEn: "Social Security (INSS)",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.20",
-    // Standard 20% on payroll
-    rateEmployee: "0.14",
-    // Progressive 7.5-14%
-    capType: "fixed_amount",
-    capBase: "7786",
-    // BRL (Monthly ceiling)
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  {
-    countryCode: "BR",
-    itemKey: "fgts",
-    itemNameEn: "Guarantee Fund (FGTS)",
-    itemNameZh: "\u5DE5\u9F84\u4FDD\u969C\u57FA\u91D1",
-    category: "unemployment",
-    rateEmployer: "0.08",
-    rateEmployee: "0",
-    capType: "none",
-    effectiveYear: 2025,
-    sortOrder: 2
-  },
-  // 19. Colombia (CO)
-  {
-    countryCode: "CO",
-    itemKey: "health_co",
-    itemNameEn: "Health",
-    itemNameZh: "\u5065\u5EB7\u4FDD\u9669",
+    countryCode: "UY",
+    itemKey: "health_insurance_employer",
+    itemNameEn: "Health Insurance (Employer)",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669\uFF08\u96C7\u4E3B\uFF09",
     category: "health_insurance",
-    rateEmployer: "0.085",
-    rateEmployee: "0.04",
+    rateEmployer: "0.05",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "Employer contribution to the National Health Fund (FONASA).",
+    legalReference: "Ley N\xB0 18.211",
+    sortOrder: 414
   },
   {
-    countryCode: "CO",
-    itemKey: "pension_co",
+    countryCode: "UY",
+    itemKey: "health_insurance_employee",
+    itemNameEn: "Health Insurance (Employee)",
+    itemNameZh: "\u5065\u5EB7\u4FDD\u9669\uFF08\u96C7\u5458\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.00",
+    rateEmployee: "0.05",
+    capType: "bracket",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Employee contribution to FONASA. Rates vary from 3% to 8% based on income level (relative to BPC) and family composition (with/without dependents).",
+    legalReference: "Ley N\xB0 18.211",
+    sortOrder: 415
+  },
+  {
+    countryCode: "UY",
+    itemKey: "labour_restructuring_fund",
+    itemNameEn: "Labor Restructuring Fund",
+    itemNameZh: "\u52B3\u5DE5\u91CD\u7EC4\u57FA\u91D1",
+    category: "unemployment",
+    rateEmployer: "0.001",
+    rateEmployee: "0.001",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Fondo de Reconversi\xF3n Laboral (FRL).",
+    legalReference: "Ley N\xB0 16.713",
+    sortOrder: 416
+  },
+  {
+    countryCode: "UY",
+    itemKey: "labour_credit_guarantee_fund",
+    itemNameEn: "Labor Credit Guarantee Fund",
+    itemNameZh: "\u52B3\u52A8\u4FE1\u8D37\u62C5\u4FDD\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.00025",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Fondo de Garant\xEDa de Cr\xE9ditos Laborales.",
+    legalReference: "Ley N\xB0 19.690",
+    sortOrder: 417
+  },
+  // --- Venezuela (VE) ---
+  // Expat: Foreign employees are subject to the same social security regulations as local employees. There are no
+  //   special exemptions or different rates for expatriates.
+  {
+    countryCode: "VE",
+    itemKey: "social_security",
+    itemNameEn: "Social Security",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C",
+    category: "social_insurance",
+    rateEmployer: "0.09",
+    rateEmployee: "0.04",
+    capType: "salary_multiple",
+    capBase: "1290",
+    effectiveYear: 2025,
+    notes: "The employer rate varies from 9% to 11% depending on the risk classification of the company. The cap base is equivalent to 5 minimum salaries (130 VES * 5 = 650), but the information from PapayaGlobal suggests a cap of ten minimum salaries for urban workers, which is 1300 VES. Given the discrepancy and the hyperinflationary context, a cap of 1290 VES is a reasonable estimate for 2025. The minimum wage is 130 VES.",
+    legalReference: "Venezuelan Social Security Institute (IVSS)",
+    sortOrder: 418
+  },
+  {
+    countryCode: "VE",
+    itemKey: "employment_benefit_regime",
+    itemNameEn: "Employment Benefit Regime",
+    itemNameZh: "\u5C31\u4E1A\u798F\u5229\u5236\u5EA6",
+    category: "unemployment",
+    rateEmployer: "0.02",
+    rateEmployee: "0.005",
+    capType: "salary_multiple",
+    capBase: "1290",
+    effectiveYear: 2025,
+    notes: "Capped at ten minimum salaries for urban workers (130 VES * 10 = 1300 VES). A cap of 1290 VES is a reasonable estimate for 2025.",
+    legalReference: "Venezuelan Social Security Institute (IVSS)",
+    sortOrder: 419
+  },
+  {
+    countryCode: "VE",
+    itemKey: "housing_regime",
+    itemNameEn: "Housing Regime",
+    itemNameZh: "\u4F4F\u623F\u5236\u5EA6",
+    category: "housing_fund",
+    rateEmployer: "0.02",
+    rateEmployee: "0.01",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "National Housing and Habitat Bank (BANAVIH)",
+    sortOrder: 420
+  },
+  {
+    countryCode: "VE",
+    itemKey: "employee_training_inces",
+    itemNameEn: "Employee Training (INCES)",
+    itemNameZh: "\u5458\u5DE5\u57F9\u8BAD (INCES)",
+    category: "other_mandatory",
+    rateEmployer: "0.02",
+    rateEmployee: "0.005",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "National Institute for Socialist Training and Education (INCES)",
+    sortOrder: 421
+  },
+  {
+    countryCode: "VE",
+    itemKey: "workplace_accident_lopcymat",
+    itemNameEn: "Workplace Accident (LOPCYMAT)",
+    itemNameZh: "\u5DE5\u4F24\u4E8B\u6545 (LOPCYMAT)",
+    category: "work_injury",
+    rateEmployer: "0.0075",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "The employer rate varies between 0.75% and 10% according to the company's risk. The provided rate is the lower bound.",
+    legalReference: "Organic Law on Prevention, Conditions and Work Environment (LOPCYMAT)",
+    sortOrder: 422
+  },
+  // =================================================================================
+  // Africa
+  // =================================================================================
+  // --- Côte d'Ivoire (CI) ---
+  // Expat:
+  //   外籍员工必须和本地员工一样参与科特迪瓦的社保体系（CNPS）。外籍员工获得医疗福利需要连续缴纳6个月的社保，而本地员工仅需3个月。此外，薪金税（IGR）的税率也不同，外籍员工的税率为12%，而本地员工为2.8%。科特迪瓦与部分国家签订了双边社保协定，可能豁免某些外籍员工的缴费义务，具体情况需根据其国籍和协定内容确定。
+  {
+    countryCode: "CI",
+    itemKey: "family_allowances",
+    itemNameEn: "Family Allowances",
+    itemNameZh: "\u5BB6\u5EAD\u6D25\u8D34",
+    category: "social_insurance",
+    rateEmployer: "0.0575",
+    rateEmployee: "0.0",
+    capType: "salary_multiple",
+    capBase: "70000",
+    effectiveYear: 2025,
+    notes: "Employer contribution for family allowances.",
+    legalReference: "https://taxsummaries.pwc.com/ivory-coast/individual/other-taxes",
+    sortOrder: 423
+  },
+  {
+    countryCode: "CI",
+    itemKey: "work_injury",
+    itemNameEn: "Work Injury",
+    itemNameZh: "\u5DE5\u4F24\u4E8B\u6545",
+    category: "work_injury",
+    rateEmployer: "0.02",
+    rateEmployee: "0.0",
+    capType: "salary_multiple",
+    capBase: "70000",
+    effectiveYear: 2025,
+    notes: "Employer contribution for industrial accidents. The rate varies from 2% to 5% depending on the risk level of the activity.",
+    legalReference: "https://taxsummaries.pwc.com/ivory-coast/individual/other-taxes",
+    sortOrder: 424
+  },
+  {
+    countryCode: "CI",
+    itemKey: "pension",
     itemNameEn: "Pension",
     itemNameZh: "\u517B\u8001\u91D1",
     category: "pension",
-    rateEmployer: "0.12",
-    rateEmployee: "0.04",
+    rateEmployer: "0.077",
+    rateEmployee: "0.063",
+    capType: "salary_multiple",
+    capBase: "3375000",
     effectiveYear: 2025,
-    sortOrder: 2
+    notes: "Contribution to the CNPS Retirement Fund.",
+    legalReference: "https://taxsummaries.pwc.com/ivory-coast/individual/other-taxes",
+    sortOrder: 425
   },
-  // 20. Chile (CL)
   {
-    countryCode: "CL",
-    itemKey: "unemployment_cl",
-    itemNameEn: "Unemployment Insurance",
-    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
-    category: "unemployment",
-    rateEmployer: "0.024",
-    rateEmployee: "0.006",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // =================================================================================
-  // EMEA (Europe, Middle East, Africa)
-  // =================================================================================
-  // 21. United Kingdom (UK)
-  {
-    countryCode: "GB",
-    itemKey: "ni_employer",
-    itemNameEn: "National Insurance (Employer)",
-    itemNameZh: "\u56FD\u6C11\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.138",
-    rateEmployee: "0.10",
-    // Reducing to 10% in 2024/25
+    countryCode: "CI",
+    itemKey: "payroll_tax",
+    itemNameEn: "Payroll Tax",
+    itemNameZh: "\u85AA\u91D1\u7A0E",
+    category: "other_mandatory",
+    rateEmployer: "0.028",
+    rateEmployee: "0.0",
     capType: "none",
-    // Employer NI has no upper limit
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "The rate is 2.8% for local employees and 12% for expatriate employees on the total taxable remuneration.",
+    legalReference: "https://taxsummaries.pwc.com/ivory-coast/individual/other-taxes",
+    sortOrder: 426
   },
+  // --- Cameroon (CM) ---
+  // Expat:
+  //   外籍员工与本地员工同样需要缴纳所有强制性社保项目。根据喀麦隆与法国、加拿大（魁北克）等国签订的双边社保协定，来自这些国家且在喀麦隆临时工作的外籍员工，如果能提供其母国社保的有效参保证明，可以申请豁免在喀麦隆缴纳养老金。其他社保项目（如家庭补助、工伤保险）通常仍需缴纳。具体豁免条件和期限需参照相应双边协定的具体条款。
   {
-    countryCode: "GB",
-    itemKey: "pension_uk",
-    itemNameEn: "Workplace Pension",
-    itemNameZh: "\u804C\u4E1A\u517B\u8001\u91D1",
+    countryCode: "CM",
+    itemKey: "pension_scheme",
+    itemNameEn: "Old-Age, Invalidity, and Survivors' Insurance",
+    itemNameZh: "\u517B\u8001\u3001\u6B8B\u75BE\u53CA\u9057\u5C5E\u4FDD\u9669",
     category: "pension",
-    rateEmployer: "0.03",
-    // Min
-    rateEmployee: "0.05",
-    // Min
-    effectiveYear: 2025,
-    sortOrder: 2
-  },
-  // 22. Germany (DE)
-  {
-    countryCode: "DE",
-    itemKey: "pension_de",
-    itemNameEn: "Pension Insurance (Rentenversicherung)",
-    itemNameZh: "\u517B\u8001\u4FDD\u9669",
-    category: "pension",
-    rateEmployer: "0.093",
-    // 18.6% split
-    rateEmployee: "0.093",
+    rateEmployer: "0.042",
+    rateEmployee: "0.042",
     capType: "fixed_amount",
-    capBase: "7550",
-    // West monthly limit
+    capBase: "750000",
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "\u7531\u56FD\u5BB6\u793E\u4F1A\u4FDD\u9669\u57FA\u91D1\uFF08CNPS/NSIF\uFF09\u7BA1\u7406\u3002",
+    legalReference: "Law No. 84-007 of 4 July 1984; Decree No. 74-733 of 22 August 1974",
+    sortOrder: 427
   },
   {
-    countryCode: "DE",
-    itemKey: "health_de",
-    itemNameEn: "Health Insurance (Krankenversicherung)",
-    itemNameZh: "\u533B\u7597\u4FDD\u9669",
-    category: "health_insurance",
-    rateEmployer: "0.073",
-    // 14.6% + surcharge split
-    rateEmployee: "0.073",
+    countryCode: "CM",
+    itemKey: "family_benefits",
+    itemNameEn: "Family Allowances",
+    itemNameZh: "\u5BB6\u5EAD\u8865\u52A9",
+    category: "social_insurance",
+    rateEmployer: "0.07",
+    rateEmployee: "0.00",
     capType: "fixed_amount",
-    capBase: "5175",
+    capBase: "750000",
     effectiveYear: 2025,
-    sortOrder: 2
+    notes: "\u96C7\u4E3B\u5168\u989D\u627F\u62C5\uFF0C\u8D39\u7387\u6839\u636E\u5458\u5DE5\u5B50\u5973\u4EBA\u6570\u53EF\u80FD\u4E3A3.7%\u62167%\u3002\u6B64\u5904\u91C7\u7528\u901A\u7528\u6700\u9AD8\u8D39\u73877%\u3002",
+    legalReference: "Law No. 67-LF-7 of 12 June 1967",
+    sortOrder: 428
   },
   {
-    countryCode: "DE",
-    itemKey: "unemployment_de",
-    itemNameEn: "Unemployment (Arbeitslosenversicherung)",
-    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
-    category: "unemployment",
-    rateEmployer: "0.013",
-    // 2.6% split
-    rateEmployee: "0.013",
-    capType: "fixed_amount",
-    capBase: "7550",
-    effectiveYear: 2025,
-    sortOrder: 3
-  },
-  // 23. France (FR)
-  {
-    countryCode: "FR",
-    itemKey: "social_charges_fr",
-    itemNameEn: "Social Security Charges",
-    itemNameZh: "\u793E\u4F1A\u5206\u644A\u91D1",
-    category: "social_insurance",
-    rateEmployer: "0.45",
-    // Approx 45% total load
-    rateEmployee: "0.22",
-    // Approx 22%
-    capType: "bracket",
-    // Highly complex, simplified here
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 24. Italy (IT)
-  {
-    countryCode: "IT",
-    itemKey: "inps",
-    itemNameEn: "Social Security (INPS)",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.30",
-    // Approx 29-32%
-    rateEmployee: "0.0919",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 25. Spain (ES)
-  {
-    countryCode: "ES",
-    itemKey: "social_security_es",
-    itemNameEn: "Social Security",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.236",
-    // Common contingencies
-    rateEmployee: "0.047",
-    capType: "fixed_amount",
-    capBase: "4720",
-    // EUR max base
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 26. Netherlands (NL)
-  {
-    countryCode: "NL",
-    itemKey: "employee_insurance",
-    itemNameEn: "Employee Insurance",
-    itemNameZh: "\u96C7\u5458\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.18",
-    // Approx total
-    rateEmployee: "0",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 27. Sweden (SE)
-  {
-    countryCode: "SE",
-    itemKey: "employer_contributions",
-    itemNameEn: "Employer Contributions (Arbetsgivaravgifter)",
-    itemNameZh: "\u96C7\u4E3B\u7A0E",
-    category: "social_insurance",
-    rateEmployer: "0.3142",
-    // 31.42% fixed
-    rateEmployee: "0",
-    // Included in tax usually
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 28. Switzerland (CH)
-  {
-    countryCode: "CH",
-    itemKey: "avs_ai_apg",
-    itemNameEn: "AHV/IV/EO (OASI/DI/IC)",
-    itemNameZh: "\u517B\u8001\u9057\u5C5E/\u6B8B\u75BE/\u670D\u5F79\u8865\u507F",
-    category: "pension",
-    rateEmployer: "0.053",
-    // 10.6% split
-    rateEmployee: "0.053",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 29. Ireland (IE)
-  {
-    countryCode: "IE",
-    itemKey: "prsi",
-    itemNameEn: "PRSI (Class A)",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.1105",
-    // 11.05%
-    rateEmployee: "0.04",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 30. Poland (PL)
-  {
-    countryCode: "PL",
-    itemKey: "zus",
-    itemNameEn: "Social Security (ZUS)",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.2048",
-    // Approx total
-    rateEmployee: "0.1371",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 31. Belgium (BE)
-  {
-    countryCode: "BE",
-    itemKey: "onss",
-    itemNameEn: "Social Security (ONSS)",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.25",
-    // Approx 25% base
-    rateEmployee: "0.1307",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 32. Austria (AT)
-  {
-    countryCode: "AT",
-    itemKey: "social_security_at",
-    itemNameEn: "Social Security",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.2123",
-    rateEmployee: "0.1812",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 33. Portugal (PT)
-  {
-    countryCode: "PT",
-    itemKey: "social_security_pt",
-    itemNameEn: "Social Security",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.2375",
-    rateEmployee: "0.11",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 34. United Arab Emirates (AE)
-  {
-    countryCode: "AE",
-    itemKey: "pension_ae",
-    itemNameEn: "Pension (GPSSA) - Nationals Only",
-    itemNameZh: "\u517B\u8001\u91D1 (\u4EC5\u672C\u56FD\u516C\u6C11)",
-    category: "pension",
-    rateEmployer: "0.125",
-    // Gov sector 15%, Private 12.5%
-    rateEmployee: "0.05",
-    capType: "fixed_amount",
-    capBase: "50000",
-    // AED
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // Note: For expats, gratuity applies (end of service benefit), not monthly contribution usually.
-  // 35. Saudi Arabia (SA)
-  {
-    countryCode: "SA",
-    itemKey: "gosi",
-    itemNameEn: "GOSI (Social Insurance) - Nationals",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669 (\u4EC5\u672C\u56FD\u516C\u6C11)",
-    category: "social_insurance",
-    rateEmployer: "0.12",
-    rateEmployee: "0.10",
-    capType: "fixed_amount",
-    capBase: "45000",
-    // SAR
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  {
-    countryCode: "SA",
-    itemKey: "gosi_expat",
-    itemNameEn: "GOSI (Work Injury) - Expats",
-    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669 (\u5916\u7C4D\u5458\u5DE5)",
+    countryCode: "CM",
+    itemKey: "occupational_accident_insurance",
+    itemNameEn: "Work Injury and Occupational Disease Insurance",
+    itemNameZh: "\u5DE5\u4F24\u53CA\u804C\u4E1A\u75C5\u4FDD\u9669",
     category: "work_injury",
-    rateEmployer: "0.02",
-    rateEmployee: "0",
+    rateEmployer: "0.0175",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "750000",
     effectiveYear: 2025,
-    sortOrder: 2
+    notes: "\u96C7\u4E3B\u5168\u989D\u627F\u62C5\u3002\u8D39\u7387\u6839\u636E\u884C\u4E1A\u98CE\u9669\u7B49\u7EA7\u57281.75%\u52305%\u4E4B\u95F4\u53D8\u5316\uFF0C1.75%\u4E3A\u6700\u4F4E\u57FA\u7840\u8D39\u7387\u3002",
+    legalReference: "Law No. 77-11 of 13 July 1977",
+    sortOrder: 429
   },
-  // 36. South Africa (ZA)
   {
-    countryCode: "ZA",
-    itemKey: "uif",
-    itemNameEn: "Unemployment Insurance Fund (UIF)",
-    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    countryCode: "CM",
+    itemKey: "housing_fund",
+    itemNameEn: "Housing Fund Contribution (Cr\xE9dit Foncier)",
+    itemNameZh: "\u4F4F\u623F\u57FA\u91D1\u7F34\u6B3E",
+    category: "housing_fund",
+    rateEmployer: "0.015",
+    rateEmployee: "0.01",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u7F34\u6B3E\u81F3\u5580\u9EA6\u9686\u571F\u5730\u4FE1\u8D37\u94F6\u884C\uFF08Cr\xE9dit Foncier du Cameroun\uFF09\uFF0C\u65E0\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u3002",
+    legalReference: "Law No. 77-2 of 13 January 1977",
+    sortOrder: 430
+  },
+  {
+    countryCode: "CM",
+    itemKey: "national_employment_fund",
+    itemNameEn: "National Employment Fund",
+    itemNameZh: "\u56FD\u5BB6\u5C31\u4E1A\u57FA\u91D1",
     category: "unemployment",
     rateEmployer: "0.01",
-    rateEmployee: "0.01",
-    capType: "fixed_amount",
-    capBase: "17712",
-    // ZAR
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "\u96C7\u4E3B\u5168\u989D\u627F\u62C5\uFF0C\u65E0\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u3002",
+    legalReference: "Decree No. 90-533 of 27 March 1990",
+    sortOrder: 431
   },
-  // 37. Turkey (TR)
   {
-    countryCode: "TR",
-    itemKey: "sgk",
-    itemNameEn: "Social Security (SGK)",
+    countryCode: "CM",
+    itemKey: "vocational_training_tax",
+    itemNameEn: "Vocational Training and Continuing Education Tax",
+    itemNameZh: "\u804C\u4E1A\u57F9\u8BAD\u53CA\u7EE7\u7EED\u6559\u80B2\u7A0E",
+    category: "other_mandatory",
+    rateEmployer: "0.01",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u96C7\u4E3B\u5168\u989D\u627F\u62C5\uFF0C\u65E0\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u3002",
+    legalReference: "Finance Law of 2001",
+    sortOrder: 432
+  },
+  // --- Algeria (DZ) ---
+  // Expat: 外籍员工与阿尔及利亚本地员工一样，需强制性缴纳社保，费率和缴费规则没有差异。社保协议可能提供豁免，但这取决于具体的双边协议。
+  {
+    countryCode: "DZ",
+    itemKey: "social_insurance",
+    itemNameEn: "Social Security Contributions",
     itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
     category: "social_insurance",
-    rateEmployer: "0.205",
-    // 20.5% (22.5 - 5% incentive + 2% unemp + 1% other)
-    rateEmployee: "0.15",
-    capType: "fixed_amount",
-    capBase: "150018",
-    // TRY (Approx 7.5x min wage)
+    rateEmployer: "0.26",
+    rateEmployee: "0.09",
+    capType: "salary_multiple",
+    capBase: "200000",
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "\u603B\u8D39\u7387\u6DB5\u76D6\u4E86\u517B\u8001\u3001\u533B\u7597\u3001\u5931\u4E1A\u3001\u5DE5\u4F24\u548C\u63D0\u524D\u9000\u4F11\u7B49\u6240\u6709\u5F3A\u5236\u6027\u793E\u4F1A\u4FDD\u969C\u9879\u76EE\u3002\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A\u6708\u6700\u4F4E\u5DE5\u8D44(SNMG)\u768420\u500D\uFF0C2025\u5E74SNMG\u4E3A20,000 DZD\uFF0C\u56E0\u6B64\u4E0A\u9650\u4E3A400,000 DZD\u3002\u7136\u800C\uFF0C\u6839\u636E2015\u5E74\u7B2C15-06\u53F7\u8865\u5145\u8D22\u653F\u6CD5\uFF0C\u5B9E\u9645\u64CD\u4F5C\u4E2D\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u4E3A200,000 DZD\u3002",
+    legalReference: "Ordinance No. 95-01 of January 21, 1995; Law No. 15-06 of July 23, 2015",
+    sortOrder: 433
   },
-  // 38. Egypt (EG)
+  // --- Egypt (EG) ---
+  // Expat: 自2021年9月起，在埃及工作的外籍员工通常必须参加埃及的社保体系，并与埃及国民承担相同的缴费义务。除与埃及签订了双边社保协定的国家的公民可能存在豁免外，没有普遍的豁免政策。
   {
     countryCode: "EG",
     itemKey: "social_insurance_eg",
@@ -24271,187 +32844,627 @@ var socialInsuranceRules = [
     rateEmployer: "0.1875",
     rateEmployee: "0.11",
     capType: "fixed_amount",
-    capBase: "12600",
-    // EGP
+    capBase: "14500",
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "The contribution base is capped at a monthly maximum, which is EGP 14,500 for 2025. There is also a minimum monthly base of EGP 2,300 for 2025. The cap increases annually on January 1st.",
+    legalReference: "Social Insurance and Pensions Law No. 148 of 2019",
+    sortOrder: 434
   },
-  // 39. Denmark (DK)
+  // --- Ethiopia (ET) ---
+  // Expat: 根据《私营组织雇员养老金公告第1268/2022号》，养老金计划强制适用于埃塞俄比亚国民。在埃塞俄比亚工作的外籍员工（非埃塞俄比亚裔）通常被豁免。埃塞俄比亚裔的外国公民则有单独的规定覆盖。
   {
-    countryCode: "DK",
-    itemKey: "atp",
-    itemNameEn: "ATP (Pension)",
-    itemNameZh: "\u8865\u5145\u517B\u8001\u91D1",
+    countryCode: "ET",
+    itemKey: "pension_fund",
+    itemNameEn: "Pension Fund",
+    itemNameZh: "\u517B\u8001\u57FA\u91D1",
     category: "pension",
-    rateEmployer: "0",
-    // Fixed amount ~190 DKK
-    rateEmployee: "0",
-    // Fixed amount ~90 DKK
-    capType: "fixed_amount",
-    // Actually it's a fixed contribution, simplified here
-    capBase: "0",
+    rateEmployer: "0.11",
+    rateEmployee: "0.07",
+    capType: "salary_multiple",
+    capBase: null,
+    capMultiplier: "1",
+    capReferenceBase: "basic salary",
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
     effectiveYear: 2025,
-    sortOrder: 1
+    legalReference: "Complete Ethiopian Payroll Guide 2025 | MoR Tax Compliance",
+    notes: "Mandatory for local workers only."
   },
-  // 40. Finland (FI)
+  // --- Ghana (GH) ---
+  // Expat: 根据《国家养老金法》（2008年第766号法案），外籍员工必须强制性参加第一级社保计划（SSNIT）。除非存在双边社保协议，否则没有豁免。
   {
-    countryCode: "FI",
-    itemKey: "tyel",
-    itemNameEn: "Pension (TyEL)",
-    itemNameZh: "\u517B\u8001\u91D1",
+    countryCode: "GH",
+    itemKey: "ssnit_contribution",
+    itemNameEn: "SSNIT Contribution (Tier 1)",
+    itemNameZh: "\u793E\u4FDD\u548C\u56FD\u6C11\u4FDD\u9669\u4FE1\u6258\u57FA\u91D1\uFF08\u7B2C\u4E00\u7EA7\uFF09",
     category: "pension",
-    rateEmployer: "0.174",
-    // Avg
-    rateEmployee: "0.0715",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 41. Norway (NO)
-  {
-    countryCode: "NO",
-    itemKey: "payroll_tax",
-    itemNameEn: "Payroll Tax",
-    itemNameZh: "\u85AA\u8D44\u7A0E",
-    category: "social_insurance",
-    rateEmployer: "0.141",
-    // Zone 1
-    rateEmployee: "0.078",
-    // NI
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 42. Czech Republic (CZ)
-  {
-    countryCode: "CZ",
-    itemKey: "social_health",
-    itemNameEn: "Social & Health",
-    itemNameZh: "\u793E\u4FDD\u4E0E\u533B\u4FDD",
-    category: "social_insurance",
-    rateEmployer: "0.338",
-    rateEmployee: "0.11",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 43. Hungary (HU)
-  {
-    countryCode: "HU",
-    itemKey: "social_tax",
-    itemNameEn: "Social Contribution Tax",
-    itemNameZh: "\u793E\u4F1A\u8D21\u732E\u7A0E",
-    category: "social_insurance",
     rateEmployer: "0.13",
-    rateEmployee: "0.185",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 44. Romania (RO)
-  {
-    countryCode: "RO",
-    itemKey: "social_contributions",
-    itemNameEn: "Social Contributions",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.0225",
-    // Shifted to employee mostly
-    rateEmployee: "0.35",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 45. Greece (GR)
-  {
-    countryCode: "GR",
-    itemKey: "efka",
-    itemNameEn: "EFKA",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.2229",
-    rateEmployee: "0.1387",
+    rateEmployee: "0.055",
     capType: "fixed_amount",
-    capBase: "7373",
-    // EUR
+    capBase: "61000",
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "\u603B\u7F34\u8D39\u7387\u4E3A\u57FA\u672C\u5DE5\u8D44\u768418.5%\uFF0C\u5176\u4E2D\u96C7\u4E3B\u627F\u62C513%\uFF0C\u96C7\u5458\u627F\u62C55.5%\u3002\u6708\u5EA6\u6700\u9AD8\u53EF\u6295\u4FDD\u6536\u5165\u4E0A\u9650\u4E3AGHS 61,000\u3002",
+    legalReference: "National Pensions Act, 2008 (Act 766), SSNIT Notice January 2025",
+    sortOrder: 436
   },
-  // 46. Israel (IL)
+  // --- Kenya (KE) ---
+  // Expat: 外籍员工通常需要缴纳NSSF、SHIF和AHL。在离开肯尼亚且不移居至东非共同体国家时，可申请NSSF移民福利金。居住超过六个月的非公民也需要加入SHIF。住房税（AHL）同样适用于外籍员工。
   {
-    countryCode: "IL",
-    itemKey: "national_insurance",
-    itemNameEn: "National Insurance",
-    itemNameZh: "\u56FD\u6C11\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.076",
-    // Upper bracket
-    rateEmployee: "0.12",
-    effectiveYear: 2025,
-    sortOrder: 1
-  },
-  // 47. Pakistan (PK)
-  {
-    countryCode: "PK",
-    itemKey: "eobi",
-    itemNameEn: "EOBI",
-    itemNameZh: "\u517B\u8001\u4FDD\u9669",
+    countryCode: "KE",
+    itemKey: "NSSF_Tier1",
+    itemNameEn: "National Social Security Fund Tier 1",
+    itemNameZh: "\u56FD\u5BB6\u793E\u4F1A\u4FDD\u969C\u57FA\u91D1\uFF08\u7B2C\u4E00\u6863\uFF09",
     category: "pension",
-    rateEmployer: "0.05",
+    rateEmployer: "0.06",
+    rateEmployee: "0.06",
+    capType: "bracket",
+    capBase: "8000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u6536\u5165\u4E2D\u4E0D\u8D85\u8FC7KES 8,000\u7684\u90E8\u5206\u3002\u603B\u7F34\u6B3E\u4E0A\u9650\u4E3AKES 480\u3002",
+    legalReference: "NSSF Act No. 45 of 2013",
+    sortOrder: 437
+  },
+  {
+    countryCode: "KE",
+    itemKey: "NSSF_Tier2",
+    itemNameEn: "National Social Security Fund Tier 2",
+    itemNameZh: "\u56FD\u5BB6\u793E\u4F1A\u4FDD\u969C\u57FA\u91D1\uFF08\u7B2C\u4E8C\u6863\uFF09",
+    category: "pension",
+    rateEmployer: "0.06",
+    rateEmployee: "0.06",
+    capType: "bracket",
+    capBase: "72000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u6536\u5165\u4E2D\u4ECEKES 8,001\u5230KES 72,000\u7684\u90E8\u5206\u3002\u603B\u7F34\u6B3E\u4E0A\u9650\u4E3AKES 3,840\u3002",
+    legalReference: "NSSF Act No. 45 of 2013",
+    sortOrder: 438
+  },
+  {
+    countryCode: "KE",
+    itemKey: "SHIF",
+    itemNameEn: "Social Health Insurance Fund",
+    itemNameZh: "\u793E\u4F1A\u5065\u5EB7\u4FDD\u9669\u57FA\u91D1",
+    category: "health_insurance",
+    rateEmployer: "0.0275",
+    rateEmployee: "0.0275",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u9002\u7528\u4E8E\u603B\u5DE5\u8D44\uFF0C\u65E0\u5C01\u9876\u57FA\u6570\u3002\u6708\u5EA6\u6700\u4F4E\u7F34\u6B3E\u989D\u4E3AKES 300\u3002",
+    legalReference: "Social Health Insurance Act, 2023",
+    sortOrder: 439
+  },
+  {
+    countryCode: "KE",
+    itemKey: "AHL",
+    itemNameEn: "Affordable Housing Levy",
+    itemNameZh: "\u7ECF\u6D4E\u9002\u7528\u623F\u7A0E",
+    category: "other_mandatory",
+    rateEmployer: "0.015",
+    rateEmployee: "0.015",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u9002\u7528\u4E8E\u603B\u5DE5\u8D44\uFF0C\u65E0\u5C01\u9876\u57FA\u6570\u3002",
+    legalReference: "Finance Act, 2023",
+    sortOrder: 440
+  },
+  // --- Morocco (MA) ---
+  // Expat: 外籍员工如果来自与摩洛哥签订了双边社保协议的国家，可以豁免在摩洛哥参加CNSS社保体系。需要提供由来源国社保机构出具的有效的参保证明。
+  {
+    countryCode: "MA",
+    itemKey: "social_security_contribution",
+    itemNameEn: "Social Security Contribution",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u969C\u7F34\u6B3E",
+    category: "social_insurance",
+    rateEmployer: "0.0898",
+    rateEmployee: "0.0448",
+    capType: "fixed_amount",
+    capBase: "6000",
+    effectiveYear: 2025,
+    notes: "Covers short-term benefits (illness, maternity) and long-term benefits (pension, disability). Capped at MAD 6,000 per month.",
+    legalReference: "https://wecount.ma/en/the-moroccan-social-security-system-cnss",
+    sortOrder: 441
+  },
+  {
+    countryCode: "MA",
+    itemKey: "family_benefits",
+    itemNameEn: "Family Benefits",
+    itemNameZh: "\u5BB6\u5EAD\u798F\u5229",
+    category: "other_mandatory",
+    rateEmployer: "0.064",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "https://wecount.ma/en/the-moroccan-social-security-system-cnss",
+    sortOrder: 442
+  },
+  {
+    countryCode: "MA",
+    itemKey: "compulsory_health_insurance",
+    itemNameEn: "Compulsory Health Insurance (AMO)",
+    itemNameZh: "\u5F3A\u5236\u533B\u7597\u4FDD\u9669 (AMO)",
+    category: "health_insurance",
+    rateEmployer: "0.0411",
+    rateEmployee: "0.0226",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "https://wecount.ma/en/the-moroccan-social-security-system-cnss",
+    sortOrder: 443
+  },
+  {
+    countryCode: "MA",
+    itemKey: "vocational_training_tax",
+    itemNameEn: "Vocational Training Tax",
+    itemNameZh: "\u804C\u4E1A\u57F9\u8BAD\u7A0E",
+    category: "other_mandatory",
+    rateEmployer: "0.016",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "https://wecount.ma/en/the-moroccan-social-security-system-cnss",
+    sortOrder: 444
+  },
+  {
+    countryCode: "MA",
+    itemKey: "work_injury_insurance",
+    itemNameEn: "Work Injury Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Mandatory contribution paid by the employer. The rate is determined by the private insurance provider based on the company's activity sector.",
+    legalReference: "https://wecount.ma/en/the-moroccan-social-security-system-cnss",
+    sortOrder: 445
+  },
+  // --- Mauritius (MU) ---
+  // Expat: 根据毛里求斯税务局（MRA）的规定，非公民雇员如果在一个财年（7月1日至次年6月30日）内在毛里求斯居住时间少于183天，则不被视为税务居民，可以豁免缴纳CSG。对于成为税务居民的外籍员工，缴费规则与本地员工相同。
+  {
+    countryCode: "MU",
+    itemKey: "csg",
+    itemNameEn: "Contribution Sociale Generalisee (CSG)",
+    itemNameZh: "\u793E\u4F1A\u8D21\u732E\u91D1",
+    category: "social_insurance",
+    rateEmployer: "0.03",
+    rateEmployee: "0.015",
+    capType: "bracket",
+    capBase: "50000",
+    effectiveYear: 2025,
+    notes: "Rates are bracketed based on monthly basic salary. For salary <= MUR 50,000: ER 3%, EE 1.5%. For salary > MUR 50,000: ER 6%, EE 3%.",
+    legalReference: "https://www.mra.mu/business/csg",
+    sortOrder: 446
+  },
+  {
+    countryCode: "MU",
+    itemKey: "nsf",
+    itemNameEn: "National Solidarity Fund (NSF)",
+    itemNameZh: "\u56FD\u5BB6\u56E2\u7ED3\u57FA\u91D1",
+    category: "social_insurance",
+    rateEmployer: "0.025",
     rateEmployee: "0.01",
     capType: "fixed_amount",
-    capBase: "25000",
-    // Minimum wages reference
+    capBase: "28570",
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "Contribution is payable on basic salary up to a ceiling of MUR 28,570 per month as of July 2024.",
+    legalReference: "https://www.mra.mu/employers/npf-nsf-contributions",
+    sortOrder: 447
   },
-  // 48. Bangladesh (BD)
-  // Limited formal social security usually
   {
-    countryCode: "BD",
-    itemKey: "provident_fund",
-    itemNameEn: "Provident Fund",
-    itemNameZh: "\u516C\u79EF\u91D1",
-    category: "pension",
-    rateEmployer: "0.0833",
-    // Optional usually
-    rateEmployee: "0.0833",
+    countryCode: "MU",
+    itemKey: "training_levy",
+    itemNameEn: "Human Resource Development Council (HRDC) Training Levy",
+    itemNameZh: "\u4EBA\u529B\u8D44\u6E90\u53D1\u5C55\u59D4\u5458\u4F1A\u57F9\u8BAD\u7A0E",
+    category: "other_mandatory",
+    rateEmployer: "0.015",
+    rateEmployee: "0.0",
+    capType: "none",
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "Payable by employers to the HRDC. The rate is 1.5% on the total basic wage or salary.",
+    legalReference: "https://www.mra.mu/employers/npf-nsf-contributions",
+    sortOrder: 448
   },
-  // 49. Philippines (PH) - Duplicate removed, replaced with Sri Lanka (LK)
+  // --- Nigeria (NG) ---
+  // Expat:
+  //   外籍员工在尼日利亚通常需要强制性参加所有社保计划，包括养老金、健康保险(NHIA)、国家住房基金(NHF)和工伤保险(NSITF)。唯一的例外是养老金：如果外籍员工受其母国与尼日利亚有互惠协议的社会保障计划覆盖，则可以豁免。雇主在雇佣外籍员工前应核实是否存在此类协议。
   {
-    countryCode: "LK",
-    itemKey: "epf_lk",
-    itemNameEn: "EPF",
-    itemNameZh: "\u516C\u79EF\u91D1",
+    countryCode: "NG",
+    itemKey: "pension",
+    itemNameEn: "Contributory Pension Scheme",
+    itemNameZh: "\u7F34\u8D39\u578B\u517B\u8001\u91D1\u8BA1\u5212",
     category: "pension",
-    rateEmployer: "0.12",
+    rateEmployer: "0.10",
     rateEmployee: "0.08",
+    capType: "none",
+    capBase: null,
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "Mandatory contribution based on total monthly emoluments (basic salary, housing, and transport allowances).",
+    legalReference: "Pension Reform Act 2014",
+    sortOrder: 449
   },
-  // 50. Cambodia (KH)
   {
-    countryCode: "KH",
+    countryCode: "NG",
+    itemKey: "nhis",
+    itemNameEn: "National Health Insurance Scheme",
+    itemNameZh: "\u56FD\u5BB6\u5065\u5EB7\u4FDD\u9669\u8BA1\u5212",
+    category: "health_insurance",
+    rateEmployer: "0.10",
+    rateEmployee: "0.05",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Contribution is based on the employee's basic salary.",
+    legalReference: "National Health Insurance Authority Act 2022",
+    sortOrder: 450
+  },
+  {
+    countryCode: "NG",
+    itemKey: "nhf",
+    itemNameEn: "National Housing Fund",
+    itemNameZh: "\u56FD\u5BB6\u4F4F\u623F\u57FA\u91D1",
+    category: "housing_fund",
+    rateEmployer: "0.00",
+    rateEmployee: "0.025",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Contribution is 2.5% of the employee's basic monthly salary.",
+    legalReference: "National Housing Fund Act 1992",
+    sortOrder: 451
+  },
+  {
+    countryCode: "NG",
+    itemKey: "itf",
+    itemNameEn: "Industrial Training Fund",
+    itemNameZh: "\u5DE5\u4E1A\u57F9\u8BAD\u57FA\u91D1",
+    category: "other_mandatory",
+    rateEmployer: "0.01",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Applicable to employers with 5 or more employees, or a turnover of NGN 50 million and above. Contribution is 1% of the annual payroll.",
+    legalReference: "Industrial Training Fund (Amendment) Act 2011",
+    sortOrder: 452
+  },
+  {
+    countryCode: "NG",
+    itemKey: "nsitf",
+    itemNameEn: "Nigeria Social Insurance Trust Fund",
+    itemNameZh: "\u5C3C\u65E5\u5229\u4E9A\u793E\u4F1A\u4FDD\u9669\u4FE1\u6258\u57FA\u91D1",
+    category: "work_injury",
+    rateEmployer: "0.01",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Provides compensation to employees for work-related injuries and diseases. Contribution is 1% of the monthly payroll.",
+    legalReference: "Employees\u2019 Compensation Act 2010",
+    sortOrder: 453
+  },
+  // --- Rwanda (RW) ---
+  // Expat: 根据卢旺达社会保障局（RSSB）的规定，所有在卢旺达工作的外籍员工，无论合同期限长短，均需强制性参加所有社保计划，包括养老金、工伤保险和社区医疗保险（Mutuelle de Santé）。无特殊豁免或不同费率。
+  {
+    countryCode: "RW",
+    itemKey: "pension_contribution",
+    itemNameEn: "Pension Contribution",
+    itemNameZh: "\u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.06",
+    rateEmployee: "0.06",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Contributions are calculated based on total gross salary. The rate increased from 6% to 12% effective January 2025.",
+    legalReference: "Rwanda Social Security Board (RSSB) directives",
+    sortOrder: 454
+  },
+  {
+    countryCode: "RW",
+    itemKey: "work_injury_contribution",
+    itemNameEn: "Occupational Hazards Insurance",
+    itemNameZh: "\u5DE5\u4F24\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.02",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Contribution is 2% of the employee's gross salary, paid by the employer.",
+    legalReference: "Rwanda Social Security Board (RSSB) directives",
+    sortOrder: 455
+  },
+  {
+    countryCode: "RW",
+    itemKey: "health_insurance_mutuelle",
+    itemNameEn: "Community Health Insurance (Mutuelle de Sant\xE9)",
+    itemNameZh: "\u793E\u533A\u533B\u7597\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "3000",
+    effectiveYear: 2025,
+    notes: "Fixed amount contribution of RWF 3,000 per month. This is a mandatory contribution for all employees, including expatriates.",
+    legalReference: "Rwanda Social Security Board (RSSB) directives",
+    sortOrder: 456
+  },
+  // --- Senegal (SN) ---
+  // Expat: 外籍员工与塞内加尔国民承担相同的社会保障义务。但是，如果外籍员工能证明在其本国已缴纳了养老保险，则可以豁免在塞内加尔缴纳养老金（IPRES）。此外，塞内加尔与法国和佛得角签有双边社保协议。
+  {
+    countryCode: "SN",
+    itemKey: "family_allowance",
+    itemNameEn: "Family Allowance",
+    itemNameZh: "\u5BB6\u5EAD\u6D25\u8D34",
+    category: "social_insurance",
+    rateEmployer: "0.07",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "63000",
+    effectiveYear: 2025,
+    notes: "\u7531\u96C7\u4E3B\u5168\u989D\u627F\u62C5\uFF0C\u7F34\u8D39\u57FA\u6570\u6709\u6708\u5EA6\u4E0A\u9650\u3002",
+    legalReference: "https://www.cleiss.fr/docs/cotisations/senegal.html",
+    sortOrder: 457
+  },
+  {
+    countryCode: "SN",
+    itemKey: "work_injury",
+    itemNameEn: "Work Injury and Occupational Diseases",
+    itemNameZh: "\u5DE5\u4F24\u4E0E\u804C\u4E1A\u75C5\u4FDD\u9669",
+    category: "work_injury",
+    rateEmployer: "0.03",
+    rateEmployee: "0.00",
+    capType: "fixed_amount",
+    capBase: "63000",
+    effectiveYear: 2025,
+    notes: "\u8D39\u7387\u6839\u636E\u4F01\u4E1A\u98CE\u9669\u7B49\u7EA7\u57281%\u81F35%\u4E4B\u95F4\u53D8\u52A8\uFF0C\u7531\u96C7\u4E3B\u5168\u989D\u627F\u62C5\u3002",
+    legalReference: "https://www.cleiss.fr/docs/cotisations/senegal.html",
+    sortOrder: 458
+  },
+  {
+    countryCode: "SN",
+    itemKey: "pension_general",
+    itemNameEn: "Pension (General Scheme)",
+    itemNameZh: "\u517B\u8001\u91D1\uFF08\u666E\u901A\u5236\u5EA6\uFF09",
+    category: "pension",
+    rateEmployer: "0.084",
+    rateEmployee: "0.056",
+    capType: "fixed_amount",
+    capBase: "432000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6240\u6709\u5458\u5DE5\u7684\u5F3A\u5236\u6027\u517B\u8001\u91D1\uFF0C\u7531IPRES\u7BA1\u7406\u3002",
+    legalReference: "https://www.cleiss.fr/docs/cotisations/senegal.html",
+    sortOrder: 459
+  },
+  {
+    countryCode: "SN",
+    itemKey: "pension_executive",
+    itemNameEn: "Pension (Supplementary Scheme for Executives)",
+    itemNameZh: "\u517B\u8001\u91D1\uFF08\u9AD8\u7BA1\u8865\u5145\u5236\u5EA6\uFF09",
+    category: "pension",
+    rateEmployer: "0.036",
+    rateEmployee: "0.024",
+    capType: "bracket",
+    capBase: "1296000",
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6708\u85AA\u8D85\u8FC7432,000 FCFA\u7684\u9AD8\u7BA1\u4EBA\u5458\uFF0C\u7F34\u8D39\u57FA\u6570\u4E3A432,001\u81F31,296,000 FCFA\u7684\u90E8\u5206\u3002",
+    legalReference: "https://www.cleiss.fr/docs/cotisations/senegal.html",
+    sortOrder: 460
+  },
+  {
+    countryCode: "SN",
+    itemKey: "health_insurance",
+    itemNameEn: "Health Insurance",
+    itemNameZh: "\u533B\u7597\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.015",
+    rateEmployee: "0.015",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u5F3A\u5236\u6027\u533B\u7597\u4FDD\u9669\uFF08AMO\uFF09\uFF0C\u7531\u96C7\u4E3B\u548C\u5458\u5DE5\u5E73\u5747\u5206\u644A3%\u7684\u8D39\u7387\u3002\u6B64\u4E3A\u57FA\u7840\u90E8\u5206\uFF0C\u4F01\u4E1A\u901A\u5E38\u4F1A\u901A\u8FC7IPM\u63D0\u4F9B\u8865\u5145\u533B\u7597\u4FDD\u9669\u3002",
+    legalReference: "https://www.secusociale.sn/nos-prestations/assurance-maladie-obligatoire/",
+    sortOrder: 461
+  },
+  {
+    countryCode: "SN",
+    itemKey: "health_insurance_complementary",
+    itemNameEn: "Complementary Health Insurance (IPM)",
+    itemNameZh: "\u8865\u5145\u533B\u7597\u4FDD\u9669\uFF08IPM\uFF09",
+    category: "health_insurance",
+    rateEmployer: "0.03",
+    rateEmployee: "0.03",
+    capType: "fixed_amount",
+    capBase: "250000",
+    effectiveYear: 2025,
+    notes: "\u7531\u4F01\u4E1A\u6240\u5C5E\u7684\u533B\u7597\u4FDD\u9669\u673A\u6784\uFF08IPM\uFF09\u7BA1\u7406\uFF0C\u8D39\u7387\u548C\u7F34\u8D39\u89C4\u5219\u7531\u5404IPM\u89C4\u5B9A\uFF0C\u603B\u8D39\u7387\u57283%\u523012%\u4E4B\u95F4\uFF0C\u901A\u5E38\u7531\u96C7\u4E3B\u548C\u5458\u5DE5\u5747\u644A\u3002\u7F34\u8D39\u57FA\u6570\u4E0A\u9650\u901A\u5E38\u4E3A250,000 FCFA\u3002",
+    legalReference: "https://www.cleiss.fr/docs/cotisations/senegal.html",
+    sortOrder: 462
+  },
+  // --- Tunisia (TN) ---
+  // Expat: 根据突尼斯法律，外籍员工与本地员工同样需要参与强制性的社会保障体系，适用相同的缴费费率和规则。不存在针对外籍员工的特殊豁免或不同费率。
+  {
+    countryCode: "TN",
+    itemKey: "social_insurance",
+    itemNameEn: "Social Insurance",
+    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    category: "social_insurance",
+    rateEmployer: "0.13",
+    rateEmployee: "0.05",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Covers basic health insurance and other social benefits.",
+    legalReference: "http://www.humanforcetunisie.com/Bibli/taux-cotisation-cnss-tunisie.php",
+    sortOrder: 463
+  },
+  {
+    countryCode: "TN",
+    itemKey: "supplementary_health_insurance",
+    itemNameEn: "Supplementary Health Insurance",
+    itemNameZh: "\u8865\u5145\u533B\u7597\u4FDD\u9669",
+    category: "health_insurance",
+    rateEmployer: "0.0057",
+    rateEmployee: "0.0143",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "http://www.humanforcetunisie.com/Bibli/taux-cotisation-cnss-tunisie.php",
+    sortOrder: 464
+  },
+  {
+    countryCode: "TN",
+    itemKey: "pension_scheme",
+    itemNameEn: "Pension Scheme",
+    itemNameZh: "\u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.025",
+    rateEmployee: "0.0275",
+    capType: "salary_multiple",
+    capBase: "2184",
+    effectiveYear: 2025,
+    notes: "Contribution base is capped at 6 times the SMIG (6 * 364 TND).",
+    legalReference: "http://www.humanforcetunisie.com/Bibli/taux-cotisation-cnss-tunisie.php",
+    sortOrder: 465
+  },
+  {
+    countryCode: "TN",
+    itemKey: "unemployment_insurance",
+    itemNameEn: "Unemployment Insurance",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669",
+    category: "unemployment",
+    rateEmployer: "0.005",
+    rateEmployee: "0.005",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    legalReference: "http://www.humanforcetunisie.com/Bibli/taux-cotisation-cnss-tunisie.php",
+    sortOrder: 466
+  },
+  {
+    countryCode: "TN",
+    itemKey: "work_accident_contribution",
+    itemNameEn: "Work Accident Contribution",
+    itemNameZh: "\u5DE5\u4F24\u4E8B\u6545\u4F9B\u6B3E",
+    category: "work_injury",
+    rateEmployer: "0.005",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "Previously referred to as 'Majoration Loi 74-101'. This is a contribution for work-related accidents and occupational diseases.",
+    legalReference: "http://www.humanforcetunisie.com/Bibli/taux-cotisation-cnss-tunisie.php",
+    sortOrder: 467
+  },
+  // --- Tanzania (TZ) ---
+  // Expat: 外籍员工通常需要参加坦桑尼亚的社保体系（NSSF），与本地员工适用相同的缴费规则。没有普遍的豁免政策。
+  {
+    countryCode: "TZ",
+    itemKey: "nssf_pension",
+    itemNameEn: "National Social Security Fund (NSSF) - Pension",
+    itemNameZh: "\u56FD\u5BB6\u793E\u4FDD\u57FA\u91D1\uFF08NSSF\uFF09- \u517B\u8001\u91D1",
+    category: "pension",
+    rateEmployer: "0.10",
+    rateEmployee: "0.10",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u79C1\u8425\u90E8\u95E8\u3002\u603B\u7F34\u8D39\u7387\u4E3A20%\uFF0C\u7531\u96C7\u4E3B\u548C\u96C7\u5458\u5E73\u5747\u5206\u62C5\u3002\u96C7\u4E3B\u4E5F\u53EF\u9009\u62E9\u627F\u62C5\u5168\u90E820%\u3002",
+    legalReference: "The National Social Security Fund Act",
+    sortOrder: 468
+  },
+  {
+    countryCode: "TZ",
+    itemKey: "wcf_work_injury",
+    itemNameEn: "Workers Compensation Fund (WCF)",
+    itemNameZh: "\u5DE5\u4F24\u8D54\u507F\u57FA\u91D1\uFF08WCF\uFF09",
+    category: "work_injury",
+    rateEmployer: "0.005",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u6240\u6709\u79C1\u8425\u90E8\u95E8\u96C7\u4E3B\u3002",
+    legalReference: "The Workers Compensation Act, Cap. 263 R.E. 2015",
+    sortOrder: 469
+  },
+  {
+    countryCode: "TZ",
+    itemKey: "sdl_skills_development_levy",
+    itemNameEn: "Skills and Development Levy (SDL)",
+    itemNameZh: "\u6280\u80FD\u4E0E\u53D1\u5C55\u7A0E\uFF08SDL\uFF09",
+    category: "other_mandatory",
+    rateEmployer: "0.035",
+    rateEmployee: "0.00",
+    capType: "none",
+    capBase: null,
+    effectiveYear: 2025,
+    notes: "\u9002\u7528\u4E8E\u62E5\u670910\u540D\u6216\u4EE5\u4E0A\u96C7\u5458\u7684\u96C7\u4E3B\u3002",
+    legalReference: "The Education and Skills Development Act",
+    sortOrder: 470
+  },
+  // --- Uganda (UG) ---
+  // Expat: Expatriate employees are required to contribute to the National Social Security Fund (NSSF) under the same
+  //   rules as local employees. Contributions can be withdrawn upon permanently leaving Uganda.
+  {
+    countryCode: "UG",
     itemKey: "nssf",
-    itemNameEn: "NSSF",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
+    itemNameEn: "National Social Security Fund",
+    itemNameZh: "\u56FD\u5BB6\u793E\u4F1A\u4FDD\u969C\u57FA\u91D1",
     category: "social_insurance",
-    rateEmployer: "0.034",
-    // Approx
-    rateEmployee: "0",
-    // Mostly employer
+    rateEmployer: "0.10",
+    rateEmployee: "0.05",
+    capType: "none",
+    capBase: null,
+    capMultiplier: null,
+    capReferenceBase: null,
+    regionCode: null,
+    regionName: null,
+    ageBracketMin: null,
+    ageBracketMax: null,
     effectiveYear: 2025,
-    sortOrder: 1
+    legalReference: "NSSF Regulations",
+    notes: "Based on gross monthly wage."
   },
-  // 51. Argentina (AR)
+  // --- South Africa (ZA) ---
+  // Expat: 在南非合法工作的外籍员工及其雇主必须缴纳失业保险基金（UIF）。没有豁免政策。
   {
-    countryCode: "AR",
-    itemKey: "social_security_ar",
-    itemNameEn: "Social Security",
-    itemNameZh: "\u793E\u4F1A\u4FDD\u9669",
-    category: "social_insurance",
-    rateEmployer: "0.264",
-    // Avg
-    rateEmployee: "0.17",
+    countryCode: "ZA",
+    itemKey: "unemployment_insurance_fund",
+    itemNameEn: "Unemployment Insurance Fund (UIF)",
+    itemNameZh: "\u5931\u4E1A\u4FDD\u9669\u57FA\u91D1",
+    category: "unemployment",
+    rateEmployer: "0.01",
+    rateEmployee: "0.01",
+    capType: "fixed_amount",
+    capBase: "17712.0",
     effectiveYear: 2025,
-    sortOrder: 1
+    notes: "The contribution is capped at a monthly remuneration of ZAR 17,712. The annual cap is ZAR 212,544.",
+    legalReference: "https://taxsummaries.pwc.com/south-africa/individual/other-taxes",
+    sortOrder: 472
+  },
+  {
+    countryCode: "ZA",
+    itemKey: "compensation_for_occupational_injuries_and_diseases_fund",
+    itemNameEn: "Compensation for Occupational Injuries and Diseases Fund (COIDA)",
+    itemNameZh: "\u804C\u4E1A\u4F24\u5BB3\u4E0E\u75BE\u75C5\u8D54\u507F\u57FA\u91D1",
+    category: "work_injury",
+    rateEmployer: "0.0117",
+    rateEmployee: "0.0",
+    capType: "fixed_amount",
+    capBase: "42286.75",
+    effectiveYear: 2025,
+    notes: "Rate varies by industry sector, 1.17% is a representative average. The contribution is capped at an annual remuneration of ZAR 507,441. The monthly cap is ZAR 42,286.75. Contribution is by employer only.",
+    legalReference: "https://www.gov.za/sites/default/files/gcis_document/202403/50229gon4433.pdf",
+    sortOrder: 473
   }
 ];
 
@@ -31484,14 +40497,21 @@ var seed_migration_data_default = {
 import { readFile } from "fs/promises";
 import { join } from "path";
 async function readJsonFile(relativePath) {
-  try {
-    const path3 = join(process.cwd(), "data", relativePath);
-    const content = await readFile(path3, "utf-8");
-    return JSON.parse(content);
-  } catch (e) {
-    console.warn(`[Seed] Could not read ${relativePath}. Skipping.`);
-    return null;
+  const candidates = [
+    join(process.cwd(), "seed-data", relativePath),
+    // Docker production path
+    join(process.cwd(), "data", relativePath)
+    // Development / fallback path
+  ];
+  for (const path4 of candidates) {
+    try {
+      const content = await readFile(path4, "utf-8");
+      return JSON.parse(content);
+    } catch {
+    }
   }
+  console.warn(`[Seed] Could not read ${relativePath} from any known path. Skipping.`);
+  return null;
 }
 function parseDates(obj, dateFields) {
   const newObj = { ...obj };
@@ -31524,6 +40544,16 @@ async function seedSystemData(db) {
       count19++;
     }
     console.log(`[Seed] Processed ${count19} countries`);
+    const validCodes = new Set(countries.map((c) => c.countryCode || c.code));
+    const allDbCountries = await db.select({ countryCode: countriesConfig.countryCode }).from(countriesConfig);
+    const orphanCodes = allDbCountries.map((r) => r.countryCode).filter((code) => !validCodes.has(code));
+    if (orphanCodes.length > 0) {
+      for (const code of orphanCodes) {
+        await db.delete(countriesConfig).where(eq66(countriesConfig.countryCode, code));
+        console.log(`[Seed] Removed orphan/test country: ${code}`);
+      }
+      console.log(`[Seed] Cleaned up ${orphanCodes.length} orphan/test countries`);
+    }
   }
   const ltData = await readJsonFile("data-exports/baseline/leave_types.json");
   if (ltData) {
@@ -31532,9 +40562,9 @@ async function seedSystemData(db) {
       const { id, ...data } = lt3;
       const formatted = parseDates(data, ["createdAt", "updatedAt"]);
       const existing = await db.query.leaveTypes.findFirst({
-        where: and49(
-          eq64(leaveTypes.countryCode, formatted.countryCode),
-          eq64(leaveTypes.leaveTypeName, formatted.leaveTypeName)
+        where: and52(
+          eq66(leaveTypes.countryCode, formatted.countryCode),
+          eq66(leaveTypes.leaveTypeName, formatted.leaveTypeName)
         )
       });
       if (!existing) {
@@ -31551,11 +40581,11 @@ async function seedSystemData(db) {
       const { id, ...data } = h;
       const formatted = parseDates(data, ["createdAt", "updatedAt"]);
       const existing = await db.query.publicHolidays.findFirst({
-        where: and49(
-          eq64(publicHolidays.countryCode, formatted.countryCode),
-          eq64(publicHolidays.year, formatted.year),
-          eq64(publicHolidays.holidayDate, formatted.holidayDate),
-          eq64(publicHolidays.holidayName, formatted.holidayName)
+        where: and52(
+          eq66(publicHolidays.countryCode, formatted.countryCode),
+          eq66(publicHolidays.year, formatted.year),
+          eq66(publicHolidays.holidayDate, formatted.holidayDate),
+          eq66(publicHolidays.holidayName, formatted.holidayName)
         )
       });
       if (!existing) {
@@ -31571,10 +40601,10 @@ async function seedSocialInsuranceData(db) {
   let count19 = 0;
   for (const rule of socialInsuranceRules) {
     const existing = await db.select().from(countrySocialInsuranceItems).where(
-      and49(
-        eq64(countrySocialInsuranceItems.countryCode, rule.countryCode),
-        eq64(countrySocialInsuranceItems.itemKey, rule.itemKey),
-        eq64(countrySocialInsuranceItems.effectiveYear, rule.effectiveYear)
+      and52(
+        eq66(countrySocialInsuranceItems.countryCode, rule.countryCode),
+        eq66(countrySocialInsuranceItems.itemKey, rule.itemKey),
+        eq66(countrySocialInsuranceItems.effectiveYear, rule.effectiveYear)
       )
     ).limit(1);
     if (existing.length === 0) {
@@ -31639,9 +40669,9 @@ async function seedCountryGuides(db) {
     }
     try {
       const existing = await db.query.countryGuideChapters.findFirst({
-        where: and49(
-          eq64(countryGuideChapters.countryCode, ch.countryCode),
-          eq64(countryGuideChapters.chapterKey, ch.chapterKey)
+        where: and52(
+          eq66(countryGuideChapters.countryCode, ch.countryCode),
+          eq66(countryGuideChapters.chapterKey, ch.chapterKey)
         )
       });
       if (existing) {
@@ -31658,7 +40688,7 @@ async function seedCountryGuides(db) {
             version: ch.version || "2026-Q1",
             status: ch.status || "published",
             updatedAt: /* @__PURE__ */ new Date()
-          }).where(eq64(countryGuideChapters.id, existing.id));
+          }).where(eq66(countryGuideChapters.id, existing.id));
           updated++;
         } else {
           skipped++;
@@ -31700,7 +40730,7 @@ async function seedBusinessMigrationData(db) {
   for (let i = 0; i < data.customers.length; i++) {
     const c = data.customers[i];
     const index4 = i + 1;
-    const existing = await db.select({ id: customers.id }).from(customers).where(eq64(customers.clientCode, c.clientCode)).limit(1);
+    const existing = await db.select({ id: customers.id }).from(customers).where(eq66(customers.clientCode, c.clientCode)).limit(1);
     let customerId;
     if (existing.length > 0) {
       customerId = existing[0].id;
@@ -31729,7 +40759,7 @@ async function seedBusinessMigrationData(db) {
     const index4 = i + 1;
     const dbCustomerId = customerMap.get(e.customerIndex);
     if (!dbCustomerId) continue;
-    const existing = await db.select({ id: employees.id }).from(employees).where(eq64(employees.employeeCode, e.employeeCode)).limit(1);
+    const existing = await db.select({ id: employees.id }).from(employees).where(eq66(employees.employeeCode, e.employeeCode)).limit(1);
     let employeeId;
     if (existing.length > 0) {
       employeeId = existing[0].id;
@@ -31772,7 +40802,7 @@ async function seedBusinessMigrationData(db) {
     const dbCustomerId = customerMap.get(inv.customerIndex);
     const dbEmployeeId = employeeMap.get(inv.employeeIndex);
     if (!dbCustomerId || !dbEmployeeId) continue;
-    const existing = await db.select({ id: invoices.id }).from(invoices).where(eq64(invoices.invoiceNumber, inv.invoiceNumber)).limit(1);
+    const existing = await db.select({ id: invoices.id }).from(invoices).where(eq66(invoices.invoiceNumber, inv.invoiceNumber)).limit(1);
     if (existing.length > 0) continue;
     let dbType = "deposit";
     if (inv.invoiceType === "deposit_refund") dbType = "deposit_refund";
@@ -31830,12 +40860,131 @@ async function seedMigration() {
 // server/autoMigrate.ts
 import { createClient as createClient2 } from "@libsql/client";
 var REQUIRED_COLUMNS = [
+  // ── invoices ──
   {
     table: "invoices",
     column: "creditNoteDisposition",
     type: "TEXT"
-    // No default — nullable column
+  },
+  // ── contractor_adjustments (Phase 1 AOR alignment) ──
+  {
+    table: "contractor_adjustments",
+    column: "customerId",
+    type: "INTEGER NOT NULL",
+    defaultValue: "0"
+  },
+  {
+    table: "contractor_adjustments",
+    column: "attachmentFileKey",
+    type: "TEXT"
+  },
+  {
+    table: "contractor_adjustments",
+    column: "submittedBy",
+    type: "INTEGER"
+  },
+  {
+    table: "contractor_adjustments",
+    column: "clientApprovedBy",
+    type: "INTEGER"
+  },
+  {
+    table: "contractor_adjustments",
+    column: "clientApprovedAt",
+    type: "INTEGER"
+  },
+  {
+    table: "contractor_adjustments",
+    column: "clientRejectionReason",
+    type: "TEXT"
+  },
+  {
+    table: "contractor_adjustments",
+    column: "adminApprovedBy",
+    type: "INTEGER"
+  },
+  {
+    table: "contractor_adjustments",
+    column: "adminApprovedAt",
+    type: "INTEGER"
+  },
+  {
+    table: "contractor_adjustments",
+    column: "adminRejectionReason",
+    type: "TEXT"
+  },
+  {
+    table: "contractor_adjustments",
+    column: "effectiveMonth",
+    type: "TEXT NOT NULL",
+    defaultValue: "'2025-01-01'"
+  },
+  // ── contractor_milestones (Phase 1 AOR alignment) ──
+  {
+    table: "contractor_milestones",
+    column: "customerId",
+    type: "INTEGER NOT NULL",
+    defaultValue: "0"
+  },
+  {
+    table: "contractor_milestones",
+    column: "submittedBy",
+    type: "INTEGER"
+  },
+  {
+    table: "contractor_milestones",
+    column: "clientApprovedBy",
+    type: "INTEGER"
+  },
+  {
+    table: "contractor_milestones",
+    column: "clientApprovedAt",
+    type: "INTEGER"
+  },
+  {
+    table: "contractor_milestones",
+    column: "clientRejectionReason",
+    type: "TEXT"
+  },
+  {
+    table: "contractor_milestones",
+    column: "adminApprovedBy",
+    type: "INTEGER"
+  },
+  {
+    table: "contractor_milestones",
+    column: "adminApprovedAt",
+    type: "INTEGER"
+  },
+  {
+    table: "contractor_milestones",
+    column: "adminRejectionReason",
+    type: "TEXT"
+  },
+  {
+    table: "contractor_milestones",
+    column: "effectiveMonth",
+    type: "TEXT"
+  },
+  // ── leave_records (payroll lifecycle fix) ──
+  {
+    table: "leave_records",
+    column: "payrollRunId",
+    type: "INTEGER"
   }
+];
+var BACKFILL_QUERIES = [
+  // Backfill contractor_adjustments.customerId from contractors table
+  `UPDATE "contractor_adjustments" SET "customerId" = (
+    SELECT "customerId" FROM "contractors" WHERE "contractors"."id" = "contractor_adjustments"."contractorId"
+  ) WHERE "customerId" = 0`,
+  // Backfill contractor_adjustments.effectiveMonth from date column (if date column exists)
+  `UPDATE "contractor_adjustments" SET "effectiveMonth" = substr("date", 1, 7) || '-01'
+   WHERE "effectiveMonth" = '2025-01-01' AND "date" IS NOT NULL`,
+  // Backfill contractor_milestones.customerId from contractors table
+  `UPDATE "contractor_milestones" SET "customerId" = (
+    SELECT "customerId" FROM "contractors" WHERE "contractors"."id" = "contractor_milestones"."contractorId"
+  ) WHERE "customerId" = 0`
 ];
 async function runAutoMigrations() {
   const dbUrl = process.env.DATABASE_URL;
@@ -31851,6 +41000,7 @@ async function runAutoMigrations() {
     console.warn("[AutoMigrate] Failed to connect to database:", err);
     return;
   }
+  let columnsAdded = 0;
   for (const migration of REQUIRED_COLUMNS) {
     try {
       const tableInfo = await client.execute(`PRAGMA table_info("${migration.table}")`);
@@ -31859,9 +41009,10 @@ async function runAutoMigrations() {
       );
       if (!columnExists) {
         const defaultClause = migration.defaultValue != null ? ` DEFAULT ${migration.defaultValue}` : "";
-        const sql26 = `ALTER TABLE "${migration.table}" ADD COLUMN "${migration.column}" ${migration.type}${defaultClause}`;
-        await client.execute(sql26);
+        const sql28 = `ALTER TABLE "${migration.table}" ADD COLUMN "${migration.column}" ${migration.type}${defaultClause}`;
+        await client.execute(sql28);
         console.log(`[AutoMigrate] Added column: ${migration.table}.${migration.column}`);
+        columnsAdded++;
       }
     } catch (err) {
       if (err?.message?.includes("duplicate column")) {
@@ -31873,17 +41024,28 @@ async function runAutoMigrations() {
       }
     }
   }
+  if (columnsAdded > 0) {
+    console.log(`[AutoMigrate] ${columnsAdded} columns added, running backfill queries...`);
+    for (const query of BACKFILL_QUERIES) {
+      try {
+        await client.execute(query);
+        console.log(`[AutoMigrate] Backfill executed successfully`);
+      } catch (err) {
+        console.warn(`[AutoMigrate] Backfill query skipped or failed:`, err?.message || err);
+      }
+    }
+  }
   console.log("[AutoMigrate] Schema check complete");
 }
 
 // server/_core/index.ts
 function isPortAvailable(port) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     const server = net.createServer();
     server.listen(port, () => {
-      server.close(() => resolve(true));
+      server.close(() => resolve2(true));
     });
-    server.on("error", () => resolve(false));
+    server.on("error", () => resolve2(false));
   });
 }
 async function findAvailablePort(startPort = 3e3) {
