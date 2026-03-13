@@ -15,7 +15,7 @@ import {
   getLeaveTypeById,
   getDb,
 } from "../db";
-import { leaveRecords } from "../../drizzle/schema";
+import { leaveRecords, leaveTypes } from "../../drizzle/schema";
 import { and, eq, sql, or, ne } from "drizzle-orm";
 import {
   enforceCutoff,
@@ -28,6 +28,7 @@ import {
 /**
  * Update leave balance: adjust used/remaining by delta days.
  * Positive delta = consuming leave (create), negative delta = restoring leave (delete/cancel).
+ * For positive deltas (consuming), remaining will NOT go below 0.
  */
 async function adjustLeaveBalance(employeeId: number, leaveTypeId: number, deltaDays: number, year: number): Promise<{ warning?: string }> {
   const balances = await listLeaveBalances(employeeId, year);
@@ -36,20 +37,53 @@ async function adjustLeaveBalance(employeeId: number, leaveTypeId: number, delta
     return { warning: "No leave balance found for this leave type and year" };
   }
 
-  const newUsed = (balance.used ?? 0) + deltaDays;
+  const newUsed = Math.max(0, (balance.used ?? 0) + deltaDays);
   const newRemaining = (balance.remaining ?? 0) - deltaDays;
 
   let warning: string | undefined;
-  if (newRemaining < 0) {
-    warning = "Leave balance will be negative (" + newRemaining + " days remaining). Proceeding anyway.";
+  if (newRemaining < 0 && deltaDays > 0) {
+    warning = "Leave balance would be negative (" + newRemaining + " days remaining). Capped at 0.";
   }
 
   await updateLeaveBalance(balance.id, {
-    used: Math.max(0, newUsed),
-    remaining: newRemaining,
+    used: newUsed,
+    remaining: deltaDays > 0 ? Math.max(0, newRemaining) : newRemaining,
   });
 
   return { warning };
+}
+
+/**
+ * Find the Unpaid Leave type for a given country code.
+ */
+async function findUnpaidLeaveType(countryCode: string): Promise<{ id: number; leaveTypeName: string } | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [unpaidType] = await db
+    .select({ id: leaveTypes.id, leaveTypeName: leaveTypes.leaveTypeName })
+    .from(leaveTypes)
+    .where(and(eq(leaveTypes.countryCode, countryCode), eq(leaveTypes.isPaid, false)))
+    .limit(1);
+  return unpaidType || null;
+}
+
+/**
+ * Check if a leave type is paid.
+ */
+async function isLeaveTypePaid(leaveTypeId: number): Promise<boolean> {
+  const lt = await getLeaveTypeById(leaveTypeId);
+  return lt?.isPaid !== false;
+}
+
+/**
+ * Get remaining balance for an employee's leave type in a given year.
+ * Returns null if no balance record exists.
+ */
+async function getRemainingBalance(employeeId: number, leaveTypeId: number, year: number): Promise<number | null> {
+  const balances = await listLeaveBalances(employeeId, year);
+  const balance = balances.find((b: any) => b.leaveTypeId === leaveTypeId);
+  if (!balance) return null;
+  return Number(balance.remaining ?? 0);
 }
 
 /**
@@ -223,31 +257,101 @@ export const leaveRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: `Duplicate leave detected: employee already has leave records overlapping with this period: ${overlapDetails}. Please adjust the dates or cancel the existing record first.` });
       }
 
-      // 7. Create leave records — one per split portion
+      // 7. Check balance and auto-split if insufficient (paid leave only)
+      const isPaid = await isLeaveTypePaid(input.leaveTypeId);
+      const year = parseInt(input.endDate.split("-")[0], 10);
+      let paidDays = totalDays;
+      let unpaidDays = 0;
+      let unpaidLeaveTypeId: number | null = null;
+      let balanceSplit = false;
+
+      if (isPaid) {
+        const remaining = await getRemainingBalance(input.employeeId, input.leaveTypeId, year);
+        if (remaining !== null && totalDays > remaining) {
+          // Need to split: use remaining for paid, excess for unpaid
+          paidDays = Math.max(0, remaining);
+          unpaidDays = totalDays - paidDays;
+          const unpaidType = await findUnpaidLeaveType(employee.country);
+          if (!unpaidType) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: `Insufficient leave balance (${remaining} days remaining, ${totalDays} requested). No Unpaid Leave type found for country ${employee.country}.` });
+          }
+          unpaidLeaveTypeId = unpaidType.id;
+          balanceSplit = true;
+        }
+      }
+
+      // 8. Create leave records — one per split portion
       const createdIds: number[] = [];
       const balanceWarnings: string[] = [];
 
-      for (const split of splits) {
-        const result = await createLeaveRecord({
-          employeeId: input.employeeId,
-          leaveTypeId: input.leaveTypeId,
-          startDate: split.startDate,
-          endDate: split.endDate,
-          days: String(split.days),
-          reason: crossMonth
-            ? `${input.reason || ""}${input.reason ? " | " : ""}[Split ${split.payrollMonth}: ${split.startDate} to ${split.endDate}]`.trim()
-            : input.reason,
-          status: "submitted",
-          submittedBy: ctx.user.id,
-        });
+      if (balanceSplit && paidDays > 0) {
+        // Create paid portion records
+        const paidRatio = paidDays / totalDays;
+        for (const split of splits) {
+          const splitPaidDays = Math.round(split.days * paidRatio * 10) / 10;
+          if (splitPaidDays <= 0) continue;
+          const result = await createLeaveRecord({
+            employeeId: input.employeeId,
+            leaveTypeId: input.leaveTypeId,
+            startDate: split.startDate,
+            endDate: split.endDate,
+            days: String(splitPaidDays),
+            reason: `${input.reason || ""}${input.reason ? " | " : ""}[Paid portion: ${splitPaidDays} days]`.trim(),
+            status: "submitted",
+            submittedBy: ctx.user.id,
+          });
+          const insertId = (result as any)[0]?.insertId;
+          if (insertId) createdIds.push(insertId);
+          const splitYear = parseInt(split.endDate.split("-")[0], 10);
+          await adjustLeaveBalance(input.employeeId, input.leaveTypeId, splitPaidDays, splitYear);
+        }
+      } else if (balanceSplit && paidDays <= 0) {
+        // All days go to unpaid, no paid records needed
+      } else {
+        // Normal flow: all days are paid or it's unpaid leave
+        for (const split of splits) {
+          const result = await createLeaveRecord({
+            employeeId: input.employeeId,
+            leaveTypeId: input.leaveTypeId,
+            startDate: split.startDate,
+            endDate: split.endDate,
+            days: String(split.days),
+            reason: crossMonth
+              ? `${input.reason || ""}${input.reason ? " | " : ""}[Split ${split.payrollMonth}: ${split.startDate} to ${split.endDate}]`.trim()
+              : input.reason,
+            status: "submitted",
+            submittedBy: ctx.user.id,
+          });
+          const insertId = (result as any)[0]?.insertId;
+          if (insertId) createdIds.push(insertId);
 
-        const insertId = (result as any)[0]?.insertId;
-        if (insertId) createdIds.push(insertId);
+          if (isPaid) {
+            const splitYear = parseInt(split.endDate.split("-")[0], 10);
+            const balResult = await adjustLeaveBalance(input.employeeId, input.leaveTypeId, split.days, splitYear);
+            if (balResult.warning) balanceWarnings.push(balResult.warning);
+          }
+        }
+      }
 
-        // Adjust leave balance for each portion
-        const year = parseInt(split.endDate.split("-")[0], 10);
-        const balResult = await adjustLeaveBalance(input.employeeId, input.leaveTypeId, split.days, year);
-        if (balResult.warning) balanceWarnings.push(balResult.warning);
+      // Create unpaid portion records if balance was split
+      if (balanceSplit && unpaidDays > 0 && unpaidLeaveTypeId) {
+        const unpaidRatio = unpaidDays / totalDays;
+        for (const split of splits) {
+          const splitUnpaidDays = Math.round(split.days * unpaidRatio * 10) / 10;
+          if (splitUnpaidDays <= 0) continue;
+          const result = await createLeaveRecord({
+            employeeId: input.employeeId,
+            leaveTypeId: unpaidLeaveTypeId,
+            startDate: split.startDate,
+            endDate: split.endDate,
+            days: String(splitUnpaidDays),
+            reason: `${input.reason || ""}${input.reason ? " | " : ""}[Unpaid portion: ${splitUnpaidDays} days — auto-split due to insufficient balance]`.trim(),
+            status: "submitted",
+            submittedBy: ctx.user.id,
+          });
+          const insertId = (result as any)[0]?.insertId;
+          if (insertId) createdIds.push(insertId);
+        }
       }
 
       await logAuditAction({
@@ -260,6 +364,9 @@ export const leaveRouter = router({
           splitCount: splits.length,
           splits: crossMonth ? splits : undefined,
           createdIds,
+          balanceSplit,
+          paidDays: balanceSplit ? paidDays : undefined,
+          unpaidDays: balanceSplit ? unpaidDays : undefined,
         }),
       });
 
@@ -270,6 +377,9 @@ export const leaveRouter = router({
         crossMonth,
         splits,
         balanceWarnings: balanceWarnings.length > 0 ? balanceWarnings : undefined,
+        balanceSplit,
+        paidDays: balanceSplit ? paidDays : undefined,
+        unpaidDays: balanceSplit ? unpaidDays : undefined,
       };
     }),
 

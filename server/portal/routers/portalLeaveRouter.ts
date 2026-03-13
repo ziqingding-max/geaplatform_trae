@@ -203,12 +203,120 @@ export const portalLeaveRouter = portalRouter({
       const actualDays = input.isHalfDay
         ? (parseFloat(input.days) - 0.5).toFixed(1)
         : input.days;
+      const totalDays = parseFloat(actualDays);
 
       // Cross-month leave splitting (matching Admin behavior)
-      if (isLeavesCrossMonth(input.startDate, input.endDate)) {
-        const splits = splitLeaveByMonth(input.startDate, input.endDate, parseFloat(actualDays));
+      const crossMonth = isLeavesCrossMonth(input.startDate, input.endDate);
+      const splits = crossMonth
+        ? splitLeaveByMonth(input.startDate, input.endDate, totalDays)
+        : [{ startDate: input.startDate, endDate: input.endDate, days: totalDays, payrollMonth: getLeavePayrollMonth(input.endDate) }];
 
-        // Insert each split as a separate leave record
+      // Check if this is a paid leave type
+      const [leaveTypeInfo] = await db
+        .select({ isPaid: leaveTypes.isPaid })
+        .from(leaveTypes)
+        .where(eq(leaveTypes.id, input.leaveTypeId))
+        .limit(1);
+      const isPaid = leaveTypeInfo?.isPaid !== false;
+
+      // Check balance and auto-split if insufficient (paid leave only)
+      const year = parseInt(input.endDate.split("-")[0], 10);
+      let paidDays = totalDays;
+      let unpaidDays = 0;
+      let unpaidLeaveTypeId: number | null = null;
+      let balanceSplit = false;
+
+      if (isPaid) {
+        // Get current balance
+        const balanceRows = await db
+          .select({ id: leaveBalances.id, remaining: leaveBalances.remaining, used: leaveBalances.used })
+          .from(leaveBalances)
+          .where(and(
+            eq(leaveBalances.employeeId, input.employeeId),
+            eq(leaveBalances.leaveTypeId, input.leaveTypeId),
+            eq(leaveBalances.year, year)
+          ))
+          .limit(1);
+        const balance = balanceRows[0];
+        const remaining = balance ? Number(balance.remaining ?? 0) : 0;
+
+        if (totalDays > remaining) {
+          paidDays = Math.max(0, remaining);
+          unpaidDays = totalDays - paidDays;
+          // Find Unpaid Leave type for this country
+          const [unpaidType] = await db
+            .select({ id: leaveTypes.id })
+            .from(leaveTypes)
+            .where(and(eq(leaveTypes.countryCode, emp.country), eq(leaveTypes.isPaid, false)))
+            .limit(1);
+          if (!unpaidType) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: `Insufficient leave balance (${remaining} days remaining, ${totalDays} requested). No Unpaid Leave type configured for this country.` });
+          }
+          unpaidLeaveTypeId = unpaidType.id;
+          balanceSplit = true;
+        }
+      }
+
+      // Helper to update balance
+      const deductBalance = async (leaveTypeId: number, days: number, yr: number) => {
+        const [bal] = await db
+          .select({ id: leaveBalances.id, used: leaveBalances.used, remaining: leaveBalances.remaining })
+          .from(leaveBalances)
+          .where(and(
+            eq(leaveBalances.employeeId, input.employeeId),
+            eq(leaveBalances.leaveTypeId, leaveTypeId),
+            eq(leaveBalances.year, yr)
+          ))
+          .limit(1);
+        if (bal) {
+          await db.update(leaveBalances).set({
+            used: Math.max(0, (bal.used ?? 0) + days),
+            remaining: Math.max(0, (bal.remaining ?? 0) - days),
+          }).where(eq(leaveBalances.id, bal.id));
+        }
+      };
+
+      // Create records
+      if (balanceSplit) {
+        // Create paid portion records
+        if (paidDays > 0) {
+          const paidRatio = paidDays / totalDays;
+          for (const split of splits) {
+            const splitPaidDays = Math.round(split.days * paidRatio * 10) / 10;
+            if (splitPaidDays <= 0) continue;
+            await db.insert(leaveRecords).values({
+              employeeId: input.employeeId,
+              leaveTypeId: input.leaveTypeId,
+              startDate: split.startDate,
+              endDate: split.endDate,
+              days: String(splitPaidDays),
+              status: "submitted",
+              reason: `${input.reason || ""}${input.reason ? " | " : ""}[Paid portion: ${splitPaidDays} days]`.trim(),
+            });
+            const splitYear = parseInt(split.endDate.split("-")[0], 10);
+            await deductBalance(input.leaveTypeId, splitPaidDays, splitYear);
+          }
+        }
+        // Create unpaid portion records
+        if (unpaidDays > 0 && unpaidLeaveTypeId) {
+          const unpaidRatio = unpaidDays / totalDays;
+          for (const split of splits) {
+            const splitUnpaidDays = Math.round(split.days * unpaidRatio * 10) / 10;
+            if (splitUnpaidDays <= 0) continue;
+            await db.insert(leaveRecords).values({
+              employeeId: input.employeeId,
+              leaveTypeId: unpaidLeaveTypeId,
+              startDate: split.startDate,
+              endDate: split.endDate,
+              days: String(splitUnpaidDays),
+              status: "submitted",
+              reason: `${input.reason || ""}${input.reason ? " | " : ""}[Unpaid portion: ${splitUnpaidDays} days \u2014 auto-split due to insufficient balance]`.trim(),
+            });
+          }
+        }
+        return { success: true, splits: splits.length, balanceSplit: true, paidDays, unpaidDays };
+      } else {
+        // Normal flow: sufficient balance or unpaid leave type
         for (const split of splits) {
           await db.insert(leaveRecords).values({
             employeeId: input.employeeId,
@@ -219,23 +327,14 @@ export const portalLeaveRouter = portalRouter({
             status: "submitted",
             reason: input.reason || null,
           });
+          // Deduct balance for paid leave
+          if (isPaid) {
+            const splitYear = parseInt(split.endDate.split("-")[0], 10);
+            await deductBalance(input.leaveTypeId, split.days, splitYear);
+          }
         }
-
-        return { success: true, splits: splits.length };
+        return { success: true, splits: crossMonth ? splits.length : undefined };
       }
-
-      // Single-month leave: insert as-is
-      await db.insert(leaveRecords).values({
-        employeeId: input.employeeId,
-        leaveTypeId: input.leaveTypeId,
-        startDate: input.startDate,
-        endDate: input.endDate,
-        days: actualDays,
-        status: "submitted",
-        reason: input.reason || null,
-      });
-
-      return { success: true };
     }),
 
   /**
@@ -254,6 +353,9 @@ export const portalLeaveRouter = portalRouter({
           id: leaveRecords.id,
           status: leaveRecords.status,
           endDate: leaveRecords.endDate,
+          employeeId: leaveRecords.employeeId,
+          leaveTypeId: leaveRecords.leaveTypeId,
+          days: leaveRecords.days,
         })
         .from(leaveRecords)
         .innerJoin(employees, eq(leaveRecords.employeeId, employees.id))
@@ -271,6 +373,36 @@ export const portalLeaveRouter = portalRouter({
       if (records[0].endDate) {
         const payrollMonth = getLeavePayrollMonth(records[0].endDate);
         await enforceCutoff(`${payrollMonth}-01`, "portal_hr", "delete leave record");
+      }
+
+      // Restore leave balance before deleting
+      const record = records[0];
+      const days = parseFloat(String(record.days ?? "0"));
+      if (days > 0 && record.endDate) {
+        const yr = parseInt(String(record.endDate).split("-")[0], 10);
+        // Check if this is a paid leave type
+        const [ltInfo] = await db
+          .select({ isPaid: leaveTypes.isPaid })
+          .from(leaveTypes)
+          .where(eq(leaveTypes.id, record.leaveTypeId))
+          .limit(1);
+        if (ltInfo?.isPaid !== false) {
+          const [bal] = await db
+            .select({ id: leaveBalances.id, used: leaveBalances.used, remaining: leaveBalances.remaining })
+            .from(leaveBalances)
+            .where(and(
+              eq(leaveBalances.employeeId, record.employeeId),
+              eq(leaveBalances.leaveTypeId, record.leaveTypeId),
+              eq(leaveBalances.year, yr)
+            ))
+            .limit(1);
+          if (bal) {
+            await db.update(leaveBalances).set({
+              used: Math.max(0, (bal.used ?? 0) - days),
+              remaining: (bal.remaining ?? 0) + days,
+            }).where(eq(leaveBalances.id, bal.id));
+          }
+        }
       }
 
       await db.delete(leaveRecords).where(eq(leaveRecords.id, input.id));

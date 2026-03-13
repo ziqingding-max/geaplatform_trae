@@ -358,9 +358,18 @@ export default function PortalLeave() {
     pageSize,
   });
 
-  // Get employees for the selector
-  const { data: empData } = portalTrpc.employees.list.useQuery({ page: 1, pageSize: 100 });
-  const employees = empData?.items ?? [];
+  // Get employees for the selector — only active and on_leave employees
+  const { data: empDataActive } = portalTrpc.employees.list.useQuery({ page: 1, pageSize: 100, status: "active" });
+  const { data: empDataOnLeave } = portalTrpc.employees.list.useQuery({ page: 1, pageSize: 100, status: "on_leave" });
+  const employees = useMemo(() => {
+    const active = empDataActive?.items ?? [];
+    const onLeave = empDataOnLeave?.items ?? [];
+    const merged = [...active];
+    for (const e of onLeave) {
+      if (!merged.find((m: any) => m.id === e.id)) merged.push(e);
+    }
+    return merged;
+  }, [empDataActive, empDataOnLeave]);
 
   // Get leave types for the selected employee's country
   const selectedEmp = employees.find((e: any) => e.id === form.employeeId);
@@ -369,13 +378,51 @@ export default function PortalLeave() {
     { enabled: !!selectedEmp?.country }
   );
 
+  // Get leave balances for selected employee (balances tab)
+  const { data: balances } = portalTrpc.leave.balances.useQuery(
+    { employeeId: selectedBalanceEmp || 0 },
+    { enabled: !!selectedBalanceEmp }
+  );
+
+  // Get leave balances for the employee selected in the create dialog
+  const { data: createFormBalances } = portalTrpc.leave.balances.useQuery(
+    { employeeId: form.employeeId || 0 },
+    { enabled: !!form.employeeId }
+  );
+
+  // Helper: get remaining balance for a leave type in the create form
+  const getFormBalance = (leaveTypeId: number) => {
+    if (!createFormBalances) return null;
+    const bal = createFormBalances.find((b: any) => b.leaveTypeId === leaveTypeId);
+    return bal ? { remaining: Number(bal.remaining ?? 0), totalEntitlement: Number(bal.totalEntitlement ?? 0) } : null;
+  };
+
+  // Check if selected leave type has insufficient balance
+  const selectedLeaveType = (leaveTypes || []).find((lt: any) => lt.id === form.leaveTypeId);
+  const requestedDays = parseFloat(form.days || "0");
+  const selectedBalance = form.leaveTypeId ? getFormBalance(form.leaveTypeId) : null;
+  const isInsufficientBalance = selectedLeaveType?.isPaid !== false && selectedBalance !== null && requestedDays > 0 && requestedDays > selectedBalance.remaining;
+
+  // Get public holidays
+  const { data: holidays } = portalTrpc.leave.publicHolidays.useQuery(
+    { year: new Date().getFullYear() },
+    { enabled: activeTab === "holidays" }
+  );
 
   const createMutation = portalTrpc.leave.create.useMutation({
-    onSuccess: () => {
-      toast.success(t("portal_leave.toasts.request_submitted"));
+    onSuccess: (data: any) => {
+      if (data?.balanceSplit) {
+        toast.success(
+          `Leave request split: ${data.paidDays} day(s) paid leave + ${data.unpaidDays} day(s) unpaid leave (due to insufficient balance)`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.success(t("portal_leave.toasts.request_submitted"));
+      }
       setShowCreate(false);
       setForm({ ...emptyForm });
       utils.leave.list.invalidate();
+      utils.leave.balances.invalidate();
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -385,6 +432,7 @@ export default function PortalLeave() {
       toast.success(t("portal_leave.toasts.request_deleted"));
       setDeleteId(null);
       utils.leave.list.invalidate();
+      utils.leave.balances.invalidate();
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -669,11 +717,19 @@ export default function PortalLeave() {
               >
                 <SelectTrigger><SelectValue placeholder={form.employeeId ? t("portal_leave.create_dialog.placeholder_leave_type") : t("portal_leave.create_dialog.placeholder_select_employee_first")} /></SelectTrigger>
                 <SelectContent>
-                  {(leaveTypes || []).map((lt: any) => (
-                    <SelectItem key={lt.id} value={String(lt.id)}>
-                      {lt.leaveTypeName} ({lt.annualEntitlement} days/year)
-                    </SelectItem>
-                  ))}
+                  {(leaveTypes || []).map((lt: any) => {
+                    const bal = getFormBalance(lt.id);
+                    const balLabel = lt.isPaid === false
+                      ? "Unpaid"
+                      : bal !== null
+                        ? `${bal.remaining}/${bal.totalEntitlement} days remaining`
+                        : `${lt.annualEntitlement} days/year`;
+                    return (
+                      <SelectItem key={lt.id} value={String(lt.id)}>
+                        {lt.leaveTypeName} ({balLabel})
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -709,6 +765,18 @@ export default function PortalLeave() {
               <Input type="number" step="0.5" value={form.days} onChange={(e) => setForm((f) => ({ ...f, days: e.target.value }))} placeholder={t("portal_leave.create_dialog.placeholder_days")} />
               <p className="text-xs text-muted-foreground">Auto-calculated as business days (weekdays). Adjust manually if needed.</p>
             </div>
+            {/* Insufficient balance warning */}
+            {isInsufficientBalance && selectedBalance && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm font-medium text-amber-800">
+                  Insufficient leave balance
+                </p>
+                <p className="text-xs text-amber-700 mt-1">
+                  You are requesting {requestedDays} day(s) but only {selectedBalance.remaining} day(s) remaining.
+                  The excess {(requestedDays - selectedBalance.remaining).toFixed(1)} day(s) will be automatically converted to Unpaid Leave.
+                </p>
+              </div>
+            )}
             {/* Bug 13: Half-day leave option */}
             <div className="flex items-center space-x-2">
               <input
