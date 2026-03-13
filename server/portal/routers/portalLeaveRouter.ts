@@ -155,7 +155,6 @@ export const portalLeaveRouter = portalRouter({
         endDate: z.string(),
         days: z.string(),
         reason: z.string().optional(),
-        isHalfDay: z.boolean().default(false),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -199,11 +198,8 @@ export const portalLeaveRouter = portalRouter({
         });
       }
 
-      // Half day: subtract 0.5 from total days (last day is half day)
-      const actualDays = input.isHalfDay
-        ? (parseFloat(input.days) - 0.5).toFixed(1)
-        : input.days;
-      const totalDays = parseFloat(actualDays);
+      // Days already include half-day deduction (calculated on frontend, matching Admin behavior)
+      const totalDays = parseFloat(input.days);
 
       // Cross-month leave splitting (matching Admin behavior)
       const crossMonth = isLeavesCrossMonth(input.startDate, input.endDate);
