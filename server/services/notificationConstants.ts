@@ -134,5 +134,22 @@ export const DEFAULT_RULES: Record<string, NotificationConfig> = {
         inAppMessage: "款项 {{currency}} {{amount}} 已汇出。"
       }
     }
+  },
+  leave_policy_country_activated: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["client:admin", "client:hr"],
+    templates: {
+      en: {
+        emailSubject: "New Country Leave Policy Activated: {{countryName}}",
+        emailBody: "<p>Dear {{contactName}},</p><p>A new country <strong>{{countryName}}</strong> has been activated for leave policy management based on employee onboarding.</p><p>Statutory leave policies have been automatically initialized with default entitlements. Please review and customize the leave policies in your <strong>Settings > Leave Policies</strong> page to match your company's requirements.</p><p>Best regards,<br>GEA Team</p>",
+        inAppMessage: "New country {{countryName}} activated. Please configure leave policies in Settings."
+      },
+      zh: {
+        emailSubject: "新国家假期政策已激活：{{countryName}}",
+        emailBody: "<p>尊敬的 {{contactName}}，</p><p>基于员工入职，新国家 <strong>{{countryName}}</strong> 的假期政策管理已激活。</p><p>法定假期政策已按默认标准自动初始化。请前往 <strong>设置 > 假期政策</strong> 页面，根据贵公司的要求审核和自定义假期政策。</p><p>祝好，<br>GEA 团队</p>",
+        inAppMessage: "新国家 {{countryName}} 已激活，请在设置中配置假期政策。"
+      }
+    }
   }
 };

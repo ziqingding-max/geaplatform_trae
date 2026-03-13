@@ -218,7 +218,9 @@ export default function PortalEmployeeDetail() {
                 <TabsTrigger value="employment">{t("portal_employees.tabs.employment")}</TabsTrigger>
                 <TabsTrigger value="documents">Documents ({employee.documents?.length || 0})</TabsTrigger>
                 <TabsTrigger value="contracts">Contracts ({employee.contracts?.length || 0})</TabsTrigger>
-                <TabsTrigger value="leave">{t("portal_employees.tabs.leave")}</TabsTrigger>
+                {(employee.status === "active" || employee.status === "on_leave") && (
+                  <TabsTrigger value="leave">{t("portal_employees.tabs.leave")}</TabsTrigger>
+                )}
               </TabsList>
 
               {/* Personal Information Tab */}
@@ -498,7 +500,7 @@ export default function PortalEmployeeDetail() {
                               <div className="h-2 bg-muted rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-primary rounded-full transition-all"
-                                  style={{ width: `${Math.min(100, (Number(balance.used) / Number(balance.totalEntitlement)) * 100)}%` }}
+                                  style={{ width: `${Number(balance.totalEntitlement) > 0 ? Math.min(100, (Number(balance.used) / Number(balance.totalEntitlement)) * 100) : 0}%` }}
                                 />
                               </div>
                             </div>
