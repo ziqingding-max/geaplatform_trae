@@ -377,6 +377,16 @@ export default function Reimbursements() {
                         />
                       </div>
                     )}
+
+                    {(() => {
+                      const selectedEmp = formData.employeeId ? employeeMap.get(formData.employeeId) : null;
+                      const currency = selectedEmp?.salaryCurrency || "USD";
+                      return selectedEmp ? (
+                        <p className="text-xs text-muted-foreground">
+                          Currency: <strong>{currency}</strong>
+                        </p>
+                      ) : null;
+                    })()}
                     
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -421,6 +431,10 @@ export default function Reimbursements() {
                     </div>
 
                     <ReceiptUploadSection />
+
+                    {formData.effectiveMonth && (
+                      <PayrollCycleIndicator month={formData.effectiveMonth} />
+                    )}
                   </div>
                   <div className="flex justify-end gap-2 mt-2">
                     <Button variant="outline" onClick={() => setShowCreate(false)}>{t("common.cancel")}</Button>

@@ -684,6 +684,10 @@ export default function Adjustments() {
 
                 <ReceiptUploadArea isEdit={false} />
 
+                {formData.effectiveMonth && (
+                  <PayrollCycleIndicator month={formData.effectiveMonth} />
+                )}
+
                 <div className="flex justify-end gap-3 pt-2">
                   <Button variant="outline" onClick={() => setCreateOpen(false)}>{t("common.cancel")}</Button>
                   <Button onClick={handleCreate} disabled={isUploading}>

@@ -132,7 +132,7 @@ export const adjustmentsRouter = router({
         description: input.description,
         amount: input.amount,
         currency,
-        effectiveMonth: new Date(normalizedMonth), // Safe conversion
+        effectiveMonth: normalizedMonth, // Store as YYYY-MM-01 string (text column)
         receiptFileUrl: input.receiptFileUrl,
         receiptFileKey: input.receiptFileKey,
         status: "submitted",
@@ -186,7 +186,7 @@ export const adjustmentsRouter = router({
       const updateData: any = { ...input.data };
       if (input.data.effectiveMonth) {
         const parts = input.data.effectiveMonth.split("-");
-        updateData.effectiveMonth = new Date(`${parts[0]}-${parts[1].padStart(2, "0")}-01`);
+        updateData.effectiveMonth = `${parts[0]}-${parts[1].padStart(2, "0")}-01`;
       }
 
       // If effectiveMonth changed, re-check cutoff for new month too
