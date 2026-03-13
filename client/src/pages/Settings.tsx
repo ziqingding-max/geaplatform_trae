@@ -150,6 +150,8 @@ export default function Settings() {
 function PayrollConfigSection() {
   const { t } = useI18n();
   const { data: configs, isLoading, refetch } = trpc.systemSettings.list.useQuery();
+  const { data: cronJobs, isLoading: cronLoading, refetch: refetchCron } = trpc.systemSettings.listCronJobs.useQuery();
+
   const updateMutation = trpc.systemSettings.update.useMutation({
     onSuccess: () => {
       toast.success(t("settings.payroll.toast.updateSuccess"));
@@ -157,42 +159,46 @@ function PayrollConfigSection() {
     },
     onError: (err: any) => toast.error(err.message),
   });
-  const triggerActivationMutation = trpc.systemSettings.triggerEmployeeActivation.useMutation({
-    onSuccess: (data: any) => {
-      toast.success(data.message || `Activated ${data.activated || 0} employees`);
+  const updateCronMutation = trpc.systemSettings.updateCronJob.useMutation({
+    onSuccess: () => {
+      toast.success("Job configuration updated");
+      refetchCron();
     },
     onError: (err: any) => toast.error(err.message),
   });
-  const triggerPayrollMutation = trpc.systemSettings.triggerPayrollAutoCreate.useMutation({
-    onSuccess: (data: any) => {
-      toast.success(data.message || `Created ${data.created || 0} payroll runs`);
+  const triggerCronMutation = trpc.systemSettings.triggerCronJob.useMutation({
+    onSuccess: (_data: any, variables: any) => {
+      toast.success(`Job "${variables.key}" executed successfully`);
+      refetchCron();
     },
     onError: (err: any) => toast.error(err.message),
   });
 
+  // Business rule states
   const [cutoffDay, setCutoffDay] = useState("4");
   const [cutoffTime, setCutoffTime] = useState("23:59");
-  const [payrollCreateDay, setPayrollCreateDay] = useState("5");
-  const [payrollCreateTime, setPayrollCreateTime] = useState("00:01");
   const [midMonthCutoff, setMidMonthCutoff] = useState("15");
+
+  // Track which cron job is being edited inline
+  const [editingJob, setEditingJob] = useState<string | null>(null);
+  const [editDay, setEditDay] = useState("");
+  const [editTime, setEditTime] = useState("");
+  // Track which job is currently being triggered
+  const [triggeringJob, setTriggeringJob] = useState<string | null>(null);
 
   useEffect(() => {
     if (configs) {
       const configMap = new Map<string, string>(configs.map((c: any) => [c.configKey, c.configValue]));
       setCutoffDay(configMap.get("payroll_cutoff_day") ?? "4");
       setCutoffTime(configMap.get("payroll_cutoff_time") ?? "23:59");
-      setPayrollCreateDay(configMap.get("payroll_auto_create_day") ?? "5");
-      setPayrollCreateTime(configMap.get("payroll_auto_create_time") ?? "00:01");
       setMidMonthCutoff(configMap.get("mid_month_activation_cutoff") ?? "15");
     }
   }, [configs]);
 
-  const handleSave = async () => {
+  const handleSaveBusinessRules = async () => {
     const updates = [
       { key: "payroll_cutoff_day", value: cutoffDay },
       { key: "payroll_cutoff_time", value: cutoffTime },
-      { key: "payroll_auto_create_day", value: payrollCreateDay },
-      { key: "payroll_auto_create_time", value: payrollCreateTime },
       { key: "mid_month_activation_cutoff", value: midMonthCutoff },
     ];
     for (const u of updates) {
@@ -200,9 +206,36 @@ function PayrollConfigSection() {
     }
   };
 
-  if (isLoading) {
+  const handleToggleJob = async (key: string, enabled: boolean) => {
+    await updateCronMutation.mutateAsync({ key, enabled });
+  };
+
+  const handleSaveJobSchedule = async (key: string) => {
+    const payload: { key: string; day?: number; time?: string } = { key };
+    if (editDay) payload.day = parseInt(editDay, 10);
+    if (editTime) payload.time = editTime;
+    await updateCronMutation.mutateAsync(payload);
+    setEditingJob(null);
+  };
+
+  const handleTriggerJob = async (key: string) => {
+    setTriggeringJob(key);
+    try {
+      await triggerCronMutation.mutateAsync({ key });
+    } finally {
+      setTriggeringJob(null);
+    }
+  };
+
+  const startEditing = (job: any) => {
+    setEditingJob(job.key);
+    setEditDay(String(job.day));
+    setEditTime(job.time);
+  };
+
+  if (isLoading || cronLoading) {
     return (
-      <div className="space-y-6 max-w-3xl animate-pulse-subtle p-6">
+      <div className="space-y-6 max-w-4xl animate-pulse-subtle p-6">
         <div className="space-y-2">
           <div className="h-6 w-40 bg-muted rounded" />
           <div className="h-4 w-64 bg-muted rounded" />
@@ -219,124 +252,176 @@ function PayrollConfigSection() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-4xl">
+      {/* ── Section 1: Business Rules ── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="w-4 h-4 text-primary" />
-            {t("settings.payroll.cutoff.title")}
+            <Shield className="w-4 h-4 text-primary" />
+            Business Rules
           </CardTitle>
           <CardDescription>
-            {t("settings.payroll.cutoff.description")}
+            Core business parameters that control data submission deadlines and employee onboarding rules. These are NOT cron job schedules.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>{t("settings.payroll.cutoff.dayLabel")}</Label>
-              <Input type="number" min={1} max={28} value={cutoffDay} onChange={(e) => setCutoffDay(e.target.value)} />
-              <p className="text-xs text-muted-foreground">{t("settings.payroll.cutoff.dayDescription")}</p>
+        <CardContent className="space-y-6">
+          {/* Payroll Cutoff */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+              {t("settings.payroll.cutoff.title")}
+            </h4>
+            <p className="text-xs text-muted-foreground mb-2">
+              {t("settings.payroll.cutoff.description")} This is the deadline for clients and employees to submit data. Admin users are NOT restricted by this cutoff.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <Label className="text-xs">{t("settings.payroll.cutoff.dayLabel")}</Label>
+                <Input type="number" min={1} max={28} value={cutoffDay} onChange={(e) => setCutoffDay(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">{t("settings.payroll.cutoff.timeLabel")}</Label>
+                <Input type="time" value={cutoffTime} onChange={(e) => setCutoffTime(e.target.value)} />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>{t("settings.payroll.cutoff.timeLabel")}</Label>
-              <Input type="time" value={cutoffTime} onChange={(e) => setCutoffTime(e.target.value)} />
-              <p className="text-xs text-muted-foreground">{t("settings.payroll.cutoff.timeDescription")}</p>
+          </div>
+
+          <div className="border-t" />
+
+          {/* Mid-Month Activation Cutoff */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-muted-foreground" />
+              {t("settings.payroll.activation.title")}
+            </h4>
+            <p className="text-xs text-muted-foreground mb-2">
+              {t("settings.payroll.activation.midMonthCutoffDescription")} Employees activated after this day will receive a Sign-on Bonus in the following month.
+            </p>
+            <div className="max-w-xs space-y-1">
+              <Label className="text-xs">{t("settings.payroll.activation.midMonthCutoffLabel")}</Label>
+              <Input type="number" min={1} max={28} value={midMonthCutoff} onChange={(e) => setMidMonthCutoff(e.target.value)} />
             </div>
+          </div>
+
+          <div className="flex items-center gap-3 pt-2">
+            <Button onClick={handleSaveBusinessRules} disabled={updateMutation.isPending} size="sm">
+              {updateMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" />Saving...</>
+              ) : (
+                <><Save className="w-4 h-4 mr-2" />Save Business Rules</>
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>
 
+      {/* ── Section 2: Scheduled Jobs ── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <CalendarClock className="w-4 h-4 text-primary" />
-            {t("settings.payroll.autoCreate.title")}
+            Scheduled Jobs
           </CardTitle>
           <CardDescription>
-            {t("settings.payroll.autoCreate.description")}
+            All automated background tasks. Toggle jobs on/off, adjust their schedule, or trigger them manually. Changes take effect immediately (hot-reload).
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>{t("settings.payroll.autoCreate.dayLabel")}</Label>
-              <Input type="number" min={1} max={28} value={payrollCreateDay} onChange={(e) => setPayrollCreateDay(e.target.value)} />
-              <p className="text-xs text-muted-foreground">{t("settings.payroll.autoCreate.dayDescription")}</p>
-            </div>
-            <div className="space-y-2">
-              <Label>{t("settings.payroll.autoCreate.timeLabel")}</Label>
-              <Input type="time" value={payrollCreateTime} onChange={(e) => setPayrollCreateTime(e.target.value)} />
-              <p className="text-xs text-muted-foreground">{t("settings.payroll.autoCreate.timeDescription")}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        <CardContent>
+          <div className="space-y-2">
+            {(cronJobs ?? []).map((job: any) => (
+              <div key={job.key} className="flex items-start gap-4 py-3 px-4 rounded-lg border bg-muted/20 hover:bg-muted/40 transition-colors">
+                {/* Toggle */}
+                <div className="pt-0.5">
+                  <Switch
+                    checked={job.enabled}
+                    onCheckedChange={(checked) => handleToggleJob(job.key, checked)}
+                  />
+                </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-primary" />
-            {t("settings.payroll.activation.title")}
-          </CardTitle>
-          <CardDescription>
-            {t("settings.payroll.activation.description")}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2 max-w-xs">
-            <Label>{t("settings.payroll.activation.midMonthCutoffLabel")}</Label>
-            <Input type="number" min={1} max={28} value={midMonthCutoff} onChange={(e) => setMidMonthCutoff(e.target.value)} />
-            <p className="text-xs text-muted-foreground">
-              {t("settings.payroll.activation.midMonthCutoffDescription")}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+                {/* Info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-sm font-medium">{job.label}</span>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      {job.frequency === "daily" ? "Daily" : "Monthly"}
+                    </Badge>
+                    {!job.enabled && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                        Disabled
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{job.description}</p>
 
-      <div className="flex items-center gap-3">
-        <Button onClick={handleSave} disabled={updateMutation.isPending}>
-          {updateMutation.isPending ? (
-            <><Loader2 className="w-4 h-4 animate-spin mr-2" />Saving...</>
-          ) : (
-            <><Save className="w-4 h-4 mr-2" />Save Configuration</>
-          )}
-        </Button>
-      </div>
+                  {/* Schedule display / edit */}
+                  {editingJob === job.key ? (
+                    <div className="flex items-center gap-2 mt-2">
+                      {job.frequency === "monthly" && (
+                        <div className="flex items-center gap-1">
+                          <Label className="text-xs text-muted-foreground">Day:</Label>
+                          <Input
+                            type="number" min={1} max={28}
+                            value={editDay}
+                            onChange={(e) => setEditDay(e.target.value)}
+                            className="w-16 h-7 text-xs"
+                          />
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1">
+                        <Label className="text-xs text-muted-foreground">Time:</Label>
+                        <Input
+                          type="time"
+                          value={editTime}
+                          onChange={(e) => setEditTime(e.target.value)}
+                          className="w-24 h-7 text-xs"
+                        />
+                      </div>
+                      <Button size="sm" variant="default" className="h-7 text-xs px-2" onClick={() => handleSaveJobSchedule(job.key)} disabled={updateCronMutation.isPending}>
+                        {updateCronMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                        <span className="ml-1">Save</span>
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => setEditingJob(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 mt-1.5">
+                      <span className="text-xs text-muted-foreground">
+                        {job.frequency === "monthly"
+                          ? `Runs on the ${job.day}${job.day === 1 ? "st" : job.day === 2 ? "nd" : job.day === 3 ? "rd" : "th"} at ${job.time} (Beijing)`
+                          : `Runs daily at ${job.time} (Beijing)`
+                        }
+                      </span>
+                      <Button size="sm" variant="ghost" className="h-5 text-[10px] px-1.5 text-muted-foreground hover:text-foreground" onClick={() => startEditing(job)}>
+                        Edit
+                      </Button>
+                      {job.lastRun && (
+                        <span className="text-[10px] text-muted-foreground">
+                          Last run: {new Date(job.lastRun).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Play className="w-4 h-4 text-primary" />
-            Manual Triggers
-          </CardTitle>
-          <CardDescription>
-            Manually trigger scheduled jobs for testing or catch-up. These normally run automatically.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between py-2 px-3 rounded-md border bg-muted/30">
-            <div>
-              <div className="text-sm font-medium">Employee Auto-Activation</div>
-              <div className="text-xs text-muted-foreground">
-                Transitions contract_signed employees to active when startDate arrives, with payroll auto-fill
+                {/* Run Now button */}
+                <div className="pt-0.5">
+                  <Button
+                    variant="outline" size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => handleTriggerJob(job.key)}
+                    disabled={triggeringJob === job.key}
+                  >
+                    {triggeringJob === job.key ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Play className="w-3 h-3" />
+                    )}
+                    <span className="ml-1">Run Now</span>
+                  </Button>
+                </div>
               </div>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => triggerActivationMutation.mutate()} disabled={triggerActivationMutation.isPending}>
-              {triggerActivationMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-              <span className="ml-1.5">Run Now</span>
-            </Button>
-          </div>
-          <div className="flex items-center justify-between py-2 px-3 rounded-md border bg-muted/30">
-            <div>
-              <div className="text-sm font-medium">Auto-Create Payroll Runs</div>
-              <div className="text-xs text-muted-foreground">
-                Creates next month's draft payroll runs for countries with active employees
-              </div>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => triggerPayrollMutation.mutate()} disabled={triggerPayrollMutation.isPending}>
-              {triggerPayrollMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-              <span className="ml-1.5">Run Now</span>
-            </Button>
+            ))}
           </div>
         </CardContent>
       </Card>
