@@ -1541,6 +1541,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "adjustments.type.reimbursement": "Reimbursement",
     "adjustments.type.deduction": "Deduction",
     "adjustments.type.other": "Other",
+    "adjustments.type.expense": "Expense",
     "adjustments.type.commission": "Commission",
     "adjustments.category.none": "None",
     "adjustments.category.housing": "Housing",
@@ -3500,6 +3501,7 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "adjustments.type.reimbursement": "报销",
     "adjustments.type.deduction": "扣款",
     "adjustments.type.other": "其他",
+    "adjustments.type.expense": "费用",
     "adjustments.type.commission": "佣金",
     "adjustments.category.none": "无",
     "adjustments.category.housing": "住房",
@@ -5992,6 +5994,7 @@ const adminTranslations = {
     // "adjustments.type.reimbursement": "Reimbursement", // Duplicate
     // "adjustments.type.deduction": "Deduction", // Duplicate
     // "adjustments.type.other": "Other", // Duplicate
+    // "adjustments.type.expense": "Expense", // Duplicate
     // "adjustments.category.housing": "Housing", // Duplicate
     // "adjustments.category.transport": "Transport", // Duplicate
     // "adjustments.category.meals": "Meals", // Duplicate
@@ -7199,6 +7202,7 @@ const adminTranslations = {
     "adjustments.type.reimbursement": "报销",
     "adjustments.type.deduction": "扣款",
     "adjustments.type.other": "其他",
+    "adjustments.type.expense": "费用",
     "adjustments.type.commission": "佣金",
     "adjustments.category.housing": "住房",
     "adjustments.category.transport": "交通",
