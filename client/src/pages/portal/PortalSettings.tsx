@@ -768,7 +768,7 @@ export default function PortalSettings() {
             </TabsTrigger>
             <TabsTrigger value="leave" className="gap-2">
               <CalendarDays className="w-4 h-4" />
-              {t("portal_settings.leave_policies.table_header.leave_type") || "Leave Policies"}
+              {t("portal_settings.leave_policies.section_title") || "Leave Policy"}
             </TabsTrigger>
             <TabsTrigger value="team" className="gap-2">
               <Users className="w-4 h-4" />

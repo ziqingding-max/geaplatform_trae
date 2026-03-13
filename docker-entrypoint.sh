@@ -32,8 +32,8 @@ for sql_file in /app/drizzle/0*.sql; do
           try {
             await client.execute(stmt);
           } catch (err) {
-            // Ignore 'already exists' errors for idempotent migrations
-            if (!err.message.includes('already exists')) {
+            // Ignore 'already exists' and 'duplicate column' errors for idempotent migrations
+            if (!err.message.includes('already exists') && !err.message.includes('duplicate column')) {
               console.warn('[Migration] Warning:', err.message.substring(0, 100));
             }
           }
