@@ -48,6 +48,10 @@ import { formatStatusLabel, formatDate, countryName } from "@/lib/format";
 import { portalPath } from "@/lib/portalBasePath";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/DatePicker";
 
 const statusColors: Record<string, string> = {
   active: "bg-green-100 text-green-800 border-green-200",
@@ -72,17 +76,28 @@ function InfoItem({ label, value, icon: Icon }: { label: string; value: string |
 }
 
 export default function PortalContractorDetail() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const contractorId = Number(params.id);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [terminateRequestOpen, setTerminateRequestOpen] = useState(false);
+  const [terminateEndDate, setTerminateEndDate] = useState("");
+  const [terminateReason, setTerminateReason] = useState("");
 
   const { data: contractor, isLoading } = portalTrpc.contractors.getById.useQuery(
     { id: contractorId },
     { enabled: !!contractorId }
   );
+
+  const requestTerminationMutation = portalTrpc.contractors.requestTermination.useMutation({
+    onSuccess: () => {
+      toast.success(locale === "zh" ? "终止申请已提交" : "Termination request submitted");
+      setTerminateRequestOpen(false);
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   const deleteMutation = portalTrpc.contractors.delete.useMutation({
     onSuccess: () => {
@@ -159,6 +174,19 @@ export default function PortalContractorDetail() {
             </div>
           </div>
           {/* Delete button for pending_review contractors */}
+          {contractor.status === "active" && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setTerminateEndDate("");
+                setTerminateReason("");
+                setTerminateRequestOpen(true);
+              }}
+            >
+              {locale === "zh" ? "请求终止" : "Request Termination"}
+            </Button>
+          )}
           {isPendingReview && (
             <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
               <AlertDialogTrigger asChild>
@@ -294,6 +322,57 @@ export default function PortalContractorDetail() {
             )}
           </div>
         </div>
+        {/* Request Termination Dialog */}
+        <Dialog open={terminateRequestOpen} onOpenChange={setTerminateRequestOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{locale === "zh" ? "请求终止承包商" : "Request Contractor Termination"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                {locale === "zh"
+                  ? `您正在为 ${contractor.firstName} ${contractor.lastName} 提交终止申请。管理员将审核您的申请。`
+                  : `You are submitting a termination request for ${contractor.firstName} ${contractor.lastName}. An administrator will review your request.`}
+              </p>
+              <div className="space-y-2">
+                <Label>{locale === "zh" ? "期望结束日期 (必填)" : "Requested End Date (required)"}</Label>
+                <DatePicker
+                  value={terminateEndDate}
+                  onChange={(d) => setTerminateEndDate(d || "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{locale === "zh" ? "原因 (可选)" : "Reason (optional)"}</Label>
+                <Textarea
+                  value={terminateReason}
+                  onChange={(e) => setTerminateReason(e.target.value)}
+                  placeholder={locale === "zh" ? "请输入终止原因..." : "Enter reason for termination..."}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTerminateRequestOpen(false)}>
+                {locale === "zh" ? "取消" : "Cancel"}
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={!terminateEndDate || requestTerminationMutation.isPending}
+                onClick={() => {
+                  requestTerminationMutation.mutate({
+                    contractorId,
+                    endDate: terminateEndDate,
+                    reason: terminateReason || undefined,
+                  });
+                }}
+              >
+                {requestTerminationMutation.isPending
+                  ? (locale === "zh" ? "提交中..." : "Submitting...")
+                  : (locale === "zh" ? "提交申请" : "Submit Request")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </PortalLayout>
   );

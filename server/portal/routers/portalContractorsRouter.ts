@@ -14,6 +14,7 @@ import {
   portalRouter,
 } from "../portalTrpc";
 import { getDb } from "../../db";
+import { notificationService } from "../../services/notificationService";
 import {
   contractors,
   contractorMilestones,
@@ -252,5 +253,73 @@ export const portalContractorsRouter = portalRouter({
       await db.delete(contractors).where(eq(contractors.id, input.id));
 
       return { success: true };
+    }),
+
+  /**
+   * Request termination for an active contractor.
+   * Portal clients can request termination; admin receives notification to process.
+   * Only available for contractors in 'active' status.
+   */
+  requestTermination: protectedPortalProcedure
+    .input(
+      z.object({
+        contractorId: z.number(),
+        endDate: z.string().min(1, "End date is required"),
+        reason: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const cid = ctx.portalUser.customerId;
+
+      // Verify the contractor belongs to this customer and is active
+      const [ctr] = await db
+        .select({
+          id: contractors.id,
+          status: contractors.status,
+          firstName: contractors.firstName,
+          lastName: contractors.lastName,
+          contractorCode: contractors.contractorCode,
+          country: contractors.country,
+        })
+        .from(contractors)
+        .where(and(eq(contractors.id, input.contractorId), eq(contractors.customerId, cid)))
+        .limit(1);
+
+      if (!ctr) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Contractor not found" });
+      }
+
+      if (ctr.status !== "active") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only active contractors can be submitted for termination request",
+        });
+      }
+
+      // Get customer name for notification
+      const [customer] = await db
+        .select({ companyName: customers.companyName })
+        .from(customers)
+        .where(eq(customers.id, cid));
+
+      // Send notification to admin
+      notificationService.send({
+        type: "contractor_termination_request",
+        customerId: cid,
+        data: {
+          contractorId: ctr.id,
+          contractorName: `${ctr.firstName} ${ctr.lastName}`,
+          contractorCode: ctr.contractorCode,
+          country: ctr.country,
+          requestedEndDate: input.endDate,
+          reason: input.reason || "No reason provided",
+          requestedBy: ctx.portalUser.contactName || ctx.portalUser.email,
+          customerName: customer?.companyName || "Unknown",
+        },
+      }).catch(err => console.error("Failed to send contractor termination request notification:", err));
+
+      return { success: true, message: "Termination request submitted. Admin will review and process." };
     }),
 });

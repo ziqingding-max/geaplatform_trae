@@ -20,8 +20,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/DatePicker";
 import {
   ArrowLeft,
   User,
@@ -72,7 +74,7 @@ const docTypeLabels: Record<string, string> = {
 };
 
 export default function PortalEmployeeDetail() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const employeeId = parseInt(params.id || "0", 10);
@@ -81,6 +83,19 @@ export default function PortalEmployeeDetail() {
     { id: employeeId },
     { enabled: !!employeeId }
   );
+
+  // Termination request state
+  const [terminateRequestOpen, setTerminateRequestOpen] = useState(false);
+  const [terminateEndDate, setTerminateEndDate] = useState("");
+  const [terminateReason, setTerminateReason] = useState("");
+
+  const requestTerminationMutation = portalTrpc.employees.requestTermination.useMutation({
+    onSuccess: () => {
+      toast.success(locale === "zh" ? "终止申请已提交" : "Termination request submitted");
+      setTerminateRequestOpen(false);
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   // Document upload state
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -179,6 +194,19 @@ export default function PortalEmployeeDetail() {
               </p>
             </div>
           </div>
+          {employee.status === "active" && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                setTerminateEndDate("");
+                setTerminateReason("");
+                setTerminateRequestOpen(true);
+              }}
+            >
+              {locale === "zh" ? "请求终止" : "Request Termination"}
+            </Button>
+          )}
         </div>
 
         {/* Profile + Details */}
@@ -567,6 +595,57 @@ export default function PortalEmployeeDetail() {
                 </div>
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+        {/* Request Termination Dialog */}
+        <Dialog open={terminateRequestOpen} onOpenChange={setTerminateRequestOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{locale === "zh" ? "请求终止员工" : "Request Employee Termination"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                {locale === "zh"
+                  ? `您正在为 ${employee.firstName} ${employee.lastName} 提交终止申请。管理员将审核您的申请。`
+                  : `You are submitting a termination request for ${employee.firstName} ${employee.lastName}. An administrator will review your request.`}
+              </p>
+              <div className="space-y-2">
+                <Label>{locale === "zh" ? "期望结束日期 (必填)" : "Requested End Date (required)"}</Label>
+                <DatePicker
+                  value={terminateEndDate}
+                  onChange={(d) => setTerminateEndDate(d || "")}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{locale === "zh" ? "原因 (可选)" : "Reason (optional)"}</Label>
+                <Textarea
+                  value={terminateReason}
+                  onChange={(e) => setTerminateReason(e.target.value)}
+                  placeholder={locale === "zh" ? "请输入终止原因..." : "Enter reason for termination..."}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTerminateRequestOpen(false)}>
+                {locale === "zh" ? "取消" : "Cancel"}
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={!terminateEndDate || requestTerminationMutation.isPending}
+                onClick={() => {
+                  requestTerminationMutation.mutate({
+                    employeeId,
+                    endDate: terminateEndDate,
+                    reason: terminateReason || undefined,
+                  });
+                }}
+              >
+                {requestTerminationMutation.isPending
+                  ? (locale === "zh" ? "提交中..." : "Submitting...")
+                  : (locale === "zh" ? "提交申请" : "Submit Request")}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

@@ -13,9 +13,15 @@ onboarding → contract_signed
 contract_signed → active             [triggers: daily cron auto-activation when startDate arrives]
 active → on_leave
 on_leave → active
-active → offboarding
-offboarding → terminated             [triggers: deposit refund invoice generation]
+active → offboarding                 [requires: endDate (last working day)]
+offboarding → terminated             [triggers: daily cron auto-termination when endDate arrives;
+                                       triggers: deposit refund invoice generation]
 ```
+
+**Hard Rules (must never be violated):**
+
+1. **Offboarding employees MUST be included in payroll.** Employees in `offboarding` status are still employed and must receive salary until their `endDate`.
+2. **Offboarding employees MUST continue to accrue leave.** The monthly leave accrual cron job must process `offboarding` employees alongside `active` and `on_leave` employees.
 
 | Status | Meaning | Editable | In Payroll |
 |:---|:---|:---:|:---:|
@@ -30,7 +36,20 @@ offboarding → terminated             [triggers: deposit refund invoice generat
 
 **Side Effects of Status Changes:**
 
-When an employee transitions to `onboarding`, the system generates a **deposit invoice** (see Section 6). When an employee transitions to `terminated`, the system generates a **deposit refund invoice** (see Section 7). When an employee transitions to `active`, the system **auto-initializes leave balances** (Annual Leave starts at 0, other types at full entitlement) and **auto-initializes leave policies** for the country if not yet configured. The daily cron job at 00:01 Beijing time auto-activates employees in `contract_signed` status whose `startDate` has arrived.
+When an employee transitions to `onboarding`, the system generates a **deposit invoice** (see Section 6). When an employee transitions to `terminated`, the system generates a **deposit refund invoice** (see Section 7). When an employee transitions to `active`, the system **auto-initializes leave balances** (Annual Leave starts at 0, other types at full entitlement) and **auto-initializes leave policies** for the country if not yet configured.
+
+**Symmetric Activation / Termination Cron Jobs:**
+
+- **Auto-Activation** (daily 00:01 Beijing time): Employees in `contract_signed` status whose `startDate ≤ today` are automatically transitioned to `active`.
+- **Auto-Termination** (daily 00:02 Beijing time): Employees in `offboarding` status whose `endDate ≤ today` are automatically transitioned to `terminated`.
+
+**Pro-Rata Salary Calculation (Symmetric):**
+
+When an employee starts mid-month, their salary is pro-rated based on `startDate`. When an employee terminates mid-month (endDate falls within the payroll month), their salary is also pro-rated based on `endDate`. If both apply in the same month, the pro-rata covers only the days between startDate and endDate.
+
+**Portal Termination Requests:**
+
+Portal clients can submit termination requests for `active` employees and contractors. The request includes a requested `endDate` and optional `reason`. A notification is sent to the admin team for review. The admin then processes the request by initiating offboarding (for employees) or terminating (for contractors) through the admin interface.
 
 **Employee Code Format**: Auto-generated as `GEA-{COUNTRY_CODE}-{SEQ}` (e.g., `GEA-SG-001`). The sequence is per-country and auto-incremented.
 
@@ -193,7 +212,7 @@ accruedEntitlement = (annualEntitlement / 12) × fullMonthsServed
 
 Rounding: values are rounded up to the nearest 0.5 day, then to the nearest integer for storage. The accrual is capped at the full annual entitlement.
 
-**Eligible employees**: Both `active` and `on_leave` employees are processed. Only employees who started in the current year are subject to pro-rata accrual.
+**Eligible employees**: `active`, `on_leave`, and `offboarding` employees are all processed. Only employees who started in the current year are subject to pro-rata accrual.
 
 **Customer Leave Policy**: Each customer can configure leave policies per country. The annual entitlement must be **greater than or equal to** the statutory minimum defined in `countries_config`. Carry-over rules and expiry rules are configurable per policy.
 

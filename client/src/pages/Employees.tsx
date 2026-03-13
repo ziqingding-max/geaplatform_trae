@@ -851,8 +851,8 @@ function EmployeeList() {
 type DetailTab = "info" | "leave" | "payroll" | "adjustments" | "visa" | "documents";
 
 function EmployeeDetail({ id }: { id: number }) {
-  const { t } = useI18n();
-  const visaStatusLabels: Record<string, string> = {
+  const { t, locale } = useI18n();
+  const visaStatusColors: Record<string, string> = {
     not_required: t("employees.visaStatus.not_required"),
     pending_application: t("employees.visaStatus.pending_application"),
     application_submitted: t("employees.visaStatus.application_submitted"),
@@ -872,6 +872,13 @@ function EmployeeDetail({ id }: { id: number }) {
   const [uploadNotes, setUploadNotes] = useState("");
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Offboarding / Termination dialog state
+  const [offboardingDialogOpen, setOffboardingDialogOpen] = useState(false);
+  const [offboardingEndDate, setOffboardingEndDate] = useState("");
+  const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
+  const [terminateEndDate, setTerminateEndDate] = useState("");
+  const [terminateReason, setTerminateReason] = useState("");
 
   // Leave balance editing
   const [editLeaveId, setEditLeaveId] = useState<number | null>(null);
@@ -1064,7 +1071,7 @@ function EmployeeDetail({ id }: { id: number }) {
   const customerName = customers?.data?.find((c) => c.id === employee.customerId)?.companyName || `Customer #${employee.customerId}`;
 
   // Status transitions with rollback capability
-  const nextStatuses: Record<string, { label: string; value: string; variant?: string; icon?: any }[]> = {
+  const nextStatuses: Record<string, { label: string; value: string; variant?: string; icon?: any; dialogAction?: string }[]> = {
     pending_review: [
       { label: t("employees.actions.startOnboarding"), value: "onboarding" },
       { label: t("employees.actions.markDocumentsIncomplete"), value: "documents_incomplete", variant: "outline" },
@@ -1085,14 +1092,14 @@ function EmployeeDetail({ id }: { id: number }) {
       { label: t("employees.actions.rollbackToOnboarding"), value: "onboarding", variant: "outline", icon: Undo2 },
     ],
     active: [
-      { label: t("employees.actions.startOffboarding"), value: "offboarding" },
+      { label: t("employees.actions.startOffboarding"), value: "offboarding", dialogAction: "offboarding" },
       { label: t("employees.actions.putOnLeave"), value: "on_leave", variant: "outline" },
     ],
     on_leave: [
       { label: t("employees.actions.returnToActive"), value: "active" },
     ],
     offboarding: [
-      { label: t("employees.actions.terminate"), value: "terminated" },
+      { label: t("employees.actions.terminate"), value: "terminated", dialogAction: "terminate" },
       { label: t("employees.actions.rollbackToActive"), value: "active", variant: "outline", icon: Undo2 },
     ],
     terminated: [
@@ -1143,6 +1150,17 @@ function EmployeeDetail({ id }: { id: number }) {
                 variant={t.variant === "destructive" ? "destructive" : t.variant === "outline" ? "outline" : "default"}
                 size="sm"
                 onClick={() => {
+                  if ((t as any).dialogAction === "offboarding") {
+                    setOffboardingEndDate("");
+                    setOffboardingDialogOpen(true);
+                    return;
+                  }
+                  if ((t as any).dialogAction === "terminate") {
+                    setTerminateEndDate(new Date().toISOString().split('T')[0]);
+                    setTerminateReason("");
+                    setTerminateDialogOpen(true);
+                    return;
+                  }
                   if (t.variant === "destructive" && !confirm(`Are you sure you want to ${t.label.toLowerCase()} this employee?`)) return;
                   updateMutation.mutate({ id: employee.id, data: { status: t.value as any } });
                 }}
@@ -1792,6 +1810,95 @@ function EmployeeDetail({ id }: { id: number }) {
                 </Button>
               </div>
             </div>
+          </DialogContent>
+        </Dialog>
+        {/* Start Offboarding Dialog */}
+        <Dialog open={offboardingDialogOpen} onOpenChange={setOffboardingDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("employees.actions.startOffboarding")}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                {locale === "zh"
+                  ? `确认为 ${employee.firstName} ${employee.lastName} 开始离职流程。员工在离职期间将继续获得薪资和假期累积。`
+                  : `Start offboarding for ${employee.firstName} ${employee.lastName}. The employee will continue to receive payroll and leave accrual during the notice period.`}
+              </p>
+              <div className="space-y-2">
+                <Label>{locale === "zh" ? "最后工作日 (必填)" : "Last Working Day (required)"}</Label>
+                <DatePicker
+                  value={offboardingEndDate}
+                  onChange={(d) => setOffboardingEndDate(d || "")}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOffboardingDialogOpen(false)}>
+                {locale === "zh" ? "取消" : "Cancel"}
+              </Button>
+              <Button
+                disabled={!offboardingEndDate || updateMutation.isPending}
+                onClick={() => {
+                  updateMutation.mutate(
+                    { id: employee.id, data: { status: "offboarding" as any, endDate: offboardingEndDate } },
+                    { onSuccess: () => { setOffboardingDialogOpen(false); toast.success(locale === "zh" ? "已开始离职流程" : "Offboarding started"); refetch(); } }
+                  );
+                }}
+              >
+                {updateMutation.isPending ? (locale === "zh" ? "处理中..." : "Processing...") : (locale === "zh" ? "确认开始离职" : "Confirm Start Offboarding")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Terminate Now Dialog */}
+        <Dialog open={terminateDialogOpen} onOpenChange={setTerminateDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("employees.actions.terminate")}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-muted-foreground">
+                {locale === "zh"
+                  ? `确认终止 ${employee.firstName} ${employee.lastName}。此操作将立即结束雇佣关系。`
+                  : `Confirm termination for ${employee.firstName} ${employee.lastName}. This will immediately end the employment.`}
+              </p>
+              <div className="space-y-2">
+                <Label>{locale === "zh" ? "终止日期" : "Termination Date"}</Label>
+                <DatePicker
+                  value={terminateEndDate}
+                  onChange={(d) => setTerminateEndDate(d || new Date().toISOString().split('T')[0])}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{locale === "zh" ? "终止原因 (可选)" : "Reason (optional)"}</Label>
+                <Textarea
+                  value={terminateReason}
+                  onChange={(e) => setTerminateReason(e.target.value)}
+                  placeholder={locale === "zh" ? "请输入终止原因..." : "Enter reason for termination..."}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTerminateDialogOpen(false)}>
+                {locale === "zh" ? "取消" : "Cancel"}
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={updateMutation.isPending}
+                onClick={() => {
+                  const data: any = { status: "terminated" };
+                  if (terminateEndDate) data.endDate = terminateEndDate;
+                  updateMutation.mutate(
+                    { id: employee.id, data },
+                    { onSuccess: () => { setTerminateDialogOpen(false); toast.success(locale === "zh" ? "员工已终止" : "Employee terminated"); refetch(); } }
+                  );
+                }}
+              >
+                {updateMutation.isPending ? (locale === "zh" ? "处理中..." : "Processing...") : (locale === "zh" ? "确认终止" : "Confirm Terminate")}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

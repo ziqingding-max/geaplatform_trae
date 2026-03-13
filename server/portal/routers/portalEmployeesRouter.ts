@@ -949,4 +949,71 @@ export const portalEmployeesRouter = portalRouter({
 
       return { success: true };
     }),
+
+  /**
+   * Request termination for an active employee.
+   * Portal clients can request termination; admin receives notification to process.
+   * Only available for employees in 'active' status.
+   */
+  requestTermination: portalHrProcedure
+    .input(
+      z.object({
+        employeeId: z.number(),
+        endDate: z.string().min(1, "End date is required"),
+        reason: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const cid = ctx.portalUser.customerId;
+
+      // Verify the employee belongs to this customer and is active
+      const [emp] = await db
+        .select({
+          id: employees.id,
+          status: employees.status,
+          firstName: employees.firstName,
+          lastName: employees.lastName,
+          employeeCode: employees.employeeCode,
+          country: employees.country,
+        })
+        .from(employees)
+        .where(and(eq(employees.id, input.employeeId), eq(employees.customerId, cid)));
+
+      if (!emp) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
+      }
+
+      if (emp.status !== "active") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only active employees can be submitted for termination request",
+        });
+      }
+
+      // Get customer name for notification
+      const [customer] = await db
+        .select({ companyName: customers.companyName })
+        .from(customers)
+        .where(eq(customers.id, cid));
+
+      // Send notification to admin
+      notificationService.send({
+        type: "employee_termination_request",
+        customerId: cid,
+        data: {
+          employeeId: emp.id,
+          employeeName: `${emp.firstName} ${emp.lastName}`,
+          employeeCode: emp.employeeCode,
+          country: emp.country,
+          requestedEndDate: input.endDate,
+          reason: input.reason || "No reason provided",
+          requestedBy: ctx.portalUser.contactName || ctx.portalUser.email,
+          customerName: customer?.companyName || "Unknown",
+        },
+      }).catch(err => console.error("Failed to send termination request notification:", err));
+
+      return { success: true, message: "Termination request submitted. Admin will review and process." };
+    }),
 });

@@ -12,7 +12,8 @@ import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import CurrencySelect from "@/components/CurrencySelect";
 import CountrySelect from "@/components/CountrySelect";
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { DatePicker } from "@/components/DatePicker";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -386,7 +387,7 @@ function EditContractorDialog({ contractor, open, onOpenChange, onSuccess }: {
 }
 
 export default function ContractorDetail() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [, setLocation] = useLocation();
   const params = useParams<{ id: string }>();
   const id = params?.id ? parseInt(params.id, 10) : 0;
@@ -448,6 +449,11 @@ export default function ContractorDetail() {
     ],
   };
 
+  // Terminate dialog state
+  const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
+  const [terminateEndDate, setTerminateEndDate] = useState("");
+  const [terminateReason, setTerminateReason] = useState("");
+
   const [milestoneOpen, setMilestoneOpen] = useState(false);
   const [milestoneForm, setMilestoneForm] = useState({
     title: "",
@@ -496,7 +502,12 @@ export default function ContractorDetail() {
                 variant={tr.variant === "destructive" ? "destructive" : tr.variant === "outline" ? "outline" : "default"}
                 size="sm"
                 onClick={() => {
-                  if (tr.variant === "destructive" && !confirm(`Are you sure you want to ${tr.label.toLowerCase()} this contractor?`)) return;
+                  if (tr.value === "terminated") {
+                    setTerminateEndDate(new Date().toISOString().split('T')[0]);
+                    setTerminateReason("");
+                    setTerminateDialogOpen(true);
+                    return;
+                  }
                   statusUpdateMutation.mutate({ id: contractor.id, data: { status: tr.value as any } });
                 }}
                 disabled={statusUpdateMutation.isPending}>
@@ -797,6 +808,61 @@ export default function ContractorDetail() {
           onOpenChange={setEditOpen}
           onSuccess={() => refetch()}
         />
+
+        {/* Terminate Dialog */}
+        <Dialog open={terminateDialogOpen} onOpenChange={setTerminateDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("contractors.actions.terminate") || "Terminate Contractor"}</DialogTitle>
+              <DialogDescription>
+                {locale === "zh"
+                  ? `确认终止承包商 ${contractor.firstName} ${contractor.lastName}。`
+                  : `Confirm termination for contractor ${contractor.firstName} ${contractor.lastName}.`}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>{locale === "zh" ? "终止日期" : "Termination Date"}</Label>
+                <DatePicker
+                  value={terminateEndDate}
+                  onChange={(d) => setTerminateEndDate(d || new Date().toISOString().split('T')[0])}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>{locale === "zh" ? "终止原因 (可选)" : "Reason (optional)"}</Label>
+                <Textarea
+                  value={terminateReason}
+                  onChange={(e) => setTerminateReason(e.target.value)}
+                  placeholder={locale === "zh" ? "请输入终止原因..." : "Enter reason for termination..."}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTerminateDialogOpen(false)}>
+                {locale === "zh" ? "取消" : "Cancel"}
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={statusUpdateMutation.isPending}
+                onClick={() => {
+                  statusUpdateMutation.mutate(
+                    { id: contractor.id, data: { status: "terminated" as any, endDate: terminateEndDate } },
+                    {
+                      onSuccess: () => {
+                        setTerminateDialogOpen(false);
+                        toast.success(locale === "zh" ? "承包商已终止" : "Contractor terminated");
+                        refetch();
+                      },
+                    }
+                  );
+                }}
+              >
+                {statusUpdateMutation.isPending ? (locale === "zh" ? "处理中..." : "Processing...") : (locale === "zh" ? "确认终止" : "Confirm Terminate")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

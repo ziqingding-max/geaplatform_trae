@@ -111,10 +111,15 @@ export async function getEmployeeCountByCountry() {
 export async function getActiveEmployeesForPayroll(countryCode: string) {
   const db = await getDb();
   if (!db) return [];
+  // Bug fix: Include both 'active' and 'offboarding' employees.
+  // Offboarding employees are still employed during their notice period and must be paid.
   return await db.select().from(employees)
     .where(and(
       eq(employees.country, countryCode), 
-      eq(employees.status, "active"),
+      or(
+        eq(employees.status, "active"),
+        eq(employees.status, "offboarding")
+      ),
       ne(employees.serviceType, "aor") // Exclude AOR
     ));
 }
@@ -180,13 +185,31 @@ export async function getContractSignedEmployeesReadyForActivation(dateStr: stri
   ));
 }
 
+/**
+ * Find offboarding employees whose endDate has passed (endDate <= dateStr).
+ * These employees should be auto-terminated by the daily cron job.
+ */
+export async function getOffboardingEmployeesReadyForTermination(dateStr: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(employees).where(and(
+    eq(employees.status, 'offboarding'),
+    lte(employees.endDate, dateStr)
+  ));
+}
+
 export async function getCountriesWithActiveEmployees() {
   const db = await getDb();
   if (!db) return [];
+  // Bug fix: Include both 'active' and 'offboarding' employees.
+  // Offboarding employees are still employed during their notice period and must generate payroll runs.
   const result = await db.select({ country: employees.country })
     .from(employees)
     .where(and(
-      eq(employees.status, 'active'),
+      or(
+        eq(employees.status, 'active'),
+        eq(employees.status, 'offboarding')
+      ),
       ne(employees.serviceType, 'aor') // Exclude AOR
     ))
     .groupBy(employees.country);
@@ -196,14 +219,15 @@ export async function getCountriesWithActiveEmployees() {
 export async function getEmployeesForPayrollMonth(country: string, monthStart: string, monthEnd: string) {
   const db = await getDb();
   if (!db) return [];
-  // Simplified logic: active employees in that country
-  // We accept monthStart/monthEnd to match the caller signature, but currently don't use them for filtering
-  // because "active" status implies they should be paid.
-  // In a real implementation, we might check if their startDate is before monthEnd etc.
+  // Bug fix: Include both 'active' and 'offboarding' employees.
+  // Offboarding employees are still employed during their notice period and must be paid.
   return await db.select().from(employees)
     .where(and(
       eq(employees.country, country), 
-      eq(employees.status, 'active'),
+      or(
+        eq(employees.status, 'active'),
+        eq(employees.status, 'offboarding')
+      ),
       ne(employees.serviceType, 'aor') // Exclude AOR
     ));
 }

@@ -289,12 +289,35 @@ export const employeesRouter = router({
 
       // Check if status is changing — fetch previous status for transition logic
       const isTransitioningToOnboarding = input.data.status === "onboarding";
+      const isTransitioningToOffboarding = input.data.status === "offboarding";
       const isTransitioningToTerminated = input.data.status === "terminated";
       const isReactivating = input.data.status && ["active", "onboarding", "contract_signed"].includes(input.data.status);
       let previousStatus: string | undefined;
       if (input.data.status) {
         const currentEmp = await getEmployeeById(input.id);
         previousStatus = currentEmp?.status;
+
+        // Validation: transitioning to offboarding requires endDate
+        if (isTransitioningToOffboarding) {
+          const effectiveEndDate = input.data.endDate || currentEmp?.endDate;
+          if (!effectiveEndDate) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'End date (last working day) is required when starting offboarding.',
+            });
+          }
+        }
+
+        // Validation: transitioning to terminated sets endDate to today if not provided
+        if (isTransitioningToTerminated && previousStatus !== "terminated") {
+          const effectiveEndDate = input.data.endDate || currentEmp?.endDate;
+          if (!effectiveEndDate) {
+            // Auto-set endDate to today for immediate termination
+            const today = new Date();
+            const todayStr = today.toISOString().split('T')[0];
+            updateData.endDate = todayStr;
+          }
+        }
       }
 
       await updateEmployee(input.id, updateData);
