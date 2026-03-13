@@ -29,7 +29,7 @@ import {
 import {
   Users, Globe, Clock, AlertCircle, ArrowUpDown, CalendarDays,
   Receipt, UserPlus, CheckCircle2, MapPin, TrendingUp,
-  DollarSign, Activity, ArrowRight,
+  DollarSign, Activity, ArrowRight, Settings,
 } from "lucide-react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
@@ -121,12 +121,14 @@ function PendingTasksCard({ tasks }: { tasks: Array<{ type: string; count: numbe
               adjustments: ArrowUpDown,
               leave: CalendarDays,
               invoices: Receipt,
+              leave_policy_setup: Settings,
             };
             const colors: Record<string, string> = {
               onboarding: "text-blue-500 bg-blue-500/10",
               adjustments: "text-amber-500 bg-amber-500/10",
               leave: "text-purple-500 bg-purple-500/10",
               invoices: "text-red-500 bg-red-500/10",
+              leave_policy_setup: "text-emerald-500 bg-emerald-500/10",
             };
             const TaskIcon = icons[task.type] || AlertCircle;
             const colorClasses = colors[task.type] || "text-muted-foreground bg-muted";
@@ -514,6 +516,12 @@ export default function PortalDashboard() {
                   count: stats?.pendingAdjustments ?? 0,
                   label: t("portal_dashboard.pending_tasks.pending_adjustments"),
                   href: portalPath("/adjustments"),
+                },
+                {
+                  type: "leave_policy_setup",
+                  count: stats?.unconfiguredLeavePolicyCountries ?? 0,
+                  label: t("portal_dashboard.pending_tasks.leave_policy_setup"),
+                  href: portalPath("/settings"),
                 },
               ]}
             />

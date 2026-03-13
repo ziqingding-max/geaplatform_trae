@@ -1103,7 +1103,7 @@ function EmployeeDetail({ id }: { id: number }) {
 
   const tabs: { key: DetailTab; label: string; show?: boolean }[] = [
     { key: "info", label: t("employees.detail.tabs.info") },
-    { key: "leave", label: t("employees.detail.tabs.leave") },
+    { key: "leave", label: t("employees.detail.tabs.leave"), show: employee.status === "active" || employee.status === "on_leave" || employee.status === "offboarding" },
     { key: "payroll", label: `${t("employees.detail.tabs.payroll")}${payrollHistory?.length ? ` (${payrollHistory.length})` : ""}` },
     { key: "adjustments", label: `${t("employees.detail.tabs.adjustments")}${adjustmentHistory?.data?.length ? ` (${adjustmentHistory.data.length})` : ""}` },
     { key: "visa", label: t("employees.detail.tabs.visa"), show: employee.requiresVisa || employee.serviceType === "visa_eor" },

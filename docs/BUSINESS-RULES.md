@@ -30,7 +30,7 @@ offboarding → terminated             [triggers: deposit refund invoice generat
 
 **Side Effects of Status Changes:**
 
-When an employee transitions to `onboarding`, the system generates a **deposit invoice** (see Section 6). When an employee transitions to `terminated`, the system generates a **deposit refund invoice** (see Section 7). The daily cron job at 00:01 Beijing time auto-activates employees in `contract_signed` status whose `startDate` has arrived.
+When an employee transitions to `onboarding`, the system generates a **deposit invoice** (see Section 6). When an employee transitions to `terminated`, the system generates a **deposit refund invoice** (see Section 7). When an employee transitions to `active`, the system **auto-initializes leave balances** (Annual Leave starts at 0, other types at full entitlement) and **auto-initializes leave policies** for the country if not yet configured. The daily cron job at 00:01 Beijing time auto-activates employees in `contract_signed` status whose `startDate` has arrived.
 
 **Employee Code Format**: Auto-generated as `GEA-{COUNTRY_CODE}-{SEQ}` (e.g., `GEA-SG-001`). The sequence is per-country and auto-incremented.
 
@@ -171,9 +171,29 @@ The monthly cutoff is the **5th of each month at 00:00 Beijing time (UTC+8)**. T
 | `compassionate_leave` | No (paid) | No |
 | `other` | Configurable | No |
 
-### Leave Balance Calculation
+### Leave Policy Auto-Initialization
 
-Leave balances are tracked in the `leaveBalances` table. Annual accrual happens on the 1st of each month via cron job. The accrual amount depends on the customer's leave policy for the employee's country.
+When a new employee is onboarded (via Admin, Portal, or Self-Service), the system automatically checks if the customer has leave policies configured for the employee's employment country. If not, statutory leave policies are automatically created from the `leave_types` table defaults. The customer is notified via email and a Dashboard pending task to review and customize the policies in **Settings > Leave Policies**.
+
+**Trigger Points**: `employees.create` (Admin), `submitOnboarding` (Portal), `submitSelfServiceOnboarding` (Self-Service), and `runEmployeeAutoActivation` (Cron).
+
+### Leave Balance Initialization
+
+Leave balances are **only created when an employee transitions to `active` status**, not at employee creation time. Employees in `pending_review`, `documents_incomplete`, `onboarding`, or `contract_signed` status do not have leave balances, and the Leave tab is hidden from their detail page.
+
+**Annual Leave starts at 0 days** upon activation. Other leave types (Sick, Maternity, Paternity, etc.) are initialized at full statutory/policy entitlement immediately.
+
+### Leave Balance Accrual
+
+Leave balances are tracked in the `leaveBalances` table. **Only Annual Leave** accrues monthly on the 1st of each month via cron job. The accrual formula:
+
+```
+accruedEntitlement = (annualEntitlement / 12) × fullMonthsServed
+```
+
+Rounding: values are rounded up to the nearest 0.5 day, then to the nearest integer for storage. The accrual is capped at the full annual entitlement.
+
+**Eligible employees**: Both `active` and `on_leave` employees are processed. Only employees who started in the current year are subject to pro-rata accrual.
 
 **Customer Leave Policy**: Each customer can configure leave policies per country. The annual entitlement must be **greater than or equal to** the statutory minimum defined in `countries_config`. Carry-over rules and expiry rules are configurable per policy.
 

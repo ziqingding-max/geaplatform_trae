@@ -17,6 +17,7 @@ import {
   portalPublicProcedure,
 } from "../portalTrpc";
 import { getDb, createEmployee, createEmployeeDocument, createContractor } from "../../db";
+import { autoInitializeLeavePolicyForCountry } from "../../services/leaveAutoInitService";
 import { storagePut } from "../../storage";
 import { notificationService } from "../../services/notificationService";
 import {
@@ -293,6 +294,13 @@ export const portalEmployeesRouter = portalRouter({
         bankDetails: input.bankDetails || null,
         status: "pending_review",
       });
+
+      // Auto-initialize leave policies for the employee's country (if not already configured)
+      try {
+        await autoInitializeLeavePolicyForCountry(cid, input.country);
+      } catch (e) {
+        console.error("Failed to auto-initialize leave policy:", e);
+      }
 
       // Submit notification for new employee request
       const [customer] = await db.select({ companyName: customers.companyName }).from(customers).where(eq(customers.id, cid));
@@ -830,6 +838,13 @@ export const portalEmployeesRouter = portalRouter({
         });
 
         const employeeId = (result as any)[0]?.id;
+
+        // Auto-initialize leave policies for the employee's country (if not already configured)
+        try {
+          await autoInitializeLeavePolicyForCountry(invite.customerId, country);
+        } catch (e) {
+          console.error("Failed to auto-initialize leave policy:", e);
+        }
 
         // Update the invite
         await db

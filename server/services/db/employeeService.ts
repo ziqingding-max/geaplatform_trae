@@ -251,13 +251,26 @@ export async function deleteLeaveBalance(id: number) {
   await db.delete(leaveBalances).where(eq(leaveBalances.id, id));
 }
 
-export async function initializeLeaveBalancesForEmployee(employeeId: number) {
+/**
+ * Initialize leave balances for an employee.
+ *
+ * @param employeeId - The employee ID
+ * @param options - Optional configuration
+ *   - annualLeaveStartsAtZero: If true, Annual Leave types start with 0 entitlement
+ *     (to be accrued monthly by the cron job). Other leave types (Sick, Maternity, etc.)
+ *     are still initialized at full entitlement. Defaults to false for backward compatibility.
+ */
+export async function initializeLeaveBalancesForEmployee(
+  employeeId: number,
+  options?: { annualLeaveStartsAtZero?: boolean }
+) {
   const db = await getDb();
   if (!db) return { added: 0 };
 
   const employee = await getEmployeeById(employeeId);
   if (!employee) return { added: 0 };
 
+  const annualLeaveStartsAtZero = options?.annualLeaveStartsAtZero ?? false;
   const year = new Date().getFullYear();
   const { leaveTypes, customerLeavePolicies, leaveBalances } = await import("../../../drizzle/schema");
 
@@ -298,78 +311,56 @@ export async function initializeLeaveBalancesForEmployee(employeeId: number) {
 
     const policy = policyMap.get(lt.id);
     
-    // Determine entitlement: Customer Policy > Statutory Default
-    const totalEntitlement = policy ? policy.annualEntitlement : (lt.annualEntitlement || 0);
+    // Determine base entitlement: Customer Policy > Statutory Default
+    const baseEntitlement = policy ? policy.annualEntitlement : (lt.annualEntitlement || 0);
+
+    // Check if this is an Annual Leave type
+    const isAnnualLeave = lt.leaveTypeName.toLowerCase().includes("annual");
+
+    // For annual leave with annualLeaveStartsAtZero, set entitlement to 0
+    // The monthly cron job will accrue it over time
+    let totalEntitlement: number;
+    if (isAnnualLeave && annualLeaveStartsAtZero) {
+      totalEntitlement = 0;
+    } else {
+      totalEntitlement = baseEntitlement ?? 0;
+    }
     
     // Determine expiry date
     let expiryDate: string | null = null;
-    const rule = policy?.expiryRule || "year_end"; // Default to year_end if no policy
+    const rule = policy?.expiryRule || "year_end";
     
     if (rule === "year_end") {
-      // If carry over is enabled, extend expiry date to allow using carried over days?
-      // Actually, standard logic is: entitlement for 2026 expires 2026-12-31.
-      // But if there are carry over days, they might have a different expiry (e.g. March 31st).
-      // For simplicity in this system:
-      // If carryOverDays > 0 is configured, we assume carried over balance expires at year end of the NEW year
-      // OR we could set expiry to null (no expiry) if policy says so.
-      
-      // However, the issue reported is "Expires: 31 Dec 2026" is shown.
-      // If the policy allows carry over, usually the carried over amount expires earlier (e.g. March 31st).
-      // But the main entitlement expires at year end.
-      
-      // If the user wants to SEE the carry over validity, we might need to adjust this.
-      // But "31 Dec 2026" is correct for the 2026 entitlement.
-      
-      // Let's check if the user implies that with Carry Over, the expiry should be different?
-      // Or maybe they just want to see the Carry Over amount distinct from the main entitlement?
-      
-      // Re-reading: "leave tab下，Expires:仍然是31 Dec 2026"
-      // If I added carry over days, the total entitlement increased.
-      // The expiry date for the *combined* balance is set to year end.
-      
-      // If the intention is that "Carry Over" extends the validity of *last year's* leave,
-      // then last year's balance record should have been updated?
-      // No, we are creating a NEW balance record for the current year.
-      
-      // If the policy is "year_end", then Dec 31st is correct for the current year's bucket.
-      // Unless the policy is "no_expiry".
-      
-      // If the user expects the expiry to be extended because of carry over, that's a misunderstanding of "Carry Over".
-      // Carry Over moves days FROM 2025 TO 2026.
-      // The moved days now expire in 2026 (usually Dec 31st, or earlier).
-      
-      // Wait, if the policy has `expiryRule` as `no_expiry`, then it should be null.
-      // Let's ensure we are respecting the policy rule correctly.
-      
       expiryDate = `${year}-12-31`;
     } else if (rule === "no_expiry") {
       expiryDate = null;
     }
-    // TODO: Handle 'anniversary' logic if needed, but 'year' column suggests calendar year tracking
+    // TODO: Handle 'anniversary' logic if needed
 
-    // Calculate Carry Over if this is not the first year
-    // Check previous year's balance
-    const previousYear = year - 1;
-    const previousBalance = await db.select()
-      .from(leaveBalances)
-      .where(and(
-        eq(leaveBalances.employeeId, employeeId),
-        eq(leaveBalances.leaveTypeId, lt.id),
-        eq(leaveBalances.year, previousYear)
-      ))
-      .limit(1);
-
+    // Calculate Carry Over from previous year (only for non-zero-start leave types)
     let carryOverAmount = 0;
-    if (previousBalance.length > 0) {
-      const prevRemaining = previousBalance[0].remaining;
-      const maxCarryOver = policy?.carryOverDays ?? 0;
-      
-      if (prevRemaining > 0 && maxCarryOver > 0) {
-        carryOverAmount = Math.min(prevRemaining, maxCarryOver);
+    if (!(isAnnualLeave && annualLeaveStartsAtZero)) {
+      const previousYear = year - 1;
+      const previousBalance = await db.select()
+        .from(leaveBalances)
+        .where(and(
+          eq(leaveBalances.employeeId, employeeId),
+          eq(leaveBalances.leaveTypeId, lt.id),
+          eq(leaveBalances.year, previousYear)
+        ))
+        .limit(1);
+
+      if (previousBalance.length > 0) {
+        const prevRemaining = previousBalance[0].remaining;
+        const maxCarryOver = policy?.carryOverDays ?? 0;
+        
+        if (prevRemaining > 0 && maxCarryOver > 0) {
+          carryOverAmount = Math.min(prevRemaining, maxCarryOver);
+        }
       }
     }
 
-    const finalEntitlement = (totalEntitlement ?? 0) + carryOverAmount;
+    const finalEntitlement = totalEntitlement + carryOverAmount;
 
     await db.insert(leaveBalances).values({
       employeeId,

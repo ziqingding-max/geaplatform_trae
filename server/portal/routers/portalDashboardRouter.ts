@@ -17,6 +17,7 @@ import {
   adjustments,
   leaveRecords,
   countriesConfig,
+  customerLeavePolicies,
   payrollRuns,
   payrollItems,
   contractors,
@@ -86,6 +87,27 @@ export const portalDashboardRouter = portalRouter({
       .from(invoices)
       .where(and(eq(invoices.customerId, cid), eq(invoices.status, "sent")));
 
+    // Countries with employees but no leave policies configured
+    // Get all distinct countries from employees (any status except terminated)
+    const employeeCountries = await db
+      .select({ countryCode: employees.country })
+      .from(employees)
+      .where(and(
+        eq(employees.customerId, cid),
+        sql`${employees.status} != 'terminated'`
+      ))
+      .groupBy(employees.country);
+
+    // Get countries that already have leave policies
+    const policyCountries = await db
+      .select({ countryCode: customerLeavePolicies.countryCode })
+      .from(customerLeavePolicies)
+      .where(eq(customerLeavePolicies.customerId, cid))
+      .groupBy(customerLeavePolicies.countryCode);
+
+    const policyCountrySet = new Set(policyCountries.map(p => p.countryCode));
+    const unconfiguredCountries = employeeCountries.filter(c => !policyCountrySet.has(c.countryCode));
+
     return {
       activeEmployees: (empCount?.count ?? 0) + (contractorCount?.count ?? 0),
       activeEorEmployees: empCount?.count ?? 0,
@@ -96,6 +118,7 @@ export const portalDashboardRouter = portalRouter({
       pendingLeave: leaveCount?.count ?? 0,
       overdueInvoices: overdueCount?.count ?? 0,
       unpaidInvoices: unpaidCount?.count ?? 0,
+      unconfiguredLeavePolicyCountries: unconfiguredCountries.length,
     };
   }),
 

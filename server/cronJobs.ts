@@ -50,6 +50,7 @@ import {
 } from "./db";
 import { notificationService } from "./services/notificationService";
 import { ContractorInvoiceGenerationService } from "./services/contractorInvoiceGenerationService";
+import { autoInitializeLeavePolicyForCountry } from "./services/leaveAutoInitService";
 import { countriesConfig } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 
@@ -152,10 +153,18 @@ export async function runEmployeeAutoActivation(): Promise<{ activated: number; 
 
     console.log(`[CronJob] Activated employee ${emp.employeeCode} (${emp.firstName} ${emp.lastName})`);
 
-    // Auto-initialize leave balances for newly activated employee
+    // Auto-initialize leave policies for the country if not yet configured
     try {
-      await initializeLeaveBalancesForEmployee(emp.id);
-      console.log(`[CronJob] Initialized leave balances for ${emp.employeeCode}`);
+      await autoInitializeLeavePolicyForCountry(emp.customerId, emp.country);
+    } catch (err) {
+      console.error(`[CronJob] Failed to auto-init leave policy for ${emp.employeeCode}:`, err);
+    }
+
+    // Auto-initialize leave balances for newly activated employee
+    // Annual leave starts at 0 and accrues monthly via cron job
+    try {
+      await initializeLeaveBalancesForEmployee(emp.id, { annualLeaveStartsAtZero: true });
+      console.log(`[CronJob] Initialized leave balances for ${emp.employeeCode} (annual leave starts at 0)`);
     } catch (err) {
       console.error(`[CronJob] Failed to initialize leave balances for ${emp.employeeCode}:`, err);
     }
@@ -645,11 +654,19 @@ export async function runOverdueInvoiceDetection(): Promise<{ overdueCount: numb
 // ============================================================================
 
 /**
- * For employees who joined in the current year, calculate pro-rata leave accrual.
+ * Monthly leave accrual for employees who joined in the current year.
+ *
+ * ONLY accrues Annual Leave types (identified by leaveTypeName containing "Annual").
+ * Other leave types (Sick, Maternity, Paternity, Bereavement, etc.) are initialized
+ * at full entitlement when the employee is activated and are NOT accrued monthly.
+ *
  * Rule: Each full month of service earns 1/12 of annual entitlement.
  * Rounding: values not reaching 0.5 day are rounded up to 0.5 day.
- * Since totalEntitlement is stored as INT, we use the nearest 0.5-day logic
- * and round to the nearest integer for storage.
+ * Since totalEntitlement is stored as INT, we round to the nearest integer for storage.
+ *
+ * Bug fixes applied:
+ * - Only processes Annual Leave types (previously all types were accrued)
+ * - Includes both 'active' and 'on_leave' employees (previously only 'active')
  */
 export async function runMonthlyLeaveAccrual(): Promise<{ processed: number; updated: number; errors: number }> {
   const now = new Date();
@@ -660,17 +677,19 @@ export async function runMonthlyLeaveAccrual(): Promise<{ processed: number; upd
 
   console.log(`[CronJob] Running monthly leave accrual for ${currentYear}-${String(currentMonth).padStart(2, "0")}`);
 
-  // Get all active employees
+  // Get all active AND on_leave employees (Bug fix: previously only active)
   const { data: activeEmployees } = await listEmployees({ status: "active", pageSize: 10000 });
+  const { data: onLeaveEmployees } = await listEmployees({ status: "on_leave", pageSize: 10000 });
+  const allEligibleEmployees = [...activeEmployees, ...onLeaveEmployees];
 
   // Filter to employees who started in the current year
-  const newEmployees = activeEmployees.filter(emp => {
+  const newEmployees = allEligibleEmployees.filter(emp => {
     if (!emp.startDate) return false;
     const startDate = new Date(emp.startDate as any);
     return startDate.getFullYear() === currentYear;
   });
 
-  console.log(`[CronJob] Found ${newEmployees.length} employees who started in ${currentYear}`);
+  console.log(`[CronJob] Found ${newEmployees.length} employees who started in ${currentYear} (active: ${activeEmployees.length}, on_leave: ${onLeaveEmployees.length})`);
 
   let processed = 0;
   let updated = 0;
@@ -705,9 +724,14 @@ export async function runMonthlyLeaveAccrual(): Promise<{ processed: number; upd
       const balances = await listLeaveBalances(emp.id, currentYear);
 
       for (const balance of balances) {
+        // Bug fix: ONLY accrue Annual Leave types
+        // Other leave types (Sick, Maternity, etc.) are already at full entitlement
+        const isAnnualLeave = balance.leaveTypeName?.toLowerCase().includes("annual");
+        if (!isAnnualLeave) continue;
+
         // Find the matching policy for this leave type
         const policy = policies.find((p: any) => p.leaveTypeId === balance.leaveTypeId);
-        const annualEntitlement = policy ? policy.annualEntitlement : balance.totalEntitlement;
+        const annualEntitlement = policy ? policy.annualEntitlement : (balance.totalEntitlement || 0);
 
         if (!annualEntitlement || annualEntitlement <= 0) continue;
 
@@ -720,17 +744,19 @@ export async function runMonthlyLeaveAccrual(): Promise<{ processed: number; upd
         // Since DB stores INT, round to nearest integer
         const finalAccrued = Math.round(accruedHalfDay);
 
+        // Cap at annual entitlement (don't exceed full year)
+        const cappedAccrued = Math.min(finalAccrued, annualEntitlement);
+
         // Only update if the accrued amount is different from current entitlement
-        // and is less than the full annual entitlement
-        if (finalAccrued !== balance.totalEntitlement && finalAccrued < annualEntitlement) {
-          const newRemaining = finalAccrued - balance.used;
+        if (cappedAccrued !== balance.totalEntitlement) {
+          const newRemaining = cappedAccrued - balance.used;
           await updateLeaveBalance(balance.id, {
-            totalEntitlement: finalAccrued,
+            totalEntitlement: cappedAccrued,
             remaining: Math.max(0, newRemaining),
           });
           updated++;
-          console.log(`[CronJob] Updated leave balance for ${emp.firstName} ${emp.lastName} (${emp.employeeCode}): ` +
-            `leaveTypeId=${balance.leaveTypeId}, months=${fullMonthsServed}, accrued=${finalAccrued}/${annualEntitlement}`);
+          console.log(`[CronJob] Updated annual leave for ${emp.firstName} ${emp.lastName} (${emp.employeeCode}): ` +
+            `months=${fullMonthsServed}, accrued=${cappedAccrued}/${annualEntitlement}`);
         }
       }
     } catch (err) {

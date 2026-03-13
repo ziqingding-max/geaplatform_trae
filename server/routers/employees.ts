@@ -34,6 +34,7 @@ import { storagePut, storageGet, storageDownload } from "../storage";
 import { generateDepositInvoice } from "../services/depositInvoiceService";
 import { generateDepositRefund } from "../services/depositRefundService";
 import { generateVisaServiceInvoice } from "../services/visaServiceInvoiceService";
+import { autoInitializeLeavePolicyForCountry } from "../services/leaveAutoInitService";
 import { onboardingInvites, customers } from "../../drizzle/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 
@@ -173,15 +174,17 @@ export const employeesRouter = router({
         visaStatus: requiresVisa ? "pending_application" : "not_required",
       });
 
-      // Auto-initialize leave balances for the current year
+      // Auto-initialize leave policies for the employee's country (if not already configured)
       const insertId = (result as any)[0]?.insertId ?? (result as any).insertId;
       if (insertId && input.country) {
         try {
-          await initializeLeaveBalancesForEmployee(insertId);
+          await autoInitializeLeavePolicyForCountry(input.customerId, input.country);
         } catch (e) {
-          console.error("Failed to initialize leave balances:", e);
+          console.error("Failed to auto-initialize leave policy:", e);
         }
       }
+      // NOTE: Leave balances are NOT created here.
+      // They will be initialized when the employee transitions to 'active' status.
 
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
@@ -432,6 +435,7 @@ export const employeesRouter = router({
       }
 
       // Auto-initialize leave balances when employee transitions to active
+      // Annual leave starts at 0 and accrues monthly via cron job
       let leaveBalancesInitialized = false;
       if (
         input.data.status === "active" &&
@@ -440,8 +444,10 @@ export const employeesRouter = router({
         try {
           const emp = await getEmployeeById(input.id);
           if (emp) {
-            const currentYear = new Date().getFullYear();
-            await initializeLeaveBalancesForEmployee(input.id);
+            // Auto-initialize leave policies for the country if not yet configured
+            await autoInitializeLeavePolicyForCountry(emp.customerId, emp.country);
+            // Initialize leave balances with annual leave starting at 0
+            await initializeLeaveBalancesForEmployee(input.id, { annualLeaveStartsAtZero: true });
             leaveBalancesInitialized = true;
           }
         } catch (err) {
