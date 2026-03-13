@@ -197,6 +197,21 @@ Rounding: values are rounded up to the nearest 0.5 day, then to the nearest inte
 
 **Customer Leave Policy**: Each customer can configure leave policies per country. The annual entitlement must be **greater than or equal to** the statutory minimum defined in `countries_config`. Carry-over rules and expiry rules are configurable per policy.
 
+### Leave Balance Deduction & Insufficient Balance Handling
+
+When a leave request is created (via Admin or Portal), the system automatically deducts the requested days from the employee's leave balance for that leave type and year.
+
+**Strict Balance Rule**: For all paid leave types (`isPaid = true`), the remaining balance **cannot go below 0**. If the requested days exceed the remaining balance, the system automatically splits the request:
+
+1. **Paid portion**: Uses the remaining balance (e.g., 3 days Annual Leave remaining → 3 days Annual Leave)
+2. **Unpaid portion**: The excess days are automatically converted to Unpaid Leave (e.g., requesting 5 days with 3 remaining → 3 days Annual + 2 days Unpaid)
+
+The frontend displays a warning banner before submission when insufficient balance is detected, showing the split breakdown. The user is informed via toast notification after successful creation.
+
+**Balance Restoration**: When a leave record is deleted, the balance is restored (used decremented, remaining incremented).
+
+**Unpaid Leave**: Leave types with `isPaid = false` have no balance limit and are not subject to deduction checks.
+
 ### Unpaid Leave Deduction
 
 Unpaid leave generates a payroll deduction calculated as:

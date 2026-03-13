@@ -99,8 +99,15 @@ export default function Leave() {
   const customersList = customersData?.data || [];
 
   const createMutation = trpc.leave.create.useMutation({
-    onSuccess: () => {
-      toast.success(t("leave.toast.submitted"));
+    onSuccess: (data: any) => {
+      if (data?.balanceSplit) {
+        toast.success(
+          `Leave request split: ${data.paidDays} day(s) paid leave + ${data.unpaidDays} day(s) unpaid leave (due to insufficient balance)`,
+          { duration: 6000 }
+        );
+      } else {
+        toast.success(t("leave.toast.submitted"));
+      }
       setCreateOpen(false);
       refetch();
       setFormData(defaultForm);
@@ -181,6 +188,21 @@ export default function Leave() {
     { countryCode: selectedEmployee?.country || "" },
     { enabled: !!selectedEmployee?.country }
   );
+
+  // Load leave balances for selected employee in create form
+  const { data: createFormBalancesData } = trpc.employees.leaveBalances.useQuery(
+    { employeeId: formData.employeeId, year: new Date().getFullYear() },
+    { enabled: !!formData.employeeId }
+  );
+  const getCreateFormBalance = (leaveTypeId: number) => {
+    if (!createFormBalancesData) return null;
+    const bal = createFormBalancesData.find((b: any) => b.leaveTypeId === leaveTypeId);
+    return bal ? { remaining: Number(bal.remaining ?? 0), totalEntitlement: Number(bal.totalEntitlement ?? 0) } : null;
+  };
+  const adminSelectedLeaveType = leaveTypesData?.find((lt: any) => lt.id === formData.leaveTypeId);
+  const adminRequestedDays = parseFloat(formData.days || "0");
+  const adminSelectedBalance = formData.leaveTypeId ? getCreateFormBalance(formData.leaveTypeId) : null;
+  const adminIsInsufficientBalance = adminSelectedLeaveType?.isPaid !== false && adminSelectedBalance !== null && adminRequestedDays > 0 && adminRequestedDays > adminSelectedBalance.remaining;
 
   // For edit form: get editing employee's country
   const editingEmployee = useMemo(() => {
@@ -397,11 +419,19 @@ export default function Leave() {
                             <SelectValue placeholder={selectedEmployee ? t("leave.form.placeholder.selectLeaveType") : t("leave.form.placeholder.selectEmployeeFirst")} />
                             </SelectTrigger>
                             <SelectContent>
-                            {leaveTypesData?.map((lt: any) => (
+                            {leaveTypesData?.map((lt: any) => {
+                                const bal = getCreateFormBalance(lt.id);
+                                const balLabel = lt.isPaid === false
+                                  ? t("leave.type.unpaid")
+                                  : bal !== null
+                                    ? `${bal.remaining}/${bal.totalEntitlement} days remaining`
+                                    : lt.annualEntitlement ? `${lt.annualEntitlement} ${t("leave.type.daysPerYear")}` : "";
+                                return (
                                 <SelectItem key={lt.id} value={String(lt.id)}>
-                                {lt.leaveTypeName} {lt.isPaid ? "" : `(${t("leave.type.unpaid")})`} {lt.annualEntitlement ? `— ${lt.annualEntitlement} ${t("leave.type.daysPerYear")}` : ""}
+                                {lt.leaveTypeName} {balLabel ? `(${balLabel})` : ""}
                                 </SelectItem>
-                            ))}
+                                );
+                            })}
                             {(!leaveTypesData || leaveTypesData.length === 0) && selectedEmployee && (
                                 <SelectItem value="__none" disabled>{t("leave.form.noLeaveTypes", { country: selectedEmployee.country })}</SelectItem>
                             )}
@@ -477,6 +507,17 @@ export default function Leave() {
                             rows={3}
                         />
                         </div>
+
+                        {/* Insufficient balance warning */}
+                        {adminIsInsufficientBalance && adminSelectedBalance && (
+                        <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                            <p className="text-sm font-medium text-amber-800">Insufficient leave balance</p>
+                            <p className="text-xs text-amber-700 mt-1">
+                            Requesting {adminRequestedDays} day(s) but only {adminSelectedBalance.remaining} day(s) remaining.
+                            The excess {(adminRequestedDays - adminSelectedBalance.remaining).toFixed(1)} day(s) will be automatically converted to Unpaid Leave.
+                            </p>
+                        </div>
+                        )}
 
                         {/* Cross-month leave warning */}
                         {formData.startDate && formData.endDate && parseFloat(formData.days) > 0 && (
