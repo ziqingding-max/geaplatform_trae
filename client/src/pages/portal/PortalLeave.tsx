@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2,
-  Loader2, Calendar, Sun, TreePalm, CheckCircle2, XCircle, Download,
+  Loader2, Calendar, CheckCircle2, XCircle, Download,
   Briefcase, Target, DollarSign,
 } from "lucide-react";
 // CurrencySelect removed — currency is now locked from contractor record
@@ -347,7 +347,6 @@ export default function PortalLeave() {
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [form, setForm] = useState<LeaveForm>({ ...emptyForm });
-  const [selectedBalanceEmp, setSelectedBalanceEmp] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("requests");
   const [showMilestoneCreate, setShowMilestoneCreate] = useState(false);
 
@@ -370,17 +369,6 @@ export default function PortalLeave() {
     { enabled: !!selectedEmp?.country }
   );
 
-  // Get leave balances for selected employee
-  const { data: balances } = portalTrpc.leave.balances.useQuery(
-    { employeeId: selectedBalanceEmp || 0 },
-    { enabled: !!selectedBalanceEmp }
-  );
-
-  // Get public holidays
-  const { data: holidays } = portalTrpc.leave.publicHolidays.useQuery(
-    { year: new Date().getFullYear() },
-    { enabled: activeTab === "holidays" }
-  );
 
   const createMutation = portalTrpc.leave.create.useMutation({
     onSuccess: () => {
@@ -497,8 +485,6 @@ export default function PortalLeave() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="requests">{t("portal_leave.tabs.requests")}</TabsTrigger>
-            <TabsTrigger value="balances">{t("portal_leave.tabs.balances")}</TabsTrigger>
-            <TabsTrigger value="holidays">{t("portal_leave.tabs.holidays")}</TabsTrigger>
             <TabsTrigger value="milestones" className="gap-1.5">
               <Target className="w-3.5 h-3.5" /> {t("portal_leave.tabs.milestones")}
             </TabsTrigger>
@@ -641,118 +627,7 @@ export default function PortalLeave() {
             )}
           </TabsContent>
 
-          {/* Leave Balances Tab */}
-          <TabsContent value="balances" className="space-y-4">
-            <div className="flex gap-3">
-              <Select
-                value={selectedBalanceEmp ? String(selectedBalanceEmp) : ""}
-                onValueChange={(v) => setSelectedBalanceEmp(Number(v))}
-              >
-                <SelectTrigger className="w-[280px]">
-                  <SelectValue placeholder={t("portal_leave.balances.select_employee_placeholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((emp: any) => (
-                    <SelectItem key={emp.id} value={String(emp.id)}>
-                      {emp.firstName} {emp.lastName}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
-            {!selectedBalanceEmp ? (
-              <Card>
-                <CardContent className="py-16">
-                  <div className="flex flex-col items-center justify-center text-muted-foreground">
-                    <TreePalm className="w-10 h-10 mb-3" />
-                    <p className="text-lg font-medium">{t("portal_leave.balances.select_employee_title")}</p>
-                    <p className="text-sm mt-1">{t("portal_leave.balances.select_employee_hint")}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {(balances || []).length === 0 ? (
-                  <Card className="col-span-full">
-                    <CardContent className="py-12">
-                      <p className="text-center text-muted-foreground">{t("portal_leave.balances.no_balances")}</p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  (balances || []).map((b: any) => (
-                    <Card key={b.id}>
-                      <CardContent className="pt-6">
-                        <div className="flex items-center justify-between mb-3">
-                          <p className="font-medium text-sm">{b.leaveTypeName || "Leave"}</p>
-                          <Badge variant="outline">{b.year}</Badge>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 text-center">
-                          <div>
-                            <p className="text-2xl font-bold text-primary">{b.totalEntitlement}</p>
-                            <p className="text-xs text-muted-foreground">{t("portal_leave.balances.entitled")}</p>
-                          </div>
-                          <div>
-                            <p className="text-2xl font-bold text-amber-600">{b.used}</p>
-                            <p className="text-xs text-muted-foreground">{t("portal_leave.balances.used")}</p>
-                          </div>
-                          <div>
-                            <p className="text-2xl font-bold text-emerald-600">{b.remaining}</p>
-                            <p className="text-xs text-muted-foreground">{t("portal_leave.balances.remaining")}</p>
-                          </div>
-                        </div>
-                        {/* Progress bar */}
-                        <div className="mt-3 h-2 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full transition-all"
-                            style={{ width: `${Math.min(100, (Number(b.used) / Math.max(1, Number(b.totalEntitlement))) * 100)}%` }}
-                          />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Public Holidays Tab */}
-          <TabsContent value="holidays" className="space-y-4">
-            <Card>
-              <CardContent className="p-0">
-                {!holidays || holidays.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                    <Sun className="w-10 h-10 mb-3" />
-                    <p className="text-lg font-medium">{t("portal_leave.holidays.empty_title")}</p>
-                    <p className="text-sm mt-1">{t("portal_leave.holidays.empty_hint")}</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>{t("portal_leave.holidays.date")}</TableHead>
-                        <TableHead>{t("portal_leave.holidays.header_holiday")}</TableHead>
-                        <TableHead className="min-w-[120px]">{t("portal_leave.holidays.header_country")}</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {holidays.map((h: any) => (
-                        <TableRow key={h.id}>
-                          <TableCell className="font-mono text-sm">
-                            {formatDate(h.holidayDate + "T00:00:00")}
-                          </TableCell>
-                          <TableCell className="font-medium">{h.holidayName}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{h.countryCode}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           {/* Milestones Tab */}
           <TabsContent value="milestones" className="space-y-4">

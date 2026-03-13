@@ -64,6 +64,13 @@
       "when": 1773297900000,
       "tag": "0008_lead_change_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1741859200000,
+      "tag": "0009_aor_schema_alignment",
+      "breakpoints": true
     }
   ]
 }
