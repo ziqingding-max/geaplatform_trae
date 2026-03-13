@@ -2,6 +2,9 @@
  * PayrollCycleIndicator — Displays current payroll period, cutoff countdown,
  * and payment date. Used in Leave and Adjustments pages to help users
  * understand which payroll cycle their entries will be attributed to.
+ *
+ * The `label` prop controls the heading text (e.g. "Adjustments", "Leave", "Reimbursements").
+ * Defaults to "Payroll" if not provided.
  */
 import { trpc } from "@/lib/trpc";
 import { formatMonthLong, formatDate } from "@/lib/format";
@@ -13,9 +16,11 @@ interface PayrollCycleIndicatorProps {
   month?: string;
   /** Whether to show in compact mode (single line) */
   compact?: boolean;
+  /** Custom label to replace "Payroll" in the heading, e.g. "Adjustments", "Leave", "Reimbursements" */
+  label?: string;
 }
 
-export default function PayrollCycleIndicator({ month, compact = false }: PayrollCycleIndicatorProps) {
+export default function PayrollCycleIndicator({ month, compact = false, label = "Payroll" }: PayrollCycleIndicatorProps) {
   // Fetch current payroll period info
   const { data: currentPeriod } = trpc.systemSettings.currentPayrollPeriod.useQuery(
     undefined,
@@ -67,7 +72,7 @@ export default function PayrollCycleIndicator({ month, compact = false }: Payrol
           )}
         </Badge>
         <span className="text-muted-foreground">
-          Payroll: {formatMonthLong(period.payrollMonth)}
+          {label}: {formatMonthLong(period.payrollMonth)}
         </span>
       </div>
     );
@@ -100,7 +105,7 @@ export default function PayrollCycleIndicator({ month, compact = false }: Payrol
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium">
-              {formatMonthLong(period.payrollMonth)} Payroll
+              {formatMonthLong(period.payrollMonth)} {label}
             </span>
             <Badge
               variant="outline"
