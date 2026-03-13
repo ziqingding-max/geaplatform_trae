@@ -4,6 +4,9 @@
  *
  * Displays current payroll period, cutoff countdown, and payment date.
  * Used in Portal Leave, Adjustments, and Reimbursements pages.
+ *
+ * The `label` prop controls the heading text (e.g. "Adjustments", "Leave", "Reimbursements").
+ * Defaults to "Payroll" if not provided.
  */
 import { portalTrpc } from "@/lib/portalTrpc";
 import { formatMonthLong, formatDate } from "@/lib/format";
@@ -15,9 +18,11 @@ interface PortalPayrollCycleIndicatorProps {
   month?: string;
   /** Whether to show in compact mode (single line) */
   compact?: boolean;
+  /** Custom label to replace "Payroll" in the heading, e.g. "Adjustments", "Leave", "Reimbursements" */
+  label?: string;
 }
 
-export default function PortalPayrollCycleIndicator({ month, compact = false }: PortalPayrollCycleIndicatorProps) {
+export default function PortalPayrollCycleIndicator({ month, compact = false, label = "Payroll" }: PortalPayrollCycleIndicatorProps) {
   // Fetch current payroll period info
   const { data: currentPeriod } = portalTrpc.settings.currentPayrollPeriod.useQuery(
     undefined,
@@ -69,7 +74,7 @@ export default function PortalPayrollCycleIndicator({ month, compact = false }: 
           )}
         </Badge>
         <span className="text-muted-foreground">
-          Payroll: {formatMonthLong(period.payrollMonth)}
+          {label}: {formatMonthLong(period.payrollMonth)}
         </span>
       </div>
     );
@@ -102,7 +107,7 @@ export default function PortalPayrollCycleIndicator({ month, compact = false }: 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium">
-              {formatMonthLong(period.payrollMonth)} Payroll
+              {formatMonthLong(period.payrollMonth)} {label}
             </span>
             <Badge
               variant="outline"

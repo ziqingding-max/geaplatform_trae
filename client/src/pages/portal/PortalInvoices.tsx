@@ -208,7 +208,7 @@ export default function PortalInvoices() {
                       <FileText className="w-12 h-12 text-muted-foreground/30 mb-3" />
                       <p className="text-sm font-medium text-muted-foreground">{t("portal_invoices.empty.title")}</p>
                       <p className="text-xs text-muted-foreground/70 mt-1">
-                        {tab === "history" ? t("portal_invoices.empty.history_desc") : t("portal_invoices.empty.active_desc")}
+                        {tab === "history" ? t("portal_invoices.empty_history_desc") : t("portal_invoices.empty_active_desc")}
                       </p>
                     </div>
                   ) : (

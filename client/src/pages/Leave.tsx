@@ -353,7 +353,7 @@ export default function Leave() {
             <p className="text-sm text-muted-foreground mt-1">Manage employee leave requests and contractor milestones</p>
           </div>
           <div className="flex-1 flex justify-center">
-            <PayrollCycleIndicator compact />
+            <PayrollCycleIndicator compact label="Leave" />
           </div>
           {/* Header buttons removed, moved inside tabs */}
         </div>
@@ -530,7 +530,7 @@ export default function Leave() {
 
                         {/* Payroll period info for the leave */}
                         {formData.endDate && (
-                        <PayrollCycleIndicator month={formData.endDate.substring(0, 7)} />
+                        <PayrollCycleIndicator month={formData.endDate.substring(0, 7)} label="Leave" />
                         )}
 
                         <div className="flex justify-end gap-3 pt-2">

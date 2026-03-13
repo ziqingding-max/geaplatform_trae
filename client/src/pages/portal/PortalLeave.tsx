@@ -349,6 +349,7 @@ export default function PortalLeave() {
   const [form, setForm] = useState<LeaveForm>({ ...emptyForm });
   const [activeTab, setActiveTab] = useState("requests");
   const [showMilestoneCreate, setShowMilestoneCreate] = useState(false);
+  const [selectedBalanceEmp, setSelectedBalanceEmp] = useState<number | null>(null);
 
   const utils = portalTrpc.useUtils();
 
@@ -695,7 +696,7 @@ export default function PortalLeave() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             {/* Payroll Cycle Indicator — matches Admin experience */}
-            <PortalPayrollCycleIndicator />
+            <PortalPayrollCycleIndicator label="Leave" />
             <div className="space-y-2">
               <Label>{t("portal_leave.create_dialog.label_employee")} <span className="text-destructive">*</span></Label>
               <Select value={form.employeeId ? String(form.employeeId) : ""} onValueChange={(v) => setForm((f) => ({ ...f, employeeId: Number(v), leaveTypeId: null }))}>

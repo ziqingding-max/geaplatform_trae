@@ -473,7 +473,7 @@ export default function PortalAdjustments() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             {/* Payroll Cycle Indicator */}
-            <PortalPayrollCycleIndicator month={form.effectiveMonth || undefined} />
+            <PortalPayrollCycleIndicator month={form.effectiveMonth || undefined} label={t("portal_adjustments.header.title")} />
             {!editingId && (
               <>
                 {/* Worker Selector — unified employee + contractor */}

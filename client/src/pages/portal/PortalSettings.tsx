@@ -255,7 +255,7 @@ function CompanyProfileTab() {
 function LeavePoliciesTab() {
   const { t } = useI18n();
   const { user } = usePortalAuth();
-  const isAdmin = user?.portalRole === "admin";
+  const canEdit = user && ["admin", "hr_manager"].includes(user.portalRole);
   const { data: policies, isLoading, refetch } = portalTrpc.settings.leavePolicies.useQuery();
   const { data: countries } = portalTrpc.settings.activeCountries.useQuery();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -351,7 +351,7 @@ function LeavePoliciesTab() {
                     <TableHead className="text-center">{t("portal_settings.leave_policies.table_header.entitlement") || "Your Entitlement"}</TableHead>
                     <TableHead className="text-center">{t("portal_settings.leave_policies.table_header.carry_over") || "Carry Over"}</TableHead>
                     <TableHead>{t("portal_settings.leave_policies.table_header.expiry_rule")}</TableHead>
-                    {isAdmin && <TableHead className="text-right">{t("portal_settings.leave_policies.table_header.actions")}</TableHead>}
+                    {canEdit && <TableHead className="text-right">{t("portal_settings.leave_policies.table_header.actions")}</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -405,7 +405,7 @@ function LeavePoliciesTab() {
                             <span className="capitalize">{policy.expiryRule?.replace(/_/g, " ")}</span>
                           )}
                         </TableCell>
-                        {isAdmin && (
+                        {canEdit && (
                           <TableCell className="text-right">
                             {isEditing ? (
                               <div className="flex gap-1 justify-end">

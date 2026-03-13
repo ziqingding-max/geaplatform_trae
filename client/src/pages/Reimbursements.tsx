@@ -341,7 +341,7 @@ export default function Reimbursements() {
             </p>
           </div>
           <div className="flex gap-4">
-              <PayrollCycleIndicator compact />
+              <PayrollCycleIndicator compact label="Reimbursements" />
               <Button variant="outline" disabled={items.length === 0} onClick={() => {
                 exportToCsv(items, [
                   { header: "Employee", accessor: (r: any) => { const emp = employeeMap.get(r.employeeId); return emp ? `${emp.firstName} ${emp.lastName}` : `#${r.employeeId}`; } },
@@ -433,7 +433,7 @@ export default function Reimbursements() {
                     <ReceiptUploadSection />
 
                     {formData.effectiveMonth && (
-                      <PayrollCycleIndicator month={formData.effectiveMonth} />
+                      <PayrollCycleIndicator month={formData.effectiveMonth} label="Reimbursements" />
                     )}
                   </div>
                   <div className="flex justify-end gap-2 mt-2">

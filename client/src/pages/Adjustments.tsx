@@ -570,7 +570,7 @@ export default function Adjustments() {
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <PayrollCycleIndicator compact />
+            <PayrollCycleIndicator compact label="Adjustments" />
             <Button variant="outline" disabled={filteredAdjustments.length === 0} onClick={() => {
                exportToCsv(filteredAdjustments, [
                 { header: "Worker Type", accessor: (r: any) => r.workerType },
@@ -685,7 +685,7 @@ export default function Adjustments() {
                 <ReceiptUploadArea isEdit={false} />
 
                 {formData.effectiveMonth && (
-                  <PayrollCycleIndicator month={formData.effectiveMonth} />
+                  <PayrollCycleIndicator month={formData.effectiveMonth} label="Adjustments" />
                 )}
 
                 <div className="flex justify-end gap-3 pt-2">

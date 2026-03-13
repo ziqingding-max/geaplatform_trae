@@ -451,7 +451,7 @@ export default function PortalReimbursements() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             {/* Payroll Cycle Indicator — matches Admin experience */}
-            <PortalPayrollCycleIndicator month={form.effectiveMonth || undefined} />
+            <PortalPayrollCycleIndicator month={form.effectiveMonth || undefined} label="Reimbursements" />
             {!editingId && (
               <>
                 <div className="space-y-2">
