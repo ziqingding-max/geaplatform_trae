@@ -1117,6 +1117,8 @@ export const invoicesRouter = router({
         totalAmount: number; // Revenue (Monthly, Visa, Manual)
         paidAmount: number;
         depositAmount: number; // Deposits (Liability)
+        depositPaidAmount: number;
+        depositCount: number;
         invoiceCount: number;
         collectionRate: number;
       }
@@ -1128,7 +1130,7 @@ export const invoicesRouter = router({
         typeBreakdown: Record<string, number>;
         customerCount: number;
         customers: Set<number>;
-        currencyBreakdowns: Map<string, { totalAmount: number; paidAmount: number; depositAmount: number; invoiceCount: number }>;
+        currencyBreakdowns: Map<string, { totalAmount: number; paidAmount: number; depositAmount: number; depositPaidAmount: number; depositCount: number; invoiceCount: number }>;
       }>();
 
       for (const inv of allInvoices) {
@@ -1168,7 +1170,7 @@ export const invoicesRouter = router({
         // Track per-currency amounts
         const ccy = inv.currency || "USD";
         if (!entry.currencyBreakdowns.has(ccy)) {
-          entry.currencyBreakdowns.set(ccy, { totalAmount: 0, paidAmount: 0, depositAmount: 0, invoiceCount: 0 });
+          entry.currencyBreakdowns.set(ccy, { totalAmount: 0, paidAmount: 0, depositAmount: 0, depositPaidAmount: 0, depositCount: 0, invoiceCount: 0 });
         }
         const ccyEntry = entry.currencyBreakdowns.get(ccy)!;
         const invTotal = parseFloat(inv.total?.toString() ?? "0");
@@ -1178,6 +1180,10 @@ export const invoicesRouter = router({
           
           if (inv.invoiceType === "deposit") {
             ccyEntry.depositAmount += invTotal;
+            ccyEntry.depositCount++;
+            if (inv.status === "paid" && inv.paidAmount) {
+              ccyEntry.depositPaidAmount += parseFloat(inv.paidAmount.toString());
+            }
           } else if (inv.invoiceType === "credit_note" || inv.invoiceType === "deposit_refund") {
             // Ignore credit notes and refunds in revenue overview
           } else {
@@ -1200,6 +1206,8 @@ export const invoicesRouter = router({
               totalAmount: data.totalAmount,
               paidAmount: data.paidAmount,
               depositAmount: data.depositAmount,
+              depositPaidAmount: data.depositPaidAmount,
+              depositCount: data.depositCount,
               invoiceCount: data.invoiceCount,
               collectionRate: data.totalAmount > 0 ? Math.round((data.paidAmount / data.totalAmount) * 10000) / 100 : 0,
             }))

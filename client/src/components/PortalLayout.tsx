@@ -115,14 +115,11 @@ export default function PortalLayout({ children, title }: PortalLayoutProps) {
   const { t, locale, setLocale } = useI18n();
   const navGroups = useMemo(() => buildPortalNavGroups(), []);
 
-  // Loading state
+  // Loading state — minimal screen to avoid "dashboard flash" before login redirect
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen portal-glass-bg">
-        <div className="flex flex-col items-center gap-4">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
