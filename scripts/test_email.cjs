@@ -276,7 +276,7 @@ ${emailButton("Review in Admin Panel", "https://admin.geahr.com")}
   console.log("SMTP Host:", SMTP_HOST);
   console.log("SMTP User:", SMTP_USER);
   console.log("Send To:", EMAIL_ADMIN);
-  console.log("Logo:", logoBase64 ? "Embedded (base64)" : "Text fallback");
+  console.log("Logo:", `External URL (${ADMIN_APP_URL}/brand/gea-logo-email.png)`);
   console.log("------------------------------------------------------");
 
   let ok = 0;
