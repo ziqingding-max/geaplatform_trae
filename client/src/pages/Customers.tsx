@@ -1340,7 +1340,7 @@ function CustomerDetail({ id }: { id: number }) {
                           <TableCell className="text-sm">{c.role || "\u2014"}</TableCell>
                           <TableCell className="text-sm">
                             {(c as any).isPortalActive || c.hasPortalAccess ? (
-                              <Badge className="text-xs" variant="outline">{(c as any).portalRole || "viewer"}</Badge>
+                              <Badge className="text-xs" variant="outline">{{ admin: t("customers.contacts.portalRoleAdmin"), hr_manager: t("customers.contacts.portalRoleHr"), finance: t("customers.contacts.portalRoleFinance"), viewer: t("customers.contacts.portalRoleViewer") }[(c as any).portalRole as string] || t("customers.contacts.portalRoleViewer")}</Badge>
                             ) : (
                               <span className="text-xs text-muted-foreground">\u2014</span>
                             )}
