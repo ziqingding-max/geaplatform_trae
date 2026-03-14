@@ -46,9 +46,9 @@ export default function PortalLogin() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <img 
-            src="/brand/gea-logo-short.jpg" 
+            src="/brand/gea-logo-horizontal-green.png" 
             alt="GEA - Global Employment Advisors" 
-            className="h-12 object-contain mb-4"
+            className="h-16 object-contain mb-4"
           />
           <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: "'DM Sans', sans-serif" }}>
             {t("portal_login.header.title")}
