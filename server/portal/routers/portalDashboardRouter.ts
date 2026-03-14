@@ -87,14 +87,14 @@ export const portalDashboardRouter = portalRouter({
       .from(invoices)
       .where(and(eq(invoices.customerId, cid), eq(invoices.status, "sent")));
 
-    // Countries with employees but no leave policies configured
-    // Get all distinct countries from employees (any status except terminated)
+    // Countries with active employees but no leave policies configured
+    // Only include employees in statuses where leave policies are relevant
     const employeeCountries = await db
       .select({ countryCode: employees.country })
       .from(employees)
       .where(and(
         eq(employees.customerId, cid),
-        sql`${employees.status} != 'terminated'`
+        inArray(employees.status, ["active", "onboarding", "on_leave", "offboarding"] as any)
       ))
       .groupBy(employees.country);
 
@@ -106,7 +106,7 @@ export const portalDashboardRouter = portalRouter({
       .groupBy(customerLeavePolicies.countryCode);
 
     const policyCountrySet = new Set(policyCountries.map(p => p.countryCode));
-    const unconfiguredCountries = employeeCountries.filter(c => !policyCountrySet.has(c.countryCode));
+    const unconfiguredCountries = employeeCountries.filter(c => c.countryCode && !policyCountrySet.has(c.countryCode));
 
     return {
       activeEmployees: (empCount?.count ?? 0) + (contractorCount?.count ?? 0),
