@@ -209,13 +209,13 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
           <img 
             src="/brand/gea-logo-icon.png" 
             alt="GEA" 
-            className="w-8 h-8 rounded-lg flex-shrink-0 object-contain"
+            className="w-8 h-8 flex-shrink-0 object-contain"
           />
         ) : (
           <img 
-            src="/brand/gea-logo-short.jpg" 
+            src="/brand/gea-logo-horizontal-white.png" 
             alt="GEA - Global Employment Advisors" 
-            className="h-9 object-contain"
+            className="h-10 object-contain"
           />
         )}
       </div>
