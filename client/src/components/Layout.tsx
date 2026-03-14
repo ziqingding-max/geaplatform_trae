@@ -12,6 +12,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
 import {
   LayoutDashboard,
+  Loader2,
   Users,
   DollarSign,
   FileText,
@@ -146,7 +147,7 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [openGroups, setOpenGroups] = useState<string[]>([]);
-  const { user, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const { lang, setLang, t } = useI18n();
   const navGroups = useNavGroups(user);
 
@@ -169,6 +170,24 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
         : [...prev, label]
     );
   };
+
+  // Auth guard: show minimal loading state while checking auth
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">{t("common.loading")}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated — redirect to login
+  if (!user) {
+    window.location.href = "/login";
+    return null;
+  }
 
   const userInitials = user?.name
     ? user.name
