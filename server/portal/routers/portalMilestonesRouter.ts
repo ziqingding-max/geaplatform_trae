@@ -81,7 +81,7 @@ export const portalMilestonesRouter = portalRouter({
       // Enrich with contractor name
       const contractorMap = new Map<number, { firstName: string; lastName: string }>();
       if (milestones.length > 0) {
-        const uniqueIds = [...new Set(milestones.map((m) => m.contractorId))];
+        const uniqueIds = Array.from(new Set(milestones.map((m) => m.contractorId)));
         const contractorDetails = await db
           .select({ id: contractors.id, firstName: contractors.firstName, lastName: contractors.lastName })
           .from(contractors)
@@ -193,7 +193,7 @@ export const portalMilestonesRouter = portalRouter({
         .update(contractorMilestones)
         .set({
           status: "client_approved" as any,
-          clientApprovedBy: ctx.portalUser.id,
+          clientApprovedBy: ctx.portalUser.contactId,
           clientApprovedAt: new Date(),
         })
         .where(eq(contractorMilestones.id, input.id));
@@ -244,7 +244,7 @@ export const portalMilestonesRouter = portalRouter({
         .update(contractorMilestones)
         .set({
           status: "client_rejected" as any,
-          clientApprovedBy: ctx.portalUser.id,
+          clientApprovedBy: ctx.portalUser.contactId,
           clientApprovedAt: new Date(),
         })
         .where(eq(contractorMilestones.id, input.id));

@@ -669,7 +669,7 @@ export default function ContractorDetail() {
                           {m.approverName ? (
                             <div>
                               <div>{m.approverName}</div>
-                              {m.approvedAt && <div className="text-xs text-muted-foreground">{formatDate(m.approvedAt)}</div>}
+                              {m.adminApprovedAt && <div className="text-xs text-muted-foreground">{formatDate(m.adminApprovedAt)}</div>}
                             </div>
                           ) : "—"}
                         </TableCell>
@@ -748,7 +748,7 @@ export default function ContractorDetail() {
                         <TableCell className={adj.type === 'deduction' ? "text-red-500 font-mono" : "text-green-600 font-mono"}>
                           {adj.type === 'deduction' ? "-" : "+"}{adj.currency} {adj.amount}
                         </TableCell>
-                        <TableCell>{formatDate(adj.date)}</TableCell>
+                        <TableCell>{formatDate(adj.effectiveMonth)}</TableCell>
                         <TableCell><Badge variant="outline">{adj.status}</Badge></TableCell>
                       </TableRow>
                     )) : (

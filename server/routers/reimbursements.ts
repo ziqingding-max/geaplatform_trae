@@ -64,11 +64,11 @@ export const reimbursementsRouter = router({
       }
 
       try {
-        const buffer = await storageDownload(item.receiptFileKey);
+        const { content, contentType } = await storageDownload(item.receiptFileKey);
         return {
-          content: buffer.toString("base64"),
+          content: content.toString("base64"),
           filename: item.receiptFileKey.split("/").pop() || "receipt.pdf",
-          contentType: "application/pdf" // Simplified, ideally store mimeType
+          contentType: contentType || "application/pdf"
         };
       } catch (error) {
         console.error("Failed to download receipt:", error);

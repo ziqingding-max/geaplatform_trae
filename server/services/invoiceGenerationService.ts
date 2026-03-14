@@ -425,7 +425,7 @@ async function generateAorInvoices(
 
     // Calculate AOR Service Fee
     let totalFee = 0;
-    for (const cid of contractorIds) {
+    for (const cid of Array.from(contractorIds)) {
        const contractorResult = await db.select().from(contractors).where(eq(contractors.id, cid)).limit(1);
        if (contractorResult.length === 0) continue;
        const ctr = contractorResult[0];

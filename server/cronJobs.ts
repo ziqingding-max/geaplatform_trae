@@ -563,7 +563,7 @@ export async function runAutoCreatePayrollRuns(): Promise<{ created: number; emp
 
     // Fetch full employee records for orphaned employees and merge
     const orphanedEmployees = [];
-    for (const empId of orphanedEmployeeIds) {
+    for (const empId of Array.from(orphanedEmployeeIds)) {
       const emp = await getEmployeeById(empId);
       if (emp && emp.country === countryCode) {
         orphanedEmployees.push(emp);
@@ -1284,7 +1284,7 @@ async function getCronJobConfig(def: CronJobDef): Promise<{ enabled: boolean; da
  */
 export async function scheduleCronJobs() {
   // Stop all existing tasks
-  for (const [key, task] of activeTasks.entries()) {
+  for (const [key, task] of Array.from(activeTasks.entries())) {
     task.stop();
     console.log(`[CronJob] Stopped existing task: ${key}`);
   }

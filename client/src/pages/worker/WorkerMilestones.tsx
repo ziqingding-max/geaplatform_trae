@@ -46,8 +46,8 @@ export default function WorkerMilestones() {
                         <div className="text-right">
                           <p className="font-bold">{milestone.currency} {milestone.amount}</p>
                           <Badge variant={
-                            milestone.status === "paid" ? "default" : 
-                            milestone.status === "approved" ? "secondary" : 
+                            milestone.status === "locked" ? "default" : 
+                            milestone.status === "admin_approved" ? "secondary" : 
                             "outline"
                           }>
                             {milestone.status}

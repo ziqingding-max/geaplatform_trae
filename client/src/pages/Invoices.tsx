@@ -492,7 +492,7 @@ export default function Invoices() {
             {/* Currency */}
             <div className="space-y-2">
               <Label>{t("invoices.detail.info.currency")}</Label>
-              <CurrencySelect value={manualForm.currency} onChange={(v) => setManualForm({ ...manualForm, currency: v })} />
+              <CurrencySelect value={manualForm.currency} onValueChange={(v) => setManualForm({ ...manualForm, currency: v })} />
             </div>
 
             {/* Billing Entity */}

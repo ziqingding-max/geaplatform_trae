@@ -548,7 +548,7 @@ export const employeesRouter = router({
   // Initialize leave balances for employee based on country leave types
   initializeLeaveBalances: customerManagerProcedure
     .input(z.object({ employeeId: z.number(), countryCode: z.string(), year: z.number() }))
-    .query(async ({ input }) => {
+    .mutation(async ({ input }) => {
       return await initializeLeaveBalancesForEmployee(input.employeeId);
     }),
 
@@ -575,7 +575,7 @@ export const employeesRouter = router({
         expiryDate: z.string().nullable().optional(),
       }),
     }))
-    .query(async ({ input }) => {
+    .mutation(async ({ input }) => {
       const updateData: any = { totalEntitlement: input.data.totalEntitlement };
       if (input.data.expiryDate !== undefined) {
         updateData.expiryDate = input.data.expiryDate;
@@ -655,11 +655,11 @@ export const employeesRouter = router({
         }
 
         try {
-          const buffer = await storageDownload(contract.fileKey);
+          const { content, contentType } = await storageDownload(contract.fileKey);
           return {
-            content: buffer.toString("base64"),
+            content: content.toString("base64"),
             filename: contract.fileKey.split("/").pop() || "contract.pdf",
-            contentType: "application/pdf"
+            contentType: contentType || "application/pdf"
           };
         } catch (error) {
           console.error("Failed to download contract:", error);
@@ -784,11 +784,11 @@ export const employeesRouter = router({
         }
 
         try {
-          const buffer = await storageDownload(doc.fileKey);
+          const { content, contentType } = await storageDownload(doc.fileKey);
           return {
-            content: buffer.toString("base64"),
+            content: content.toString("base64"),
             filename: doc.fileKey.split("/").pop() || "document.pdf",
-            contentType: doc.mimeType || "application/pdf"
+            contentType: contentType || doc.mimeType || "application/pdf"
           };
         } catch (error) {
           console.error("Failed to download document:", error);
