@@ -852,7 +852,7 @@ type DetailTab = "info" | "leave" | "payroll" | "adjustments" | "visa" | "docume
 
 function EmployeeDetail({ id }: { id: number }) {
   const { t, locale } = useI18n();
-  const visaStatusColors: Record<string, string> = {
+  const visaStatusLabels: Record<string, string> = {
     not_required: t("employees.visaStatus.not_required"),
     pending_application: t("employees.visaStatus.pending_application"),
     application_submitted: t("employees.visaStatus.application_submitted"),
