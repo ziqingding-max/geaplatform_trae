@@ -9,6 +9,7 @@ export type NotificationConfig = {
   enabled: boolean;
   channels: ("email" | "in_app")[];
   recipients: string[]; // e.g. "client:finance", "admin:operations_manager"
+  audience: "admin" | "client" | "worker"; // Determines email layout footer
   templates: {
     en: TemplateConfig;
     zh: TemplateConfig;
@@ -16,172 +17,421 @@ export type NotificationConfig = {
 };
 
 export const DEFAULT_RULES: Record<string, NotificationConfig> = {
+  // ─────────────────────────────────────────────────────────
+  // 1. INVOICE SENT — Client-facing
+  // ─────────────────────────────────────────────────────────
   invoice_sent: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["client:finance", "client:admin", "admin:finance_manager"],
+    audience: "client",
     templates: {
       en: {
-        emailSubject: "Invoice #{{invoiceNumber}} from GEA",
-        emailBody: "<p>Dear {{contactName}},</p><p>Please find attached invoice #{{invoiceNumber}} for {{currency}} {{amount}}.</p><p>Due Date: {{dueDate}}</p><p>Best regards,<br>GEA Team</p>",
+        emailSubject: "Invoice #{{invoiceNumber}} from Global Employment Advisors",
+        emailBody: `<p>Dear {{contactName}},</p>
+<p>Thank you for your continued partnership with GEA. A new invoice has been generated for your account. Please find the details below:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Invoice Number" value="#{{invoiceNumber}}" />
+<GEA_ROW label="Amount Due" value="{{currency}} {{amount}}" />
+<GEA_ROW label="Due Date" value="{{dueDate}}" />
+</GEA_INFO_CARD>
+<p>The invoice PDF is attached to this email for your records. If you have any questions regarding this invoice, please don't hesitate to reach out to your dedicated account manager.</p>
+<GEA_BUTTON text="View in Client Portal" href="https://app.geahr.com" />
+<p>Best regards,<br><strong>GEA Finance Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "Invoice #{{invoiceNumber}} has been sent."
       },
       zh: {
-        emailSubject: "发票 #{{invoiceNumber}} - GEA",
-        emailBody: "<p>尊敬的 {{contactName}}，</p><p>附件是您的发票 #{{invoiceNumber}}，金额 {{currency}} {{amount}}。</p><p>到期日：{{dueDate}}</p><p>祝好，<br>GEA 团队</p>",
+        emailSubject: "发票 #{{invoiceNumber}} — Global Employment Advisors",
+        emailBody: `<p>尊敬的 {{contactName}}，</p>
+<p>感谢您与 GEA 的持续合作。我们已为您生成一份新的发票，详情如下：</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="发票编号" value="#{{invoiceNumber}}" />
+<GEA_ROW label="应付金额" value="{{currency}} {{amount}}" />
+<GEA_ROW label="到期日" value="{{dueDate}}" />
+</GEA_INFO_CARD>
+<p>发票 PDF 已附在此邮件中。如您对此发票有任何疑问，请随时联系您的客户经理。</p>
+<GEA_BUTTON text="前往客户门户查看" href="https://app.geahr.com" />
+<p>祝好，<br><strong>GEA 财务团队</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "发票 #{{invoiceNumber}} 已发送。"
       }
     }
   },
+
+  // ─────────────────────────────────────────────────────────
+  // 2. INVOICE OVERDUE — Client-facing (urgent)
+  // ─────────────────────────────────────────────────────────
   invoice_overdue: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["client:finance", "client:admin", "admin:customer_manager"],
+    audience: "client",
     templates: {
       en: {
-        emailSubject: "OVERDUE: Invoice #{{invoiceNumber}}",
-        emailBody: "<p>Dear {{contactName}},</p><p>This is a reminder that invoice #{{invoiceNumber}} was due on {{dueDate}}.</p><p>Please arrange payment immediately.</p>",
+        emailSubject: "Payment Overdue: Invoice #{{invoiceNumber}} — Action Required",
+        emailBody: `<GEA_BANNER type="warning" text="This invoice is past due. Please arrange payment at your earliest convenience." />
+<p>Dear {{contactName}},</p>
+<p>We would like to bring to your attention that the following invoice remains unpaid past its due date:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Invoice Number" value="#{{invoiceNumber}}" />
+<GEA_ROW label="Original Due Date" value="{{dueDate}}" />
+<GEA_ROW label="Status" value="<span style='color:#ef4444;font-weight:bold;'>OVERDUE</span>" />
+</GEA_INFO_CARD>
+<p>To avoid any disruption to your services, we kindly request that payment be arranged as soon as possible. If payment has already been made, please disregard this notice and accept our thanks.</p>
+<p>Should you have any questions or need to discuss payment arrangements, please contact your account manager or reply to this email.</p>
+<GEA_BUTTON text="View Invoice Details" href="https://app.geahr.com" color="#ef4444" />
+<p>Best regards,<br><strong>GEA Finance Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "Invoice #{{invoiceNumber}} is overdue."
       },
       zh: {
-        emailSubject: "逾期提醒：发票 #{{invoiceNumber}}",
-        emailBody: "<p>尊敬的 {{contactName}}，</p><p>温馨提醒：您的发票 #{{invoiceNumber}} 已于 {{dueDate}} 到期。</p><p>请尽快安排付款。</p>",
+        emailSubject: "付款逾期提醒：发票 #{{invoiceNumber}} — 请尽快处理",
+        emailBody: `<GEA_BANNER type="warning" text="此发票已逾期，请尽快安排付款。" />
+<p>尊敬的 {{contactName}}，</p>
+<p>我们注意到以下发票已超过付款期限，尚未收到款项：</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="发票编号" value="#{{invoiceNumber}}" />
+<GEA_ROW label="原到期日" value="{{dueDate}}" />
+<GEA_ROW label="状态" value="<span style='color:#ef4444;font-weight:bold;'>已逾期</span>" />
+</GEA_INFO_CARD>
+<p>为避免影响您的服务，请尽快安排付款。如您已完成付款，请忽略此通知。</p>
+<p>如有任何疑问或需要讨论付款安排，请联系您的客户经理或回复此邮件。</p>
+<GEA_BUTTON text="查看发票详情" href="https://app.geahr.com" color="#ef4444" />
+<p>祝好，<br><strong>GEA 财务团队</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "发票 #{{invoiceNumber}} 已逾期。"
       }
     }
   },
+
+  // ─────────────────────────────────────────────────────────
+  // 3. PAYROLL DRAFT CREATED — Admin-only (in-app only)
+  // ─────────────────────────────────────────────────────────
   payroll_draft_created: {
     enabled: true,
     channels: ["in_app"],
     recipients: ["admin:operations_manager"],
+    audience: "admin",
     templates: {
       en: {
-        emailSubject: "Payroll Draft Ready",
-        emailBody: "Payroll draft for {{period}} has been created.",
+        emailSubject: "Payroll Draft Ready for Review — {{period}}",
+        emailBody: `<p>Dear Admin,</p>
+<p>A payroll draft for <strong>{{period}}</strong> has been automatically generated and is ready for your review.</p>
+<GEA_BUTTON text="Review Payroll Draft" href="https://admin.geahr.com" />
+<p>— GEA System</p>`,
         inAppMessage: "Payroll draft for {{period}} is ready for review."
       },
       zh: {
-        emailSubject: "工资单草稿已生成",
-        emailBody: "{{period}} 的工资单草稿已生成。",
+        emailSubject: "工资单草稿已生成 — {{period}}",
+        emailBody: `<p>管理员您好，</p>
+<p><strong>{{period}}</strong> 的工资单草稿已自动生成，请前往后台审核。</p>
+<GEA_BUTTON text="审核工资单" href="https://admin.geahr.com" />
+<p>— GEA 系统</p>`,
         inAppMessage: "{{period}} 的工资单草稿已生成，请审核。"
       }
     }
   },
+
+  // ─────────────────────────────────────────────────────────
+  // 4. NEW EMPLOYEE REQUEST — Admin notification
+  // ─────────────────────────────────────────────────────────
   new_employee_request: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["admin:operations_manager"],
+    audience: "admin",
     templates: {
       en: {
-        emailSubject: "New Employee Onboarding Request",
-        emailBody: "Customer {{customerName}} has requested onboarding for {{employeeName}}.",
+        emailSubject: "New Employee Onboarding Request — {{employeeName}} from {{customerName}}",
+        emailBody: `<GEA_BANNER type="info" text="A new employee onboarding request has been submitted and requires your review." />
+<p>Dear Admin,</p>
+<p>Customer <strong>{{customerName}}</strong> has submitted a new employee onboarding request through the Client Portal. Please review the details below:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Employee Name" value="{{employeeName}}" />
+<GEA_ROW label="Customer" value="{{customerName}}" />
+<GEA_ROW label="Service Type" value="{{serviceType}}" />
+<GEA_ROW label="Requested Start Date" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>Please review this request and begin the onboarding process at your earliest convenience.</p>
+<GEA_BUTTON text="Review in Admin Panel" href="https://admin.geahr.com" />
+<p>— GEA System</p>`,
         inAppMessage: "New onboarding request: {{employeeName}} from {{customerName}}."
       },
       zh: {
-        emailSubject: "新员工入职申请",
-        emailBody: "客户 {{customerName}} 为 {{employeeName}} 提交了入职申请。",
+        emailSubject: "新员工入职申请 — {{customerName}} 的 {{employeeName}}",
+        emailBody: `<GEA_BANNER type="info" text="收到新的员工入职申请，请尽快审核。" />
+<p>管理员您好，</p>
+<p>客户 <strong>{{customerName}}</strong> 通过客户门户提交了一份新的员工入职申请，详情如下：</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="员工姓名" value="{{employeeName}}" />
+<GEA_ROW label="客户名称" value="{{customerName}}" />
+<GEA_ROW label="服务类型" value="{{serviceType}}" />
+<GEA_ROW label="期望入职日期" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>请尽快审核此申请并启动入职流程。</p>
+<GEA_BUTTON text="前往管理后台审核" href="https://admin.geahr.com" />
+<p>— GEA 系统</p>`,
         inAppMessage: "收到 {{customerName}} 提交的 {{employeeName}} 入职申请。"
       }
     }
   },
+
+  // ─────────────────────────────────────────────────────────
+  // 5. WORKER INVITE — Worker-facing
+  // ─────────────────────────────────────────────────────────
   worker_invite: {
     enabled: true,
     channels: ["email"],
-    recipients: ["worker:user"], // Special role for worker
+    recipients: ["worker:user"],
+    audience: "worker",
     templates: {
       en: {
-        emailSubject: "Invitation to GEA Worker Portal",
-        emailBody: "<p>Dear {{workerName}},</p><p>You have been invited to the GEA Worker Portal.</p><p>Please click the link below to set up your account:</p><p><a href=\"{{inviteLink}}\">Accept Invitation</a></p>",
+        emailSubject: "Welcome to GEA — Set Up Your Worker Portal Account",
+        emailBody: `<p>Dear {{workerName}},</p>
+<p>Welcome to <strong>Global Employment Advisors (GEA)</strong>! You have been invited to join the GEA Worker Portal, where you can manage your employment information, view payslips, submit invoices, and more.</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Portal" value="GEA Worker Portal" />
+<GEA_ROW label="Your Email" value="{{workerEmail}}" />
+</GEA_INFO_CARD>
+<p>To get started, please click the button below to set up your password and activate your account:</p>
+<GEA_BUTTON text="Accept Invitation & Set Up Account" href="{{inviteLink}}" />
+<GEA_BANNER type="info" text="This invitation link will expire in 7 days. If you did not expect this invitation, please ignore this email." />
+<p>If you have any questions about your onboarding process, feel free to reach out to us.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "Welcome to GEA Worker Portal!"
       },
       zh: {
-        emailSubject: "GEA 员工门户邀请",
-        emailBody: "<p>尊敬的 {{workerName}}，</p><p>您已被邀请加入 GEA 员工门户。</p><p>请点击下方链接设置您的账户：</p><p><a href=\"{{inviteLink}}\">接受邀请</a></p>",
+        emailSubject: "欢迎加入 GEA — 设置您的员工门户账户",
+        emailBody: `<p>尊敬的 {{workerName}}，</p>
+<p>欢迎加入 <strong>Global Employment Advisors (GEA)</strong>！您已被邀请加入 GEA 员工门户，在这里您可以管理您的雇佣信息、查看工资单、提交发票等。</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="门户" value="GEA 员工门户" />
+<GEA_ROW label="您的邮箱" value="{{workerEmail}}" />
+</GEA_INFO_CARD>
+<p>请点击下方按钮设置密码并激活您的账户：</p>
+<GEA_BUTTON text="接受邀请并设置账户" href="{{inviteLink}}" />
+<GEA_BANNER type="info" text="此邀请链接将在 7 天后过期。如果您未预期收到此邀请，请忽略此邮件。" />
+<p>如您对入职流程有任何疑问，请随时联系我们。</p>
+<p>祝好，<br><strong>GEA 运营团队</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "欢迎来到 GEA 员工门户！"
       }
     }
   },
+
+  // ─────────────────────────────────────────────────────────
+  // 6. WORKER INVOICE READY — Worker-facing
+  // ─────────────────────────────────────────────────────────
   worker_invoice_ready: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["worker:user"],
+    audience: "worker",
     templates: {
       en: {
-        emailSubject: "Invoice #{{invoiceNumber}} Ready",
-        emailBody: "<p>Dear {{workerName}},</p><p>Your invoice #{{invoiceNumber}} for {{period}} is now ready.</p>",
+        emailSubject: "Your Invoice #{{invoiceNumber}} Is Ready — {{period}}",
+        emailBody: `<p>Dear {{workerName}},</p>
+<p>Your invoice for the period of <strong>{{period}}</strong> has been generated and is now available in your Worker Portal.</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Invoice Number" value="#{{invoiceNumber}}" />
+<GEA_ROW label="Period" value="{{period}}" />
+</GEA_INFO_CARD>
+<p>You can view and download the invoice by logging into your portal:</p>
+<GEA_BUTTON text="View Invoice in Portal" href="https://worker.geahr.com" />
+<p>If you have any questions, please don't hesitate to contact us.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "Invoice #{{invoiceNumber}} is ready for review."
       },
       zh: {
-        emailSubject: "发票 #{{invoiceNumber}} 已生成",
-        emailBody: "<p>尊敬的 {{workerName}}，</p><p>您的 {{period}} 发票 #{{invoiceNumber}} 已生成。</p>",
+        emailSubject: "您的发票 #{{invoiceNumber}} 已生成 — {{period}}",
+        emailBody: `<p>尊敬的 {{workerName}}，</p>
+<p>您 <strong>{{period}}</strong> 期间的发票已生成，可在员工门户中查看。</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="发票编号" value="#{{invoiceNumber}}" />
+<GEA_ROW label="期间" value="{{period}}" />
+</GEA_INFO_CARD>
+<p>请登录门户查看和下载发票：</p>
+<GEA_BUTTON text="前往门户查看发票" href="https://worker.geahr.com" />
+<p>如有任何疑问，请随时联系我们。</p>
+<p>祝好，<br><strong>GEA 运营团队</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "发票 #{{invoiceNumber}} 已生成，请查看。"
       }
     }
   },
+
+  // ─────────────────────────────────────────────────────────
+  // 7. WORKER PAYMENT SENT — Worker-facing
+  // ─────────────────────────────────────────────────────────
   worker_payment_sent: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["worker:user"],
+    audience: "worker",
     templates: {
       en: {
-        emailSubject: "Payment Sent: {{currency}} {{amount}}",
-        emailBody: "<p>Dear {{workerName}},</p><p>We have processed a payment of {{currency}} {{amount}} for invoice #{{invoiceNumber}}.</p>",
+        emailSubject: "Payment Sent: {{currency}} {{amount}} — Invoice #{{invoiceNumber}}",
+        emailBody: `<GEA_BANNER type="success" text="Your payment has been processed and sent successfully." />
+<p>Dear {{workerName}},</p>
+<p>We are pleased to confirm that a payment has been processed for your account:</p>
+<GEA_AMOUNT currency="{{currency}}" amount="{{amount}}" />
+<GEA_INFO_CARD>
+<GEA_ROW label="Invoice Number" value="#{{invoiceNumber}}" />
+<GEA_ROW label="Amount" value="{{currency}} {{amount}}" />
+<GEA_ROW label="Status" value="<span style='color:#22c55e;font-weight:bold;'>Sent</span>" />
+</GEA_INFO_CARD>
+<p>Please allow 1–3 business days for the funds to arrive in your account, depending on your bank's processing time.</p>
+<GEA_BUTTON text="View Payment Details" href="https://worker.geahr.com" />
+<p>Best regards,<br><strong>GEA Finance Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "Payment of {{currency}} {{amount}} has been sent."
       },
       zh: {
-        emailSubject: "付款已发送：{{currency}} {{amount}}",
-        emailBody: "<p>尊敬的 {{workerName}}，</p><p>我们已处理发票 #{{invoiceNumber}} 的付款，金额为 {{currency}} {{amount}}。</p>",
+        emailSubject: "付款已发送：{{currency}} {{amount}} — 发票 #{{invoiceNumber}}",
+        emailBody: `<GEA_BANNER type="success" text="您的付款已处理并成功发送。" />
+<p>尊敬的 {{workerName}}，</p>
+<p>我们很高兴确认您的账户已处理一笔付款：</p>
+<GEA_AMOUNT currency="{{currency}}" amount="{{amount}}" />
+<GEA_INFO_CARD>
+<GEA_ROW label="发票编号" value="#{{invoiceNumber}}" />
+<GEA_ROW label="金额" value="{{currency}} {{amount}}" />
+<GEA_ROW label="状态" value="<span style='color:#22c55e;font-weight:bold;'>已发送</span>" />
+</GEA_INFO_CARD>
+<p>根据您银行的处理时间，资金预计将在 1-3 个工作日内到账。</p>
+<GEA_BUTTON text="查看付款详情" href="https://worker.geahr.com" />
+<p>祝好，<br><strong>GEA 财务团队</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "款项 {{currency}} {{amount}} 已汇出。"
       }
     }
   },
+
+  // ─────────────────────────────────────────────────────────
+  // 8. LEAVE POLICY COUNTRY ACTIVATED — Client-facing
+  // ─────────────────────────────────────────────────────────
   leave_policy_country_activated: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["client:admin", "client:hr"],
+    audience: "client",
     templates: {
       en: {
         emailSubject: "New Country Leave Policy Activated: {{countryName}}",
-        emailBody: "<p>Dear {{contactName}},</p><p>A new country <strong>{{countryName}}</strong> has been activated for leave policy management based on employee onboarding.</p><p>Statutory leave policies have been automatically initialized with default entitlements. Please review and customize the leave policies in your <strong>Settings > Leave Policies</strong> page to match your company's requirements.</p><p>Best regards,<br>GEA Team</p>",
+        emailBody: `<GEA_BANNER type="info" text="A new country has been activated for leave policy management." />
+<p>Dear {{contactName}},</p>
+<p>Based on recent employee onboarding activity, a new country has been activated in your leave policy management system:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Country" value="{{countryName}}" />
+<GEA_ROW label="Status" value="<span style='color:#22c55e;font-weight:bold;'>Active</span>" />
+</GEA_INFO_CARD>
+<p>Statutory leave policies for <strong>{{countryName}}</strong> have been automatically initialized with default entitlements based on local labor regulations. We recommend reviewing and customizing these policies to align with your company's specific requirements.</p>
+<GEA_BUTTON text="Review Leave Policies" href="https://app.geahr.com" />
+<p>If you need assistance configuring leave policies, our team is here to help.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "New country {{countryName}} activated. Please configure leave policies in Settings."
       },
       zh: {
         emailSubject: "新国家假期政策已激活：{{countryName}}",
-        emailBody: "<p>尊敬的 {{contactName}}，</p><p>基于员工入职，新国家 <strong>{{countryName}}</strong> 的假期政策管理已激活。</p><p>法定假期政策已按默认标准自动初始化。请前往 <strong>设置 > 假期政策</strong> 页面，根据贵公司的要求审核和自定义假期政策。</p><p>祝好，<br>GEA 团队</p>",
+        emailBody: `<GEA_BANNER type="info" text="新国家的假期政策管理已激活。" />
+<p>尊敬的 {{contactName}}，</p>
+<p>基于近期的员工入职活动，您的假期政策管理系统中已激活一个新国家：</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="国家" value="{{countryName}}" />
+<GEA_ROW label="状态" value="<span style='color:#22c55e;font-weight:bold;'>已激活</span>" />
+</GEA_INFO_CARD>
+<p><strong>{{countryName}}</strong> 的法定假期政策已根据当地劳动法规自动初始化默认标准。建议您审核并根据贵公司的具体要求进行自定义调整。</p>
+<GEA_BUTTON text="审核假期政策" href="https://app.geahr.com" />
+<p>如需协助配置假期政策，我们的团队随时为您提供帮助。</p>
+<p>祝好，<br><strong>GEA 运营团队</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "新国家 {{countryName}} 已激活，请在设置中配置假期政策。"
       }
     }
   },
+
+  // ─────────────────────────────────────────────────────────
+  // 9. EMPLOYEE TERMINATION REQUEST — Admin notification
+  // ─────────────────────────────────────────────────────────
   employee_termination_request: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["admin:operations_manager", "admin:customer_manager"],
+    audience: "admin",
     templates: {
       en: {
         emailSubject: "Employee Termination Request: {{employeeName}} ({{employeeCode}})",
-        emailBody: "<p>Dear Admin,</p><p>Customer <strong>{{customerName}}</strong> has requested termination for employee <strong>{{employeeName}}</strong> ({{employeeCode}}).</p><p><strong>Requested Last Working Day:</strong> {{requestedEndDate}}</p><p><strong>Reason:</strong> {{reason}}</p><p><strong>Requested By:</strong> {{requestedBy}}</p><p>Please review and process this request in the Admin panel.</p><p>Best regards,<br>GEA System</p>",
+        emailBody: `<GEA_BANNER type="warning" text="An employee termination request has been submitted and requires your review." />
+<p>Dear Admin,</p>
+<p>Customer <strong>{{customerName}}</strong> has submitted a termination request through the Client Portal. Please review the details below:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Employee Name" value="{{employeeName}}" />
+<GEA_ROW label="Employee Code" value="{{employeeCode}}" />
+<GEA_ROW label="Customer" value="{{customerName}}" />
+<GEA_ROW label="Requested Last Working Day" value="{{requestedEndDate}}" />
+<GEA_ROW label="Reason" value="{{reason}}" />
+<GEA_ROW label="Requested By" value="{{requestedBy}}" />
+</GEA_INFO_CARD>
+<p>Please review this request carefully and take appropriate action in the Admin panel. Ensure all local labor law requirements are considered before processing.</p>
+<GEA_BUTTON text="Review in Admin Panel" href="https://admin.geahr.com" />
+<p>— GEA System</p>`,
         inAppMessage: "Termination request: {{employeeName}} ({{employeeCode}}) from {{customerName}}. Last day: {{requestedEndDate}}."
       },
       zh: {
         emailSubject: "员工终止申请：{{employeeName}} ({{employeeCode}})",
-        emailBody: "<p>管理员您好，</p><p>客户 <strong>{{customerName}}</strong> 为员工 <strong>{{employeeName}}</strong> ({{employeeCode}}) 提交了终止申请。</p><p><strong>申请的最后工作日：</strong>{{requestedEndDate}}</p><p><strong>原因：</strong>{{reason}}</p><p><strong>申请人：</strong>{{requestedBy}}</p><p>请在管理后台审核并处理此申请。</p><p>祝好，<br>GEA 系统</p>",
+        emailBody: `<GEA_BANNER type="warning" text="收到员工终止申请，请尽快审核。" />
+<p>管理员您好，</p>
+<p>客户 <strong>{{customerName}}</strong> 通过客户门户提交了一份终止申请，详情如下：</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="员工姓名" value="{{employeeName}}" />
+<GEA_ROW label="员工编号" value="{{employeeCode}}" />
+<GEA_ROW label="客户名称" value="{{customerName}}" />
+<GEA_ROW label="申请的最后工作日" value="{{requestedEndDate}}" />
+<GEA_ROW label="原因" value="{{reason}}" />
+<GEA_ROW label="申请人" value="{{requestedBy}}" />
+</GEA_INFO_CARD>
+<p>请仔细审核此申请，并在管理后台采取相应操作。处理前请确保已考虑当地劳动法的相关要求。</p>
+<GEA_BUTTON text="前往管理后台审核" href="https://admin.geahr.com" />
+<p>— GEA 系统</p>`,
         inAppMessage: "终止申请：{{customerName}} 的 {{employeeName}} ({{employeeCode}})，最后工作日：{{requestedEndDate}}。"
       }
     }
   },
+
+  // ─────────────────────────────────────────────────────────
+  // 10. CONTRACTOR TERMINATION REQUEST — Admin notification
+  // ─────────────────────────────────────────────────────────
   contractor_termination_request: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["admin:operations_manager", "admin:customer_manager"],
+    audience: "admin",
     templates: {
       en: {
         emailSubject: "Contractor Termination Request: {{contractorName}} ({{contractorCode}})",
-        emailBody: "<p>Dear Admin,</p><p>Customer <strong>{{customerName}}</strong> has requested termination for contractor <strong>{{contractorName}}</strong> ({{contractorCode}}).</p><p><strong>Requested End Date:</strong> {{requestedEndDate}}</p><p><strong>Reason:</strong> {{reason}}</p><p><strong>Requested By:</strong> {{requestedBy}}</p><p>Please review and process this request in the Admin panel.</p><p>Best regards,<br>GEA System</p>",
+        emailBody: `<GEA_BANNER type="warning" text="A contractor termination request has been submitted and requires your review." />
+<p>Dear Admin,</p>
+<p>Customer <strong>{{customerName}}</strong> has submitted a contractor termination request through the Client Portal. Please review the details below:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Contractor Name" value="{{contractorName}}" />
+<GEA_ROW label="Contractor Code" value="{{contractorCode}}" />
+<GEA_ROW label="Customer" value="{{customerName}}" />
+<GEA_ROW label="Requested End Date" value="{{requestedEndDate}}" />
+<GEA_ROW label="Reason" value="{{reason}}" />
+<GEA_ROW label="Requested By" value="{{requestedBy}}" />
+</GEA_INFO_CARD>
+<p>Please review this request and take appropriate action in the Admin panel.</p>
+<GEA_BUTTON text="Review in Admin Panel" href="https://admin.geahr.com" />
+<p>— GEA System</p>`,
         inAppMessage: "Termination request: {{contractorName}} ({{contractorCode}}) from {{customerName}}. End date: {{requestedEndDate}}."
       },
       zh: {
         emailSubject: "承包商终止申请：{{contractorName}} ({{contractorCode}})",
-        emailBody: "<p>管理员您好，</p><p>客户 <strong>{{customerName}}</strong> 为承包商 <strong>{{contractorName}}</strong> ({{contractorCode}}) 提交了终止申请。</p><p><strong>申请的结束日期：</strong>{{requestedEndDate}}</p><p><strong>原因：</strong>{{reason}}</p><p><strong>申请人：</strong>{{requestedBy}}</p><p>请在管理后台审核并处理此申请。</p><p>祝好，<br>GEA 系统</p>",
+        emailBody: `<GEA_BANNER type="warning" text="收到承包商终止申请，请尽快审核。" />
+<p>管理员您好，</p>
+<p>客户 <strong>{{customerName}}</strong> 通过客户门户提交了一份承包商终止申请，详情如下：</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="承包商姓名" value="{{contractorName}}" />
+<GEA_ROW label="承包商编号" value="{{contractorCode}}" />
+<GEA_ROW label="客户名称" value="{{customerName}}" />
+<GEA_ROW label="申请的结束日期" value="{{requestedEndDate}}" />
+<GEA_ROW label="原因" value="{{reason}}" />
+<GEA_ROW label="申请人" value="{{requestedBy}}" />
+</GEA_INFO_CARD>
+<p>请审核此申请，并在管理后台采取相应操作。</p>
+<GEA_BUTTON text="前往管理后台审核" href="https://admin.geahr.com" />
+<p>— GEA 系统</p>`,
         inAppMessage: "终止申请：{{customerName}} 的 {{contractorName}} ({{contractorCode}})，结束日期：{{requestedEndDate}}。"
       }
     }

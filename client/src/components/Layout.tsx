@@ -205,18 +205,18 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
         "flex items-center gap-3 px-4 py-4 border-b",
         "border-sidebar-border"
       )}>
-        <img 
-          src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663378930055/eXXlZiimGUkORVcw.png" 
-          alt="GEA" 
-          className="w-8 h-8 rounded-lg flex-shrink-0 object-contain"
-        />
-        {!collapsed && (
-          <div className="min-w-0">
-            <div className="text-sm font-bold text-sidebar-accent-foreground leading-tight" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-              GEA
-            </div>
-            <div className="text-xs text-sidebar-foreground/60 leading-tight">Global Employment Advisors</div>
-          </div>
+        {collapsed ? (
+          <img 
+            src="/brand/gea-logo-icon.png" 
+            alt="GEA" 
+            className="w-8 h-8 rounded-lg flex-shrink-0 object-contain"
+          />
+        ) : (
+          <img 
+            src="/brand/gea-logo-short.jpg" 
+            alt="GEA - Global Employment Advisors" 
+            className="h-9 object-contain"
+          />
         )}
       </div>
 

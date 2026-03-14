@@ -145,9 +145,11 @@ export default function PortalLayout({ children, title }: PortalLayoutProps) {
       <div className={cn(
         "flex items-center gap-3 px-4 py-4 border-b border-white/10"
       )}>
-        <div className="w-8 h-8 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center flex-shrink-0 shadow-sm">
-          <Building2 className="w-4 h-4 text-white" />
-        </div>
+        <img 
+          src="/brand/gea-logo-icon-white.png" 
+          alt="GEA" 
+          className="w-8 h-8 rounded-lg flex-shrink-0 object-contain"
+        />
         {!collapsed && (
           <div className="min-w-0">
             <div className="text-sm font-bold text-white leading-tight truncate" style={{ fontFamily: "'DM Sans', sans-serif" }}>
