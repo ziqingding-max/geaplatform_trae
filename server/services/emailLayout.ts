@@ -29,7 +29,7 @@ let _logoBase64Cache: string | null = null;
 function getLogoBase64(): string {
   if (_logoBase64Cache) return _logoBase64Cache;
   try {
-    const logoPath = path.join(process.cwd(), "server/assets/gea-logo-email.jpg");
+    const logoPath = path.join(process.cwd(), "server/assets/gea-logo-email.png");
     const buf = fs.readFileSync(logoPath);
     _logoBase64Cache = buf.toString("base64");
   } catch {
@@ -58,7 +58,7 @@ export function renderEmailLayout(
 ): string {
   const logoB64 = getLogoBase64();
   const logoImg = logoB64
-    ? `<img src="data:image/jpeg;base64,${logoB64}" alt="GEA - Global Employment Advisors" width="220" style="display:block;margin:0 auto;max-width:220px;height:auto;" />`
+    ? `<img src="data:image/png;base64,${logoB64}" alt="GEA - Global Employment Advisors" width="220" style="display:block;margin:0 auto;max-width:220px;height:auto;" />`
     : `<span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:1px;">GEA — Global Employment Advisors</span>`;
 
   const preheaderHtml = options.preheader
