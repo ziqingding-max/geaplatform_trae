@@ -154,7 +154,7 @@ function buildFooter(audience: EmailAudience): string {
   const supportLine =
     audience === "admin"
       ? `This is an internal system notification.`
-      : `Questions? Contact us at <a href="mailto:sales@geahr.com" style="color:${BRAND_GREEN};text-decoration:none;">sales@geahr.com</a>`;
+      : `Questions? Contact us at <a href="mailto:support@bestgea.com" style="color:${BRAND_GREEN};text-decoration:none;">support@bestgea.com</a>`;
 
   return `
 ${aboutSection}

@@ -616,7 +616,7 @@ const DEFAULT_BRANDING: BrandingInfo = {
   shortName: "GEA",
   fullName: "Global Employment Advisors",
   logoUrl: null,
-  contactEmail: "sales@geahr.com",
+  contactEmail: "support@bestgea.com",
 };
 
 // ─── Page wrapper helpers ───────────────────────────────────────────────────
@@ -990,7 +990,7 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
   `, branding);
 
   // 4. Notes (if any) + Terms & Conditions page
-  const contactEmail = data.createdByEmail ?? branding.contactEmail ?? data.billingEntity?.contactEmail ?? "sales@geahr.com";
+  const contactEmail = data.createdByEmail ?? branding.contactEmail ?? data.billingEntity?.contactEmail ?? "support@bestgea.com";
   const contactName = data.createdByName ?? branding.shortName + " account manager";
   const notesHtml = data.notes ? `
     <div class="notes-box" style="margin-bottom:6mm;">
