@@ -96,9 +96,11 @@ export default function WorkerRegister() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center mb-4">
-            <User className="w-6 h-6 text-primary-foreground" />
-          </div>
+          <img 
+            src="/brand/gea-logo-short.jpg" 
+            alt="GEA - Global Employment Advisors" 
+            className="h-12 object-contain mb-4"
+          />
           <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: "'DM Sans', sans-serif" }}>
             Join GEA Worker Portal
           </h1>

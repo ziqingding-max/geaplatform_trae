@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import { TRPCError } from "@trpc/server";
 import { ENV } from "./env";
+import { renderEmailLayout, emailBanner, emailInfoCard } from "../services/emailLayout";
 
 export type NotificationPayload = {
   title: string;
@@ -79,11 +80,19 @@ export async function notifyOwner(
       },
     });
 
+    // Build branded HTML for admin system alerts
+    const bodyHtml = `
+${emailBanner(title, "warning")}
+<p style="font-size:15px;color:#1a1a1a;line-height:1.65;">${content.replace(/\n/g, "<br/>")}</p>
+<p style="margin-top:20px;font-size:13px;color:#888;">This is an automated system alert from the GEA platform.<br/>Timestamp: ${new Date().toISOString()}</p>
+`;
+    const html = renderEmailLayout(bodyHtml, { audience: "admin", preheader: title });
+
     await transporter.sendMail({
       from: `GEA Admin <${ENV.emailFrom}>`,
       to: ENV.emailAdmin,
       subject: `[GEA System Alert] ${title}`,
-      text: content,
+      html,
     });
 
     return true;

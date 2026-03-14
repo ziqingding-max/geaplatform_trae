@@ -2,10 +2,17 @@
 import { getDb } from "../db";
 import { notifications, systemSettings, users, customerContacts, workerUsers } from "../../drizzle/schema";
 import { eq, and, like, inArray, or } from "drizzle-orm";
-// import { sendEmail } from "../_core/notification"; // Removed: use internal sendRawEmail
 import { generateInvoicePdf } from "./invoicePdfService";
 import { TRPCError } from "@trpc/server";
 import { DEFAULT_RULES, NotificationConfig } from "./notificationConstants";
+import {
+  renderEmailLayout,
+  emailButton,
+  emailInfoCard,
+  emailBanner,
+  emailAmountDisplay,
+  type EmailAudience,
+} from "./emailLayout";
 
 export type NotificationEvent = {
   type: string;
@@ -64,9 +71,14 @@ export const notificationService = {
         const lang = (recipient.language as "en" | "zh") || "en";
         const template = config.templates[lang] || config.templates.en;
 
-        // Render content
+        // Render content — substitute variables, expand custom tags, wrap in branded layout
         const emailSubject = this.renderTemplate(template.emailSubject, event.data);
-        const emailBody = this.renderTemplate(template.emailBody, { ...event.data, contactName: recipient.name });
+        const rawBody = this.renderTemplate(template.emailBody, { ...event.data, contactName: recipient.name, workerName: recipient.name });
+        const processedBody = this.processCustomTags(rawBody);
+        const emailBody = renderEmailLayout(processedBody, {
+          audience: (config.audience || "admin") as EmailAudience,
+          preheader: emailSubject,
+        });
         const inAppMessage = this.renderTemplate(template.inAppMessage, event.data);
 
         // Channel: In-App
@@ -228,7 +240,45 @@ export const notificationService = {
     });
   },
 
-  // Temporary internal mailer until we refactor _core/notification.ts
+  /**
+   * Process custom GEA email tags into actual HTML.
+   * Supported tags:
+   *   <GEA_INFO_CARD> ... <GEA_ROW label="..." value="..." /> ... </GEA_INFO_CARD>
+   *   <GEA_BUTTON text="..." href="..." [color="..."] />
+   *   <GEA_BANNER type="warning|danger|success|info" text="..." />
+   *   <GEA_AMOUNT currency="..." amount="..." />
+   */
+  processCustomTags(html: string): string {
+    // 1. Process <GEA_INFO_CARD>...</GEA_INFO_CARD>
+    html = html.replace(/<GEA_INFO_CARD>([\s\S]*?)<\/GEA_INFO_CARD>/g, (_match: string, inner: string) => {
+      const rows: Array<{ label: string; value: string }> = [];
+      const rowRegex = /<GEA_ROW\s+label="([^"]*?)"\s+value="([^"]*?)"\s*\/>/g;
+      let m;
+      while ((m = rowRegex.exec(inner)) !== null) {
+        rows.push({ label: m[1], value: m[2] });
+      }
+      return emailInfoCard(rows);
+    });
+
+    // 2. Process <GEA_BUTTON text="..." href="..." [color="..."] />
+    html = html.replace(/<GEA_BUTTON\s+text="([^"]*?)"\s+href="([^"]*?)"(?:\s+color="([^"]*?)")?\s*\/>/g, (_match: string, text: string, href: string, color: string) => {
+      return emailButton(text, href, color || undefined);
+    });
+
+    // 3. Process <GEA_BANNER type="..." text="..." />
+    html = html.replace(/<GEA_BANNER\s+type="([^"]*?)"\s+text="([^"]*?)"\s*\/>/g, (_match: string, type: string, text: string) => {
+      return emailBanner(text, type as any);
+    });
+
+    // 4. Process <GEA_AMOUNT currency="..." amount="..." />
+    html = html.replace(/<GEA_AMOUNT\s+currency="([^"]*?)"\s+amount="([^"]*?)"\s*\/>/g, (_match: string, currency: string, amount: string) => {
+      return emailAmountDisplay(currency, amount);
+    });
+
+    return html;
+  },
+
+  // Internal mailer using nodemailer + Alibaba Cloud DirectMail SMTP
   async sendRawEmail(payload: { to: string; subject: string; html: string; attachments?: any[] }) {
     // Dynamic import to avoid circular dependency issues if any, though nodemailer is external
     const nodemailer = (await import("nodemailer")).default;

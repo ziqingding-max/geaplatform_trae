@@ -301,7 +301,7 @@ export const quotationService = {
     let branding: BrandingInfo = {
       shortName: "GEA",
       fullName: "Global Employment Advisors",
-      contactEmail: "sales@geahr.com",
+      contactEmail: "support@bestgea.com",
     };
 
     let defaultBilling = await db.query.billingEntities.findFirst({
