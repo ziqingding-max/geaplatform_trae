@@ -359,18 +359,21 @@ export default function PortalLeave() {
     pageSize,
   });
 
-  // Get employees for the selector — only active and on_leave employees
+  // Get employees for the selector — active, on_leave, AND offboarding employees
+  // Offboarding employees must be able to submit leave during their notice period (Hard Rule 2)
   const { data: empDataActive } = portalTrpc.employees.list.useQuery({ page: 1, pageSize: 100, status: "active" });
   const { data: empDataOnLeave } = portalTrpc.employees.list.useQuery({ page: 1, pageSize: 100, status: "on_leave" });
+  const { data: empDataOffboarding } = portalTrpc.employees.list.useQuery({ page: 1, pageSize: 100, status: "offboarding" });
   const employees = useMemo(() => {
     const active = empDataActive?.items ?? [];
     const onLeave = empDataOnLeave?.items ?? [];
+    const offboarding = empDataOffboarding?.items ?? [];
     const merged = [...active];
-    for (const e of onLeave) {
+    for (const e of [...onLeave, ...offboarding]) {
       if (!merged.find((m: any) => m.id === e.id)) merged.push(e);
     }
     return merged;
-  }, [empDataActive, empDataOnLeave]);
+  }, [empDataActive, empDataOnLeave, empDataOffboarding]);
 
   // Get leave types for the selected employee's country
   const selectedEmp = employees.find((e: any) => e.id === form.employeeId);

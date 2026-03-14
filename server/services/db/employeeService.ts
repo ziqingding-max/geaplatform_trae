@@ -201,14 +201,16 @@ export async function getOffboardingEmployeesReadyForTermination(dateStr: string
 export async function getCountriesWithActiveEmployees() {
   const db = await getDb();
   if (!db) return [];
-  // Bug fix: Include both 'active' and 'offboarding' employees.
-  // Offboarding employees are still employed during their notice period and must generate payroll runs.
+  // Include 'active', 'offboarding', AND 'on_leave' employees.
+  // - Offboarding employees are still employed during their notice period.
+  // - On_leave employees are still employed and must receive payroll (even if base is deducted).
   const result = await db.select({ country: employees.country })
     .from(employees)
     .where(and(
       or(
         eq(employees.status, 'active'),
-        eq(employees.status, 'offboarding')
+        eq(employees.status, 'offboarding'),
+        eq(employees.status, 'on_leave')
       ),
       ne(employees.serviceType, 'aor') // Exclude AOR
     ))
@@ -219,14 +221,16 @@ export async function getCountriesWithActiveEmployees() {
 export async function getEmployeesForPayrollMonth(country: string, monthStart: string, monthEnd: string) {
   const db = await getDb();
   if (!db) return [];
-  // Bug fix: Include both 'active' and 'offboarding' employees.
-  // Offboarding employees are still employed during their notice period and must be paid.
+  // Include 'active', 'offboarding', AND 'on_leave' employees.
+  // - Offboarding employees must be paid during their notice period (Hard Rule 1).
+  // - On_leave employees must still receive payroll (leave ≠ unpaid; they may have adjustments).
   return await db.select().from(employees)
     .where(and(
       eq(employees.country, country), 
       or(
         eq(employees.status, 'active'),
-        eq(employees.status, 'offboarding')
+        eq(employees.status, 'offboarding'),
+        eq(employees.status, 'on_leave')
       ),
       ne(employees.serviceType, 'aor') // Exclude AOR
     ));
