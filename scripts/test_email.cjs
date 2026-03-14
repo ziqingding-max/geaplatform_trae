@@ -1,10 +1,12 @@
 /**
- * GEA Email Notification Test Script — Brand Upgrade v2
+ * GEA Email Test Script — Complete Coverage (v3)
  *
  * Usage:
- *   node scripts/test_email.cjs
+ *   node scripts/test_email.cjs              # Send all 16 templates
+ *   node scripts/test_email.cjs auth         # Send only auth emails (6)
+ *   node scripts/test_email.cjs notification # Send only notification emails (10)
  *
- * Sends all 10 branded email notification templates to the admin email.
+ * Sends all branded email templates to the admin email.
  * Each subject is prefixed with [TEST].
  * Logo is loaded via external URL (ADMIN_APP_URL env var).
  */
@@ -111,8 +113,8 @@ ${aboutSection}
 </table></td></tr></table></body></html>`;
 }
 
-// ─── Template Definitions ───────────────────────────────
-const templates = [
+// ─── Notification Templates (10) ──────────────────────────
+const notificationTemplates = [
   {
     name: "invoice_sent",
     audience: "client",
@@ -270,9 +272,116 @@ ${emailButton("Review in Admin Panel", "https://admin.geahr.com")}
   }
 ];
 
-// ─── Send All ───────────────────────────────────────────
+// ─── Auth Email Templates (6) ─────────────────────────────
+const authTemplates = [
+  {
+    name: "admin_invite",
+    audience: "admin",
+    subject: "You're Invited to GEA Admin Panel — Set Up Your Account",
+    body: `<p>Dear Sarah Chen,</p>
+<p>You have been invited to join the <strong>GEA Admin Panel</strong> as a team member. Your account has been created with the following details:</p>
+${emailInfoCard([
+  { label: "Name", value: "Sarah Chen" },
+  { label: "Email", value: "sarah.chen@bestgea.com" },
+  { label: "Role(s)", value: "operations_manager, customer_manager" },
+])}
+<p>To activate your account, please click the button below to set your password:</p>
+${emailButton("Accept Invitation & Set Password", "https://admin.geahr.com/invite?token=test-admin-invite-token")}
+${emailBanner("This invitation link will expire in 7 days. If you did not expect this invitation, please ignore this email.", "info")}
+<p>Once activated, you can log in at the GEA Admin Panel to begin managing operations.</p>
+<p>Best regards,<br><strong>GEA System</strong><br>Global Employment Advisors</p>`
+  },
+  {
+    name: "admin_password_reset",
+    audience: "admin",
+    subject: "Your GEA Admin Password Has Been Reset",
+    body: `${emailBanner("Your password has been reset by an administrator.", "warning")}
+<p>Dear Sarah Chen,</p>
+<p>An administrator has reset your password for the GEA Admin Panel. Please use the temporary password below to log in:</p>
+${emailInfoCard([
+  { label: "Email", value: "sarah.chen@bestgea.com" },
+  { label: "Temporary Password", value: '<code style="font-size:16px;font-weight:bold;color:#005430;background:#f0fdf4;padding:2px 8px;border-radius:4px;">Xk9mP2wQ7rBn</code>' },
+])}
+${emailBanner("You will be required to change your password upon first login.", "info")}
+${emailButton("Log In to Admin Panel", "https://admin.geahr.com")}
+<p>If you did not request this password reset, please contact your system administrator immediately.</p>
+<p>Best regards,<br><strong>GEA System</strong><br>Global Employment Advisors</p>`
+  },
+  {
+    name: "portal_invite",
+    audience: "client",
+    subject: "You're Invited to the GEA Client Portal — Test Corp",
+    body: `<p>Dear Simon Ding,</p>
+<p>You have been invited to join the <strong>GEA Client Portal</strong> for <strong>Test Corp</strong>. The Client Portal gives you access to manage employees, view invoices, track onboarding progress, and more.</p>
+${emailInfoCard([
+  { label: "Company", value: "Test Corp" },
+  { label: "Your Email", value: "simon.ding@bestgea.com" },
+  { label: "Portal Role", value: "Administrator" },
+])}
+<p>To get started, click the button below to set your password and activate your account:</p>
+${emailButton("Accept Invitation & Set Up Account", "https://app.geahr.com/register?token=test-portal-invite-token")}
+${emailBanner("This invitation link will expire in 7 days. If you did not expect this invitation, please ignore this email.", "info")}
+<p>If you have any questions, please contact us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`
+  },
+  {
+    name: "portal_password_reset",
+    audience: "client",
+    subject: "Reset Your GEA Client Portal Password",
+    body: `<p>Dear Simon Ding,</p>
+<p>We received a request to reset your password for the GEA Client Portal. If you made this request, please click the button below to set a new password:</p>
+${emailButton("Reset Your Password", "https://app.geahr.com/reset-password?token=test-reset-token")}
+${emailBanner("This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email — your password will remain unchanged.", "info")}
+<p>For security reasons, this link can only be used once. If you need to reset your password again, please visit the login page and request a new link.</p>
+<p>If you have any concerns about your account security, please contact us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Security Team</strong><br>Global Employment Advisors</p>`
+  },
+  {
+    name: "onboarding_invite",
+    audience: "worker",
+    subject: "Complete Your Onboarding — Test Corp via GEA",
+    body: `<p>Dear John Smith,</p>
+<p>Welcome! <strong>Test Corp</strong> has invited you to complete your onboarding with <strong>Global Employment Advisors (GEA)</strong>.</p>
+<p>As your Employer of Record (EOR), GEA will handle your employment administration, payroll, and compliance. To get started, we need you to fill in some personal and employment information.</p>
+${emailInfoCard([
+  { label: "Company", value: "Test Corp" },
+  { label: "Your Email", value: "john.smith@example.com" },
+])}
+<p>Please click the button below to complete your onboarding form:</p>
+${emailButton("Complete Onboarding Form", "https://app.geahr.com/onboarding?token=test-onboarding-token")}
+${emailBanner("This link will expire in 72 hours. Please complete the form before it expires.", "info")}
+<p>If you have any questions about the onboarding process, please contact your HR representative at Test Corp or reach out to us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`
+  },
+  {
+    name: "worker_password_reset",
+    audience: "worker",
+    subject: "Reset Your GEA Worker Portal Password",
+    body: `<p>Dear John Smith,</p>
+<p>We received a request to reset your password for the GEA Worker Portal. If you made this request, please click the button below to set a new password:</p>
+${emailButton("Reset Your Password", "https://worker.geahr.com/reset-password?token=test-worker-reset-token")}
+${emailBanner("This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email — your password will remain unchanged.", "info")}
+<p>For security reasons, this link can only be used once. If you need to reset your password again, please visit the login page and request a new link.</p>
+<p>If you have any concerns about your account security, please contact us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Security Team</strong><br>Global Employment Advisors</p>`
+  }
+];
+
+// ─── Send ─────────────────────────────────────────────────
+const mode = process.argv[2] || "all"; // "all", "auth", "notification"
+
+let templates;
+if (mode === "auth") {
+  templates = authTemplates;
+} else if (mode === "notification") {
+  templates = notificationTemplates;
+} else {
+  templates = [...notificationTemplates, ...authTemplates];
+}
+
 (async () => {
-  console.log("=== GEA Email Notification Test (Brand Upgrade v2) ===");
+  console.log(`=== GEA Email Test (v3 — Complete Coverage) ===`);
+  console.log(`Mode: ${mode} (${templates.length} templates)`);
   console.log("SMTP Host:", SMTP_HOST);
   console.log("SMTP User:", SMTP_USER);
   console.log("Send To:", EMAIL_ADMIN);
@@ -286,7 +395,7 @@ ${emailButton("Review in Admin Panel", "https://admin.geahr.com")}
     try {
       const html = wrapLayout(t.body, t.audience, t.subject);
       await transporter.sendMail({
-        from: `GEA Notification <${EMAIL_FROM}>`,
+        from: `GEA <${EMAIL_FROM}>`,
         to: EMAIL_ADMIN,
         subject: `[TEST] ${t.subject}`,
         html

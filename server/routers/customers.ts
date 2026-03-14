@@ -27,6 +27,7 @@ import { storagePut, storageGet, storageDownload } from "../storage";
 import { TRPCError } from "@trpc/server";
 import { generateInviteToken, getInviteExpiryDate, hashPassword, signPortalToken } from "../portal/portalAuth";
 import type { PortalJwtPayload } from "../portal/portalAuth";
+import { sendPortalInviteEmail } from "../services/authEmailService";
 
 export const customersRouter = router({
   list: userProcedure
@@ -496,6 +497,30 @@ export const customersRouter = router({
           entityId: input.contactId,
           changes: JSON.stringify({ action: "portal_invite", portalRole: input.portalRole }),
         });
+
+        // Send portal invite email
+        try {
+          const { customers: custTable } = await import("../../drizzle/schema");
+          const custRows = await db
+            .select({ companyName: custTable.companyName })
+            .from(custTable)
+            .where(eqOp(custTable.id, contact.customerId))
+            .limit(1);
+          const companyName = custRows[0]?.companyName || "Your Company";
+
+          const portalOrigin = process.env.PORTAL_APP_URL || `${ctx.req.protocol}://${ctx.req.get("host")}`;
+          const inviteUrl = `${portalOrigin}/register?token=${inviteToken}`;
+
+          await sendPortalInviteEmail({
+            to: contact.email,
+            contactName: contact.contactName,
+            companyName,
+            portalRole: input.portalRole,
+            inviteUrl,
+          });
+        } catch (err) {
+          console.error("[Customers] Failed to send portal invite email:", err);
+        }
 
         return {
           success: true,

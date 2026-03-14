@@ -7,6 +7,7 @@ import { ALL_ROLES, validateRoles, serializeRoles, type RoleValue } from "../../
 import { users } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
+import { sendAdminInviteEmail, sendAdminPasswordResetEmail } from "../services/authEmailService";
 import {
   hashPassword,
   verifyPassword,
@@ -140,6 +141,19 @@ export const userManagementRouter = router({
       // Build invite URL
       const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
       const inviteUrl = `${origin}/invite?token=${inviteToken}`;
+
+      // Send invite email
+      try {
+        await sendAdminInviteEmail({
+          to: input.email.toLowerCase().trim(),
+          name: input.name,
+          inviteUrl,
+          roles: roles.join(", "),
+        });
+      } catch (err) {
+        console.error("[UserMgmt] Failed to send invite email:", err);
+        // Don't fail the invite if email fails — the URL is still returned
+      }
 
       return {
         success: true,
@@ -295,6 +309,19 @@ export const userManagementRouter = router({
         changes: JSON.stringify({ targetUser: user.email }),
       });
 
+      // Send password reset email
+      try {
+        const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
+        await sendAdminPasswordResetEmail({
+          to: user.email || "",
+          name: user.name || "Admin",
+          tempPassword,
+          loginUrl: origin,
+        });
+      } catch (err) {
+        console.error("[UserMgmt] Failed to send password reset email:", err);
+      }
+
       return {
         success: true,
         temporaryPassword: tempPassword,
@@ -326,6 +353,18 @@ export const userManagementRouter = router({
 
       const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
       const inviteUrl = `${origin}/invite?token=${inviteToken}`;
+
+      // Resend invite email
+      try {
+        await sendAdminInviteEmail({
+          to: user.email || "",
+          name: user.name || "User",
+          inviteUrl,
+          roles: user.role || "",
+        });
+      } catch (err) {
+        console.error("[UserMgmt] Failed to resend invite email:", err);
+      }
 
       return { success: true, inviteUrl, inviteToken };
     }),

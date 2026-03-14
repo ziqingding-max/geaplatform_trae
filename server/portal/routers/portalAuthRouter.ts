@@ -27,6 +27,7 @@ import {
 } from "../portalAuth";
 import { getDb } from "../../db";
 import { customerContacts, customers } from "../../../drizzle/schema";
+import { sendPortalPasswordResetEmail } from "../../services/authEmailService";
 
 const loginAttemptTracker = new Map<string, { count: number; firstAt: number }>();
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
@@ -349,12 +350,28 @@ export const portalAuthRouter = portalRouter({
         ? `${origin}/reset-password?token=${resetToken}`
         : `${origin}/portal/reset-password?token=${resetToken}`;
 
-      // In production, send email here. For now, return the link.
+      // Send password reset email
+      try {
+        // Get contact name for the email
+        const contactDetails = await db
+          .select({ contactName: customerContacts.contactName })
+          .from(customerContacts)
+          .where(eq(customerContacts.id, contact.id))
+          .limit(1);
+        const contactName = contactDetails[0]?.contactName || "User";
+
+        await sendPortalPasswordResetEmail({
+          to: contact.email,
+          contactName,
+          resetUrl,
+        });
+      } catch (err) {
+        console.error("[PortalAuth] Failed to send password reset email:", err);
+      }
+
       return {
         success: true,
         message: "If an account exists with this email, a reset link has been generated.",
-        // DEV ONLY: return the reset link for testing. Remove in production.
-        resetUrl,
       };
     }),
 

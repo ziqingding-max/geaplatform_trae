@@ -111,6 +111,14 @@ export function getInviteExpiryDate(): Date {
   return new Date(Date.now() + WORKER_INVITE_EXPIRY_HOURS * 60 * 60 * 1000);
 }
 
+export function generateResetToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+export function getResetExpiryDate(): Date {
+  return new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 hour
+}
+
 // ============================================================================
 // Cookie Helpers
 // ============================================================================

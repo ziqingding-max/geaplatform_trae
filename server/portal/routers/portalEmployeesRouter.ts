@@ -20,6 +20,7 @@ import { getDb, createEmployee, createEmployeeDocument, createContractor } from 
 import { autoInitializeLeavePolicyForCountry } from "../../services/leaveAutoInitService";
 import { storagePut } from "../../storage";
 import { notificationService } from "../../services/notificationService";
+import { sendOnboardingInviteEmail } from "../../services/authEmailService";
 import {
   employees,
   employeeContracts,
@@ -511,6 +512,28 @@ export const portalEmployeesRouter = portalRouter({
         contractorCurrency: input.contractorCurrency || null,
       });
 
+      // Send onboarding invite email
+      try {
+        const custRows = await db
+          .select({ companyName: customers.companyName })
+          .from(customers)
+          .where(eq(customers.id, cid))
+          .limit(1);
+        const companyName = custRows[0]?.companyName || "Your Company";
+
+        const portalOrigin = process.env.PORTAL_APP_URL || "https://app.geahr.com";
+        const inviteUrl = `${portalOrigin}/onboarding?token=${token}`;
+
+        await sendOnboardingInviteEmail({
+          to: input.employeeEmail,
+          employeeName: input.employeeName,
+          companyName,
+          inviteUrl,
+        });
+      } catch (err) {
+        console.error("[PortalEmployees] Failed to send onboarding invite email:", err);
+      }
+
       return { success: true, token };
     }),
 
@@ -577,6 +600,28 @@ export const portalEmployeesRouter = portalRouter({
         .update(onboardingInvites)
         .set({ token: newToken, expiresAt: newExpiresAt })
         .where(eq(onboardingInvites.id, input.id));
+
+      // Resend onboarding invite email
+      try {
+        const custRows = await db
+          .select({ companyName: customers.companyName })
+          .from(customers)
+          .where(eq(customers.id, cid))
+          .limit(1);
+        const companyName = custRows[0]?.companyName || "Your Company";
+
+        const portalOrigin = process.env.PORTAL_APP_URL || "https://app.geahr.com";
+        const inviteUrl = `${portalOrigin}/onboarding?token=${newToken}`;
+
+        await sendOnboardingInviteEmail({
+          to: invite.employeeEmail,
+          employeeName: invite.employeeName,
+          companyName,
+          inviteUrl,
+        });
+      } catch (err) {
+        console.error("[PortalEmployees] Failed to resend onboarding invite email:", err);
+      }
 
       return { success: true, token: newToken };
     }),

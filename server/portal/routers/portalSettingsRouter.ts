@@ -26,6 +26,7 @@ import {
   generateInviteToken,
   getInviteExpiryDate,
 } from "../portalAuth";
+import { sendPortalInviteEmail } from "../../services/authEmailService";
 import {
   getCurrentPayrollPeriod,
   getPayrollPeriodInfo,
@@ -324,6 +325,29 @@ export const portalSettingsRouter = portalRouter({
         inviteExpiresAt,
       });
 
+      // Send portal invite email
+      try {
+        const custRows = await db
+          .select({ companyName: customers.companyName })
+          .from(customers)
+          .where(eq(customers.id, cid))
+          .limit(1);
+        const companyName = custRows[0]?.companyName || "Your Company";
+
+        const portalOrigin = process.env.PORTAL_APP_URL || "https://app.geahr.com";
+        const inviteUrl = `${portalOrigin}/register?token=${inviteToken}`;
+
+        await sendPortalInviteEmail({
+          to: input.email.toLowerCase().trim(),
+          contactName: input.contactName,
+          companyName,
+          portalRole: input.portalRole,
+          inviteUrl,
+        });
+      } catch (err) {
+        console.error("[PortalSettings] Failed to send invite email:", err);
+      }
+
       return {
         success: true,
         inviteToken,
@@ -432,6 +456,37 @@ export const portalSettingsRouter = portalRouter({
         .update(customerContacts)
         .set({ inviteToken, inviteExpiresAt })
         .where(eq(customerContacts.id, input.contactId));
+
+      // Resend portal invite email
+      try {
+        const contactDetails = await db
+          .select({ contactName: customerContacts.contactName, email: customerContacts.email })
+          .from(customerContacts)
+          .where(eq(customerContacts.id, input.contactId))
+          .limit(1);
+        const contactName = contactDetails[0]?.contactName || "User";
+        const contactEmail = contactDetails[0]?.email || "";
+
+        const custRows = await db
+          .select({ companyName: customers.companyName })
+          .from(customers)
+          .where(eq(customers.id, cid))
+          .limit(1);
+        const companyName = custRows[0]?.companyName || "Your Company";
+
+        const portalOrigin = process.env.PORTAL_APP_URL || "https://app.geahr.com";
+        const inviteUrl = `${portalOrigin}/register?token=${inviteToken}`;
+
+        await sendPortalInviteEmail({
+          to: contactEmail,
+          contactName,
+          companyName,
+          portalRole: "viewer",
+          inviteUrl,
+        });
+      } catch (err) {
+        console.error("[PortalSettings] Failed to resend invite email:", err);
+      }
 
       return {
         success: true,
