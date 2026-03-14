@@ -4,8 +4,21 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import {
   Sidebar,
   SidebarContent,
@@ -21,7 +34,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, KeyRound } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -110,6 +123,35 @@ function DashboardLayoutContent({
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
+
+  // Change Password state
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const changePasswordMutation = trpc.userManagement.changePassword.useMutation({
+    onSuccess: () => {
+      toast.success("Password changed successfully");
+      setChangePasswordOpen(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to change password");
+    },
+  });
+  const handleChangePassword = () => {
+    if (newPassword.length < 8) {
+      toast.error("New password must be at least 8 characters");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    changePasswordMutation.mutate({ currentPassword, newPassword });
+  };
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find(item => item.path === location);
@@ -222,6 +264,14 @@ function DashboardLayoutContent({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
+                  onClick={() => setChangePasswordOpen(true)}
+                  className="cursor-pointer"
+                >
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  <span>Change Password</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
                   onClick={logout}
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
@@ -229,6 +279,39 @@ function DashboardLayoutContent({
                   <span>Sign out</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
+
+              {/* Change Password Dialog */}
+              <Dialog open={changePasswordOpen} onOpenChange={(open) => { setChangePasswordOpen(open); if (!open) { setCurrentPassword(""); setNewPassword(""); setConfirmNewPassword(""); } }}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Change Password</DialogTitle>
+                    <DialogDescription>Enter your current password and choose a new one.</DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Current Password</Label>
+                      <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Enter current password" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>New Password</Label>
+                      <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Confirm New Password</Label>
+                      <Input type="password" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} placeholder="Re-enter new password" />
+                      {confirmNewPassword && newPassword !== confirmNewPassword && (
+                        <p className="text-xs text-destructive">Passwords do not match</p>
+                      )}
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setChangePasswordOpen(false)}>Cancel</Button>
+                    <Button onClick={handleChangePassword} disabled={changePasswordMutation.isPending || !currentPassword || !newPassword || newPassword !== confirmNewPassword || newPassword.length < 8}>
+                      {changePasswordMutation.isPending ? "Changing..." : "Change Password"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </DropdownMenu>
           </SidebarFooter>
         </Sidebar>

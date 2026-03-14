@@ -850,6 +850,18 @@ export const portalEmployeesRouter = portalRouter({
           })
           .where(eq(onboardingInvites.id, invite.id));
 
+        // Send onboarding completed notification for contractor
+        notificationService.send({
+          type: "employee_onboarding_completed",
+          customerId: invite.customerId,
+          data: {
+            employeeName: `${input.firstName} ${input.lastName}`,
+            position: jobTitle,
+            country: country,
+            startDate: startDate,
+          }
+        }).catch(err => console.error("Failed to send onboarding completed notification:", err));
+
         return { success: true, contractorId };
       } else {
         // EOR / Visa EOR: Create employee record
@@ -900,6 +912,18 @@ export const portalEmployeesRouter = portalRouter({
             completedAt: new Date(),
           })
           .where(eq(onboardingInvites.id, invite.id));
+
+        // Send onboarding completed notification to client HR + GEA admin
+        notificationService.send({
+          type: "employee_onboarding_completed",
+          customerId: invite.customerId,
+          data: {
+            employeeName: `${input.firstName} ${input.lastName}`,
+            position: jobTitle,
+            country: country,
+            startDate: startDate,
+          }
+        }).catch(err => console.error("Failed to send onboarding completed notification:", err));
 
         return { success: true, employeeId };
       }

@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import rateLimit from "express-rate-limit";
 import { registerAuthRoutes } from "./authRoutes";
+import { registerAdminForgotPasswordRoutes } from "./adminForgotPassword";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { portalAppRouter } from "../portal/portalRouter";
@@ -76,8 +77,9 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
   app.use("/api/auth/login", authLimiter); // Specifically protect login
 
 
-  // Admin auth routes (login/logout)
+  // Admin auth routes (login/logout + forgot password)
   registerAuthRoutes(app);
+  registerAdminForgotPasswordRoutes(app);
 
   // PDF preview endpoint (inline display in browser)
   app.get("/api/invoices/:id/pdf/preview", async (req, res) => {

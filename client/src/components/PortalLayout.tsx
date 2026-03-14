@@ -25,6 +25,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  KeyRound,
   Building2,
   Loader2,
   DollarSign,
@@ -41,6 +42,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { portalTrpc } from "@/lib/portalTrpc";
+import { toast } from "sonner";
 
 import type { LucideIcon } from "lucide-react";
 
@@ -113,6 +127,29 @@ export default function PortalLayout({ children, title }: PortalLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, loading, logout } = usePortalAuth();
   const { t, locale, setLocale } = useI18n();
+
+  // Change Password state
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const changePasswordMutation = portalTrpc.auth.changePassword.useMutation({
+    onSuccess: () => {
+      toast.success("Password changed successfully");
+      setChangePasswordOpen(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to change password");
+    },
+  });
+  const handleChangePassword = () => {
+    if (newPassword.length < 8) { toast.error("New password must be at least 8 characters"); return; }
+    if (newPassword !== confirmNewPassword) { toast.error("Passwords do not match"); return; }
+    changePasswordMutation.mutate({ currentPassword, newPassword, confirmNewPassword });
+  };
   const navGroups = useMemo(() => buildPortalNavGroups(), []);
 
   // Loading state — minimal screen to avoid "dashboard flash" before login redirect
@@ -253,11 +290,49 @@ export default function PortalLayout({ children, title }: PortalLayoutProps) {
               {user.portalRole === "admin" ? "Administrator" : user.portalRole === "hr_manager" ? "HR Manager" : user.portalRole === "finance" ? "Finance" : "Viewer"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => setChangePasswordOpen(true)}>
+              <KeyRound className="w-4 h-4 mr-2" />
+              Change Password
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="text-destructive" onClick={logout}>
               <LogOut className="w-4 h-4 mr-2" />
               {t("nav.signOut")}
             </DropdownMenuItem>
           </DropdownMenuContent>
+
+          {/* Change Password Dialog */}
+          <Dialog open={changePasswordOpen} onOpenChange={(open) => { setChangePasswordOpen(open); if (!open) { setCurrentPassword(""); setNewPassword(""); setConfirmNewPassword(""); } }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Change Password</DialogTitle>
+                <DialogDescription>Enter your current password and choose a new one.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Current Password</Label>
+                  <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Enter current password" />
+                </div>
+                <div className="space-y-2">
+                  <Label>New Password</Label>
+                  <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Confirm New Password</Label>
+                  <Input type="password" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} placeholder="Re-enter new password" />
+                  {confirmNewPassword && newPassword !== confirmNewPassword && (
+                    <p className="text-xs text-destructive">Passwords do not match</p>
+                  )}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setChangePasswordOpen(false)}>Cancel</Button>
+                <Button onClick={handleChangePassword} disabled={changePasswordMutation.isPending || !currentPassword || !newPassword || newPassword !== confirmNewPassword || newPassword.length < 8}>
+                  {changePasswordMutation.isPending ? "Changing..." : "Change Password"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </DropdownMenu>
       </div>
 

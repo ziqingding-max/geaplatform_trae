@@ -221,6 +221,18 @@ export async function runEmployeeAutoActivation(): Promise<{ activated: number; 
 
     console.log(`[CronJob] Activated employee ${emp.employeeCode} (${emp.firstName} ${emp.lastName})`);
 
+    // Send employee activated notification to client
+    notificationService.send({
+      type: "employee_activated",
+      customerId: emp.customerId,
+      data: {
+        employeeName: `${emp.firstName} ${emp.lastName}`,
+        employeeCode: emp.employeeCode,
+        country: emp.country,
+        startDate: emp.startDate,
+      }
+    }).catch(err => console.error(`[CronJob] Failed to send activation notification for ${emp.employeeCode}:`, err));
+
     // Auto-initialize leave policies for the country if not yet configured
     try {
       await autoInitializeLeavePolicyForCountry(emp.customerId, emp.country);

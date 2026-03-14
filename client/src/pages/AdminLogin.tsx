@@ -6,6 +6,7 @@
  */
 
 import { useState } from "react";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -140,7 +141,15 @@ export default function AdminLogin() {
               </Button>
             </form>
 
-            <div className="mt-6 text-center">
+            <div className="mt-4 text-center">
+              <Link href="/forgot-password">
+                <Button variant="link" className="text-sm text-muted-foreground hover:text-primary p-0 h-auto">
+                  Forgot your password?
+                </Button>
+              </Link>
+            </div>
+
+            <div className="mt-4 text-center">
               <p className="text-xs text-muted-foreground">
                 {t("adminLogin.footer.contactAdmin")}
               </p>

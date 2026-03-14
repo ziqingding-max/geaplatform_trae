@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { workerTrpc } from "@/lib/workerTrpc";
 import { 
@@ -7,7 +7,8 @@ import {
   Flag, 
   User, 
   LogOut,
-  Bell
+  Bell,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +19,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { toast } from "sonner";
 
 export default function WorkerLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
@@ -31,6 +43,29 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
   const logoutMutation = workerTrpc.auth.logout.useMutation({
     onSuccess: () => setLocation("/worker/login"),
   });
+
+  // Change Password state
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const changePasswordMutation = workerTrpc.auth.changePassword.useMutation({
+    onSuccess: () => {
+      toast.success("Password changed successfully");
+      setChangePasswordOpen(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to change password");
+    },
+  });
+  const handleChangePassword = () => {
+    if (newPassword.length < 8) { toast.error("New password must be at least 8 characters"); return; }
+    if (newPassword !== confirmNewPassword) { toast.error("Passwords do not match"); return; }
+    changePasswordMutation.mutate({ currentPassword, newPassword });
+  };
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -68,12 +103,60 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
               <p className="text-sm font-medium truncate">{user.email}</p>
               <p className="text-xs text-muted-foreground truncate">Worker</p>
             </div>
-            <Button variant="ghost" size="icon" onClick={() => logoutMutation.mutate()}>
-              <LogOut className="w-4 h-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="shrink-0">
+                  <User className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => setChangePasswordOpen(true)}>
+                  <KeyRound className="w-4 h-4 mr-2" />
+                  Change Password
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-destructive" onClick={() => logoutMutation.mutate()}>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </aside>
+
+      {/* Change Password Dialog */}
+      <Dialog open={changePasswordOpen} onOpenChange={(open) => { setChangePasswordOpen(open); if (!open) { setCurrentPassword(""); setNewPassword(""); setConfirmNewPassword(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+            <DialogDescription>Enter your current password and choose a new one.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Current Password</Label>
+              <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Enter current password" />
+            </div>
+            <div className="space-y-2">
+              <Label>New Password</Label>
+              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="At least 8 characters" />
+            </div>
+            <div className="space-y-2">
+              <Label>Confirm New Password</Label>
+              <Input type="password" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)} placeholder="Re-enter new password" />
+              {confirmNewPassword && newPassword !== confirmNewPassword && (
+                <p className="text-xs text-destructive">Passwords do not match</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChangePasswordOpen(false)}>Cancel</Button>
+            <Button onClick={handleChangePassword} disabled={changePasswordMutation.isPending || !currentPassword || !newPassword || newPassword !== confirmNewPassword || newPassword.length < 8}>
+              {changePasswordMutation.isPending ? "Changing..." : "Change Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Main Content */}
       <main className="flex-1 ml-64 p-8">

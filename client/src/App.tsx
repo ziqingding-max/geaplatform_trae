@@ -36,6 +36,8 @@ import Quotations from "./pages/Quotations";
 import QuotationCreatePage from "./pages/QuotationCreatePage";
 import AdminLogin from "./pages/AdminLogin";
 import AdminInvite from "./pages/AdminInvite";
+import AdminForgotPassword from "./pages/AdminForgotPassword";
+import AdminResetPassword from "./pages/AdminResetPassword";
 import CountryGuideList from "@/pages/admin/CountryGuideList";
 import CountryGuideEditor from "@/pages/admin/CountryGuideEditor";
 import AdminCountryGuide from "@/pages/admin/AdminCountryGuide";
@@ -52,6 +54,8 @@ import { isPortalDomain, getPortalBasePath, isWorkerDomain } from "@/lib/portalB
 // Worker Portal pages
 const WorkerLogin = lazy(() => import("./pages/worker/WorkerLogin"));
 const WorkerRegister = lazy(() => import("./pages/worker/WorkerRegister"));
+const WorkerForgotPassword = lazy(() => import("./pages/worker/WorkerForgotPassword"));
+const WorkerResetPassword = lazy(() => import("./pages/worker/WorkerResetPassword"));
 const WorkerDashboard = lazy(() => import("./pages/worker/WorkerDashboard"));
 const WorkerMilestones = lazy(() => import("./pages/worker/WorkerMilestones"));
 const WorkerInvoices = lazy(() => import("./pages/worker/WorkerInvoices"));
@@ -131,6 +135,8 @@ function WorkerRouter() {
             <Route path={`${basePath}/login`} component={WorkerLogin} />
             <Route path={`${basePath}/register`} component={WorkerRegister} />
             <Route path={`${basePath}/invite/:token`} component={WorkerRegister} />
+            <Route path={`${basePath}/forgot-password`} component={WorkerForgotPassword} />
+            <Route path={`${basePath}/reset-password`} component={WorkerResetPassword} />
             <Route path={`${basePath}/onboarding`} component={WorkerOnboarding} />
             <Route path={`${basePath}/dashboard`} component={WorkerDashboard} />
             <Route path={`${basePath}/milestones`} component={WorkerMilestones} />
@@ -275,6 +281,8 @@ function Router() {
       {/* Admin auth pages (no auth required) */}
       <Route path="/login" component={AdminLogin} />
       <Route path="/invite" component={AdminInvite} />
+      <Route path="/forgot-password" component={AdminForgotPassword} />
+      <Route path="/reset-password" component={AdminResetPassword} />
       
       {/* Worker Portal routes */}
       <Route path="/worker/:rest*" component={WorkerRouter} />

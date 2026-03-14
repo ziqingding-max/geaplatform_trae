@@ -1438,7 +1438,7 @@ function CustomerDetail({ id }: { id: number }) {
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>
-                    {inviteResult ? "Invite Link Generated" : "Invite to Client Portal"}
+                    {inviteResult ? "Invitation Sent" : "Invite to Client Portal"}
                   </DialogTitle>
                 </DialogHeader>
                 {!inviteResult ? (
@@ -1485,7 +1485,7 @@ function CustomerDetail({ id }: { id: number }) {
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Share this link with the contact. It expires in 72 hours.
+                        An invitation email has been sent. You can also share this link as a backup. It expires in 72 hours.
                       </p>
                     </div>
                     <div className="flex justify-end pt-2">

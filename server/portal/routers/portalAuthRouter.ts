@@ -371,7 +371,7 @@ export const portalAuthRouter = portalRouter({
 
       return {
         success: true,
-        message: "If an account exists with this email, a reset link has been generated.",
+        message: "If an account exists with this email, a password reset link has been sent.",
       };
     }),
 

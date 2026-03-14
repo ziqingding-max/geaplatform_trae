@@ -435,5 +435,139 @@ export const DEFAULT_RULES: Record<string, NotificationConfig> = {
         inAppMessage: "终止申请：{{customerName}} 的 {{contractorName}} ({{contractorCode}})，结束日期：{{requestedEndDate}}。"
       }
     }
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 11. EMPLOYEE ONBOARDING COMPLETED — Client + Admin notification
+  // ─────────────────────────────────────────────────────────
+  employee_onboarding_completed: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["client:admin", "client:hr_manager", "admin:operations_manager"],
+    audience: "client",
+    templates: {
+      en: {
+        emailSubject: "Employee Onboarding Completed: {{employeeName}}",
+        emailBody: `<GEA_BANNER type="success" text="An employee has completed their onboarding process." />
+<p>Dear {{contactName}},</p>
+<p>We're pleased to inform you that the following employee has successfully completed their onboarding:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Employee Name" value="{{employeeName}}" />
+<GEA_ROW label="Position" value="{{position}}" />
+<GEA_ROW label="Country" value="{{country}}" />
+<GEA_ROW label="Start Date" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>The employee's information has been submitted and is now being reviewed by the GEA team. You will be notified once the employee is fully activated.</p>
+<GEA_BUTTON text="View in Client Portal" href="https://app.geahr.com" />
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`,
+        inAppMessage: "{{employeeName}} has completed onboarding."
+      },
+      zh: {
+        emailSubject: "员工入职完成：{{employeeName}}",
+        emailBody: `<GEA_BANNER type="success" text="员工已完成入职流程。" />
+<p>尊敬的 {{contactName}}，</p>
+<p>我们很高兴通知您，以下员工已成功完成入职流程：</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="员工姓名" value="{{employeeName}}" />
+<GEA_ROW label="职位" value="{{position}}" />
+<GEA_ROW label="国家" value="{{country}}" />
+<GEA_ROW label="入职日期" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>该员工的信息已提交，GEA 团队正在审核中。员工完全激活后我们会通知您。</p>
+<GEA_BUTTON text="前往客户门户查看" href="https://app.geahr.com" />
+<p>祝好，<br><strong>GEA 运营团队</strong><br>Global Employment Advisors</p>`,
+        inAppMessage: "{{employeeName}} 已完成入职。"
+      }
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 12. EMPLOYEE ACTIVATED — Client notification
+  // ─────────────────────────────────────────────────────────
+  employee_activated: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["client:admin", "client:hr_manager"],
+    audience: "client",
+    templates: {
+      en: {
+        emailSubject: "Employee Activated: {{employeeName}} ({{employeeCode}})",
+        emailBody: `<GEA_BANNER type="success" text="An employee has been activated and is now fully onboarded." />
+<p>Dear {{contactName}},</p>
+<p>Great news! The following employee has been activated and is now fully set up in the GEA system:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Employee Name" value="{{employeeName}}" />
+<GEA_ROW label="Employee Code" value="{{employeeCode}}" />
+<GEA_ROW label="Country" value="{{country}}" />
+<GEA_ROW label="Start Date" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>Payroll and benefits are now being processed. You can view the employee's details in the Client Portal.</p>
+<GEA_BUTTON text="View Employee" href="https://app.geahr.com" />
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`,
+        inAppMessage: "{{employeeName}} ({{employeeCode}}) has been activated."
+      },
+      zh: {
+        emailSubject: "员工已激活：{{employeeName}} ({{employeeCode}})",
+        emailBody: `<GEA_BANNER type="success" text="员工已激活，入职流程全部完成。" />
+<p>尊敬的 {{contactName}}，</p>
+<p>好消息！以下员工已在 GEA 系统中激活：</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="员工姓名" value="{{employeeName}}" />
+<GEA_ROW label="员工编号" value="{{employeeCode}}" />
+<GEA_ROW label="国家" value="{{country}}" />
+<GEA_ROW label="入职日期" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>薪资和福利正在处理中。您可以在客户门户中查看该员工的详细信息。</p>
+<GEA_BUTTON text="查看员工" href="https://app.geahr.com" />
+<p>祝好，<br><strong>GEA 运营团队</strong><br>Global Employment Advisors</p>`,
+        inAppMessage: "{{employeeName}} ({{employeeCode}}) 已激活。"
+      }
+    }
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 13. ADMIN PENDING APPROVAL ALERT — Admin daily digest
+  // ─────────────────────────────────────────────────────────
+  admin_pending_approval_alert: {
+    enabled: true,
+    channels: ["email"],
+    recipients: ["admin:operations_manager", "admin:customer_manager"],
+    audience: "admin",
+    templates: {
+      en: {
+        emailSubject: "Action Required: {{totalPending}} Pending Items for {{period}}",
+        emailBody: `<GEA_BANNER type="warning" text="You have pending items that missed the payroll lock window and require immediate attention." />
+<p>Dear Admin,</p>
+<p>The following items for <strong>{{period}}</strong> are still pending approval and were NOT included in the payroll lock. They will be delayed to next month's payroll unless approved immediately:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Pending Adjustments" value="{{pendingAdjustments}}" />
+<GEA_ROW label="Pending Reimbursements" value="{{pendingReimbursements}}" />
+<GEA_ROW label="Pending Leave" value="{{pendingLeave}}" />
+<GEA_ROW label="Total Pending" value="{{totalPending}}" />
+</GEA_INFO_CARD>
+<p>{{message}}</p>
+<p>Please log in to the Admin Panel to review and approve these items as soon as possible.</p>
+<GEA_BUTTON text="Go to Admin Panel" href="https://admin.geahr.com" />
+<p>\u2014 GEA System</p>`,
+        inAppMessage: "{{totalPending}} pending items for {{period}} need approval."
+      },
+      zh: {
+        emailSubject: "\u9700\u8981\u64cd\u4f5c\uff1a{{period}} \u6709 {{totalPending}} \u4e2a\u5f85\u5ba1\u6279\u9879\u76ee",
+        emailBody: `<GEA_BANNER type="warning" text="\u60a8\u6709\u672a\u5ba1\u6279\u7684\u9879\u76ee\u9519\u8fc7\u4e86\u5de5\u8d44\u9501\u5b9a\u7a97\u53e3\uff0c\u9700\u8981\u7acb\u5373\u5904\u7406\u3002" />
+<p>\u7ba1\u7406\u5458\u60a8\u597d\uff0c</p>
+<p><strong>{{period}}</strong> \u7684\u4ee5\u4e0b\u9879\u76ee\u4ecd\u5728\u7b49\u5f85\u5ba1\u6279\uff0c\u672a\u88ab\u7eb3\u5165\u5de5\u8d44\u9501\u5b9a\u3002\u5982\u4e0d\u5c3d\u5feb\u5ba1\u6279\uff0c\u5c06\u5ef6\u8fdf\u5230\u4e0b\u6708\u7684\u5de5\u8d44\u5355\uff1a</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u5f85\u5904\u7406\u8c03\u6574" value="{{pendingAdjustments}}" />
+<GEA_ROW label="\u5f85\u5904\u7406\u62a5\u9500" value="{{pendingReimbursements}}" />
+<GEA_ROW label="\u5f85\u5904\u7406\u5047\u671f" value="{{pendingLeave}}" />
+<GEA_ROW label="\u5f85\u5904\u7406\u603b\u8ba1" value="{{totalPending}}" />
+</GEA_INFO_CARD>
+<p>{{message}}</p>
+<p>\u8bf7\u5c3d\u5feb\u767b\u5f55\u7ba1\u7406\u540e\u53f0\u5ba1\u6838\u5e76\u5904\u7406\u8fd9\u4e9b\u9879\u76ee\u3002</p>
+<GEA_BUTTON text="\u524d\u5f80\u7ba1\u7406\u540e\u53f0" href="https://admin.geahr.com" />
+<p>\u2014 GEA \u7cfb\u7edf</p>`,
+        inAppMessage: "{{period}} \u6709 {{totalPending}} \u4e2a\u5f85\u5ba1\u6279\u9879\u76ee\u3002"
+      }
+    }
   }
 };

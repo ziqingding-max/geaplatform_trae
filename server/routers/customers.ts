@@ -27,7 +27,7 @@ import { storagePut, storageGet, storageDownload } from "../storage";
 import { TRPCError } from "@trpc/server";
 import { generateInviteToken, getInviteExpiryDate, hashPassword, signPortalToken } from "../portal/portalAuth";
 import type { PortalJwtPayload } from "../portal/portalAuth";
-import { sendPortalInviteEmail } from "../services/authEmailService";
+import { sendPortalInviteEmail, sendPortalPasswordChangedEmail } from "../services/authEmailService";
 
 export const customersRouter = router({
   list: userProcedure
@@ -604,6 +604,19 @@ export const customersRouter = router({
           entityId: input.contactId,
           changes: JSON.stringify({ action: "admin_reset_password" }),
         });
+
+        // Send email notification to the portal user
+        try {
+          const loginUrl = process.env.PORTAL_APP_URL ? `${process.env.PORTAL_APP_URL}/login` : "https://app.geahr.com/login";
+          await sendPortalPasswordChangedEmail({
+            to: contact.email,
+            contactName: contact.contactName || "User",
+            newPassword: input.newPassword,
+            loginUrl,
+          });
+        } catch (err) {
+          console.error("[Customers] Failed to send portal password reset email:", err);
+        }
 
         return { success: true, contactName: contact.contactName, email: contact.email };
       }),

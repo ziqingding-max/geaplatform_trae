@@ -18,7 +18,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ArrowLeft, Mail, CheckCircle2, Copy, ExternalLink } from "lucide-react";
+import { ArrowLeft, Mail, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { useI18n } from "@/lib/i18n";
@@ -26,14 +26,9 @@ export default function PortalForgotPassword() {
   const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
-  const [resetUrl, setResetUrl] = useState<string | null>(null);
   const forgotPasswordMutation = portalTrpc.auth.forgotPassword.useMutation({
-    onSuccess: (data) => {
+    onSuccess: () => {
       setSubmitted(true);
-      // DEV: capture the reset URL for testing
-      if (data.resetUrl) {
-        setResetUrl(data.resetUrl);
-      }
     },
     onError: (error) => {
       toast.error(error.message);
@@ -47,13 +42,6 @@ export default function PortalForgotPassword() {
       email: email.trim(),
       origin: window.location.origin,
     });
-  };
-
-  const copyResetLink = () => {
-    if (resetUrl) {
-      navigator.clipboard.writeText(resetUrl);
-      toast.success(t("portal_forgot_password.toast.copy_success"));
-    }
   };
 
   if (submitted) {
@@ -74,44 +62,11 @@ export default function PortalForgotPassword() {
               {t("portal_forgot_password.submitted.instructions")}
             </p>
 
-            {/* DEV ONLY: Show reset link for testing */}
-            {resetUrl && (
-              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-                <p className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-2">
-                  {t("portal_forgot_password.submitted.dev_mode_notice")}
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    value={resetUrl}
-                    readOnly
-                    className="text-xs font-mono"
-                  />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={copyResetLink}
-                    className="shrink-0"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => window.open(resetUrl, "_blank")}
-                    className="shrink-0"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-
             <div className="flex flex-col gap-2">
               <Button
                 variant="outline"
                 onClick={() => {
                   setSubmitted(false);
-                  setResetUrl(null);
                 }}
                 className="w-full"
               >

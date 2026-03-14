@@ -759,13 +759,9 @@ function UserManagementSection() {
   const resendInviteMut = trpc.userManagement.resendInvite.useMutation({
     onSuccess: (data) => {
       refetch();
-      // Bug 15: Use fallback clipboard copy for non-HTTPS environments
-      copyToClipboard(data.inviteUrl)
-        .then(() => toast.success("Invite link copied to clipboard"))
-        .catch(() => {
-          // Show the URL in a prompt as ultimate fallback
-          prompt("Copy this invite link:", data.inviteUrl);
-        });
+      toast.success("Invitation email resent successfully");
+      // Also copy link to clipboard as backup
+      copyToClipboard(data.inviteUrl).catch(() => {});
     },
     onError: (err) => toast.error(err.message),
   });
@@ -1087,10 +1083,10 @@ function UserManagementSection() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-green-600">
                 <CheckCircle2 className="w-5 h-5" />
-                <span className="font-medium">Invite Created!</span>
+                <span className="font-medium">Invitation Sent!</span>
               </div>
               <p className="text-sm text-muted-foreground">
-                Share this link with the user. They will set their password and activate their account.
+                An invitation email has been sent to the user. They can also use the link below to set their password and activate their account.
               </p>
               <div className="flex items-center gap-2">
                 <Input value={inviteResult.inviteUrl} readOnly className="text-xs" />

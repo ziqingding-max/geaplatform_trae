@@ -36,6 +36,7 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useI18n } from "@/lib/i18n";
+import { getPortalOrigin, getPortalBasePath } from "@/lib/portalBasePath";
 
 // ─── Company Profile ─────────────────────────────────────────────────────────
 
@@ -464,7 +465,7 @@ function UserManagementTab() {
 
   const inviteMutation = portalTrpc.settings.inviteUser.useMutation({
     onSuccess: (data: { inviteToken: string }) => {
-      const link = `${window.location.origin}/portal/register?token=${data.inviteToken}`;
+      const link = `${getPortalOrigin()}${getPortalBasePath()}/register?token=${data.inviteToken}`;
       setInviteLink(link);
       toast.success(t("portal_settings.team.create_invite_success_toast"));
       refetch();
@@ -496,7 +497,7 @@ function UserManagementTab() {
 
   const resendMutation = portalTrpc.settings.resendInvite.useMutation({
     onSuccess: (data: { inviteToken: string }) => {
-      const link = `${window.location.origin}/portal/register?token=${data.inviteToken}`;
+      const link = `${getPortalOrigin()}${getPortalBasePath()}/register?token=${data.inviteToken}`;
       navigator.clipboard.writeText(link);
       toast.success("New invite link copied to clipboard");
       refetch();
@@ -596,10 +597,10 @@ function UserManagementTab() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 text-green-800">
                       <CheckCircle2 className="w-5 h-5" />
-                      <span className="text-sm font-medium">{t("portal_settings.team.invite_created_message")}</span>
+                      <span className="text-sm font-medium">Invitation email has been sent to {inviteEmail}.</span>
                     </div>
                     <div>
-                      <Label>{t("portal_settings.team.invite_link_label")}</Label>
+                      <Label>Backup: Copy invite link</Label>
                       <div className="flex gap-2 mt-1">
                         <Input value={inviteLink} readOnly className="font-mono text-xs" />
                         <Button variant="outline" size="icon" onClick={copyLink}>
@@ -607,7 +608,7 @@ function UserManagementTab() {
                         </Button>
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {t("portal_settings.team.description")}
+                        If the recipient didn't receive the email, you can share this link directly.
                       </p>
                     </div>
                     <DialogFooter>

@@ -1,10 +1,10 @@
 /**
- * GEA Email Test Script — Complete Coverage (v3)
+ * GEA Email Test Script — Complete Coverage (v4)
  *
  * Usage:
- *   node scripts/test_email.cjs              # Send all 16 templates
- *   node scripts/test_email.cjs auth         # Send only auth emails (6)
- *   node scripts/test_email.cjs notification # Send only notification emails (10)
+ *   node scripts/test_email.cjs              # Send all 21 templates
+ *   node scripts/test_email.cjs auth         # Send only auth emails (8)
+ *   node scripts/test_email.cjs notification # Send only notification emails (13)
  *
  * Sends all branded email templates to the admin email.
  * Each subject is prefixed with [TEST].
@@ -269,11 +269,91 @@ ${emailButton("Review in Admin Panel", "https://admin.geahr.com")}
     body: `${emailBanner("Database Backup Completed", "warning")}
 <p style="font-size:15px;color:#1a1a1a;line-height:1.65;">The scheduled database backup has been completed successfully. All data has been securely stored.</p>
 <p style="margin-top:20px;font-size:13px;color:#888;">This is an automated system alert from the GEA platform.<br/>Timestamp: ${new Date().toISOString()}</p>`
+  },
+  {
+    name: "employee_onboarding_completed",
+    audience: "client",
+    subject: "Employee Onboarding Completed: John Smith",
+    body: `${emailBanner("An employee has completed their onboarding process.", "success")}
+<p>Dear Simon,</p>
+<p>We're pleased to inform you that the following employee has successfully completed their onboarding:</p>
+${emailInfoCard([
+  { label: "Employee Name", value: "John Smith" },
+  { label: "Position", value: "Software Engineer" },
+  { label: "Country", value: "Singapore" },
+  { label: "Start Date", value: "2026-04-01" },
+])}
+<p>The employee's information has been submitted and is now being reviewed by the GEA team. You will be notified once the employee is fully activated.</p>
+${emailButton("View in Client Portal", "https://app.geahr.com")}
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`
+  },
+  {
+    name: "employee_activated",
+    audience: "client",
+    subject: "Employee Activated: John Smith (EMP-0042)",
+    body: `${emailBanner("An employee has been activated and is now fully onboarded.", "success")}
+<p>Dear Simon,</p>
+<p>Great news! The following employee has been activated and is now fully set up in the GEA system:</p>
+${emailInfoCard([
+  { label: "Employee Name", value: "John Smith" },
+  { label: "Employee Code", value: "EMP-0042" },
+  { label: "Country", value: "Singapore" },
+  { label: "Start Date", value: "2026-04-01" },
+])}
+<p>Payroll and benefits are now being processed. You can view the employee's details in the Client Portal.</p>
+${emailButton("View Employee", "https://app.geahr.com")}
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`
+  },
+  {
+    name: "admin_pending_approval_alert",
+    audience: "admin",
+    subject: "Action Required: 5 Pending Items for 2026-03",
+    body: `${emailBanner("You have pending items that missed the payroll lock window and require immediate attention.", "warning")}
+<p>Dear Admin,</p>
+<p>The following items for <strong>2026-03</strong> are still pending approval and were NOT included in the payroll lock. They will be delayed to next month's payroll unless approved immediately:</p>
+${emailInfoCard([
+  { label: "Pending Adjustments", value: "2" },
+  { label: "Pending Reimbursements", value: "2" },
+  { label: "Pending Leave", value: "1" },
+  { label: "Total Pending", value: "5" },
+])}
+<p>5 items for 2026-03 missed the lock window and need immediate admin approval to avoid a 1-month delay.</p>
+<p>Please log in to the Admin Panel to review and approve these items as soon as possible.</p>
+${emailButton("Go to Admin Panel", "https://admin.geahr.com")}
+<p>— GEA System</p>`
   }
 ];
 
 // ─── Auth Email Templates (6) ─────────────────────────────
 const authTemplates = [
+  {
+    name: "admin_forgot_password",
+    audience: "admin",
+    subject: "Reset Your GEA Admin Panel Password",
+    body: `<p>Dear Sarah Chen,</p>
+<p>We received a request to reset your password for the GEA Admin Panel. If you made this request, please click the button below to set a new password:</p>
+${emailButton("Reset Your Password", "https://admin.geahr.com/reset-password?token=test-admin-reset-token")}
+${emailBanner("This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email \u2014 your password will remain unchanged.", "info")}
+<p>For security reasons, this link can only be used once. If you need to reset your password again, please visit the login page and request a new link.</p>
+<p>If you have any concerns about your account security, please contact your system administrator immediately.</p>
+<p>Best regards,<br><strong>GEA Security Team</strong><br>Global Employment Advisors</p>`
+  },
+  {
+    name: "portal_password_changed_by_admin",
+    audience: "client",
+    subject: "Your GEA Client Portal Password Has Been Changed",
+    body: `${emailBanner("Your password has been changed by an administrator.", "warning")}
+<p>Dear Simon Ding,</p>
+<p>An administrator has reset your password for the GEA Client Portal. Your new password is:</p>
+${emailInfoCard([
+  { label: "Email", value: "simon.ding@bestgea.com" },
+  { label: "New Password", value: '<code style="font-size:16px;font-weight:bold;color:#005430;background:#f0fdf4;padding:2px 8px;border-radius:4px;">Tm4kR8wP2xBn</code>' },
+])}
+${emailBanner("We recommend changing your password after logging in for security.", "info")}
+${emailButton("Log In to Client Portal", "https://app.geahr.com")}
+<p>If you did not expect this change, please contact your administrator immediately.</p>
+<p>Best regards,<br><strong>GEA Security Team</strong><br>Global Employment Advisors</p>`
+  },
   {
     name: "admin_invite",
     audience: "admin",
@@ -302,7 +382,7 @@ ${emailInfoCard([
   { label: "Email", value: "sarah.chen@bestgea.com" },
   { label: "Temporary Password", value: '<code style="font-size:16px;font-weight:bold;color:#005430;background:#f0fdf4;padding:2px 8px;border-radius:4px;">Xk9mP2wQ7rBn</code>' },
 ])}
-${emailBanner("You will be required to change your password upon first login.", "info")}
+${emailBanner("We recommend changing your password after logging in for security.", "info")}
 ${emailButton("Log In to Admin Panel", "https://admin.geahr.com")}
 <p>If you did not request this password reset, please contact your system administrator immediately.</p>
 <p>Best regards,<br><strong>GEA System</strong><br>Global Employment Advisors</p>`
@@ -380,7 +460,7 @@ if (mode === "auth") {
 }
 
 (async () => {
-  console.log(`=== GEA Email Test (v3 — Complete Coverage) ===`);
+  console.log(`=== GEA Email Test (v4 — Complete Coverage) ===`);
   console.log(`Mode: ${mode} (${templates.length} templates)`);
   console.log("SMTP Host:", SMTP_HOST);
   console.log("SMTP User:", SMTP_USER);

@@ -111,7 +111,7 @@ ${emailInfoCard([
   { label: "Email", value: params.to },
   { label: "Temporary Password", value: `<code style="font-size:16px;font-weight:bold;color:#005430;background:#f0fdf4;padding:2px 8px;border-radius:4px;">${params.tempPassword}</code>` },
 ])}
-${emailBanner("You will be required to change your password upon first login.", "info")}
+${emailBanner("We strongly recommend changing your password after logging in for security.", "info")}
 ${emailButton("Log In to Admin Panel", params.loginUrl)}
 <p>If you did not request this password reset, please contact your system administrator immediately.</p>
 <p>Best regards,<br><strong>GEA System</strong><br>Global Employment Advisors</p>`;
@@ -262,6 +262,71 @@ ${emailBanner("This link will expire in 1 hour. If you did not request a passwor
   await sendEmail({
     to: params.to,
     subject: "Reset Your GEA Worker Portal Password",
+    html,
+  });
+}
+
+// ============================================================================
+// 7. Admin Forgot Password (Reset Link)
+// ============================================================================
+
+export async function sendAdminForgotPasswordEmail(params: {
+  to: string;
+  name: string;
+  resetUrl: string;
+}) {
+  const body = `
+<p>Dear ${params.name},</p>
+<p>We received a request to reset your password for the GEA Admin Panel. If you made this request, please click the button below to set a new password:</p>
+${emailButton("Reset Your Password", params.resetUrl)}
+${emailBanner("This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email — your password will remain unchanged.", "info")}
+<p>For security reasons, this link can only be used once. If you need to reset your password again, please visit the login page and request a new link.</p>
+<p>If you have any concerns about your account security, please contact your system administrator immediately.</p>
+<p>Best regards,<br><strong>GEA Security Team</strong><br>Global Employment Advisors</p>`;
+
+  const html = renderEmailLayout(body, {
+    audience: "admin",
+    preheader: "Reset your GEA Admin Panel password",
+  });
+
+  await sendEmail({
+    to: params.to,
+    subject: "Reset Your GEA Admin Panel Password",
+    html,
+  });
+}
+
+// ============================================================================
+// 8. Portal Password Changed by Admin (Notification)
+// ============================================================================
+
+export async function sendPortalPasswordChangedEmail(params: {
+  to: string;
+  contactName: string;
+  newPassword: string;
+  loginUrl: string;
+}) {
+  const body = `
+${emailBanner("Your Client Portal password has been reset by a GEA administrator.", "warning")}
+<p>Dear ${params.contactName},</p>
+<p>A GEA administrator has reset your password for the Client Portal. Please use the new credentials below to log in:</p>
+${emailInfoCard([
+  { label: "Email", value: params.to },
+  { label: "New Password", value: `<code style="font-size:16px;font-weight:bold;color:#005430;background:#f0fdf4;padding:2px 8px;border-radius:4px;">${params.newPassword}</code>` },
+])}
+${emailBanner("We strongly recommend changing your password after logging in for security.", "info")}
+${emailButton("Log In to Client Portal", params.loginUrl)}
+<p>If you did not expect this change, please contact your GEA account manager or email us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Security Team</strong><br>Global Employment Advisors</p>`;
+
+  const html = renderEmailLayout(body, {
+    audience: "client",
+    preheader: "Your GEA Client Portal password has been reset",
+  });
+
+  await sendEmail({
+    to: params.to,
+    subject: "Your GEA Client Portal Password Has Been Reset",
     html,
   });
 }
