@@ -530,7 +530,10 @@ export async function getActiveLeaveRecordsForDate(employeeId: number, date: Dat
       eq(leaveRecords.employeeId, employeeId),
       lte(leaveRecords.startDate, date),
       gte(leaveRecords.endDate, date),
-      eq(leaveRecords.status, 'approved')
+      or(
+        eq(leaveRecords.status, 'admin_approved'),
+        eq(leaveRecords.status, 'locked')
+      )
     ));
 }
 
@@ -547,7 +550,6 @@ export async function getAllActiveLeaveRecordsForDate(dateStr: string) {
       lte(leaveRecords.startDate, dateStr),
       gte(leaveRecords.endDate, dateStr),
       or(
-        eq(leaveRecords.status, 'approved'),
         eq(leaveRecords.status, 'admin_approved'),
         eq(leaveRecords.status, 'locked')
       )
@@ -578,7 +580,6 @@ export async function getOnLeaveEmployeesWithExpiredLeave(todayStr?: string) {
         lte(leaveRecords.startDate, dateStr),
         gte(leaveRecords.endDate, dateStr),
         or(
-          eq(leaveRecords.status, 'approved'),
           eq(leaveRecords.status, 'admin_approved'),
           eq(leaveRecords.status, 'locked')
         )

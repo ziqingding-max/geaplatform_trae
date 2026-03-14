@@ -453,6 +453,45 @@ export class WalletService {
       createdBy,
     });
   }
+
+  /**
+   * Release funds from frozen wallet directly to main wallet.
+   * This is an atomic operation: debit frozen wallet + credit main wallet in a single transaction.
+   */
+  async releaseFrozenToMain(customerId: number, currency: string, amount: string, reason: string, createdBy?: number) {
+    const db = getDb();
+    if (!db) throw new Error("Database not initialized");
+
+    return await db.transaction(async (tx: any) => {
+      // 1. Debit from frozen wallet
+      const frozenWallet = await this.getFrozenWallet(customerId, currency, tx);
+      await this._frozenTransactWithTx(tx, {
+        walletId: frozenWallet.id,
+        type: "deposit_release",
+        amount,
+        direction: "debit",
+        referenceId: 0,
+        referenceType: "manual",
+        description: `Released to operating account: ${reason}`,
+        createdBy,
+      });
+
+      // 2. Credit to main wallet
+      const mainWallet = await this.getWallet(customerId, currency, tx);
+      const result = await this._transactWithTx(tx, {
+        walletId: mainWallet.id,
+        type: "manual_adjustment",
+        amount,
+        direction: "credit",
+        referenceId: 0,
+        referenceType: "manual",
+        description: `Received from frozen deposit: ${reason}`,
+        createdBy,
+      });
+
+      return result;
+    });
+  }
 }
 
 export const walletService = new WalletService();

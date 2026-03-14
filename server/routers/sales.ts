@@ -422,7 +422,7 @@ export const salesRouter = router({
               }
             }
 
-            for (const item of pricingMap.values()) {
+            for (const item of Array.from(pricingMap.values())) {
               if (item.serviceType === "aor") {
                 // AOR Global Pricing — one price per customer, no country needed
                 await createCustomerPricing({
@@ -464,28 +464,30 @@ export const salesRouter = router({
       });
 
        // 5. Sync Sales Documents (e.g. MSA) to Customer Contracts/Documents
-      const salesDocs = await db.query.salesDocuments.findMany({
-          where: eq(salesDocuments.leadId, input.leadId)
-      });
-      
-      for (const doc of salesDocs) {
-          // If docType is 'contract', convert to customer contract
-          if (doc.docType === 'contract') {
-              // Use raw SQL to avoid Drizzle passing null for autoIncrement id
-              const contractName = doc.title || `MSA-${lead.companyName}`;
-              const now = Date.now();
-              await db.run(sql`INSERT INTO customer_contracts ("customerId", "contractName", "contractType", "fileUrl", "fileKey", "status", "createdAt", "updatedAt") VALUES (${customerId}, ${contractName}, ${'MSA'}, ${doc.fileUrl}, ${doc.fileKey}, ${'signed'}, ${now}, ${now})`);
-          }
-          // Also sync the document's customerId for future reference
-          await db.update(salesDocuments)
-            .set({ customerId })
-            .where(eq(salesDocuments.id, doc.id));
-      }
+      if (db) {
+        const salesDocs = await db.query.salesDocuments.findMany({
+            where: eq(salesDocuments.leadId, input.leadId)
+        });
+        
+        for (const doc of salesDocs) {
+            // If docType is 'contract', convert to customer contract
+            if (doc.docType === 'contract') {
+                // Use raw SQL to avoid Drizzle passing null for autoIncrement id
+                const contractName = doc.title || `MSA-${lead.companyName}`;
+                const now = Date.now();
+                await db.run(sql`INSERT INTO customer_contracts ("customerId", "contractName", "contractType", "fileUrl", "fileKey", "status", "createdAt", "updatedAt") VALUES (${customerId}, ${contractName}, ${'MSA'}, ${doc.fileUrl}, ${doc.fileKey}, ${'signed'}, ${now}, ${now})`);
+            }
+            // Also sync the document's customerId for future reference
+            await db.update(salesDocuments)
+              .set({ customerId })
+              .where(eq(salesDocuments.id, doc.id));
+        }
 
-      // 5b. Sync Quotations — link to the new customer
-      await db.update(quotations)
-        .set({ customerId })
-        .where(eq(quotations.leadId, input.leadId));
+        // 5b. Sync Quotations — link to the new customer
+        await db.update(quotations)
+          .set({ customerId })
+          .where(eq(quotations.leadId, input.leadId));
+      }
 
       // 6. Log the conversion activity
       await createSalesActivity({
