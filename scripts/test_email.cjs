@@ -2,17 +2,14 @@
  * GEA Email Notification Test Script — Brand Upgrade v2
  *
  * Usage:
- *   docker cp scripts/test_email.js gea-saas-app:/tmp/test_email.js
- *   docker cp server/assets/gea-logo-email.png gea-saas-app:/tmp/gea-logo-email.png
- *   docker exec gea-saas-app node /tmp/test_email.js
+ *   node scripts/test_email.cjs
  *
  * Sends all 10 branded email notification templates to the admin email.
  * Each subject is prefixed with [TEST].
+ * Logo is loaded via external URL (ADMIN_APP_URL env var).
  */
 
 const nodemailer = require("nodemailer");
-const fs = require("fs");
-const path = require("path");
 
 // ─── SMTP Config ────────────────────────────────────────
 const SMTP_HOST = process.env.EMAIL_SMTP_HOST || "smtpdm.aliyun.com";
@@ -39,23 +36,9 @@ const BG_BODY = "#f4f5f7";
 const BG_CARD = "#ffffff";
 const BORDER_LIGHT = "#e5e7eb";
 
-// ─── Logo (base64 embedded) ────────────────────────────
-let logoBase64 = "";
-const logoPaths = [
-  path.join(__dirname, "../server/assets/gea-logo-email.png"),
-  "/tmp/gea-logo-email.png",
-  path.join(process.cwd(), "server/assets/gea-logo-email.png"),
-];
-for (const p of logoPaths) {
-  try {
-    logoBase64 = fs.readFileSync(p).toString("base64");
-    console.log("Logo loaded from:", p);
-    break;
-  } catch (_) {}
-}
-const logoImg = logoBase64
-  ? `<img src="data:image/png;base64,${logoBase64}" alt="GEA" width="220" style="display:block;margin:0 auto;max-width:220px;height:auto;" />`
-  : `<span style="color:#fff;font-size:20px;font-weight:bold;">GEA — Global Employment Advisors</span>`;
+// ─── Logo (external URL) ───────────────────────────────
+const ADMIN_APP_URL = (process.env.ADMIN_APP_URL || "https://app.geahr.com").replace(/\/+$/, "");
+const logoImg = `<img src="${ADMIN_APP_URL}/brand/gea-logo-email.png" alt="GEA - Global Employment Advisors" width="220" style="display:block;margin:0 auto;max-width:220px;height:auto;" />`;
 
 // ─── Reusable HTML Builders ─────────────────────────────
 function emailButton(text, href, color) {

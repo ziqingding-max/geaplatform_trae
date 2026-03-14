@@ -9,9 +9,6 @@
  * - Inline CSS only (no external stylesheets)
  */
 
-import * as fs from "fs";
-import * as path from "path";
-
 // Brand colors
 const BRAND_GREEN = "#005430";
 const BRAND_GREEN_LIGHT = "#006a3e";
@@ -23,19 +20,18 @@ const BG_BODY = "#f4f5f7";
 const BG_CARD = "#ffffff";
 const BORDER_LIGHT = "#e5e7eb";
 
-// Cache the base64 logo so we only read the file once
-let _logoBase64Cache: string | null = null;
-
-function getLogoBase64(): string {
-  if (_logoBase64Cache) return _logoBase64Cache;
-  try {
-    const logoPath = path.join(process.cwd(), "server/assets/gea-logo-email.png");
-    const buf = fs.readFileSync(logoPath);
-    _logoBase64Cache = buf.toString("base64");
-  } catch {
-    _logoBase64Cache = "";
+/**
+ * Build the logo <img> tag using an externally hosted URL.
+ * The logo PNG is served from the app's static files at /brand/gea-logo-email.png.
+ * The base URL comes from ADMIN_APP_URL in .env (e.g. https://app.geahr.com).
+ * This avoids base64 embedding which triggers anti-spam filters on Aliyun DirectMail.
+ */
+function getLogoImg(): string {
+  const appUrl = (process.env.ADMIN_APP_URL || "").replace(/\/+$/, "");
+  if (appUrl) {
+    return `<img src="${appUrl}/brand/gea-logo-email.png" alt="GEA - Global Employment Advisors" width="220" style="display:block;margin:0 auto;max-width:220px;height:auto;" />`;
   }
-  return _logoBase64Cache;
+  return `<span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:1px;">GEA — Global Employment Advisors</span>`;
 }
 
 /**
@@ -56,10 +52,7 @@ export function renderEmailLayout(
     preheader?: string; // Hidden preview text for email clients
   }
 ): string {
-  const logoB64 = getLogoBase64();
-  const logoImg = logoB64
-    ? `<img src="data:image/png;base64,${logoB64}" alt="GEA - Global Employment Advisors" width="220" style="display:block;margin:0 auto;max-width:220px;height:auto;" />`
-    : `<span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:1px;">GEA — Global Employment Advisors</span>`;
+  const logoImg = getLogoImg();
 
   const preheaderHtml = options.preheader
     ? `<div style="display:none;font-size:1px;color:#f4f5f7;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${options.preheader}</div>`

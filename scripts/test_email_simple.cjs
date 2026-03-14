@@ -22,7 +22,7 @@ const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
 <table width="100%" style="background-color:#f4f5f7;"><tr><td align="center" style="padding:24px;">
 <table width="600" style="max-width:600px;background:#fff;border-radius:8px;overflow:hidden;">
 <tr><td style="background-color:#005430;padding:28px 32px;text-align:center;">
-<span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:1px;">GEA — Global Employment Advisors</span>
+<img src="https://app.geahr.com/brand/gea-logo-email.png" alt="GEA - Global Employment Advisors" width="220" style="display:block;margin:0 auto;max-width:220px;height:auto;" />
 </td></tr>
 <tr><td style="background-color:#D4A843;height:3px;font-size:0;">&nbsp;</td></tr>
 <tr><td style="padding:32px;font-size:15px;line-height:1.65;color:#1a1a1a;">
