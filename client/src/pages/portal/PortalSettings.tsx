@@ -258,41 +258,52 @@ function LeavePoliciesTab() {
   const canEdit = user && ["admin", "hr_manager"].includes(user.portalRole);
   const { data: policies, isLoading, refetch } = portalTrpc.settings.leavePolicies.useQuery();
   const { data: countries } = portalTrpc.settings.activeCountries.useQuery();
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValues, setEditValues] = useState<{
+  const [editingCountry, setEditingCountry] = useState<string | null>(null);
+  const [editForms, setEditForms] = useState<Record<number, {
     annualEntitlement: number;
     expiryRule: string;
     carryOverDays: number;
-  }>({ annualEntitlement: 0, expiryRule: "year_end", carryOverDays: 0 });
+  }>>({});
+  const [savingCountry, setSavingCountry] = useState(false);
 
-  const updateMutation = portalTrpc.settings.updateLeavePolicy.useMutation({
-    onSuccess: () => {
-      toast.success("Leave policy updated");
-      setEditingId(null);
-      refetch();
-    },
-    onError: (err: { message?: string }) => {
-      toast.error(err.message || "Failed to update policy");
-    },
-  });
+  const updateMutation = portalTrpc.settings.updateLeavePolicy.useMutation();
 
-  const startEdit = (policy: any) => {
-    setEditingId(policy.id);
-    setEditValues({
-      annualEntitlement: policy.annualEntitlement,
-      expiryRule: policy.expiryRule,
-      carryOverDays: policy.carryOverDays,
+  // Start editing all policies for a country
+  const startEditCountry = (countryCode: string, countryPolicies: any[]) => {
+    const forms: Record<number, { annualEntitlement: number; expiryRule: string; carryOverDays: number }> = {};
+    countryPolicies.forEach((p: any) => {
+      forms[p.id] = {
+        annualEntitlement: p.annualEntitlement,
+        expiryRule: p.expiryRule,
+        carryOverDays: p.carryOverDays,
+      };
     });
+    setEditForms(forms);
+    setEditingCountry(countryCode);
   };
 
-  const saveEdit = () => {
-    if (editingId === null) return;
-    updateMutation.mutate({
-      id: editingId,
-      annualEntitlement: editValues.annualEntitlement,
-      expiryRule: editValues.expiryRule as any,
-      carryOverDays: editValues.carryOverDays,
-    });
+  // Save all policies for the editing country
+  const saveCountryPolicies = async () => {
+    setSavingCountry(true);
+    try {
+      const promises = Object.entries(editForms).map(([idStr, data]) =>
+        updateMutation.mutateAsync({
+          id: parseInt(idStr),
+          annualEntitlement: data.annualEntitlement,
+          expiryRule: data.expiryRule as any,
+          carryOverDays: data.carryOverDays,
+        })
+      );
+      await Promise.all(promises);
+      toast.success(t("portal_settings.leave_policies.country_updated") || "Leave policies updated");
+      setEditingCountry(null);
+      setEditForms({});
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update policies");
+    } finally {
+      setSavingCountry(false);
+    }
   };
 
   // Group policies by country
@@ -317,8 +328,8 @@ function LeavePoliciesTab() {
         <CardContent className="py-12">
           <div className="flex flex-col items-center justify-center text-muted-foreground">
             <CalendarDays className="w-10 h-10 mb-3" />
-            <p className="text-sm font-medium">No leave policies configured</p>
-            <p className="text-xs mt-1">Leave policies will be set up when you onboard employees in a new country.</p>
+            <p className="text-sm font-medium">{t("portal_settings.leave_policies.no_policies")}</p>
+            <p className="text-xs mt-1">{t("portal_settings.leave_policies.no_policies_hint")}</p>
           </div>
         </CardContent>
       </Card>
@@ -329,18 +340,40 @@ function LeavePoliciesTab() {
     <div className="space-y-6">
       <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 text-blue-800 text-sm">
         <Info className="w-4 h-4 shrink-0" />
-        <span>Leave policies define the annual entitlement for each leave type per country. Entitlements must meet or exceed the statutory minimum.</span>
+        <span>{t("portal_settings.leave_policies.info_banner")}</span>
       </div>
 
       {Object.entries(groupedPolicies).map(([countryCode, countryPolicies]) => {
         const countryName = (countryPolicies as any[])[0]?.countryName || countryCode;
+        const isEditing = editingCountry === countryCode;
         return (
           <Card key={countryCode}>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Badge variant="outline" className="font-mono">{countryCode}</Badge>
-                {countryName}
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Badge variant="outline" className="font-mono">{countryCode}</Badge>
+                  {countryName}
+                </CardTitle>
+                {canEdit && (
+                  <div className="flex items-center gap-2">
+                    {isEditing ? (
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="default" className="h-7 text-xs" disabled={savingCountry} onClick={saveCountryPolicies}>
+                          {savingCountry ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                          {t("common.save") || "Save"}
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setEditingCountry(null); setEditForms({}); }}>
+                          {t("common.cancel") || "Cancel"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button size="sm" variant="ghost" className="h-7" onClick={() => startEditCountry(countryCode, countryPolicies as any[])}>
+                        <Pencil className="w-3.5 h-3.5 mr-1" /> {t("common.edit") || "Edit"}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -350,77 +383,60 @@ function LeavePoliciesTab() {
                     <TableHead className="text-center">{t("portal_settings.leave_policies.table_header.statutory_min") || "Statutory Min."}</TableHead>
                     <TableHead className="text-center">{t("portal_settings.leave_policies.table_header.entitlement") || "Your Entitlement"}</TableHead>
                     <TableHead className="text-center">{t("portal_settings.leave_policies.table_header.carry_over") || "Carry Over"}</TableHead>
-                    <TableHead>{t("portal_settings.leave_policies.table_header.expiry_rule")}</TableHead>
-                    {canEdit && <TableHead className="text-right">{t("portal_settings.leave_policies.table_header.actions")}</TableHead>}
+                    <TableHead>{t("portal_settings.leave_policies.table_header.expiry_rule") || "Expiry Rule"}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {(countryPolicies as any[]).map((policy: any) => {
-                    const isEditing = editingId === policy.id;
+                    const form = editForms[policy.id];
                     return (
                       <TableRow key={policy.id}>
                         <TableCell className="font-medium">{policy.leaveTypeName}</TableCell>
                         <TableCell className="text-center">
-                          <Badge variant="secondary">{policy.statutoryMinimum ?? "—"} days</Badge>
+                          <Badge variant="secondary">{policy.statutoryMinimum ?? "—"} {t("common.days") || "days"}</Badge>
                         </TableCell>
                         <TableCell className="text-center">
-                          {isEditing ? (
+                          {isEditing && form ? (
                             <Input
                               type="number"
                               min={policy.statutoryMinimum || 0}
                               className="w-20 mx-auto text-center"
-                              value={editValues.annualEntitlement}
-                              onChange={(e) => setEditValues({ ...editValues, annualEntitlement: parseInt(e.target.value) || 0 })}
+                              value={form.annualEntitlement}
+                              onChange={(e) => setEditForms({ ...editForms, [policy.id]: { ...form, annualEntitlement: parseInt(e.target.value) || 0 } })}
                             />
                           ) : (
-                            <span className="font-medium">{policy.annualEntitlement} days</span>
+                            <span className="font-medium">{policy.annualEntitlement} {t("common.days") || "days"}</span>
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          {isEditing ? (
+                          {isEditing && form ? (
                             <Input
                               type="number"
                               min={0}
                               className="w-20 mx-auto text-center"
-                              value={editValues.carryOverDays}
-                              onChange={(e) => setEditValues({ ...editValues, carryOverDays: parseInt(e.target.value) || 0 })}
+                              value={form.carryOverDays}
+                              onChange={(e) => setEditForms({ ...editForms, [policy.id]: { ...form, carryOverDays: parseInt(e.target.value) || 0 } })}
                             />
                           ) : (
-                            <span>{policy.carryOverDays} days</span>
+                            <span>{policy.carryOverDays} {t("common.days") || "days"}</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          {isEditing ? (
-                            <Select value={editValues.expiryRule} onValueChange={(v) => setEditValues({ ...editValues, expiryRule: v })}>
+                          {isEditing && form ? (
+                            <Select value={form.expiryRule} onValueChange={(v) => setEditForms({ ...editForms, [policy.id]: { ...form, expiryRule: v } })}>
                               <SelectTrigger className="w-[140px]">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="year_end">Year End</SelectItem>
-                                <SelectItem value="anniversary">Anniversary</SelectItem>
-                                <SelectItem value="no_expiry">No Expiry</SelectItem>
+                                <SelectItem value="year_end">{t("leave.expiryRule.yearEnd") || "Year End"}</SelectItem>
+                                <SelectItem value="anniversary">{t("leave.expiryRule.anniversary") || "Anniversary"}</SelectItem>
+                                <SelectItem value="no_expiry">{t("leave.expiryRule.noExpiry") || "No Expiry"}</SelectItem>
                               </SelectContent>
                             </Select>
                           ) : (
                             <span className="capitalize">{policy.expiryRule?.replace(/_/g, " ")}</span>
                           )}
                         </TableCell>
-                        {canEdit && (
-                          <TableCell className="text-right">
-                            {isEditing ? (
-                              <div className="flex gap-1 justify-end">
-                                <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
-                                <Button size="sm" onClick={saveEdit} disabled={updateMutation.isPending}>
-                                  {updateMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Save"}
-                                </Button>
-                              </div>
-                            ) : (
-                              <Button size="sm" variant="ghost" onClick={() => startEdit(policy)}>
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                            )}
-                          </TableCell>
-                        )}
                       </TableRow>
                     );
                   })}

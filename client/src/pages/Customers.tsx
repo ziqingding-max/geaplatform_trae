@@ -32,7 +32,7 @@ import {
 import {
   Building2, Plus, Search, ArrowLeft, Mail, Phone, Users, DollarSign,
   ChevronRight, Trash2, UserPlus, FileText, Upload, ExternalLink, X, Pencil,
-  Send, ShieldCheck, ShieldX, Copy, Check, KeyRound, Wallet, ArrowUpRight, ArrowDownLeft, LogIn, Shield, MoreHorizontal
+  Send, ShieldCheck, ShieldX, Copy, Check, KeyRound, Wallet, ArrowUpRight, ArrowDownLeft, LogIn, Shield, MoreHorizontal, Loader2
 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { toast } from "sonner";
@@ -1751,8 +1751,9 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
 }) {
   const { t } = useI18n();
   const [initCountry, setInitCountry] = useState("");
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState<{ annualEntitlement: number; expiryRule: "year_end" | "anniversary" | "no_expiry"; carryOverDays: number }>({ annualEntitlement: 0, expiryRule: "year_end", carryOverDays: 0 });
+  const [editingCountry, setEditingCountry] = useState<string | null>(null);
+  const [editForms, setEditForms] = useState<Record<number, { annualEntitlement: number; expiryRule: "year_end" | "anniversary" | "no_expiry"; carryOverDays: number }>>({});
+  const [savingCountry, setSavingCountry] = useState(false);
 
   const { data: countriesData } = trpc.countries.list.useQuery();
   const initMutation = trpc.customerLeavePolicies.initializeFromStatutory.useMutation({
@@ -1763,21 +1764,47 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
     },
     onError: (err) => toast.error(err.message),
   });
-  const updateMutation = trpc.customerLeavePolicies.update.useMutation({
-    onSuccess: () => {
-      toast.success("Leave policy updated");
-      refetch();
-      setEditingId(null);
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  const updateMutation = trpc.customerLeavePolicies.update.useMutation();
   const deleteMutation = trpc.customerLeavePolicies.delete.useMutation({
     onSuccess: () => {
-      toast.success("Leave policy deleted");
+      toast.success(t("leave.policy.deleted") || "Leave policy deleted");
       refetch();
     },
     onError: (err) => toast.error(err.message),
   });
+
+  // Start editing all policies for a country
+  const startEditCountry = (countryCode: string, policies: any[]) => {
+    const forms: Record<number, { annualEntitlement: number; expiryRule: "year_end" | "anniversary" | "no_expiry"; carryOverDays: number }> = {};
+    policies.forEach((p) => {
+      forms[p.id] = {
+        annualEntitlement: p.annualEntitlement,
+        expiryRule: p.expiryRule,
+        carryOverDays: p.carryOverDays,
+      };
+    });
+    setEditForms(forms);
+    setEditingCountry(countryCode);
+  };
+
+  // Save all policies for the editing country
+  const saveCountryPolicies = async () => {
+    setSavingCountry(true);
+    try {
+      const promises = Object.entries(editForms).map(([idStr, data]) =>
+        updateMutation.mutateAsync({ id: parseInt(idStr), data })
+      );
+      await Promise.all(promises);
+      toast.success(t("leave.policy.countryUpdated") || "Leave policies updated");
+      setEditingCountry(null);
+      setEditForms({});
+      refetch();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update policies");
+    } finally {
+      setSavingCountry(false);
+    }
+  };
 
   // Group policies by country
   const policiesByCountry = leavePolicies.reduce((acc: Record<string, any[]>, p) => {
@@ -1831,111 +1858,111 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
       </Card>
 
       {/* Policies by country */}
-      {Object.entries(policiesByCountry).map(([countryCode, policies]) => (
-        <Card key={countryCode}>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">{t("customers.leave.countryPolicies", { country: countryCode })}</CardTitle>
-              <Badge variant="outline">{t("customers.leave.typesCount", { count: policies.length })}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t("leave.table.header.leaveType")}</TableHead>
-                  <TableHead>{t("leave.table.header.annualEntitlement")}</TableHead>
-                  <TableHead>{t("leave.table.header.expiryRule")}</TableHead>
-                  <TableHead>{t("leave.table.header.carryOverDays")}</TableHead>
-                  <TableHead className="w-24">{t("common.actions")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {policies.map((policy: any) => (
-                  <TableRow key={policy.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{policy.leaveTypeName}</span>
-                        {policy.isPaid === false && <Badge variant="outline" className="text-xs">{t("leave.badge.unpaid")}</Badge>}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {editingId === policy.id ? (
-                        <Input
-                          type="number"
-                          min={0}
-                          className="w-20 h-8"
-                          value={editForm.annualEntitlement}
-                          onChange={(e) => setEditForm({ ...editForm, annualEntitlement: parseInt(e.target.value) || 0 })}
-                        />
-                      ) : (
-                        <span className="text-sm">{policy.annualEntitlement} {t("common.days")}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {editingId === policy.id ? (
-                        <Select value={editForm.expiryRule} onValueChange={(v) => setEditForm({ ...editForm, expiryRule: v as "year_end" | "anniversary" | "no_expiry" })}>
-                          <SelectTrigger className="h-8 w-48"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="year_end">{t("leave.expiryRule.yearEnd")}</SelectItem>
-                            <SelectItem value="anniversary">{t("leave.expiryRule.anniversary")}</SelectItem>
-                            <SelectItem value="no_expiry">{t("leave.expiryRule.noExpiry")}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-sm">{expiryRuleLabels[policy.expiryRule] || policy.expiryRule}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {editingId === policy.id ? (
-                        <Input
-                          type="number"
-                          min={0}
-                          className="w-20 h-8"
-                          value={editForm.carryOverDays}
-                          onChange={(e) => setEditForm({ ...editForm, carryOverDays: parseInt(e.target.value) || 0 })}
-                        />
-                      ) : (
-                        <span className="text-sm">{policy.carryOverDays > 0 ? `${policy.carryOverDays} ${t("common.days")}` : t("common.none")}</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {editingId === policy.id ? (
-                        <div className="flex gap-1">
-                          <Button size="sm" variant="default" className="h-7 text-xs" onClick={() => updateMutation.mutate({ id: policy.id, data: editForm })}>
-                            {t("common.save")}
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingId(null)}>
-                            {t("common.cancel")}
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex gap-1">
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => {
-                            setEditingId(policy.id);
-                            setEditForm({
-                              annualEntitlement: policy.annualEntitlement,
-                              expiryRule: policy.expiryRule,
-                              carryOverDays: policy.carryOverDays,
-                            });
-                          }}>
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
+      {Object.entries(policiesByCountry).map(([countryCode, policies]) => {
+        const isEditing = editingCountry === countryCode;
+        return (
+          <Card key={countryCode}>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">{t("customers.leave.countryPolicies", { country: countryCode })}</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{t("customers.leave.typesCount", { count: policies.length })}</Badge>
+                  {isEditing ? (
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="default" className="h-7 text-xs" disabled={savingCountry} onClick={saveCountryPolicies}>
+                        {savingCountry ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                        {t("common.save")}
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setEditingCountry(null); setEditForms({}); }}>
+                        {t("common.cancel")}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="ghost" className="h-7" onClick={() => startEditCountry(countryCode, policies)}>
+                      <Pencil className="w-3.5 h-3.5 mr-1" /> {t("common.edit") || "Edit"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("leave.table.header.leaveType")}</TableHead>
+                    <TableHead>{t("leave.table.header.annualEntitlement")}</TableHead>
+                    <TableHead>{t("leave.table.header.expiryRule")}</TableHead>
+                    <TableHead>{t("leave.table.header.carryOverDays")}</TableHead>
+                    <TableHead className="w-16">{t("common.actions")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {policies.map((policy: any) => {
+                    const form = editForms[policy.id];
+                    return (
+                      <TableRow key={policy.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm">{policy.leaveTypeName}</span>
+                            {policy.isPaid === false && <Badge variant="outline" className="text-xs">{t("leave.badge.unpaid")}</Badge>}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {isEditing && form ? (
+                            <Input
+                              type="number"
+                              min={0}
+                              className="w-20 h-8"
+                              value={form.annualEntitlement}
+                              onChange={(e) => setEditForms({ ...editForms, [policy.id]: { ...form, annualEntitlement: parseInt(e.target.value) || 0 } })}
+                            />
+                          ) : (
+                            <span className="text-sm">{policy.annualEntitlement} {t("common.days")}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isEditing && form ? (
+                            <Select value={form.expiryRule} onValueChange={(v) => setEditForms({ ...editForms, [policy.id]: { ...form, expiryRule: v as "year_end" | "anniversary" | "no_expiry" } })}>
+                              <SelectTrigger className="h-8 w-48"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="year_end">{t("leave.expiryRule.yearEnd")}</SelectItem>
+                                <SelectItem value="anniversary">{t("leave.expiryRule.anniversary")}</SelectItem>
+                                <SelectItem value="no_expiry">{t("leave.expiryRule.noExpiry")}</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <span className="text-sm">{expiryRuleLabels[policy.expiryRule] || policy.expiryRule}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isEditing && form ? (
+                            <Input
+                              type="number"
+                              min={0}
+                              className="w-20 h-8"
+                              value={form.carryOverDays}
+                              onChange={(e) => setEditForms({ ...editForms, [policy.id]: { ...form, carryOverDays: parseInt(e.target.value) || 0 } })}
+                            />
+                          ) : (
+                            <span className="text-sm">{policy.carryOverDays > 0 ? `${policy.carryOverDays} ${t("common.days")}` : t("common.none")}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
                           <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => {
-                            if (confirm("Delete this leave policy?")) deleteMutation.mutate({ id: policy.id });
+                            if (confirm(t("leave.policy.deleteConfirm") || "Delete this leave policy?")) deleteMutation.mutate({ id: policy.id });
                           }}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
-                        </div>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        );
+      })}
 
       {leavePolicies.length === 0 && (
         <Card>
