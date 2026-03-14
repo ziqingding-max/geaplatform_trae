@@ -42,6 +42,7 @@ import {
   getSubmittedUnpaidLeaveForPayroll,
   getSubmittedReimbursementsForPayroll,
   updatePayrollRun,
+  getEmployeeById,
   getAllActiveLeaveRecordsForDate,
   getOnLeaveEmployeesWithExpiredLeave,
   initializeLeaveBalancesForEmployee,
@@ -52,10 +53,11 @@ import {
   createAdjustment,
 } from "./db";
 import { notificationService } from "./services/notificationService";
+import { generateDepositRefund } from "./services/depositRefundService";
 import { ContractorInvoiceGenerationService } from "./services/contractorInvoiceGenerationService";
 import { autoInitializeLeavePolicyForCountry } from "./services/leaveAutoInitService";
 import { countriesConfig } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 // ============================================================================
 // UTILITY: Working days calculation for pro-rata
@@ -312,7 +314,7 @@ export async function runEmployeeAutoActivation(): Promise<{ activated: number; 
             amount: String(proRataAmount),
             currency: emp.salaryCurrency ?? "USD",
             effectiveMonth,
-            status: "submitted",
+            status: "admin_approved",  // System-generated: skip manual approval chain to ensure auto-lock picks it up
             description: `Sign-on bonus - pro-rata compensation for ${workedDays}/${totalWorkingDays} working days in ${currentYear}-${String(currentMonth).padStart(2, "0")} (started ${emp.startDate})`,
           });
 
@@ -391,6 +393,54 @@ export async function runAutoLock(): Promise<{ adjustmentsLocked: number; leaveL
     entityId: 0,
     changes: { detail: `Auto-locked for ${prevMonthStr}: EOR(${adjLocked} adj, ${leaveLocked} leave, ${reimbLocked} reimb) + AOR(${ctrAdjLocked} ctr_adj, ${ctrMilLocked} ctr_mil)` },
   });
+
+  // ── ADMIN ALERT: Check for items still pending approval that missed the lock window ──
+  // These are items in 'submitted' or 'client_approved' status for the previous month.
+  // They weren't locked because admin hadn't approved them yet, so they'll be delayed by a full month.
+  try {
+    const { getDb: getDbConn } = await import("./db");
+    const alertDb = await getDbConn();
+    if (alertDb) {
+      const { adjustments, reimbursements, leaveRecords } = await import("../drizzle/schema");
+      const { inArray: inArr } = await import("drizzle-orm");
+      const pendingStatuses = ["submitted", "client_approved"];
+
+      const pendingAdjCount = await alertDb.select({ id: adjustments.id })
+        .from(adjustments)
+        .where(and(eq(adjustments.effectiveMonth, prevMonthDate), inArr(adjustments.status, pendingStatuses as any[])));
+      const pendingReimbCount = await alertDb.select({ id: reimbursements.id })
+        .from(reimbursements)
+        .where(and(eq(reimbursements.effectiveMonth, prevMonthDate), inArr(reimbursements.status, pendingStatuses as any[])));
+      const pendingLeaveCount = await alertDb.select({ id: leaveRecords.id })
+        .from(leaveRecords)
+        .where(and(
+          inArr(leaveRecords.status, pendingStatuses as any[]),
+          // Leave records for the previous month: startDate within the month
+          sql`${leaveRecords.startDate} >= ${prevMonthDate}`,
+          sql`${leaveRecords.startDate} < ${`${currentYear}-${String(currentMonth).padStart(2, "0")}-01`}`,
+        ));
+
+      const totalPending = pendingAdjCount.length + pendingReimbCount.length + pendingLeaveCount.length;
+
+      if (totalPending > 0) {
+        console.warn(`[CronJob] \u26a0\ufe0f WARNING: ${totalPending} items for ${prevMonthStr} are still pending admin approval and were NOT locked. They will be delayed to next month's payroll.`);
+        notificationService.send({
+          type: "admin_pending_approval_alert",
+          data: {
+            period: prevMonthStr,
+            pendingAdjustments: pendingAdjCount.length,
+            pendingReimbursements: pendingReimbCount.length,
+            pendingLeave: pendingLeaveCount.length,
+            totalPending,
+            message: `${totalPending} items for ${prevMonthStr} missed the lock window and need immediate admin approval to avoid a 1-month delay.`,
+          },
+        }).catch(err => console.error("Failed to send admin pending approval alert:", err));
+      }
+    }
+  } catch (alertErr) {
+    console.error("[CronJob] Failed to check pending approvals:", alertErr);
+    // Non-fatal: don't block the lock process
+  }
 
   return { adjustmentsLocked: adjLocked, leaveLocked, reimbursementsLocked: reimbLocked, contractorAdjustmentsLocked: ctrAdjLocked, contractorMilestonesLocked: ctrMilLocked };
 }
@@ -485,8 +535,8 @@ export async function runAutoCreatePayrollRuns(): Promise<{ created: number; emp
       }
     }).catch(err => console.error("Failed to send payroll notification:", err));
 
-    // Get eligible employees for current month
-    const eligibleEmployees = await getEmployeesForPayrollMonth(countryCode, targetMonthStr, targetMonthEndStr);
+    // Get eligible employees for current month (active + offboarding + on_leave)
+    const statusBasedEmployees = await getEmployeesForPayrollMonth(countryCode, targetMonthStr, targetMonthEndStr);
 
     // Get locked adjustments and unpaid leave for the CURRENT month (which was just locked)
     // Note: auto-fill for next month's payroll uses current month's locked data
@@ -494,6 +544,34 @@ export async function runAutoCreatePayrollRuns(): Promise<{ created: number; emp
     const lockedAdjustments = await getSubmittedAdjustmentsForPayroll(countryCode, prevMonthPayroll, ["locked"]);
     const lockedReimbursements = await getSubmittedReimbursementsForPayroll(countryCode, prevMonthPayroll, ["locked"]);
     const lockedUnpaidLeave = await getSubmittedUnpaidLeaveForPayroll(countryCode, `${prevYear}-${String(prevMonth).padStart(2, "0")}`, ["locked"]);
+
+    // ── DATA-DRIVEN RESCUE: Find orphaned employees with locked data ──
+    // Employees who have been terminated but still have locked adjustments/leave/reimbursements
+    // that haven't been consumed by any payroll run. These employees MUST receive a payroll item.
+    const statusBasedIds = new Set(statusBasedEmployees.map(e => e.id));
+    const orphanedEmployeeIds = new Set<number>();
+
+    for (const adj of lockedAdjustments) {
+      if (!statusBasedIds.has(adj.employeeId)) orphanedEmployeeIds.add(adj.employeeId);
+    }
+    for (const reimb of lockedReimbursements) {
+      if (!statusBasedIds.has(reimb.employeeId)) orphanedEmployeeIds.add(reimb.employeeId);
+    }
+    for (const leave of lockedUnpaidLeave) {
+      if (!statusBasedIds.has(leave.employeeId)) orphanedEmployeeIds.add(leave.employeeId);
+    }
+
+    // Fetch full employee records for orphaned employees and merge
+    const orphanedEmployees = [];
+    for (const empId of orphanedEmployeeIds) {
+      const emp = await getEmployeeById(empId);
+      if (emp && emp.country === countryCode) {
+        orphanedEmployees.push(emp);
+        console.log(`[CronJob] RESCUE: Including terminated employee ${emp.employeeCode} (${emp.firstName} ${emp.lastName}) - has orphaned locked data`);
+      }
+    }
+
+    const eligibleEmployees = [...statusBasedEmployees, ...orphanedEmployees];
 
     // Build adjustment aggregation maps
     const adjByEmployee = new Map<number, { bonus: number; allowances: number; reimbursements: number; otherDeductions: number }>();
@@ -670,7 +748,7 @@ export async function runLeaveStatusTransition(): Promise<{ toOnLeave: number; t
   let toOnLeave = 0;
   let toActive = 0;
 
-  // 1. Find active employees who have leave records starting today or earlier
+  // 1. Find active/offboarding employees who have leave records starting today or earlier
   const activeLeaves = await getAllActiveLeaveRecordsForDate(todayStr);
   
   // Group by employee to avoid duplicate transitions
@@ -679,7 +757,7 @@ export async function runLeaveStatusTransition(): Promise<{ toOnLeave: number; t
     employeesWithActiveLeave.add(leave.employeeId);
   }
 
-  // For each employee with active leave, check if they're currently 'active' and transition to 'on_leave'
+  // For each employee with active leave, check if they're currently 'active' or 'offboarding' and transition to 'on_leave'
   const { getDb } = await import("./db");
   const db = await getDb();
   if (!db) {
@@ -695,6 +773,9 @@ export async function runLeaveStatusTransition(): Promise<{ toOnLeave: number; t
       .where(eq(employees.id, empId))
       .limit(1);
     
+    // Transition active → on_leave (standard case)
+    // Note: We do NOT transition offboarding → on_leave to avoid losing the offboarding flag.
+    // Offboarding employees on leave are still tracked by payroll via the on_leave inclusion fix.
     if (emp && emp.status === "active") {
       await updateEmployee(empId, { status: "on_leave" });
       toOnLeave++;
@@ -705,24 +786,28 @@ export async function runLeaveStatusTransition(): Promise<{ toOnLeave: number; t
         entityType: "employee",
         entityId: empId,
         changes: { detail: `Auto-transitioned active → on_leave (leave record covers ${todayStr})` },
-  
       });
     }
   }
 
   // 2. Find on_leave employees whose leave records have all ended
+  // IMPORTANT: Check if the employee has an endDate — if so, they were offboarding before going on leave.
+  // Restore to 'offboarding' instead of 'active' to preserve the termination lifecycle.
   const expiredLeaveEmps = await getOnLeaveEmployeesWithExpiredLeave(todayStr);
   for (const emp of expiredLeaveEmps) {
-    await updateEmployee(emp.id, { status: "active" });
+    const fullEmp = await getEmployeeById(emp.id);
+    const hasEndDate = fullEmp && fullEmp.endDate;
+    const restoreStatus = hasEndDate ? "offboarding" : "active";
+
+    await updateEmployee(emp.id, { status: restoreStatus });
     toActive++;
-    console.log(`[CronJob] Employee ${emp.employeeCode || emp.id} returned to active (leave ended)`);
+    console.log(`[CronJob] Employee ${emp.employeeCode || emp.id} returned to ${restoreStatus} (leave ended${hasEndDate ? ', has endDate → offboarding' : ''})`);
     await logAuditAction({
       userName: "System",
       action: "employee_auto_return_from_leave",
       entityType: "employee",
       entityId: emp.id,
-      changes: { detail: `Auto-transitioned on_leave → active (all leave records ended before ${todayStr})` },
-
+      changes: { detail: `Auto-transitioned on_leave → ${restoreStatus} (all leave records ended before ${todayStr}${hasEndDate ? ', endDate present → restored to offboarding' : ''})` },
     });
   }
 
@@ -1037,7 +1122,16 @@ export async function runEmployeeAutoTermination(): Promise<{ terminated: number
       changes: { detail: `Auto-terminated: offboarding → terminated (endDate: ${emp.endDate})` },
     });
 
-    // TODO: Trigger deposit refund billing when billing service is available
+    // Trigger deposit refund: create credit note and credit to customer's frozen wallet
+    try {
+      const refundResult = await generateDepositRefund(emp.id);
+      if (refundResult) {
+        console.log(`[CronJob] Deposit refund generated for employee ${emp.employeeCode}: invoice #${refundResult.invoiceId}`);
+      }
+    } catch (refundErr) {
+      console.error(`[CronJob] Failed to generate deposit refund for employee ${emp.employeeCode}:`, refundErr);
+      // Don't block termination — deposit refund failure is non-fatal
+    }
   }
 
   console.log(`[CronJob] Employee auto-termination complete: ${terminated} terminated`);
@@ -1095,10 +1189,10 @@ export const CRON_JOB_DEFS: CronJobDef[] = [
   {
     key: "payroll_create",
     label: "Auto-Create Payroll Runs & Contractor Invoices",
-    description: "Creates draft payroll runs for all countries with active employees, and generates contractor invoices",
+    description: "Creates draft payroll runs for all countries with active employees, and generates contractor invoices. Runs AFTER activation/termination (00:01) to avoid race conditions.",
     frequency: "monthly",
     defaultDay: 5,
-    defaultTime: "00:01",
+    defaultTime: "00:05",
     defaultEnabled: true,
     runner: async () => {
       const payrollResult = await runAutoCreatePayrollRuns();

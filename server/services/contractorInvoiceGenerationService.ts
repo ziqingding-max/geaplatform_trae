@@ -79,6 +79,8 @@ export const ContractorInvoiceGenerationService = {
    * Creates 1 invoice per contractor per month:
    * - Base monthly rate as service_fee line item
    * - All locked adjustments for the month as separate line items
+   *
+   * DATA-DRIVEN: Also includes terminated contractors who have orphaned locked adjustments.
    */
   async processMonthlyFromLocked(
     effectiveMonth: string,
@@ -95,7 +97,7 @@ export const ContractorInvoiceGenerationService = {
     const invoiceDate = new Date().toISOString().split("T")[0];
 
     // Find active monthly contractors
-    const eligibleContractors = await db
+    const activeContractors = await db
       .select()
       .from(contractors)
       .where(
@@ -104,6 +106,34 @@ export const ContractorInvoiceGenerationService = {
           eq(contractors.paymentFrequency, "monthly")
         )
       );
+
+    // DATA-DRIVEN RESCUE: Find terminated monthly contractors with orphaned locked adjustments
+    const activeIds = new Set(activeContractors.map(c => c.id));
+    const orphanedAdj = await db
+      .select({ contractorId: contractorAdjustments.contractorId })
+      .from(contractorAdjustments)
+      .where(
+        and(
+          eq(contractorAdjustments.effectiveMonth, effectiveMonth),
+          eq(contractorAdjustments.status, "locked" as any),
+          isNull(contractorAdjustments.invoiceId)
+        )
+      )
+      .groupBy(contractorAdjustments.contractorId);
+
+    const orphanedContractors = [];
+    for (const row of orphanedAdj) {
+      if (activeIds.has(row.contractorId)) continue;
+      const [ctr] = await db.select().from(contractors)
+        .where(and(eq(contractors.id, row.contractorId), eq(contractors.paymentFrequency, "monthly")))
+        .limit(1);
+      if (ctr) {
+        orphanedContractors.push(ctr);
+        console.log(`[ContractorInvoice] RESCUE: Including terminated monthly contractor #${ctr.id} - has orphaned locked adjustments`);
+      }
+    }
+
+    const eligibleContractors = [...activeContractors, ...orphanedContractors];
 
     let count = 0;
 
@@ -249,7 +279,7 @@ export const ContractorInvoiceGenerationService = {
     ];
 
     // Find active semi-monthly contractors
-    const eligibleContractors = await db
+    const activeSemiMonthly = await db
       .select()
       .from(contractors)
       .where(
@@ -258,6 +288,34 @@ export const ContractorInvoiceGenerationService = {
           eq(contractors.paymentFrequency, "semi_monthly")
         )
       );
+
+    // DATA-DRIVEN RESCUE: Find terminated semi-monthly contractors with orphaned locked adjustments
+    const activeSemiIds = new Set(activeSemiMonthly.map(c => c.id));
+    const orphanedSemiAdj = await db
+      .select({ contractorId: contractorAdjustments.contractorId })
+      .from(contractorAdjustments)
+      .where(
+        and(
+          eq(contractorAdjustments.effectiveMonth, effectiveMonth),
+          eq(contractorAdjustments.status, "locked" as any),
+          isNull(contractorAdjustments.invoiceId)
+        )
+      )
+      .groupBy(contractorAdjustments.contractorId);
+
+    const orphanedSemiContractors = [];
+    for (const row of orphanedSemiAdj) {
+      if (activeSemiIds.has(row.contractorId)) continue;
+      const [ctr] = await db.select().from(contractors)
+        .where(and(eq(contractors.id, row.contractorId), eq(contractors.paymentFrequency, "semi_monthly")))
+        .limit(1);
+      if (ctr) {
+        orphanedSemiContractors.push(ctr);
+        console.log(`[ContractorInvoice] RESCUE: Including terminated semi-monthly contractor #${ctr.id} - has orphaned locked adjustments`);
+      }
+    }
+
+    const eligibleContractors = [...activeSemiMonthly, ...orphanedSemiContractors];
 
     let count = 0;
 
