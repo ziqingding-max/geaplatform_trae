@@ -1132,11 +1132,20 @@ export const invoicesRouter = router({
       }>();
 
       for (const inv of allInvoices) {
-        const monthKey = inv.invoiceMonth
-          ? new Date(inv.invoiceMonth).toISOString().slice(0, 7)
-          : inv.createdAt
-            ? new Date(inv.createdAt).toISOString().slice(0, 7)
-            : "unknown";
+        let monthKey = "unknown";
+        if (inv.invoiceMonth) {
+          // invoiceMonth may be "2026-03" (YYYY-MM) or "2026-03-01" (full date)
+          // If it already looks like YYYY-MM, use it directly; otherwise parse as Date
+          if (/^\d{4}-\d{2}$/.test(inv.invoiceMonth)) {
+            monthKey = inv.invoiceMonth;
+          } else {
+            const d = new Date(inv.invoiceMonth);
+            monthKey = isNaN(d.getTime()) ? "unknown" : d.toISOString().slice(0, 7);
+          }
+        } else if (inv.createdAt) {
+          const d = new Date(inv.createdAt);
+          monthKey = isNaN(d.getTime()) ? "unknown" : d.toISOString().slice(0, 7);
+        }
 
         if (!monthMap.has(monthKey)) {
           monthMap.set(monthKey, {

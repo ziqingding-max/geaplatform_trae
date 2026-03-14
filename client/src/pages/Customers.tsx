@@ -27,9 +27,12 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Building2, Plus, Search, ArrowLeft, Mail, Phone, Users, DollarSign,
   ChevronRight, Trash2, UserPlus, FileText, Upload, ExternalLink, X, Pencil,
-  Send, ShieldCheck, ShieldX, Copy, Check, KeyRound, Wallet, ArrowUpRight, ArrowDownLeft, LogIn, Shield
+  Send, ShieldCheck, ShieldX, Copy, Check, KeyRound, Wallet, ArrowUpRight, ArrowDownLeft, LogIn, Shield, MoreHorizontal
 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { toast } from "sonner";
@@ -1358,12 +1361,12 @@ function CustomerDetail({ id }: { id: number }) {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-1 justify-end flex-wrap">
+                            <div className="flex gap-1 justify-end items-center">
                               {/* Edit contact info */}
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditContactDialog(c)} title={t("common.edit") || "Edit"}>
                                 <Pencil className="w-3.5 h-3.5" />
                               </Button>
-                              {/* Portal actions */}
+                              {/* Invite (only when no portal access) */}
                               {!(c as any).isPortalActive && !c.hasPortalAccess && (
                                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openInviteDialog(c.id)}>
                                   <Send className="w-3 h-3 mr-1" />{t("customers.contacts.inviteToPortal") || "Invite"}
@@ -1374,33 +1377,47 @@ function CustomerDetail({ id }: { id: number }) {
                                   <Send className="w-3 h-3 mr-1" />{t("customers.contacts.resendInvite") || "Resend"}
                                 </Button>
                               )}
+                              {/* Login As (inline for active portal users) */}
                               {(c as any).isPortalActive && (
-                                <>
-                                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openPermDialog(c)} title={t("customers.contacts.changePermission") || "Change Permission"}>
-                                    <Shield className="w-3 h-3 mr-1" />{t("customers.contacts.changePermission") || "Permission"}
-                                  </Button>
-                                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleLoginAs(c.id)} title={t("customers.contacts.loginAs") || "Login As"}>
-                                    <LogIn className="w-3 h-3 mr-1" />{t("customers.contacts.loginAs") || "Login As"}
-                                  </Button>
-                                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openResetPwDialog(c.id, c.contactName)}>
-                                    <KeyRound className="w-3 h-3 mr-1" />{t("customers.contacts.resetPassword") || "Reset Pwd"}
-                                  </Button>
-                                  <Button variant="outline" size="sm" className="h-7 text-xs text-destructive" onClick={() => { if (confirm(t("customers.contacts.revokeConfirm") || "Revoke portal access for this contact?")) revokeAccessMutation.mutate({ contactId: c.id }); }}>
-                                    <ShieldX className="w-3 h-3 mr-1" />{t("customers.contacts.revoke") || "Revoke"}
-                                  </Button>
-                                </>
-                              )}
-                              {!c.isPrimary && (
-                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
-                                  if (confirm(t("customers.contacts.setPrimaryConfirm") || `Set ${c.contactName} as the primary contact?`))
-                                    updateContactMutation.mutate({ id: c.id, customerId: id, data: { isPrimary: true } });
-                                }}>
-                                  {t("customers.contacts.setPrimary") || "Set Primary"}
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleLoginAs(c.id)} title={t("customers.contacts.loginAs") || "Login As"}>
+                                  <LogIn className="w-3.5 h-3.5" />
                                 </Button>
                               )}
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm(t("customers.contacts.deleteConfirm") || "Delete this contact?")) deleteContactMutation.mutate({ id: c.id }); }}>
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                              {/* More actions dropdown */}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7">
+                                    <MoreHorizontal className="w-3.5 h-3.5" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  {(c as any).isPortalActive && (
+                                    <>
+                                      <DropdownMenuItem onClick={() => openPermDialog(c)}>
+                                        <Shield className="w-3.5 h-3.5 mr-2" />{t("customers.contacts.changePermission") || "Change Permission"}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => openResetPwDialog(c.id, c.contactName)}>
+                                        <KeyRound className="w-3.5 h-3.5 mr-2" />{t("customers.contacts.resetPassword") || "Reset Password"}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem className="text-destructive" onClick={() => { if (confirm(t("customers.contacts.revokeConfirm") || "Revoke portal access for this contact?")) revokeAccessMutation.mutate({ contactId: c.id }); }}>
+                                        <ShieldX className="w-3.5 h-3.5 mr-2" />{t("customers.contacts.revoke") || "Revoke Access"}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                    </>
+                                  )}
+                                  {!c.isPrimary && (
+                                    <DropdownMenuItem onClick={() => {
+                                      if (confirm(t("customers.contacts.setPrimaryConfirm") || `Set ${c.contactName} as the primary contact?`))
+                                        updateContactMutation.mutate({ id: c.id, customerId: id, data: { isPrimary: true } });
+                                    }}>
+                                      <ShieldCheck className="w-3.5 h-3.5 mr-2" />{t("customers.contacts.setPrimary") || "Set Primary"}
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem className="text-destructive" onClick={() => { if (confirm(t("customers.contacts.deleteConfirm") || "Delete this contact?")) deleteContactMutation.mutate({ id: c.id }); }}>
+                                    <Trash2 className="w-3.5 h-3.5 mr-2" />{t("common.delete") || "Delete"}
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>
