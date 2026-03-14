@@ -128,10 +128,16 @@ export function InvoiceStats({
                     </div>
                     {ccy.depositAmount > 0 && (
                       <div>
-                        <div className="text-xs text-muted-foreground">{t("invoices.monthlyOverview.deposits") || "Deposits (Liability)"}</div>
+                        <div className="text-xs text-muted-foreground">{t("invoices.monthlyOverview.deposits")}</div>
                         <div className="text-sm font-bold font-mono text-blue-600">
                           {ccy.currency} {formatAmount(ccy.depositAmount)}
                         </div>
+                        {(ccy.depositPaidAmount > 0 || ccy.depositCount > 0) && (
+                          <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                            <div className="text-emerald-600">{t("invoices.monthlyOverview.depositsPaid")}: {ccy.currency} {formatAmount(ccy.depositPaidAmount || 0)}</div>
+                            <div className="text-amber-600">{t("invoices.monthlyOverview.depositsUnpaid")}: {ccy.currency} {formatAmount(ccy.depositAmount - (ccy.depositPaidAmount || 0))}</div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
