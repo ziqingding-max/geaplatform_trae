@@ -373,6 +373,7 @@ export const customersRouter = router({
             role: z.string().optional(),
             isPrimary: z.boolean().optional(),
             hasPortalAccess: z.boolean().optional(),
+            portalRole: z.enum(["admin", "hr_manager", "finance", "viewer"]).optional(),
           }),
         })
       )
@@ -720,15 +721,31 @@ export const customersRouter = router({
       }),
   }),
 
-  // Admin impersonation: generate a short-lived portal token for a customer's primary contact
+  // Admin impersonation: generate a short-lived portal token for a specific contact or the primary contact
   generatePortalToken: adminProcedure
-    .input(z.object({ customerId: z.number() }))
+    .input(z.object({ customerId: z.number(), contactId: z.number().optional() }))
     .mutation(async ({ input, ctx }) => {
-      // Find the primary contact with portal access for this customer
       const contacts = await listCustomerContacts(input.customerId);
-      const portalContact = contacts.find(c => c.isPortalActive && c.hasPortalAccess) || contacts.find(c => c.hasPortalAccess);
-      if (!portalContact) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "No portal-enabled contact found for this customer. Please invite a contact first." });
+      let portalContact;
+      if (input.contactId) {
+        // Specific contact requested (from "Login As" button)
+        portalContact = contacts.find(c => c.id === input.contactId && (c as any).isPortalActive && c.hasPortalAccess);
+        if (!portalContact) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "This contact does not have active portal access." });
+        }
+      } else {
+        // Global button: enforce primary contact with portal access
+        const primaryContact = contacts.find(c => (c as any).isPrimary && (c as any).isPortalActive && c.hasPortalAccess);
+        if (primaryContact) {
+          portalContact = primaryContact;
+        } else {
+          // Fallback: any active portal contact, but prefer primary
+          const anyActive = contacts.find(c => (c as any).isPortalActive && c.hasPortalAccess);
+          if (!anyActive) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "No portal-enabled contact found for this customer. Please invite a contact first." });
+          }
+          portalContact = anyActive;
+        }
       }
       // Get customer name
       const customer = await getCustomerById(input.customerId);

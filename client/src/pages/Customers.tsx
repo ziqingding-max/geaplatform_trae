@@ -29,7 +29,7 @@ import {
 import {
   Building2, Plus, Search, ArrowLeft, Mail, Phone, Users, DollarSign,
   ChevronRight, Trash2, UserPlus, FileText, Upload, ExternalLink, X, Pencil,
-  Send, ShieldCheck, ShieldX, Copy, Check, KeyRound, Wallet, ArrowUpRight, ArrowDownLeft
+  Send, ShieldCheck, ShieldX, Copy, Check, KeyRound, Wallet, ArrowUpRight, ArrowDownLeft, LogIn, Shield
 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { toast } from "sonner";
@@ -515,6 +515,43 @@ function CustomerDetail({ id }: { id: number }) {
     onError: (err: any) => toast.error(err.message),
   });
 
+  // ── Edit Contact Dialog ──
+  const [editContactOpen, setEditContactOpen] = useState(false);
+  const [editContactId, setEditContactId] = useState<number | null>(null);
+  const [editContactForm, setEditContactForm] = useState({ contactName: "", email: "", phone: "", role: "" });
+  function openEditContactDialog(c: any) {
+    setEditContactId(c.id);
+    setEditContactForm({ contactName: c.contactName, email: c.email, phone: c.phone || "", role: c.role || "" });
+    setEditContactOpen(true);
+  }
+  function handleSaveEditContact() {
+    if (!editContactId || !editContactForm.contactName || !editContactForm.email) { toast.error("Name and email are required"); return; }
+    updateContactMutation.mutate({ id: editContactId, customerId: id, data: editContactForm });
+    setEditContactOpen(false);
+  }
+
+  // ── Change Permission Dialog ──
+  const [permDialogOpen, setPermDialogOpen] = useState(false);
+  const [permContactId, setPermContactId] = useState<number | null>(null);
+  const [permContactName, setPermContactName] = useState("");
+  const [permRole, setPermRole] = useState<"admin" | "hr_manager" | "finance" | "viewer">("viewer");
+  function openPermDialog(c: any) {
+    setPermContactId(c.id);
+    setPermContactName(c.contactName);
+    setPermRole(c.portalRole || "viewer");
+    setPermDialogOpen(true);
+  }
+  function handleSavePermission() {
+    if (!permContactId) return;
+    updateContactMutation.mutate({ id: permContactId, customerId: id, data: { portalRole: permRole } });
+    setPermDialogOpen(false);
+  }
+
+  // ── Login As (per-row impersonation) ──
+  function handleLoginAs(contactId: number) {
+    portalAccessMutation.mutate({ customerId: id, contactId });
+  }
+
   // ── Portal Invite ──
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteResult, setInviteResult] = useState<{ token: string; email: string; contactName: string } | null>(null);
@@ -702,9 +739,14 @@ function CustomerDetail({ id }: { id: number }) {
               portalAccessMutation.mutate({ customerId: id });
             }}
             disabled={portalAccessMutation.isPending}
+            title={(() => {
+              const primary = contacts?.find((c: any) => c.isPrimary && c.isPortalActive);
+              if (primary) return `${t("customers.contacts.loginAs") || "Login as"}: ${primary.contactName} (${primary.email})`;
+              return t("customers.contacts.accessPortalHint") || "Login as primary contact";
+            })()}
           >
             <ExternalLink className="w-4 h-4 mr-2" />
-            {portalAccessMutation.isPending ? "Opening..." : "Access Client Portal"}
+            {portalAccessMutation.isPending ? (t("common.opening") || "Opening...") : (t("customers.contacts.accessPortal") || "Access Client Portal")}
           </Button>
         </div>
 
@@ -1231,9 +1273,9 @@ function CustomerDetail({ id }: { id: number }) {
                         <Input value={contactForm.phone} onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })} placeholder="+65 9123 4567" />
                       </div>
                       <div className="space-y-2">
-                        <Label>{t("common.role")}</Label>
+                        <Label>{t("customers.contacts.jobTitle") || "Job Title"}</Label>
                         <Select value={contactForm.role || "none"} onValueChange={(v) => setContactForm({ ...contactForm, role: v === "none" ? "" : v })}>
-                          <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder="Select title" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">{t("customers.contacts.noSpecificRole")}</SelectItem>
                             <SelectItem value="HR Manager">{t("customers.contacts.role.hrManager")}</SelectItem>
@@ -1275,7 +1317,8 @@ function CustomerDetail({ id }: { id: number }) {
                         <TableHead>{t("common.name")}</TableHead>
                         <TableHead>{t("customers.form.email")}</TableHead>
                         <TableHead>{t("customers.form.phone")}</TableHead>
-                        <TableHead>{t("common.role")}</TableHead>
+                        <TableHead>{t("customers.contacts.jobTitle") || "Job Title"}</TableHead>
+                        <TableHead>{t("customers.contacts.portalRole") || "Portal Role"}</TableHead>
                         <TableHead>{t("customers.contacts.portalStatus")}</TableHead>
                         <TableHead className="text-right">{t("common.actions")}</TableHead>
                       </TableRow>
@@ -1283,13 +1326,24 @@ function CustomerDetail({ id }: { id: number }) {
                     <TableBody>
                       {contacts.map((c) => (
                         <TableRow key={c.id}>
-                          <TableCell className="text-sm font-medium">{c.contactName}</TableCell>
+                          <TableCell className="text-sm font-medium">
+                            <div className="flex items-center gap-1">
+                              {c.contactName}
+                              {c.isPrimary && <Badge className="text-xs ml-1" variant="default">{t("customers.contacts.primary")}</Badge>}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-sm">{c.email}</TableCell>
-                          <TableCell className="text-sm">{c.phone || "—"}</TableCell>
-                          <TableCell className="text-sm">{c.role || "—"}</TableCell>
+                          <TableCell className="text-sm">{c.phone || "\u2014"}</TableCell>
+                          <TableCell className="text-sm">{c.role || "\u2014"}</TableCell>
+                          <TableCell className="text-sm">
+                            {(c as any).isPortalActive || c.hasPortalAccess ? (
+                              <Badge className="text-xs" variant="outline">{(c as any).portalRole || "viewer"}</Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">\u2014</span>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <div className="flex gap-1 items-center">
-                              {c.isPrimary && <Badge className="text-xs" variant="default">{t("customers.contacts.primary")}</Badge>}
                               {(c as any).isPortalActive ? (
                                 <Badge className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200" variant="outline">
                                   <ShieldCheck className="w-3 h-3 mr-1" />Active
@@ -1304,36 +1358,47 @@ function CustomerDetail({ id }: { id: number }) {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <div className="flex gap-1 justify-end">
+                            <div className="flex gap-1 justify-end flex-wrap">
+                              {/* Edit contact info */}
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditContactDialog(c)} title={t("common.edit") || "Edit"}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              {/* Portal actions */}
                               {!(c as any).isPortalActive && !c.hasPortalAccess && (
                                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openInviteDialog(c.id)}>
-                                  <Send className="w-3 h-3 mr-1" />Invite to Portal
+                                  <Send className="w-3 h-3 mr-1" />{t("customers.contacts.inviteToPortal") || "Invite"}
                                 </Button>
                               )}
                               {c.hasPortalAccess && !(c as any).isPortalActive && (
                                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openInviteDialog(c.id)}>
-                                  <Send className="w-3 h-3 mr-1" />Resend Invite
+                                  <Send className="w-3 h-3 mr-1" />{t("customers.contacts.resendInvite") || "Resend"}
                                 </Button>
                               )}
                               {(c as any).isPortalActive && (
                                 <>
-                                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openResetPwDialog(c.id, c.contactName)}>
-                                    <KeyRound className="w-3 h-3 mr-1" />Reset Password
+                                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openPermDialog(c)} title={t("customers.contacts.changePermission") || "Change Permission"}>
+                                    <Shield className="w-3 h-3 mr-1" />{t("customers.contacts.changePermission") || "Permission"}
                                   </Button>
-                                  <Button variant="outline" size="sm" className="h-7 text-xs text-destructive" onClick={() => { if (confirm("Revoke portal access for this contact?")) revokeAccessMutation.mutate({ contactId: c.id }); }}>
-                                    <ShieldX className="w-3 h-3 mr-1" />Revoke
+                                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleLoginAs(c.id)} title={t("customers.contacts.loginAs") || "Login As"}>
+                                    <LogIn className="w-3 h-3 mr-1" />{t("customers.contacts.loginAs") || "Login As"}
+                                  </Button>
+                                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openResetPwDialog(c.id, c.contactName)}>
+                                    <KeyRound className="w-3 h-3 mr-1" />{t("customers.contacts.resetPassword") || "Reset Pwd"}
+                                  </Button>
+                                  <Button variant="outline" size="sm" className="h-7 text-xs text-destructive" onClick={() => { if (confirm(t("customers.contacts.revokeConfirm") || "Revoke portal access for this contact?")) revokeAccessMutation.mutate({ contactId: c.id }); }}>
+                                    <ShieldX className="w-3 h-3 mr-1" />{t("customers.contacts.revoke") || "Revoke"}
                                   </Button>
                                 </>
                               )}
                               {!c.isPrimary && (
                                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
-                                  if (confirm(`Set ${c.contactName} as the primary contact? This will update the customer's billing contact info.`))
+                                  if (confirm(t("customers.contacts.setPrimaryConfirm") || `Set ${c.contactName} as the primary contact?`))
                                     updateContactMutation.mutate({ id: c.id, customerId: id, data: { isPrimary: true } });
                                 }}>
-                                  Set Primary
+                                  {t("customers.contacts.setPrimary") || "Set Primary"}
                                 </Button>
                               )}
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm("Delete this contact?")) deleteContactMutation.mutate({ id: c.id }); }}>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm(t("customers.contacts.deleteConfirm") || "Delete this contact?")) deleteContactMutation.mutate({ id: c.id }); }}>
                                 <Trash2 className="w-3.5 h-3.5" />
                               </Button>
                             </div>
@@ -1448,6 +1513,80 @@ function CustomerDetail({ id }: { id: number }) {
                       disabled={resetPasswordMutation.isPending || resetPwValue.length < 8}
                     >
                       {resetPasswordMutation.isPending ? "Resetting..." : "Reset Password"}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* ── Edit Contact Dialog ── */}
+            <Dialog open={editContactOpen} onOpenChange={setEditContactOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader><DialogTitle>{t("customers.contacts.editContact") || "Edit Contact"}</DialogTitle></DialogHeader>
+                <div className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <Label>{t("common.name")} *</Label>
+                    <Input value={editContactForm.contactName} onChange={(e) => setEditContactForm({ ...editContactForm, contactName: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("common.email")} *</Label>
+                    <Input type="email" value={editContactForm.email} onChange={(e) => setEditContactForm({ ...editContactForm, email: e.target.value })} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>{t("customers.form.phone")}</Label>
+                      <Input value={editContactForm.phone} onChange={(e) => setEditContactForm({ ...editContactForm, phone: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t("customers.contacts.jobTitle") || "Job Title"}</Label>
+                      <Select value={editContactForm.role || "none"} onValueChange={(v) => setEditContactForm({ ...editContactForm, role: v === "none" ? "" : v })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">{t("customers.contacts.noSpecificRole")}</SelectItem>
+                          <SelectItem value="HR Manager">{t("customers.contacts.role.hrManager")}</SelectItem>
+                          <SelectItem value="Finance Manager">{t("customers.contacts.role.financeManager")}</SelectItem>
+                          <SelectItem value="CEO">{t("customers.contacts.role.ceo")}</SelectItem>
+                          <SelectItem value="COO">{t("customers.contacts.role.coo")}</SelectItem>
+                          <SelectItem value="Legal">{t("customers.contacts.role.legal")}</SelectItem>
+                          <SelectItem value="Other">{t("common.other")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <Button variant="outline" onClick={() => setEditContactOpen(false)}>{t("common.cancel")}</Button>
+                    <Button onClick={handleSaveEditContact} disabled={updateContactMutation.isPending}>
+                      {updateContactMutation.isPending ? (t("common.saving") || "Saving...") : (t("common.save") || "Save")}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* ── Change Permission Dialog ── */}
+            <Dialog open={permDialogOpen} onOpenChange={setPermDialogOpen}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader><DialogTitle>{t("customers.contacts.changePermission") || "Change Portal Permission"}</DialogTitle></DialogHeader>
+                <div className="space-y-4 mt-2">
+                  <p className="text-sm text-muted-foreground">
+                    {t("customers.contacts.changePermissionDesc") || `Update the portal permission for`} <span className="font-medium text-foreground">{permContactName}</span>
+                  </p>
+                  <div className="space-y-2">
+                    <Label>{t("customers.contacts.portalRole") || "Portal Role"}</Label>
+                    <Select value={permRole} onValueChange={(v: any) => setPermRole(v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">{t("customers.contacts.portalRoleAdmin")}</SelectItem>
+                        <SelectItem value="hr_manager">{t("customers.contacts.portalRoleHr")}</SelectItem>
+                        <SelectItem value="finance">{t("customers.contacts.portalRoleFinance")}</SelectItem>
+                        <SelectItem value="viewer">{t("customers.contacts.portalRoleViewer")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <Button variant="outline" onClick={() => setPermDialogOpen(false)}>{t("common.cancel")}</Button>
+                    <Button onClick={handleSavePermission} disabled={updateContactMutation.isPending}>
+                      {updateContactMutation.isPending ? (t("common.saving") || "Saving...") : (t("common.save") || "Save")}
                     </Button>
                   </div>
                 </div>
