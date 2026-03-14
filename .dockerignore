@@ -1,0 +1,40 @@
+# =============================================================================
+# GEA EOR SaaS — Docker 构建忽略文件
+# =============================================================================
+# 防止宿主机的 node_modules 等文件进入 Docker 构建上下文，
+# 避免与容器内 pnpm install 产生的符号链接结构冲突。
+# =============================================================================
+
+# 依赖目录（容器内由 pnpm install 重新安装）
+node_modules
+
+# 版本控制
+.git
+.gitignore
+
+# Docker 配置自身
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# 环境变量（敏感信息，不应打包进镜像）
+.env
+.env.*
+
+# 编辑器和系统文件
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# 日志和临时文件
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# 测试和文档（非运行时必需）
+README.md
+LICENSE
+docs/
