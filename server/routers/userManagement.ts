@@ -316,7 +316,7 @@ export const userManagementRouter = router({
           to: user.email || "",
           name: user.name || "Admin",
           tempPassword,
-          loginUrl: origin,
+          loginUrl: `${origin}/login`,
         });
       } catch (err) {
         console.error("[UserMgmt] Failed to send password reset email:", err);

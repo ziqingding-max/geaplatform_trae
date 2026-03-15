@@ -522,7 +522,7 @@ export const portalEmployeesRouter = portalRouter({
         const companyName = custRows[0]?.companyName || "Your Company";
 
         const portalOrigin = process.env.PORTAL_APP_URL || "https://app.geahr.com";
-        const inviteUrl = `${portalOrigin}/onboarding?token=${token}`;
+        const inviteUrl = `${portalOrigin}/self-onboarding?token=${token}`;
 
         await sendOnboardingInviteEmail({
           to: input.employeeEmail,
@@ -611,7 +611,7 @@ export const portalEmployeesRouter = portalRouter({
         const companyName = custRows[0]?.companyName || "Your Company";
 
         const portalOrigin = process.env.PORTAL_APP_URL || "https://app.geahr.com";
-        const inviteUrl = `${portalOrigin}/onboarding?token=${newToken}`;
+        const inviteUrl = `${portalOrigin}/self-onboarding?token=${newToken}`;
 
         await sendOnboardingInviteEmail({
           to: invite.employeeEmail,
