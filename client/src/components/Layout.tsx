@@ -43,7 +43,8 @@ import {
   TrendingUp,
   Activity,
   Layers,
-  PieChart
+  PieChart,
+  KeyRound
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -59,6 +60,18 @@ import {
 } from "@/components/ui/collapsible";
 import { toast } from "sonner";
 import NotificationCenter from "@/components/NotificationCenter";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { trpc } from "@/lib/trpc";
 
 import { useMemo } from "react";
 
@@ -152,6 +165,33 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
   const navGroups = useNavGroups(user);
 
   const navRef = useRef<HTMLElement>(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [pwForm, setPwForm] = useState({ current: "", new: "", confirm: "" });
+  const changePasswordMutation = trpc.userManagement.changePassword.useMutation({
+    onSuccess: () => {
+      toast.success(t("common.changePassword.success"));
+      setShowChangePassword(false);
+      setPwForm({ current: "", new: "", confirm: "" });
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to change password");
+    },
+  });
+
+  const handleChangePassword = () => {
+    if (pwForm.new.length < 8) {
+      toast.error(t("common.changePassword.error.tooShort"));
+      return;
+    }
+    if (pwForm.new !== pwForm.confirm) {
+      toast.error(t("common.changePassword.error.mismatch"));
+      return;
+    }
+    changePasswordMutation.mutate({
+      currentPassword: pwForm.current,
+      newPassword: pwForm.new,
+    });
+  };
 
   // Auto-expand group based on current location
   useEffect(() => {
@@ -305,20 +345,35 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
       {/* Bottom section */}
       <div className="border-t border-sidebar-border p-2 space-y-0.5">
         {/* User */}
-        <div className={cn(
-          "flex items-center gap-3 px-3 py-2 mt-2 rounded-md cursor-pointer",
-          "hover:bg-sidebar-accent transition-all duration-150"
-        )}>
-          <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-            <span className="text-xs font-bold text-primary-foreground">{userInitials}</span>
-          </div>
-          {!collapsed && (
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-semibold text-sidebar-accent-foreground truncate">{user?.name || "Admin"}</div>
-              <div className="text-xs text-sidebar-foreground/60 truncate">{user?.email || ""}</div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <div className={cn(
+              "flex items-center gap-3 px-3 py-2 mt-2 rounded-md cursor-pointer",
+              "hover:bg-sidebar-accent transition-all duration-150"
+            )}>
+              <div className="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                <span className="text-xs font-bold text-primary-foreground">{userInitials}</span>
+              </div>
+              {!collapsed && (
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold text-sidebar-accent-foreground truncate">{user?.name || "Admin"}</div>
+                  <div className="text-xs text-sidebar-foreground/60 truncate">{user?.email || ""}</div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="w-48">
+            <DropdownMenuItem onClick={() => setShowChangePassword(true)}>
+              <KeyRound className="w-4 h-4 mr-2" />
+              {t("common.changePassword")}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive" onClick={() => logout()}>
+              <LogOut className="w-4 h-4 mr-2" />
+              {t("common.signOut")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Collapse toggle */}
@@ -418,10 +473,14 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-
+              <DropdownMenuItem onClick={() => setShowChangePassword(true)}>
+                <KeyRound className="w-4 h-4 mr-2" />
+                {t("common.changePassword")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem className="text-destructive" onClick={() => logout()}>
                 <LogOut className="w-4 h-4 mr-2" />
-                Sign Out
+                {t("common.signOut")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -434,6 +493,61 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
           </div>
         </main>
       </div>
+
+      {/* Change Password Dialog */}
+      <Dialog open={showChangePassword} onOpenChange={(open) => {
+        setShowChangePassword(open);
+        if (!open) setPwForm({ current: "", new: "", confirm: "" });
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("common.changePassword.title")}</DialogTitle>
+            <DialogDescription>
+              {t("common.changePassword.placeholder.new")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>{t("common.changePassword.currentPassword")}</Label>
+              <Input
+                type="password"
+                placeholder={t("common.changePassword.placeholder.current")}
+                value={pwForm.current}
+                onChange={(e) => setPwForm(prev => ({ ...prev, current: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t("common.changePassword.newPassword")}</Label>
+              <Input
+                type="password"
+                placeholder={t("common.changePassword.placeholder.new")}
+                value={pwForm.new}
+                onChange={(e) => setPwForm(prev => ({ ...prev, new: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{t("common.changePassword.confirmPassword")}</Label>
+              <Input
+                type="password"
+                placeholder={t("common.changePassword.placeholder.confirm")}
+                value={pwForm.confirm}
+                onChange={(e) => setPwForm(prev => ({ ...prev, confirm: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowChangePassword(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              onClick={handleChangePassword}
+              disabled={changePasswordMutation.isPending || !pwForm.current || !pwForm.new || !pwForm.confirm}
+            >
+              {changePasswordMutation.isPending ? t("common.changePassword.submitting") : t("common.changePassword.submit")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
