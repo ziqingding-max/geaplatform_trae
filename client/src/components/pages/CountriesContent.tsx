@@ -322,6 +322,9 @@ export default function CountriesContent() {
                                   <div className="text-xs text-muted-foreground flex items-center gap-2">
                                     <span>{lt.isPaid ? "Paid" : "Unpaid"}</span>
                                     {lt.requiresApproval && <span>· Approval required</span>}
+                                    {lt.applicableGender && lt.applicableGender !== "all" && (
+                                      <span>· {lt.applicableGender === "female" ? "Female only" : "Male only"}</span>
+                                    )}
                                   </div>
                                 </div>
                                 <span className="text-sm font-mono">{lt.annualEntitlement || 0} days/yr</span>

@@ -401,8 +401,20 @@ export default function PortalLeave() {
     return bal ? { remaining: Number(bal.remaining ?? 0), totalEntitlement: Number(bal.totalEntitlement ?? 0) } : null;
   };
 
+  // Filter leave types by employee gender
+  const filteredLeaveTypes = useMemo(() => {
+    if (!leaveTypes || !selectedEmp) return leaveTypes;
+    const empGender = selectedEmp.gender;
+    return leaveTypes.filter((lt: any) => {
+      const applicable = lt.applicableGender || "all";
+      if (applicable === "all") return true;
+      if (!empGender || empGender === "other" || empGender === "prefer_not_to_say") return true;
+      return applicable === empGender;
+    });
+  }, [leaveTypes, selectedEmp]);
+
   // Check if selected leave type has insufficient balance
-  const selectedLeaveType = (leaveTypes || []).find((lt: any) => lt.id === form.leaveTypeId);
+  const selectedLeaveType = (filteredLeaveTypes || []).find((lt: any) => lt.id === form.leaveTypeId);
   const requestedDays = parseFloat(form.days || "0");
   const selectedBalance = form.leaveTypeId ? getFormBalance(form.leaveTypeId) : null;
   const isInsufficientBalance = selectedLeaveType?.isPaid !== false && selectedBalance !== null && requestedDays > 0 && requestedDays > selectedBalance.remaining;
@@ -722,7 +734,7 @@ export default function PortalLeave() {
               >
                 <SelectTrigger><SelectValue placeholder={form.employeeId ? t("portal_leave.create_dialog.placeholder_leave_type") : t("portal_leave.create_dialog.placeholder_select_employee_first")} /></SelectTrigger>
                 <SelectContent>
-                  {(leaveTypes || []).map((lt: any) => {
+                  {(filteredLeaveTypes || []).map((lt: any) => {
                     const bal = getFormBalance(lt.id);
                     const balLabel = lt.isPaid === false
                       ? "Unpaid"

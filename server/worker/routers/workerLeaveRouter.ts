@@ -56,6 +56,7 @@ export const workerLeaveRouter = workerRouter({
         remaining: leaveBalances.remaining,
         leaveTypeName: leaveTypes.leaveTypeName,
         isPaid: leaveTypes.isPaid,
+        applicableGender: leaveTypes.applicableGender,
       })
       .from(leaveBalances)
       .innerJoin(leaveTypes, eq(leaveBalances.leaveTypeId, leaveTypes.id))
@@ -66,7 +67,25 @@ export const workerLeaveRouter = workerRouter({
         )
       );
 
-    return balances;
+    // Filter out gender-mismatched balances where used === 0
+    // Get employee gender for filtering
+    const [empInfo] = await db
+      .select({ gender: employees.gender })
+      .from(employees)
+      .where(eq(employees.id, employeeId))
+      .limit(1);
+    const empGender = empInfo?.gender;
+
+    const filteredBalances = balances.filter(b => {
+      const applicable = b.applicableGender || "all";
+      if (applicable === "all") return true;
+      if (!empGender || empGender === "other" || empGender === "prefer_not_to_say") return true;
+      if (applicable === empGender) return true;
+      // Gender mismatch: only show if used > 0 (preserve historical data)
+      return (b.used ?? 0) > 0;
+    });
+
+    return filteredBalances;
   }),
 
   /**
@@ -94,11 +113,27 @@ export const workerLeaveRouter = workerRouter({
         leaveTypeName: leaveTypes.leaveTypeName,
         isPaid: leaveTypes.isPaid,
         countryCode: leaveTypes.countryCode,
+        applicableGender: leaveTypes.applicableGender,
       })
       .from(leaveTypes)
       .where(eq(leaveTypes.countryCode, emp.country));
 
-    return types;
+    // Filter leave types by employee gender
+    const [empGenderInfo] = await db
+      .select({ gender: employees.gender })
+      .from(employees)
+      .where(eq(employees.id, employeeId))
+      .limit(1);
+    const empGender = empGenderInfo?.gender;
+
+    const filteredTypes = types.filter(lt => {
+      const applicable = lt.applicableGender || "all";
+      if (applicable === "all") return true;
+      if (!empGender || empGender === "other" || empGender === "prefer_not_to_say") return true;
+      return applicable === empGender;
+    });
+
+    return filteredTypes;
   }),
 
   /**
@@ -312,12 +347,26 @@ export const workerLeaveRouter = workerRouter({
           id: leaveTypes.id,
           isPaid: leaveTypes.isPaid,
           leaveTypeName: leaveTypes.leaveTypeName,
+          applicableGender: leaveTypes.applicableGender,
         })
         .from(leaveTypes)
         .where(eq(leaveTypes.id, input.leaveTypeId));
 
       if (!leaveType) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Leave type not found" });
+      }
+
+      // Validate gender compatibility with leave type
+      if (leaveType.applicableGender && leaveType.applicableGender !== "all") {
+        const [empGenderInfo] = await db
+          .select({ gender: employees.gender })
+          .from(employees)
+          .where(eq(employees.id, employeeId))
+          .limit(1);
+        const empGender = empGenderInfo?.gender;
+        if (empGender && empGender !== "other" && empGender !== "prefer_not_to_say" && leaveType.applicableGender !== empGender) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `This leave type (${leaveType.leaveTypeName}) is only applicable to ${leaveType.applicableGender} employees.` });
+        }
       }
 
       const totalDays = parseFloat(input.days);

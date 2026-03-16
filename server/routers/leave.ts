@@ -236,6 +236,16 @@ export const leaveRouter = router({
       const employee = await getEmployeeById(input.employeeId);
       if (!employee) throw new TRPCError({ code: 'BAD_REQUEST', message: "Employee not found" });
 
+      // 3b. Validate gender compatibility with leave type
+      const leaveTypeRecord = await getLeaveTypeById(input.leaveTypeId);
+      if (leaveTypeRecord) {
+        const applicableGender = leaveTypeRecord.applicableGender || "all";
+        const empGender = employee.gender;
+        if (applicableGender !== "all" && empGender && empGender !== "other" && empGender !== "prefer_not_to_say" && applicableGender !== empGender) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `This leave type (${leaveTypeRecord.leaveTypeName}) is only applicable to ${applicableGender} employees.` });
+        }
+      }
+
       // 4. Determine if cross-month and compute splits
       const crossMonth = isLeavesCrossMonth(input.startDate, input.endDate);
       const totalDays = parseFloat(input.days);

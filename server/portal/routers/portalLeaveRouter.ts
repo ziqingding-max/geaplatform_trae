@@ -130,6 +130,7 @@ export const portalLeaveRouter = portalRouter({
           used: leaveBalances.used,
           remaining: leaveBalances.remaining,
           leaveTypeName: leaveTypes.leaveTypeName,
+          applicableGender: leaveTypes.applicableGender,
         })
         .from(leaveBalances)
         .leftJoin(leaveTypes, eq(leaveBalances.leaveTypeId, leaveTypes.id))
@@ -196,6 +197,26 @@ export const portalLeaveRouter = portalRouter({
           code: "BAD_REQUEST",
           message: `Payroll run for ${endPayrollMonth} is already ${existingPayroll.status}. Leave requests cannot be added.`,
         });
+      }
+
+      // Validate gender compatibility with leave type
+      const [leaveTypeGenderInfo] = await db
+        .select({ applicableGender: leaveTypes.applicableGender, leaveTypeName: leaveTypes.leaveTypeName })
+        .from(leaveTypes)
+        .where(eq(leaveTypes.id, input.leaveTypeId))
+        .limit(1);
+      if (leaveTypeGenderInfo) {
+        const applicable = leaveTypeGenderInfo.applicableGender || "all";
+        // Get employee gender
+        const [empGenderInfo] = await db
+          .select({ gender: employees.gender })
+          .from(employees)
+          .where(eq(employees.id, input.employeeId))
+          .limit(1);
+        const empGender = empGenderInfo?.gender;
+        if (applicable !== "all" && empGender && empGender !== "other" && empGender !== "prefer_not_to_say" && applicable !== empGender) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `This leave type (${leaveTypeGenderInfo.leaveTypeName}) is only applicable to ${applicable} employees.` });
+        }
       }
 
       // Days already include half-day deduction (calculated on frontend, matching Admin behavior)

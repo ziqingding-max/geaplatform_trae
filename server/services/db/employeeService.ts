@@ -73,6 +73,7 @@ export async function listEmployees(params: ListEmployeesParams = {}) {
       serviceType: employees.serviceType,
       baseSalary: employees.baseSalary,
       salaryCurrency: employees.salaryCurrency,
+      gender: employees.gender,
     })
     .from(employees)
     .leftJoin(customers, eq(employees.customerId, customers.id))
@@ -255,6 +256,7 @@ export async function listLeaveBalances(employeeId: number, year?: number) {
     createdAt: leaveBalances.createdAt,
     updatedAt: leaveBalances.updatedAt,
     leaveTypeName: leaveTypes.leaveTypeName,
+    applicableGender: leaveTypes.applicableGender,
   })
   .from(leaveBalances)
   .leftJoin(leaveTypes, eq(leaveBalances.leaveTypeId, leaveTypes.id))
@@ -309,6 +311,20 @@ export async function initializeLeaveBalancesForEmployee(
 
   if (countryLeaveTypes.length === 0) return { added: 0 };
 
+  // 1b. Filter leave types by employee gender
+  // Male employees skip "female" leave types (e.g., Maternity)
+  // Female employees skip "male" leave types (e.g., Paternity)
+  // "other", "prefer_not_to_say", or null gender → see all leave types
+  const employeeGender = employee.gender; // "male" | "female" | "other" | "prefer_not_to_say" | null
+  const filteredLeaveTypes = countryLeaveTypes.filter(lt => {
+    const applicable = lt.applicableGender || "all";
+    if (applicable === "all") return true;
+    if (!employeeGender || employeeGender === "other" || employeeGender === "prefer_not_to_say") return true;
+    return applicable === employeeGender;
+  });
+
+  if (filteredLeaveTypes.length === 0) return { added: 0 };
+
   // 2. Get customer-specific policies for this country
   const customerPolicies = await db.select()
     .from(customerLeavePolicies)
@@ -332,9 +348,9 @@ export async function initializeLeaveBalancesForEmployee(
   
   const existingTypeIds = new Set(existingBalances.map(b => b.leaveTypeId));
 
-  // 4. Create missing balances
+  // 4. Create missing balances (using gender-filtered leave types)
   let addedCount = 0;
-  for (const lt of countryLeaveTypes) {
+  for (const lt of filteredLeaveTypes) {
     if (existingTypeIds.has(lt.id)) continue;
 
     const policy = policyMap.get(lt.id);

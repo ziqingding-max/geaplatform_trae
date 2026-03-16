@@ -502,7 +502,18 @@ export default function PortalEmployeeDetail() {
 
               {/* Leave Balances Tab */}
               <TabsContent value="leave" className="mt-4">
-                {(employee.leaveBalances?.length || 0) === 0 ? (
+                {/* Filter leave balances by gender */}
+                {(() => {
+                  const empGender = employee.gender;
+                  const filtered = (employee.leaveBalances || []).filter((b: any) => {
+                    const applicable = b.applicableGender || "all";
+                    if (applicable === "all") return true;
+                    if (!empGender || empGender === "other" || empGender === "prefer_not_to_say") return true;
+                    if (applicable === empGender) return true;
+                    return (b.used ?? 0) > 0;
+                  });
+                  return filtered;
+                })().length === 0 ? (
                   <Card>
                     <CardContent className="py-12">
                       <div className="flex flex-col items-center text-muted-foreground">
@@ -514,7 +525,16 @@ export default function PortalEmployeeDetail() {
                   </Card>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {employee.leaveBalances!.map((balance) => (
+                    {(() => {
+                      const empGender = employee.gender;
+                      return (employee.leaveBalances || []).filter((b: any) => {
+                        const applicable = b.applicableGender || "all";
+                        if (applicable === "all") return true;
+                        if (!empGender || empGender === "other" || empGender === "prefer_not_to_say") return true;
+                        if (applicable === empGender) return true;
+                        return (b.used ?? 0) > 0;
+                      });
+                    })().map((balance) => (
                       <Card key={balance.id}>
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between mb-3">
