@@ -801,7 +801,7 @@ export const employeesRouter = router({
       .input(
         z.object({
           employeeId: z.number(),
-          documentType: z.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "other"]),
+          documentType: z.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "payslip", "reimbursement_receipt", "other"]),
           documentName: z.string().min(1),
           fileBase64: z.string(),
           fileName: z.string(),
