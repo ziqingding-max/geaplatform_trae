@@ -19,6 +19,7 @@ import {
 import { getDb } from "../../services/db/connection";
 import { reimbursements } from "../../../drizzle/schema";
 import { eq, and, desc, count } from "drizzle-orm";
+import { storagePut } from "../../storage";
 
 export const workerReimbursementsRouter = workerRouter({
   /**
@@ -81,8 +82,34 @@ export const workerReimbursementsRouter = workerRouter({
     }),
 
   /**
+   * Upload receipt file (base64 encoded).
+   * Returns the URL and file key for use in the submit mutation.
+   */
+  uploadReceipt: employeeOnlyProcedure
+    .input(
+      z.object({
+        fileBase64: z.string(),
+        fileName: z.string(),
+        mimeType: z.string().default("application/pdf"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const fileBuffer = Buffer.from(input.fileBase64, "base64");
+
+      if (fileBuffer.length > 20 * 1024 * 1024) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "File size must be under 20MB" });
+      }
+
+      const randomSuffix = Math.random().toString(36).substring(2, 10);
+      const fileKey = `reimbursement-receipts/${Date.now()}-${randomSuffix}-${input.fileName}`;
+      const { url } = await storagePut(fileKey, fileBuffer, input.mimeType);
+
+      return { url, fileKey };
+    }),
+
+  /**
    * Submit a reimbursement request.
-   * Employee provides category, amount, description, and optionally a receipt file.
+   * Employee provides category, amount, description, and a receipt file (required).
    */
   submit: employeeOnlyProcedure
     .input(
@@ -94,7 +121,7 @@ export const workerReimbursementsRouter = workerRouter({
         description: z.string().optional(),
         amount: z.string(), // Decimal as string
         currency: z.string().length(3).default("USD"),
-        receiptFileUrl: z.string().url().optional(),
+        receiptFileUrl: z.string(), // Now required
         receiptFileKey: z.string().optional(),
         effectiveMonth: z.string(), // YYYY-MM-01
       })
@@ -117,7 +144,7 @@ export const workerReimbursementsRouter = workerRouter({
         description: input.description || null,
         amount: input.amount,
         currency: input.currency,
-        receiptFileUrl: input.receiptFileUrl || null,
+        receiptFileUrl: input.receiptFileUrl,
         receiptFileKey: input.receiptFileKey || null,
         status: "submitted",
         submittedBy: ctx.workerUser.id,

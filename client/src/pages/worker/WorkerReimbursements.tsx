@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { workerTrpc } from "@/lib/workerTrpc";
 import WorkerLayout from "./WorkerLayout";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Receipt, Plus, X, ExternalLink } from "lucide-react";
+import { Loader2, Receipt, Plus, X, ExternalLink, Upload, FileCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -71,21 +71,32 @@ export default function WorkerReimbursements() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [category, setCategory] = useState<string>("");
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("USD");
   const [description, setDescription] = useState("");
-  const [receiptUrl, setReceiptUrl] = useState("");
   const [effectiveMonth, setEffectiveMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   });
 
+  // Receipt file upload state
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptUrl, setReceiptUrl] = useState("");
+  const [receiptFileKey, setReceiptFileKey] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const utils = workerTrpc.useUtils();
+
+  // Get user profile for currency
+  const { data: me } = workerTrpc.auth.me.useQuery();
+  const employeeCurrency = me?.currency || "USD";
 
   const { data, isLoading } = workerTrpc.reimbursements.list.useQuery({
     page,
     pageSize: 20,
     status: statusFilter === "all" ? undefined : statusFilter as any,
   });
+
+  const uploadReceiptMutation = workerTrpc.reimbursements.uploadReceipt.useMutation();
 
   const submitMutation = workerTrpc.reimbursements.submit.useMutation({
     onSuccess: () => {
@@ -114,9 +125,56 @@ export default function WorkerReimbursements() {
   const resetForm = () => {
     setCategory("");
     setAmount("");
-    setCurrency("USD");
     setDescription("");
+    setReceiptFile(null);
     setReceiptUrl("");
+    setReceiptFileKey("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (20MB max)
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("File size must be under 20MB");
+      return;
+    }
+
+    setReceiptFile(file);
+    setIsUploading(true);
+
+    try {
+      // Read file as base64
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Remove data:xxx;base64, prefix
+          const base64Data = result.split(",")[1] || result;
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const result = await uploadReceiptMutation.mutateAsync({
+        fileBase64: base64,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+      });
+
+      setReceiptUrl(result.url);
+      setReceiptFileKey(result.fileKey);
+      toast.success("Receipt uploaded successfully");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload receipt");
+      setReceiptFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleSubmit = () => {
@@ -124,12 +182,17 @@ export default function WorkerReimbursements() {
       toast.error("Please fill in all required fields");
       return;
     }
+    if (!receiptUrl) {
+      toast.error("Please upload a receipt file");
+      return;
+    }
     submitMutation.mutate({
       category: category as any,
       amount,
-      currency,
+      currency: employeeCurrency,
       description: description || undefined,
-      receiptFileUrl: receiptUrl || undefined,
+      receiptFileUrl: receiptUrl,
+      receiptFileKey: receiptFileKey || undefined,
       effectiveMonth: effectiveMonth + "-01",
     });
   };
@@ -291,7 +354,11 @@ export default function WorkerReimbursements() {
                 </div>
                 <div className="space-y-2">
                   <Label>Currency</Label>
-                  <Input value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} maxLength={3} />
+                  <Input
+                    value={employeeCurrency}
+                    disabled
+                    className="bg-muted cursor-not-allowed"
+                  />
                 </div>
               </div>
               <div className="space-y-2">
@@ -308,18 +375,64 @@ export default function WorkerReimbursements() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Receipt URL (optional)</Label>
-                <Input
-                  placeholder="https://storage.example.com/receipt.pdf"
-                  value={receiptUrl}
-                  onChange={(e) => setReceiptUrl(e.target.value)}
+                <Label>Receipt *</Label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,.pdf,.doc,.docx"
+                  onChange={handleFileSelect}
+                  className="hidden"
                 />
-                <p className="text-xs text-muted-foreground">Upload your receipt first, then paste the URL here.</p>
+                {!receiptFile ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full h-20 border-dashed flex flex-col gap-1"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                  >
+                    <Upload className="w-5 h-5 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Click to upload receipt</span>
+                    <span className="text-xs text-muted-foreground">PDF, images, or documents (max 20MB)</span>
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-3 p-3 rounded-md border bg-muted/30">
+                    {isUploading ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-primary shrink-0" />
+                    ) : (
+                      <FileCheck className="w-5 h-5 text-green-600 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{receiptFile.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {isUploading ? "Uploading..." : "Uploaded successfully"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 h-8 w-8"
+                      onClick={() => {
+                        setReceiptFile(null);
+                        setReceiptUrl("");
+                        setReceiptFileKey("");
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
+                      disabled={isUploading}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => { setCreateDialogOpen(false); resetForm(); }}>Cancel</Button>
-              <Button onClick={handleSubmit} disabled={submitMutation.isPending || !category || !amount || !effectiveMonth}>
+              <Button
+                onClick={handleSubmit}
+                disabled={submitMutation.isPending || isUploading || !category || !amount || !effectiveMonth || !receiptUrl}
+              >
                 {submitMutation.isPending ? "Submitting..." : "Submit"}
               </Button>
             </DialogFooter>
