@@ -29,10 +29,12 @@ import {
   contractorInvoices,
   contractorMilestones,
   contractorAdjustments,
-  users
+  users,
+  workerUsers
 } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { ContractorInvoiceGenerationService } from "../services/contractorInvoiceGenerationService";
+import { provisionWorkerUser, resendWorkerInvite } from "../services/workerProvisioningService";
 
 export const contractorsRouter = router({
   getApprovers: userProcedure.query(async () => {
@@ -217,6 +219,50 @@ export const contractorsRouter = router({
         changes: JSON.stringify({ endDate, reason: input.reason || null }),
       });
       return { success: true };
+    }),
+
+  // ── Worker Portal Invite ──
+  workerPortalStatus: userProcedure
+    .input(z.object({ contractorId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { hasAccount: false, workerUserId: null, email: null, passwordSet: false };
+      const [wu] = await db.select().from(workerUsers).where(eq(workerUsers.contractorId, input.contractorId)).limit(1);
+      if (!wu) return { hasAccount: false, workerUserId: null, email: null, passwordSet: false };
+      return {
+        hasAccount: true,
+        workerUserId: wu.id,
+        email: wu.email,
+        passwordSet: !!wu.passwordHash && wu.passwordHash.length > 0,
+      };
+    }),
+
+  inviteToWorkerPortal: customerManagerProcedure
+    .input(z.object({
+      contractorId: z.number(),
+      email: z.string().email().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const result = await provisionWorkerUser({
+        contractorId: input.contractorId,
+        email: input.email,
+      });
+
+      await logAuditAction({
+        userId: ctx.user.id, userName: ctx.user.name || null,
+        action: result.alreadyExists ? "resend_worker_invite" : "invite_to_worker_portal",
+        entityType: "contractor",
+        entityId: input.contractorId,
+        changes: JSON.stringify({ workerUserId: result.workerUserId, email: result.email }),
+      });
+
+      if (result.alreadyExists) {
+        // Resend invite email with fresh token
+        await resendWorkerInvite(result.workerUserId);
+        return { success: true, alreadyExists: true, email: result.email };
+      }
+
+      return { success: true, alreadyExists: false, email: result.email };
     }),
 
   // ── Milestones Sub-Router ──

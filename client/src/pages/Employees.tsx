@@ -34,7 +34,7 @@ import {
   Calendar, Building2, Briefcase, Shield, Globe, Pencil,
   Upload, FileText, Trash2, Eye, DollarSign, CalendarDays,
   Receipt, FileCheck, AlertTriangle, Undo2, Clock, Hash, User, Cake,
-  CreditCard, Home,
+  CreditCard, Home, UserPlus, CheckCircle, Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -894,6 +894,23 @@ function EmployeeDetail({ id }: { id: number }) {
   const { data: customers } = trpc.customers.list.useQuery({ limit: 200 });
   const { data: detailCountriesList } = trpc.countries.list.useQuery();
 
+  // Worker Portal invite
+  const { data: workerPortalStatus, refetch: refetchWpStatus } = trpc.employees.workerPortalStatus.useQuery(
+    { employeeId: id },
+    { enabled: !!id }
+  );
+  const inviteToWorkerPortalMutation = trpc.employees.inviteToWorkerPortal.useMutation({
+    onSuccess: (data) => {
+      if (data.alreadyExists) {
+        toast.success(`Invite resent to ${data.email}`);
+      } else {
+        toast.success(`Worker Portal invite sent to ${data.email}`);
+      }
+      refetchWpStatus();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   // Auto-detect visa requirement when editing nationality/country
   const { data: editVisaCheck } = trpc.employees.checkVisaRequired.useQuery(
     { nationality: editForm.nationality || "", workCountry: editForm.country || "" },
@@ -1142,6 +1159,36 @@ function EmployeeDetail({ id }: { id: number }) {
             </p>
           </div>
           <div className="flex gap-2 flex-wrap justify-end">
+            {/* Worker Portal Invite Button */}
+            {workerPortalStatus && !workerPortalStatus.hasAccount && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => inviteToWorkerPortalMutation.mutate({ employeeId: employee.id, email: employee.email || undefined })}
+                disabled={inviteToWorkerPortalMutation.isPending}
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                Invite to Worker Portal
+              </Button>
+            )}
+            {workerPortalStatus?.hasAccount && !workerPortalStatus.passwordSet && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => inviteToWorkerPortalMutation.mutate({ employeeId: employee.id })}
+                disabled={inviteToWorkerPortalMutation.isPending}
+                className="text-amber-600 border-amber-300"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Resend Invite
+              </Button>
+            )}
+            {workerPortalStatus?.hasAccount && workerPortalStatus.passwordSet && (
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 h-9 px-3 flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Worker Portal Active
+              </Badge>
+            )}
             <Button variant="outline" size="sm" onClick={openEditDialog}>
               <Pencil className="w-4 h-4 mr-2" />Edit
             </Button>

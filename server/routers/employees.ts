@@ -35,7 +35,8 @@ import { generateDepositInvoice } from "../services/depositInvoiceService";
 import { generateDepositRefund } from "../services/depositRefundService";
 import { generateVisaServiceInvoice } from "../services/visaServiceInvoiceService";
 import { autoInitializeLeavePolicyForCountry } from "../services/leaveAutoInitService";
-import { onboardingInvites, customers } from "../../drizzle/schema";
+import { onboardingInvites, customers, workerUsers } from "../../drizzle/schema";
+import { provisionWorkerUser, resendWorkerInvite } from "../services/workerProvisioningService";
 import { eq, desc, and, sql } from "drizzle-orm";
 
 
@@ -849,8 +850,50 @@ export const employeesRouter = router({
         return { success: true };
       }),
   }),
+  // ── Worker Portal Invite ──────────────────────────────────────────────────
+  workerPortalStatus: userProcedure
+    .input(z.object({ employeeId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { hasAccount: false, workerUserId: null, email: null, passwordSet: false };
+      const [wu] = await db.select().from(workerUsers).where(eq(workerUsers.employeeId, input.employeeId)).limit(1);
+      if (!wu) return { hasAccount: false, workerUserId: null, email: null, passwordSet: false };
+      return {
+        hasAccount: true,
+        workerUserId: wu.id,
+        email: wu.email,
+        passwordSet: !!wu.passwordHash && wu.passwordHash.length > 0,
+      };
+    }),
 
-  // ── Onboarding Invites (Admin view) ──────────────────────────────
+  inviteToWorkerPortal: customerManagerProcedure
+    .input(z.object({
+      employeeId: z.number(),
+      email: z.string().email().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const result = await provisionWorkerUser({
+        employeeId: input.employeeId,
+        email: input.email,
+      });
+
+      await logAuditAction({
+        userId: ctx.user.id, userName: ctx.user.name || null,
+        action: result.alreadyExists ? "resend_worker_invite" : "invite_to_worker_portal",
+        entityType: "employee",
+        entityId: input.employeeId,
+        changes: JSON.stringify({ workerUserId: result.workerUserId, email: result.email }),
+      });
+
+      if (result.alreadyExists) {
+        await resendWorkerInvite(result.workerUserId);
+        return { success: true, alreadyExists: true, email: result.email };
+      }
+
+      return { success: true, alreadyExists: false, email: result.email };
+    }),
+
+  // ── Onboarding Invites (Admin view) ──────────────────────────────────────────
   onboardingInvites: router({
     list: userProcedure
       .input(z.object({

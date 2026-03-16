@@ -3,7 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Calendar, DollarSign, User, Briefcase, FileText, CreditCard, Pencil, MapPin } from "lucide-react";
+import { ArrowLeft, Plus, Calendar, DollarSign, User, Briefcase, FileText, CreditCard, Pencil, MapPin, UserPlus, CheckCircle, Send } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -402,6 +402,23 @@ export default function ContractorDetail() {
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
+  // Worker Portal invite
+  const { data: workerPortalStatus, refetch: refetchWpStatus } = trpc.contractors.workerPortalStatus.useQuery(
+    { contractorId: id },
+    { enabled: !!id }
+  );
+  const inviteToWorkerPortalMutation = trpc.contractors.inviteToWorkerPortal.useMutation({
+    onSuccess: (data) => {
+      if (data.alreadyExists) {
+        toast.success(`Invite resent to ${data.email}`);
+      } else {
+        toast.success(`Worker Portal invite sent to ${data.email}`);
+      }
+      refetchWpStatus();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const createMilestoneMutation = trpc.contractors.milestones.create.useMutation({
     onSuccess: () => {
       toast.success("Milestone created");
@@ -493,6 +510,36 @@ export default function ContractorDetail() {
             </div>
           </div>
           <div className="flex gap-2 flex-wrap justify-end">
+            {/* Worker Portal Invite Button */}
+            {workerPortalStatus && !workerPortalStatus.hasAccount && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => inviteToWorkerPortalMutation.mutate({ contractorId: contractor.id, email: contractor.email || undefined })}
+                disabled={inviteToWorkerPortalMutation.isPending}
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                Invite to Worker Portal
+              </Button>
+            )}
+            {workerPortalStatus?.hasAccount && !workerPortalStatus.passwordSet && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => inviteToWorkerPortalMutation.mutate({ contractorId: contractor.id })}
+                disabled={inviteToWorkerPortalMutation.isPending}
+                className="text-amber-600 border-amber-300"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Resend Invite
+              </Button>
+            )}
+            {workerPortalStatus?.hasAccount && workerPortalStatus.passwordSet && (
+              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 h-9 px-3 flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Worker Portal Active
+              </Badge>
+            )}
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="w-4 h-4 mr-2" />
               Edit
