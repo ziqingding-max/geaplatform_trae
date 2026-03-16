@@ -581,12 +581,9 @@ export async function seedMigration() {
   await seedAIProviderConfigs(db);
   await seedCountryGuides(db);
 
-  // Only seed test business data in non-production environments
-  if (process.env.NODE_ENV !== 'production') {
-    await seedBusinessMigrationData(db);
-  } else {
-    console.log('[Seed] Production mode: skipping test business data import.');
-  }
+  // Seed business migration data (customers, employees, contacts)
+  // This is idempotent (upsert logic) — safe to run on every startup in all environments
+  await seedBusinessMigrationData(db);
 
   console.log('[Seed] All seed operations completed.');
 }
