@@ -15,6 +15,9 @@ import {
   FolderOpen,
   Menu,
   X,
+  ArrowLeftRight,
+  Briefcase,
+  UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,6 +58,22 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
   const logoutMutation = workerTrpc.auth.logout.useMutation({
     onSuccess: () => setLocation(workerPath("/login")),
   });
+
+  // Role switch mutation
+  const switchRoleMutation = workerTrpc.auth.switchRole.useMutation({
+    onSuccess: () => {
+      // Full reload to refresh all data with new role context
+      window.location.href = workerPath("/dashboard");
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to switch role");
+    },
+  });
+
+  const handleSwitchRole = () => {
+    const otherRole = user?.activeRole === "contractor" ? "employee" : "contractor";
+    switchRoleMutation.mutate({ role: otherRole });
+  };
 
   // Change Password state
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
@@ -105,14 +124,14 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
     { href: workerPath("/dashboard"), icon: LayoutDashboard, label: "Dashboard" },
   ];
 
-  if (user.workerType === "contractor") {
+  if (user.activeRole === "contractor") {
     navItems.push(
       { href: workerPath("/invoices"), icon: FileText, label: "Invoices" },
       { href: workerPath("/milestones"), icon: Flag, label: "Milestones" },
     );
   }
 
-  if (user.workerType === "employee") {
+  if (user.activeRole === "employee") {
     navItems.push(
       { href: workerPath("/payslips"), icon: Wallet, label: "Payslips" },
       { href: workerPath("/leave"), icon: CalendarDays, label: "Leave" },
@@ -129,7 +148,9 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
   const initials = user.workerName
     ? user.workerName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
     : user.email[0].toUpperCase();
-  const workerTypeLabel = user.workerType === "contractor" ? "Contractor" : "Employee";
+  const workerTypeLabel = user.activeRole === "contractor" ? "Contractor" : "Employee";
+  const hasDualIdentity = user.hasDualIdentity;
+  const availableRoles = user.availableRoles || [];
 
   return (
     <div className="min-h-screen bg-muted/20">
@@ -163,6 +184,15 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
+                {hasDualIdentity && (
+                  <>
+                    <DropdownMenuItem onClick={handleSwitchRole} disabled={switchRoleMutation.isPending}>
+                      <ArrowLeftRight className="w-4 h-4 mr-2" />
+                      {switchRoleMutation.isPending ? "Switching..." : `Switch to ${user.activeRole === "contractor" ? "Employee" : "Contractor"}`}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem onClick={() => setChangePasswordOpen(true)}>
                   <KeyRound className="w-4 h-4 mr-2" />
                   Change Password
@@ -190,12 +220,21 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuContent align="end" className="w-48">
               <div className="px-2 py-1.5">
                 <p className="text-sm font-medium">{displayName}</p>
                 <p className="text-xs text-muted-foreground">{workerTypeLabel}</p>
               </div>
               <DropdownMenuSeparator />
+              {hasDualIdentity && (
+                <>
+                  <DropdownMenuItem onClick={handleSwitchRole} disabled={switchRoleMutation.isPending}>
+                    <ArrowLeftRight className="w-4 h-4 mr-2" />
+                    {switchRoleMutation.isPending ? "Switching..." : `Switch to ${user.activeRole === "contractor" ? "Employee" : "Contractor"}`}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem onClick={() => setChangePasswordOpen(true)}>
                 <KeyRound className="w-4 h-4 mr-2" />
                 Change Password
