@@ -48,6 +48,9 @@ import {
   contractorInvoiceItems,
   contractorMilestones,
   contractorAdjustments,
+  contractorDocuments,
+  contractorContracts,
+  employeePayslips,
   workerUsers,
   customerWallets,
   walletTransactions,
@@ -416,6 +419,8 @@ export const contractorsRelations = relations(contractors, ({ one, many }) => ({
   invoices: many(contractorInvoices),
   milestones: many(contractorMilestones),
   adjustments: many(contractorAdjustments),
+  documents: many(contractorDocuments),
+  contracts: many(contractorContracts),
   workerUser: one(workerUsers),
 }));
 
@@ -456,6 +461,35 @@ export const workerUsersRelations = relations(workerUsers, ({ one }) => ({
   contractor: one(contractors, {
     fields: [workerUsers.contractorId],
     references: [contractors.id],
+  }),
+  employee: one(employees, {
+    fields: [workerUsers.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const contractorDocumentsRelations = relations(contractorDocuments, ({ one }) => ({
+  contractor: one(contractors, {
+    fields: [contractorDocuments.contractorId],
+    references: [contractors.id],
+  }),
+}));
+
+export const contractorContractsRelations = relations(contractorContracts, ({ one }) => ({
+  contractor: one(contractors, {
+    fields: [contractorContracts.contractorId],
+    references: [contractors.id],
+  }),
+}));
+
+export const employeePayslipsRelations = relations(employeePayslips, ({ one }) => ({
+  employee: one(employees, {
+    fields: [employeePayslips.employeeId],
+    references: [employees.id],
+  }),
+  customer: one(customers, {
+    fields: [employeePayslips.customerId],
+    references: [customers.id],
   }),
 }));
 

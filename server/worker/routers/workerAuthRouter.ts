@@ -2,6 +2,7 @@
  * Worker Auth Router
  *
  * Handles login, registration, password reset, and forgot password for workers.
+ * Supports both Contractor (AOR) and Employee (EOR) worker types.
  */
 
 import { z } from "zod";
@@ -17,14 +18,13 @@ import {
   signWorkerToken,
   setWorkerCookie,
   clearWorkerCookie,
-  getWorkerTokenFromRequest,
-  verifyWorkerToken,
   generateResetToken,
   getResetExpiryDate,
+  resolveWorkerType,
 } from "../workerAuth";
 import { getDb } from "../../services/db/connection";
-import { workerUsers, contractors } from "../../../drizzle/schema";
-import { eq, and } from "drizzle-orm";
+import { workerUsers, contractors, employees } from "../../../drizzle/schema";
+import { eq } from "drizzle-orm";
 import { sendWorkerPasswordResetEmail } from "../../services/authEmailService";
 
 export const workerAuthRouter = workerRouter({
@@ -62,7 +62,6 @@ export const workerAuthRouter = workerRouter({
       }
 
       if (!user.passwordHash) {
-        // Should use registration flow if no password set
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Please complete registration first",
@@ -77,15 +76,18 @@ export const workerAuthRouter = workerRouter({
         });
       }
 
-      // Generate token
+      const workerType = resolveWorkerType(user);
+
+      // Generate token with full identity info
       const token = await signWorkerToken({
         sub: user.id.toString(),
         email: user.email,
         contractorId: user.contractorId,
+        employeeId: user.employeeId,
+        workerType,
         iss: "gea-worker",
       });
 
-      // Set cookie
       setWorkerCookie(ctx.res, token);
 
       // Update last login
@@ -100,6 +102,8 @@ export const workerAuthRouter = workerRouter({
           id: user.id,
           email: user.email,
           contractorId: user.contractorId,
+          employeeId: user.employeeId,
+          workerType,
         },
       };
     }),
@@ -113,7 +117,7 @@ export const workerAuthRouter = workerRouter({
   }),
 
   /**
-   * Get current user
+   * Get current user — returns full context including workerType and profile info
    */
   me: protectedWorkerProcedure.query(({ ctx }) => {
     return ctx.workerUser;
@@ -168,11 +172,15 @@ export const workerAuthRouter = workerRouter({
         })
         .where(eq(workerUsers.id, user.id));
 
+      const workerType = resolveWorkerType(user);
+
       // Generate token for auto-login
       const token = await signWorkerToken({
         sub: user.id.toString(),
         email: user.email,
         contractorId: user.contractorId,
+        employeeId: user.employeeId,
+        workerType,
         iss: "gea-worker",
       });
 
@@ -188,20 +196,20 @@ export const workerAuthRouter = workerRouter({
     .input(
       z.object({
         email: z.string().email(),
-        origin: z.string().url(), // Frontend origin for building reset URL
+        origin: z.string().url(),
       })
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      // Find worker user by email
       const [user] = await db
         .select({
           id: workerUsers.id,
           email: workerUsers.email,
           isActive: workerUsers.isActive,
           contractorId: workerUsers.contractorId,
+          employeeId: workerUsers.employeeId,
         })
         .from(workerUsers)
         .where(eq(workerUsers.email, input.email.toLowerCase().trim()));
@@ -217,20 +225,18 @@ export const workerAuthRouter = workerRouter({
       const resetToken = generateResetToken();
       const resetExpiresAt = getResetExpiryDate();
 
-      // Store reset token
       await db
         .update(workerUsers)
         .set({ resetToken, resetExpiresAt })
         .where(eq(workerUsers.id, user.id));
 
-      // Build reset URL
       const origin = input.origin;
       const resetUrl = `${origin}/reset-password?token=${resetToken}`;
 
-      // Get worker name from contractors table
+      // Get worker name from the appropriate profile table
       let workerName = user.email;
-      if (user.contractorId) {
-        try {
+      try {
+        if (user.contractorId) {
           const [contractor] = await db
             .select({ firstName: contractors.firstName, lastName: contractors.lastName })
             .from(contractors)
@@ -238,12 +244,19 @@ export const workerAuthRouter = workerRouter({
           if (contractor) {
             workerName = `${contractor.firstName || ""} ${contractor.lastName || ""}`.trim() || user.email;
           }
-        } catch {
-          // Fallback to email
+        } else if (user.employeeId) {
+          const [employee] = await db
+            .select({ firstName: employees.firstName, lastName: employees.lastName })
+            .from(employees)
+            .where(eq(employees.id, user.employeeId));
+          if (employee) {
+            workerName = `${employee.firstName || ""} ${employee.lastName || ""}`.trim() || user.email;
+          }
         }
+      } catch {
+        // Fallback to email
       }
 
-      // Send password reset email
       try {
         await sendWorkerPasswordResetEmail({
           to: user.email,
@@ -261,7 +274,7 @@ export const workerAuthRouter = workerRouter({
     }),
 
   /**
-   * Verify reset token (check if valid before showing reset form)
+   * Verify reset token
    */
   verifyResetToken: workerPublicProcedure
     .input(z.object({ token: z.string() }))
@@ -311,7 +324,6 @@ export const workerAuthRouter = workerRouter({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      // Find user by reset token
       const [user] = await db
         .select()
         .from(workerUsers)
@@ -325,7 +337,6 @@ export const workerAuthRouter = workerRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Reset link has expired" });
       }
 
-      // Hash new password and clear reset token
       const passwordHash = await hashPassword(input.password);
 
       await db
@@ -337,11 +348,15 @@ export const workerAuthRouter = workerRouter({
         })
         .where(eq(workerUsers.id, user.id));
 
+      const workerType = resolveWorkerType(user);
+
       // Auto-login after password reset
       const token = await signWorkerToken({
         sub: user.id.toString(),
         email: user.email,
         contractorId: user.contractorId,
+        employeeId: user.employeeId,
+        workerType,
         iss: "gea-worker",
       });
 
@@ -364,7 +379,6 @@ export const workerAuthRouter = workerRouter({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      // Get current password hash
       const [user] = await db
         .select({ passwordHash: workerUsers.passwordHash })
         .from(workerUsers)

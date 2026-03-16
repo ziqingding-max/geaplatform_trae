@@ -61,6 +61,10 @@ const WorkerMilestones = lazy(() => import("./pages/worker/WorkerMilestones"));
 const WorkerInvoices = lazy(() => import("./pages/worker/WorkerInvoices"));
 const WorkerProfile = lazy(() => import("./pages/worker/WorkerProfile"));
 const WorkerOnboarding = lazy(() => import("./pages/worker/WorkerOnboarding"));
+const WorkerLeave = lazy(() => import("./pages/worker/WorkerLeave"));
+const WorkerReimbursements = lazy(() => import("./pages/worker/WorkerReimbursements"));
+const WorkerPayslips = lazy(() => import("./pages/worker/WorkerPayslips"));
+const WorkerDocuments = lazy(() => import("./pages/worker/WorkerDocuments"));
 
 const PortalLogin = lazy(() => import("./pages/portal/PortalLogin"));
 const PortalRegister = lazy(() => import("./pages/portal/PortalRegister"));
@@ -141,6 +145,10 @@ function WorkerRouter() {
             <Route path={`${basePath}/dashboard`} component={WorkerDashboard} />
             <Route path={`${basePath}/milestones`} component={WorkerMilestones} />
             <Route path={`${basePath}/invoices`} component={WorkerInvoices} />
+            <Route path={`${basePath}/leave`} component={WorkerLeave} />
+            <Route path={`${basePath}/reimbursements`} component={WorkerReimbursements} />
+            <Route path={`${basePath}/payslips`} component={WorkerPayslips} />
+            <Route path={`${basePath}/documents`} component={WorkerDocuments} />
             <Route path={`${basePath}/profile`} component={WorkerProfile} />
             <Route path={basePath || "/"}>{() => <Redirect to={redirectPath} />}</Route>
             <Route component={NotFound} />

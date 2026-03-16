@@ -1,21 +1,25 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { workerTrpc } from "@/lib/workerTrpc";
-import { 
-  LayoutDashboard, 
-  FileText, 
-  Flag, 
-  User, 
+import {
+  LayoutDashboard,
+  FileText,
+  Flag,
+  User,
   LogOut,
-  Bell,
   KeyRound,
+  CalendarDays,
+  Receipt,
+  Wallet,
+  FolderOpen,
+  Menu,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -29,14 +33,21 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
+
+type NavItem = {
+  href: string;
+  icon: any;
+  label: string;
+};
 
 export default function WorkerLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
-  
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   // Check auth
-  const { data: user, isLoading, error } = workerTrpc.auth.me.useQuery(undefined, {
+  const { data: user, isLoading } = workerTrpc.auth.me.useQuery(undefined, {
     retry: false,
   });
 
@@ -73,35 +84,76 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
     }
   }, [user, isLoading, setLocation]);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location]);
+
   if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   if (!user) return null;
 
+  // Build navigation items based on worker type
+  const navItems: NavItem[] = [
+    { href: "/worker/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+  ];
+
+  if (user.workerType === "contractor") {
+    navItems.push(
+      { href: "/worker/invoices", icon: FileText, label: "Invoices" },
+      { href: "/worker/milestones", icon: Flag, label: "Milestones" },
+    );
+  }
+
+  if (user.workerType === "employee") {
+    navItems.push(
+      { href: "/worker/payslips", icon: Wallet, label: "Payslips" },
+      { href: "/worker/leave", icon: CalendarDays, label: "Leave" },
+      { href: "/worker/reimbursements", icon: Receipt, label: "Expenses" },
+    );
+  }
+
+  navItems.push(
+    { href: "/worker/documents", icon: FolderOpen, label: "Documents" },
+    { href: "/worker/profile", icon: User, label: "Profile" },
+  );
+
+  const displayName = user.workerName || user.email;
+  const initials = user.workerName
+    ? user.workerName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
+    : user.email[0].toUpperCase();
+  const workerTypeLabel = user.workerType === "contractor" ? "Contractor" : "Employee";
+
   return (
-    <div className="min-h-screen bg-muted/20 flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-background border-r flex flex-col fixed h-full">
+    <div className="min-h-screen bg-muted/20">
+      {/* ===== Desktop Sidebar (hidden on mobile) ===== */}
+      <aside className="hidden md:flex w-64 bg-background border-r flex-col fixed h-full z-30">
         <div className="p-6 border-b h-16 flex items-center">
           <h1 className="font-bold text-xl">GEA Worker</h1>
         </div>
-        
+
         <nav className="flex-1 p-4 space-y-1">
-          <NavLink href="/worker/dashboard" icon={LayoutDashboard}>Dashboard</NavLink>
-          <NavLink href="/worker/invoices" icon={FileText}>Invoices</NavLink>
-          <NavLink href="/worker/milestones" icon={Flag}>Milestones</NavLink>
-          <NavLink href="/worker/profile" icon={User}>Profile</NavLink>
+          {navItems.map((item) => (
+            <NavLink key={item.href} href={item.href} icon={item.icon}>
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
 
         <div className="p-4 border-t">
           <div className="flex items-center gap-3">
-            <Avatar>
-              <AvatarFallback>{user.email[0].toUpperCase()}</AvatarFallback>
+            <Avatar className="h-9 w-9">
+              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user.email}</p>
-              <p className="text-xs text-muted-foreground truncate">Worker</p>
+              <p className="text-sm font-medium truncate">{displayName}</p>
+              <p className="text-xs text-muted-foreground truncate">{workerTypeLabel}</p>
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -125,9 +177,67 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
         </div>
       </aside>
 
-      {/* Change Password Dialog */}
+      {/* ===== Mobile Header (hidden on desktop) ===== */}
+      <header className="md:hidden fixed top-0 left-0 right-0 h-14 bg-background border-b flex items-center justify-between px-4 z-30">
+        <h1 className="font-bold text-lg">GEA Worker</h1>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Avatar className="h-7 w-7">
+                  <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                </Avatar>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <div className="px-2 py-1.5">
+                <p className="text-sm font-medium">{displayName}</p>
+                <p className="text-xs text-muted-foreground">{workerTypeLabel}</p>
+              </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => setChangePasswordOpen(true)}>
+                <KeyRound className="w-4 h-4 mr-2" />
+                Change Password
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-destructive" onClick={() => logoutMutation.mutate()}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </Button>
+        </div>
+      </header>
+
+      {/* ===== Mobile Menu Overlay ===== */}
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-20">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileMenuOpen(false)} />
+          <nav className="absolute top-14 left-0 right-0 bg-background border-b shadow-lg p-4 space-y-1">
+            {navItems.map((item) => (
+              <NavLink key={item.href} href={item.href} icon={item.icon}>
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+        </div>
+      )}
+
+      {/* ===== Mobile Bottom Navigation ===== */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-background border-t z-30 safe-area-bottom">
+        <div className="flex justify-around items-center h-16">
+          {navItems.slice(0, 5).map((item) => (
+            <BottomNavLink key={item.href} href={item.href} icon={item.icon} label={item.label} />
+          ))}
+        </div>
+      </nav>
+
+      {/* ===== Change Password Dialog ===== */}
       <Dialog open={changePasswordOpen} onOpenChange={(open) => { setChangePasswordOpen(open); if (!open) { setCurrentPassword(""); setNewPassword(""); setConfirmNewPassword(""); } }}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Change Password</DialogTitle>
             <DialogDescription>Enter your current password and choose a new one.</DialogDescription>
@@ -158,27 +268,47 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
         </DialogContent>
       </Dialog>
 
-      {/* Main Content */}
-      <main className="flex-1 ml-64 p-8">
-        {children}
+      {/* ===== Main Content ===== */}
+      <main className="md:ml-64 pt-14 md:pt-0 pb-20 md:pb-0 min-h-screen">
+        <div className="p-4 md:p-8 max-w-5xl mx-auto">
+          {children}
+        </div>
       </main>
     </div>
   );
 }
 
+// ===== Desktop Sidebar Nav Link =====
 function NavLink({ href, icon: Icon, children }: { href: string; icon: any; children: React.ReactNode }) {
   const [location] = useLocation();
-  const isActive = location === href;
-  
+  const isActive = location === href || location.startsWith(href + "/");
+
   return (
     <Link href={href}>
-      <a className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-        isActive 
-          ? "bg-primary text-primary-foreground" 
+      <a className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
+        isActive
+          ? "bg-primary text-primary-foreground"
           : "hover:bg-muted text-muted-foreground hover:text-foreground"
       }`}>
-        <Icon className="w-4 h-4" />
+        <Icon className="w-4 h-4 shrink-0" />
         {children}
+      </a>
+    </Link>
+  );
+}
+
+// ===== Mobile Bottom Nav Link =====
+function BottomNavLink({ href, icon: Icon, label }: { href: string; icon: any; label: string }) {
+  const [location] = useLocation();
+  const isActive = location === href || location.startsWith(href + "/");
+
+  return (
+    <Link href={href}>
+      <a className={`flex flex-col items-center justify-center gap-0.5 px-2 py-1 min-w-0 ${
+        isActive ? "text-primary" : "text-muted-foreground"
+      }`}>
+        <Icon className="w-5 h-5" />
+        <span className="text-[10px] font-medium truncate max-w-[60px]">{label}</span>
       </a>
     </Link>
   );

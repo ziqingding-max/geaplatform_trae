@@ -330,3 +330,50 @@ ${emailButton("Log In to Client Portal", params.loginUrl)}
     html,
   });
 }
+
+
+// ============================================================================
+// 9. Worker Portal Invite (Invite worker to set up Worker Portal account)
+// ============================================================================
+
+export async function sendWorkerPortalInviteEmail(params: {
+  to: string;
+  workerName: string;
+  companyName: string;
+  workerType: "employee" | "contractor";
+  inviteUrl: string;
+}) {
+  const typeLabel = params.workerType === "employee" ? "employee" : "contractor";
+  const body = `
+<p>Dear ${params.workerName},</p>
+<p>You have been invited to join the <strong>GEA Worker Portal</strong> as a ${typeLabel} of <strong>${params.companyName}</strong>.</p>
+<p>The Worker Portal gives you access to manage your work-related information, including:</p>
+<ul>
+  ${params.workerType === "employee" ? `
+  <li>View and download your payslips</li>
+  <li>Submit leave requests</li>
+  <li>Submit expense reimbursements</li>
+  ` : `
+  <li>View your invoices</li>
+  <li>Submit milestone deliverables</li>
+  `}
+  <li>View your documents and contracts</li>
+  <li>Manage your profile information</li>
+</ul>
+<p>To get started, please click the button below to set your password and activate your account:</p>
+${emailButton("Activate Your Account", params.inviteUrl)}
+${emailBanner("This invitation link will expire in 7 days. If you did not expect this invitation, please ignore this email.", "info")}
+<p>If you have any questions, please contact your HR representative at ${params.companyName} or reach out to us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`;
+
+  const html = renderEmailLayout(body, {
+    audience: "worker",
+    preheader: `You've been invited to the GEA Worker Portal by ${params.companyName}`,
+  });
+
+  await sendEmail({
+    to: params.to,
+    subject: `Welcome to GEA Worker Portal — ${params.companyName}`,
+    html,
+  });
+}

@@ -4,6 +4,10 @@
  * COMPLETELY SEPARATE tRPC instance from admin and customer portal.
  * Every procedure that accesses data MUST go through protectedWorkerProcedure,
  * which injects ctx.workerUser into the context.
+ *
+ * Identity-based middleware:
+ * - contractorOnlyProcedure: Only accessible by contractor workers
+ * - employeeOnlyProcedure: Only accessible by employee workers
  */
 
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
@@ -81,3 +85,61 @@ const requireWorkerUser = t.middleware(async ({ ctx, next }) => {
 });
 
 export const protectedWorkerProcedure = t.procedure.use(requireWorkerUser);
+
+/**
+ * Contractor-only procedure — for routes that only contractors can access.
+ * e.g., Invoices, Milestones
+ */
+const requireContractor = t.middleware(async ({ ctx, next }) => {
+  if (!ctx.workerUser) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "You must be logged in to access this resource",
+    });
+  }
+
+  if (ctx.workerUser.workerType !== "contractor" || !ctx.workerUser.contractorId) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "This feature is only available for contractors",
+    });
+  }
+
+  return next({
+    ctx: {
+      ...ctx,
+      workerUser: ctx.workerUser,
+    },
+  });
+});
+
+export const contractorOnlyProcedure = t.procedure.use(requireContractor);
+
+/**
+ * Employee-only procedure — for routes that only employees can access.
+ * e.g., Leave, Reimbursements, Payslips
+ */
+const requireEmployee = t.middleware(async ({ ctx, next }) => {
+  if (!ctx.workerUser) {
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+      message: "You must be logged in to access this resource",
+    });
+  }
+
+  if (ctx.workerUser.workerType !== "employee" || !ctx.workerUser.employeeId) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "This feature is only available for employees",
+    });
+  }
+
+  return next({
+    ctx: {
+      ...ctx,
+      workerUser: ctx.workerUser,
+    },
+  });
+});
+
+export const employeeOnlyProcedure = t.procedure.use(requireEmployee);

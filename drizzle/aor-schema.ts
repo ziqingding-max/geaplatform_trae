@@ -179,6 +179,12 @@ export const contractorMilestones = sqliteTable(
     dueDate: text("dueDate"),
     completedAt: integer("completedAt", { mode: "timestamp_ms" }),
     
+    // Deliverable files uploaded by worker when submitting
+    deliverableFileUrl: text("deliverableFileUrl"),
+    deliverableFileKey: text("deliverableFileKey", { length: 500 }),
+    deliverableFileName: text("deliverableFileName", { length: 255 }),
+    submissionNote: text("submissionNote"), // Worker's note when submitting the milestone
+    
     // Approval tracking (aligned with EOR adjustments)
     submittedBy: integer("submittedBy"), // Worker user ID who submitted
     clientApprovedBy: integer("clientApprovedBy"), // Portal contact ID
@@ -265,14 +271,126 @@ export const contractorAdjustments = sqliteTable(
 export type ContractorAdjustment = typeof contractorAdjustments.$inferSelect;
 export type InsertContractorAdjustment = typeof contractorAdjustments.$inferInsert;
 
+// ── Contractor Documents (aligned with employee_documents) ──
+// For storing contractor agreements, ID copies, tax forms, etc.
+// TODO: Add admin/client portal UI to manage these documents
+export const contractorDocuments = sqliteTable(
+  "contractor_documents",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    contractorId: integer("contractorId").notNull(),
+    documentType: text("documentType", { enum: [
+      "agreement",        // Contractor agreement / SOW
+      "nda",              // Non-disclosure agreement
+      "passport",
+      "national_id",
+      "tax_form",         // W-9, W-8BEN, etc.
+      "insurance",        // Liability insurance
+      "certification",    // Professional certifications
+      "other",
+    ] }).notNull(),
+    documentName: text("documentName", { length: 255 }).notNull(),
+    fileUrl: text("fileUrl").notNull(),
+    fileKey: text("fileKey", { length: 500 }).notNull(),
+    mimeType: text("mimeType", { length: 100 }),
+    fileSize: integer("fileSize"),
+    notes: text("notes"),
+    uploadedAt: integer("uploadedAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    cdContractorIdIdx: index("cd_contractor_id_idx").on(table.contractorId),
+    cdDocTypeIdx: index("cd_doc_type_idx").on(table.documentType),
+  })
+);
+
+export type ContractorDocument = typeof contractorDocuments.$inferSelect;
+export type InsertContractorDocument = typeof contractorDocuments.$inferInsert;
+
+// ── Contractor Contracts (aligned with employee_contracts) ──
+// For storing signed contractor agreements with effective dates
+// TODO: Add admin/client portal UI to manage these contracts
+export const contractorContracts = sqliteTable(
+  "contractor_contracts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    contractorId: integer("contractorId").notNull(),
+    contractType: text("contractType", { length: 100 }), // e.g. "Service Agreement", "SOW", "Amendment"
+    fileUrl: text("fileUrl"),
+    fileKey: text("fileKey", { length: 500 }),
+    signedDate: text("signedDate"),
+    effectiveDate: text("effectiveDate"),
+    expiryDate: text("expiryDate"),
+    status: text("status", { enum: ["draft", "signed", "expired", "terminated"] }).default("draft").notNull(),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    ccContractorIdIdx: index("cc_contractor_id_idx").on(table.contractorId),
+    ccStatusIdx: index("cc_status_idx").on(table.status),
+  })
+);
+
+export type ContractorContract = typeof contractorContracts.$inferSelect;
+export type InsertContractorContract = typeof contractorContracts.$inferInsert;
+
+// ── Employee Payslips ──
+// Admin uploads payslip PDF files for employees to view in Worker Portal.
+// This is separate from payroll_runs/payroll_items which are internal accounting records.
+// TODO: Add admin portal UI to upload payslips
+export const employeePayslips = sqliteTable(
+  "employee_payslips",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    employeeId: integer("employeeId").notNull(),
+    customerId: integer("customerId").notNull(), // Auto-filled from employee
+    // Period
+    payPeriod: text("payPeriod").notNull(), // YYYY-MM format, e.g. "2026-03"
+    payDate: text("payDate"), // Actual pay date, e.g. "2026-03-25"
+    // File
+    fileUrl: text("fileUrl").notNull(),
+    fileKey: text("fileKey", { length: 500 }).notNull(),
+    fileName: text("fileName", { length: 255 }).notNull(),
+    mimeType: text("mimeType", { length: 100 }).default("application/pdf"),
+    fileSize: integer("fileSize"),
+    // Metadata
+    currency: text("currency", { length: 3 }),
+    grossAmount: text("grossAmount"), // Optional summary for display
+    netAmount: text("netAmount"),     // Optional summary for display
+    notes: text("notes"),
+    // Publishing control: only published payslips are visible to workers
+    isPublished: integer("isPublished", { mode: "boolean" }).default(false).notNull(),
+    publishedAt: integer("publishedAt", { mode: "timestamp_ms" }),
+    uploadedBy: integer("uploadedBy"), // Admin user ID who uploaded
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    epEmployeeIdIdx: index("ep_employee_id_idx").on(table.employeeId),
+    epCustomerIdIdx: index("ep_customer_id_idx").on(table.customerId),
+    epPayPeriodIdx: index("ep_pay_period_idx").on(table.payPeriod),
+    epPublishedIdx: index("ep_published_idx").on(table.isPublished),
+    epEmployeePeriodIdx: uniqueIndex("ep_employee_period_idx").on(table.employeeId, table.payPeriod),
+  })
+);
+
+export type EmployeePayslip = typeof employeePayslips.$inferSelect;
+export type InsertEmployeePayslip = typeof employeePayslips.$inferInsert;
+
 // ── Worker Portal Auth ──
+// Unified authentication for both Employee (EOR) and Contractor (AOR) users.
+// Each worker_user links to either an employee OR a contractor (mutually exclusive).
 export const workerUsers = sqliteTable(
   "worker_users",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     email: text("email", { length: 320 }).unique().notNull(),
     passwordHash: text("passwordHash", { length: 255 }),
-    contractorId: integer("contractorId").unique(), // 1:1 link to contractor profile
+    contractorId: integer("contractorId").unique(), // 1:1 link to contractor profile (AOR)
+    employeeId: integer("employeeId").unique(),     // 1:1 link to employee profile (EOR)
+    
+    // Worker type derived from which ID is set: "contractor" if contractorId, "employee" if employeeId
     
     isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
     isEmailVerified: integer("isEmailVerified", { mode: "boolean" }).default(false).notNull(),
@@ -289,6 +407,7 @@ export const workerUsers = sqliteTable(
   (table) => ({
     wuEmailIdx: uniqueIndex("wu_email_idx").on(table.email),
     wuContractorIdIdx: uniqueIndex("wu_contractor_id_idx").on(table.contractorId),
+    wuEmployeeIdIdx: uniqueIndex("wu_employee_id_idx").on(table.employeeId),
   })
 );
 
