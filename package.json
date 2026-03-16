@@ -12,7 +12,8 @@
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "seed:prod": "tsx scripts/seed-production.ts",
     "seed:knowledge": "tsx server/scripts/seedKnowledgeFromInternalData.ts",
-    "test": "jest"
+    "test": "jest",
+    "migrate:business": "tsx scripts/migrate-business-data.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
