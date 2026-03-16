@@ -154,6 +154,13 @@ const REQUIRED_COLUMNS: ColumnMigration[] = [
     type: "TEXT NOT NULL",
     defaultValue: "'all'",
   },
+  // ── customer_leave_policies (client confirmation tracking) ──
+  {
+    table: "customer_leave_policies",
+    column: "clientConfirmed",
+    type: "INTEGER NOT NULL",
+    defaultValue: "1",  // Existing records default to confirmed (1=true)
+  },
 ];
 
 /**

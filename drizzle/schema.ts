@@ -301,6 +301,7 @@ export const customerLeavePolicies = sqliteTable(
     annualEntitlement: integer("annualEntitlement").notNull(), // Days per year (must be >= statutory minimum)
     expiryRule: text("expiryRule", { enum: ["year_end", "anniversary", "no_expiry"] }).default("year_end").notNull(),
     carryOverDays: integer("carryOverDays").default(0).notNull(), // Max days that can carry over to next year (0 = no carry over)
+    clientConfirmed: integer("clientConfirmed", { mode: "boolean" }).default(false).notNull(), // Whether client has reviewed and confirmed this policy
     createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
     updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },

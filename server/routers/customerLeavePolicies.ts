@@ -87,7 +87,11 @@ export const customerLeavePoliciesRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const updateResult = await updateCustomerLeavePolicy(input.id, input.data);
+      // Admin editing resets client confirmation — client must re-review
+      const updateResult = await updateCustomerLeavePolicy(input.id, {
+        ...input.data,
+        clientConfirmed: false,
+      });
 
       // After successful policy update, sync leave balances for all affected employees
       syncLeaveBalancesOnPolicyUpdate(input.id).catch(err => {

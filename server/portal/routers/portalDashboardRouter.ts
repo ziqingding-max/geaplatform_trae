@@ -21,6 +21,7 @@ import {
   payrollRuns,
   payrollItems,
   contractors,
+  reimbursements,
 } from "../../../drizzle/schema";
 
 export const portalDashboardRouter = portalRouter({
@@ -87,26 +88,22 @@ export const portalDashboardRouter = portalRouter({
       .from(invoices)
       .where(and(eq(invoices.customerId, cid), eq(invoices.status, "sent")));
 
-    // Countries with active employees but no leave policies configured
-    // Only include employees in statuses where leave policies are relevant
-    const employeeCountries = await db
-      .select({ countryCode: employees.country })
-      .from(employees)
-      .where(and(
-        eq(employees.customerId, cid),
-        inArray(employees.status, ["active", "onboarding", "on_leave", "offboarding"] as any)
-      ))
-      .groupBy(employees.country);
+    // Pending reimbursements (submitted, awaiting client approval)
+    const [reimbursementCount] = await db
+      .select({ count: count() })
+      .from(reimbursements)
+      .where(and(eq(reimbursements.customerId, cid), eq(reimbursements.status, "submitted")));
 
-    // Get countries that already have leave policies
-    const policyCountries = await db
+    // Countries with leave policies that have NOT been confirmed by the client
+    // A country needs attention if any of its policies have clientConfirmed = false
+    const unconfirmedPolicyCountries = await db
       .select({ countryCode: customerLeavePolicies.countryCode })
       .from(customerLeavePolicies)
-      .where(eq(customerLeavePolicies.customerId, cid))
+      .where(and(
+        eq(customerLeavePolicies.customerId, cid),
+        eq(customerLeavePolicies.clientConfirmed, false)
+      ))
       .groupBy(customerLeavePolicies.countryCode);
-
-    const policyCountrySet = new Set(policyCountries.map(p => p.countryCode));
-    const unconfiguredCountries = employeeCountries.filter(c => c.countryCode && !policyCountrySet.has(c.countryCode));
 
     return {
       activeEmployees: (empCount?.count ?? 0) + (contractorCount?.count ?? 0),
@@ -118,7 +115,8 @@ export const portalDashboardRouter = portalRouter({
       pendingLeave: leaveCount?.count ?? 0,
       overdueInvoices: overdueCount?.count ?? 0,
       unpaidInvoices: unpaidCount?.count ?? 0,
-      unconfiguredLeavePolicyCountries: unconfiguredCountries.length,
+      pendingReimbursements: reimbursementCount?.count ?? 0,
+      unconfiguredLeavePolicyCountries: unconfirmedPolicyCountries.length,
     };
   }),
 

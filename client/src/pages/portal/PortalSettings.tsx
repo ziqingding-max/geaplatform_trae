@@ -347,6 +347,7 @@ function LeavePoliciesTab() {
       {Object.entries(groupedPolicies).map(([countryCode, countryPolicies]) => {
         const countryName = (countryPolicies as any[])[0]?.countryName || countryCode;
         const isEditing = editingCountry === countryCode;
+        const hasUnconfirmed = (countryPolicies as any[]).some((p: any) => !p.clientConfirmed);
         return (
           <Card key={countryCode}>
             <CardHeader>
@@ -368,9 +369,14 @@ function LeavePoliciesTab() {
                         </Button>
                       </div>
                     ) : (
-                      <Button size="sm" variant="ghost" className="h-7" onClick={() => startEditCountry(countryCode, countryPolicies as any[])}>
-                        <Pencil className="w-3.5 h-3.5 mr-1" /> {t("common.edit") || "Edit"}
-                      </Button>
+                      <div className="relative inline-flex">
+                        <Button size="sm" variant="ghost" className="h-7" onClick={() => startEditCountry(countryCode, countryPolicies as any[])}>
+                          <Pencil className="w-3.5 h-3.5 mr-1" /> {t("common.edit") || "Edit"}
+                        </Button>
+                        {hasUnconfirmed && (
+                          <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white" />
+                        )}
+                      </div>
                     )}
                   </div>
                 )}
