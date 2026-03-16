@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { workerTrpc } from "@/lib/workerTrpc";
+import { workerPath } from "@/lib/workerBasePath";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +18,7 @@ export default function WorkerLogin() {
 
   const loginMutation = workerTrpc.auth.login.useMutation({
     onSuccess: () => {
-      setLocation("/worker/dashboard");
+      setLocation(workerPath("/dashboard"));
     },
     onError: (err) => {
       setError(err.message || "Login failed");
@@ -83,7 +84,7 @@ export default function WorkerLogin() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
-                  <Link href="/worker/forgot-password" className="text-xs text-primary hover:underline">
+                  <Link href={workerPath("/forgot-password")} className="text-xs text-primary hover:underline">
                     Forgot password?
                   </Link>
                 </div>

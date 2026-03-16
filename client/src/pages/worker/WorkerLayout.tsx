@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { workerTrpc } from "@/lib/workerTrpc";
+import { workerPath } from "@/lib/workerBasePath";
 import {
   LayoutDashboard,
   FileText,
@@ -52,7 +53,7 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
   });
 
   const logoutMutation = workerTrpc.auth.logout.useMutation({
-    onSuccess: () => setLocation("/worker/login"),
+    onSuccess: () => setLocation(workerPath("/login")),
   });
 
   // Change Password state
@@ -80,7 +81,7 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     if (!isLoading && !user) {
-      setLocation("/worker/login");
+      setLocation(workerPath("/login"));
     }
   }, [user, isLoading, setLocation]);
 
@@ -101,27 +102,27 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
 
   // Build navigation items based on worker type
   const navItems: NavItem[] = [
-    { href: "/worker/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { href: workerPath("/dashboard"), icon: LayoutDashboard, label: "Dashboard" },
   ];
 
   if (user.workerType === "contractor") {
     navItems.push(
-      { href: "/worker/invoices", icon: FileText, label: "Invoices" },
-      { href: "/worker/milestones", icon: Flag, label: "Milestones" },
+      { href: workerPath("/invoices"), icon: FileText, label: "Invoices" },
+      { href: workerPath("/milestones"), icon: Flag, label: "Milestones" },
     );
   }
 
   if (user.workerType === "employee") {
     navItems.push(
-      { href: "/worker/payslips", icon: Wallet, label: "Payslips" },
-      { href: "/worker/leave", icon: CalendarDays, label: "Leave" },
-      { href: "/worker/reimbursements", icon: Receipt, label: "Expenses" },
+      { href: workerPath("/payslips"), icon: Wallet, label: "Payslips" },
+      { href: workerPath("/leave"), icon: CalendarDays, label: "Leave" },
+      { href: workerPath("/reimbursements"), icon: Receipt, label: "Expenses" },
     );
   }
 
   navItems.push(
-    { href: "/worker/documents", icon: FolderOpen, label: "Documents" },
-    { href: "/worker/profile", icon: User, label: "Profile" },
+    { href: workerPath("/documents"), icon: FolderOpen, label: "Documents" },
+    { href: workerPath("/profile"), icon: User, label: "Profile" },
   );
 
   const displayName = user.workerName || user.email;

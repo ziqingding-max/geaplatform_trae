@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { workerTrpc } from "@/lib/workerTrpc";
+import { workerPath, getWorkerBasePath } from "@/lib/workerBasePath";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +11,7 @@ import { User, Loader2, Eye, EyeOff, Lock, CheckCircle2 } from "lucide-react";
 
 export default function WorkerRegister() {
   const [, setLocation] = useLocation();
-  const [match, params] = useRoute("/worker/invite/:token");
+  const [match, params] = useRoute(`${getWorkerBasePath()}/invite/:token`);
   const token = params?.token || "";
 
   const [password, setPassword] = useState("");
@@ -41,7 +42,7 @@ export default function WorkerRegister() {
 
   const registerMutation = workerTrpc.auth.register.useMutation({
     onSuccess: () => {
-      setLocation("/worker/dashboard");
+      setLocation(workerPath("/dashboard"));
     },
     onError: (err) => {
       setError(err.message || "Registration failed");
@@ -74,7 +75,7 @@ export default function WorkerRegister() {
             <CardDescription>This invite link is missing a token.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/worker/login">
+            <Link href={workerPath("/login")}>
               <Button className="w-full">Back to Login</Button>
             </Link>
           </CardContent>
