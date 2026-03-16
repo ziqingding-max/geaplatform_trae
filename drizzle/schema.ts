@@ -847,6 +847,8 @@ export const employeeDocuments = sqliteTable(
       "visa",
       "contract",
       "education",
+      "payslip",
+      "reimbursement_receipt",
       "other",
     ] }).notNull(),
     documentName: text("documentName", { length: 255 }).notNull(),

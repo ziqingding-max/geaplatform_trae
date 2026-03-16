@@ -769,6 +769,8 @@ var init_schema = __esm({
         // Days per year
         isPaid: integer3("isPaid", { mode: "boolean" }).default(true).notNull(),
         requiresApproval: integer3("requiresApproval", { mode: "boolean" }).default(true).notNull(),
+        applicableGender: text3("applicableGender", { enum: ["male", "female", "all"] }).default("all").notNull(),
+        // Which gender this leave type applies to
         description: text3("description"),
         createdAt: integer3("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
         updatedAt: integer3("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
@@ -1432,6 +1434,8 @@ var init_schema = __esm({
           "visa",
           "contract",
           "education",
+          "payslip",
+          "reimbursement_receipt",
           "other"
         ] }).notNull(),
         documentName: text3("documentName", { length: 255 }).notNull(),
@@ -3151,7 +3155,8 @@ async function listEmployees(params = {}) {
       clientCode: customers.clientCode,
       serviceType: employees.serviceType,
       baseSalary: employees.baseSalary,
-      salaryCurrency: employees.salaryCurrency
+      salaryCurrency: employees.salaryCurrency,
+      gender: employees.gender
     }).from(employees).leftJoin(customers, eq3(employees.customerId, customers.id)).where(where).limit(pageSize).offset(offset).orderBy(desc3(employees.createdAt)),
     db.select({ count: count3() }).from(employees).where(where)
   ]);
@@ -3286,7 +3291,8 @@ async function listLeaveBalances(employeeId, year) {
     expiryDate: leaveBalances.expiryDate,
     createdAt: leaveBalances.createdAt,
     updatedAt: leaveBalances.updatedAt,
-    leaveTypeName: leaveTypes.leaveTypeName
+    leaveTypeName: leaveTypes.leaveTypeName,
+    applicableGender: leaveTypes.applicableGender
   }).from(leaveBalances).leftJoin(leaveTypes, eq3(leaveBalances.leaveTypeId, leaveTypes.id)).where(and2(...conditions));
 }
 async function createLeaveBalance(data) {
@@ -3314,6 +3320,14 @@ async function initializeLeaveBalancesForEmployee(employeeId, options) {
   const { leaveTypes: leaveTypes2, customerLeavePolicies: customerLeavePolicies3, leaveBalances: leaveBalances3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
   const countryLeaveTypes = await db.select().from(leaveTypes2).where(eq3(leaveTypes2.countryCode, employee.country));
   if (countryLeaveTypes.length === 0) return { added: 0 };
+  const employeeGender = employee.gender;
+  const filteredLeaveTypes = countryLeaveTypes.filter((lt3) => {
+    const applicable = lt3.applicableGender || "all";
+    if (applicable === "all") return true;
+    if (!employeeGender || employeeGender === "other" || employeeGender === "prefer_not_to_say") return true;
+    return applicable === employeeGender;
+  });
+  if (filteredLeaveTypes.length === 0) return { added: 0 };
   const customerPolicies = await db.select().from(customerLeavePolicies3).where(and2(
     eq3(customerLeavePolicies3.customerId, employee.customerId),
     eq3(customerLeavePolicies3.countryCode, employee.country)
@@ -3327,7 +3341,7 @@ async function initializeLeaveBalancesForEmployee(employeeId, options) {
   ));
   const existingTypeIds = new Set(existingBalances.map((b) => b.leaveTypeId));
   let addedCount = 0;
-  for (const lt3 of countryLeaveTypes) {
+  for (const lt3 of filteredLeaveTypes) {
     if (existingTypeIds.has(lt3.id)) continue;
     const policy = policyMap.get(lt3.id);
     const baseEntitlement = policy ? policy.annualEntitlement : lt3.annualEntitlement || 0;
@@ -3574,9 +3588,9 @@ async function listInvoices(filters = {}, limit = 50, offset = 0) {
   if (filters.invoiceType) conditions.push(eq4(invoices.invoiceType, filters.invoiceType));
   if (filters.invoiceMonth) conditions.push(eq4(invoices.invoiceMonth, filters.invoiceMonth));
   if (filters.excludeCreditNotes) {
-    const { ne: ne4, and: and58 } = await import("drizzle-orm");
-    conditions.push(ne4(invoices.invoiceType, "credit_note"));
-    conditions.push(ne4(invoices.invoiceType, "deposit_refund"));
+    const { ne: ne5, and: and59 } = await import("drizzle-orm");
+    conditions.push(ne5(invoices.invoiceType, "credit_note"));
+    conditions.push(ne5(invoices.invoiceType, "deposit_refund"));
   }
   const where = conditions.length > 0 ? and3(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
@@ -4184,12 +4198,12 @@ async function lockSubmittedReimbursements(monthStr, countryCode, payrollRunId) 
 async function getEmployeeMonthlyRevenue(employeeId, serviceMonth) {
   const db = await getDb();
   if (!db) return { total: 0, breakdown: [] };
-  const { ne: ne4 } = await import("drizzle-orm");
+  const { ne: ne5 } = await import("drizzle-orm");
   const monthInvoices = await db.select({ id: invoices.id }).from(invoices).where(
     and3(
       sql`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth}`,
-      ne4(invoices.invoiceType, "credit_note"),
-      ne4(invoices.invoiceType, "deposit_refund")
+      ne5(invoices.invoiceType, "credit_note"),
+      ne5(invoices.invoiceType, "deposit_refund")
     )
   );
   if (monthInvoices.length === 0) return { total: 0, breakdown: [] };
@@ -4202,7 +4216,7 @@ async function getEmployeeMonthlyRevenue(employeeId, serviceMonth) {
     and3(
       eq4(invoiceItems.employeeId, employeeId),
       inArray2(invoiceItems.invoiceId, invoiceIds),
-      ne4(invoiceItems.itemType, "deposit")
+      ne5(invoiceItems.itemType, "deposit")
     )
   );
   const breakdownMap = {};
@@ -4226,12 +4240,12 @@ async function getAllEmployeesMonthlyRevenue(serviceMonth) {
   const db = await getDb();
   if (!db) return [];
   const { employees: employees2, customers: customers2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-  const { ne: ne4 } = await import("drizzle-orm");
+  const { ne: ne5 } = await import("drizzle-orm");
   const monthInvoices = await db.select({ id: invoices.id }).from(invoices).where(
     and3(
       sql`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth}`,
-      ne4(invoices.invoiceType, "credit_note"),
-      ne4(invoices.invoiceType, "deposit_refund")
+      ne5(invoices.invoiceType, "credit_note"),
+      ne5(invoices.invoiceType, "deposit_refund")
     )
   );
   if (monthInvoices.length === 0) return [];
@@ -4243,7 +4257,7 @@ async function getAllEmployeesMonthlyRevenue(serviceMonth) {
   }).from(invoiceItems).where(
     and3(
       inArray2(invoiceItems.invoiceId, invoiceIds),
-      ne4(invoiceItems.itemType, "deposit")
+      ne5(invoiceItems.itemType, "deposit")
     )
   );
   const empMap = {};
@@ -9972,9 +9986,9 @@ var employeesRouter = router({
         const db = await getDb2();
         if (db) {
           const { invoices: invoicesTable, invoiceItems: invoiceItemsTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-          const { eq: eq72, and: and58 } = await import("drizzle-orm");
+          const { eq: eq72, and: and59 } = await import("drizzle-orm");
           const existingVisaInvoices = await db.select().from(invoicesTable).where(
-            and58(
+            and59(
               eq72(invoicesTable.invoiceType, "visa_service"),
               eq72(invoicesTable.customerId, currentEmpForVisa.customerId)
             )
@@ -9982,7 +9996,7 @@ var employeesRouter = router({
           let hasActiveBilledInvoice = false;
           for (const inv of existingVisaInvoices) {
             const items = await db.select().from(invoiceItemsTable).where(
-              and58(
+              and59(
                 eq72(invoiceItemsTable.invoiceId, inv.id),
                 eq72(invoiceItemsTable.employeeId, input.id)
               )
@@ -10827,18 +10841,18 @@ var payrollRouter = router({
     const db = getDb2();
     if (db) {
       const { adjustments: adjustments2, reimbursements: reimbursements2, leaveRecords: leaveRecords2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const { and: and58, eq: eq72 } = await import("drizzle-orm");
-      await db.update(adjustments2).set({ status: "admin_approved", payrollRunId: null }).where(and58(
+      const { and: and59, eq: eq72 } = await import("drizzle-orm");
+      await db.update(adjustments2).set({ status: "admin_approved", payrollRunId: null }).where(and59(
         eq72(adjustments2.status, "locked"),
         eq72(adjustments2.payrollRunId, payrollRunId),
         eq72(adjustments2.employeeId, employeeId)
       ));
-      await db.update(reimbursements2).set({ status: "admin_approved", payrollRunId: null }).where(and58(
+      await db.update(reimbursements2).set({ status: "admin_approved", payrollRunId: null }).where(and59(
         eq72(reimbursements2.status, "locked"),
         eq72(reimbursements2.payrollRunId, payrollRunId),
         eq72(reimbursements2.employeeId, employeeId)
       ));
-      await db.update(leaveRecords2).set({ status: "admin_approved", payrollRunId: null }).where(and58(
+      await db.update(leaveRecords2).set({ status: "admin_approved", payrollRunId: null }).where(and59(
         eq72(leaveRecords2.status, "locked"),
         eq72(leaveRecords2.payrollRunId, payrollRunId),
         eq72(leaveRecords2.employeeId, employeeId)
@@ -10870,20 +10884,20 @@ var payrollRouter = router({
     const db = getDb2();
     if (!db) throw new Error("Database not initialized");
     const { leaveRecords: leaveRecords2, adjustments: adjustments2, reimbursements: reimbursements2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-    const { and: and58, eq: eq72, inArray: inArray21, sql: sql31, gte: gte5, lt: lt3 } = await import("drizzle-orm");
+    const { and: and59, eq: eq72, inArray: inArray21, sql: sql31, gte: gte5, lt: lt3 } = await import("drizzle-orm");
     const monthStartDate = prevMonthDate;
     const [y, m] = prevMonthPrefix.split("-").map(Number);
     const nextMonth = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
-    const pendingLeaves = await db.select({ count: sql31`count(*)` }).from(leaveRecords2).where(and58(
+    const pendingLeaves = await db.select({ count: sql31`count(*)` }).from(leaveRecords2).where(and59(
       inArray21(leaveRecords2.status, ["submitted", "client_approved"]),
       gte5(leaveRecords2.startDate, monthStartDate),
       lt3(leaveRecords2.startDate, nextMonth)
     ));
-    const pendingAdjustments = await db.select({ count: sql31`count(*)` }).from(adjustments2).where(and58(
+    const pendingAdjustments = await db.select({ count: sql31`count(*)` }).from(adjustments2).where(and59(
       inArray21(adjustments2.status, ["submitted", "client_approved"]),
       eq72(adjustments2.effectiveMonth, prevMonthDate)
     ));
-    const pendingReimbursements = await db.select({ count: sql31`count(*)` }).from(reimbursements2).where(and58(
+    const pendingReimbursements = await db.select({ count: sql31`count(*)` }).from(reimbursements2).where(and59(
       inArray21(reimbursements2.status, ["submitted", "client_approved"]),
       eq72(reimbursements2.effectiveMonth, prevMonthDate)
     ));
@@ -11082,7 +11096,7 @@ var WalletService = class {
     const db = externalTx || getDb();
     if (!db) throw new Error("Database not initialized");
     const existing = await db.query.customerWallets.findFirst({
-      where: (t4, { and: and58, eq: eq72 }) => and58(eq72(t4.customerId, customerId), eq72(t4.currency, currency))
+      where: (t4, { and: and59, eq: eq72 }) => and59(eq72(t4.customerId, customerId), eq72(t4.currency, currency))
     });
     if (existing) return existing;
     const [inserted] = await db.insert(customerWallets).values({
@@ -11226,7 +11240,7 @@ var WalletService = class {
     const db = externalTx || getDb();
     if (!db) throw new Error("Database not initialized");
     const existing = await db.query.customerFrozenWallets.findFirst({
-      where: (t4, { and: and58, eq: eq72 }) => and58(eq72(t4.customerId, customerId), eq72(t4.currency, currency))
+      where: (t4, { and: and59, eq: eq72 }) => and59(eq72(t4.customerId, customerId), eq72(t4.currency, currency))
     });
     if (existing) return existing;
     const [inserted] = await db.insert(customerFrozenWallets).values({
@@ -11311,7 +11325,7 @@ var WalletService = class {
     const db = getDb();
     if (!db) throw new Error("Database not initialized");
     const existingTx = await db.query.frozenWalletTransactions.findFirst({
-      where: (t4, { and: and58, eq: eq72 }) => and58(
+      where: (t4, { and: and59, eq: eq72 }) => and59(
         eq72(t4.type, "deposit_in"),
         eq72(t4.referenceId, invoiceId),
         eq72(t4.referenceType, "invoice")
@@ -13689,6 +13703,7 @@ var countriesRouter = router({
         annualEntitlement: z8.number().default(0),
         isPaid: z8.boolean().default(true),
         requiresApproval: z8.boolean().default(true),
+        applicableGender: z8.enum(["male", "female", "all"]).default("all"),
         description: z8.string().optional()
       })
     ).mutation(async ({ input, ctx }) => {
@@ -13710,6 +13725,7 @@ var countriesRouter = router({
           annualEntitlement: z8.number().optional(),
           isPaid: z8.boolean().optional(),
           requiresApproval: z8.boolean().optional(),
+          applicableGender: z8.enum(["male", "female", "all"]).optional(),
           description: z8.string().optional()
         })
       })
@@ -13923,18 +13939,18 @@ function formatDate(date) {
   return `${y}-${m}-${d}`;
 }
 function countWorkingDays(start, end, workingDaysPerWeek) {
-  let count24 = 0;
+  let count23 = 0;
   const current = new Date(start);
   while (current <= end) {
     const dayOfWeek = current.getDay();
     if (workingDaysPerWeek >= 6) {
-      if (dayOfWeek !== 0) count24++;
+      if (dayOfWeek !== 0) count23++;
     } else {
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) count24++;
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) count23++;
     }
     current.setDate(current.getDate() + 1);
   }
-  return count24;
+  return count23;
 }
 function getLastBusinessDay(referenceDate) {
   const year = referenceDate.getUTCFullYear();
@@ -14090,6 +14106,14 @@ var leaveRouter = router({
     }
     const employee = await getEmployeeById(input.employeeId);
     if (!employee) throw new TRPCError9({ code: "BAD_REQUEST", message: "Employee not found" });
+    const leaveTypeRecord = await getLeaveTypeById(input.leaveTypeId);
+    if (leaveTypeRecord) {
+      const applicableGender = leaveTypeRecord.applicableGender || "all";
+      const empGender = employee.gender;
+      if (applicableGender !== "all" && empGender && empGender !== "other" && empGender !== "prefer_not_to_say" && applicableGender !== empGender) {
+        throw new TRPCError9({ code: "BAD_REQUEST", message: `This leave type (${leaveTypeRecord.leaveTypeName}) is only applicable to ${applicableGender} employees.` });
+      }
+    }
     const crossMonth = isLeavesCrossMonth(input.startDate, input.endDate);
     const totalDays = parseFloat(input.days);
     const splits = splitLeaveByMonth(input.startDate, input.endDate, totalDays);
@@ -16212,7 +16236,7 @@ var ContractorInvoiceGenerationService = {
       }
     }
     const eligibleContractors = [...activeContractors, ...orphanedContractors];
-    let count24 = 0;
+    let count23 = 0;
     for (const contractor of eligibleContractors) {
       const existing = await db.select().from(contractorInvoices).where(
         and20(
@@ -16283,10 +16307,10 @@ var ContractorInvoiceGenerationService = {
       for (const adjId of adjustmentIdsToLink) {
         await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq25(contractorAdjustments.id, adjId));
       }
-      count24++;
+      count23++;
       console.log(`[ContractorInvoice] Created monthly invoice ${invoiceNumber} for contractor #${contractor.id} (${totalAmount.toFixed(2)} ${currency})`);
     }
-    return count24;
+    return count23;
   },
   /**
    * Generate invoices for semi-monthly contractors from locked data.
@@ -16338,7 +16362,7 @@ var ContractorInvoiceGenerationService = {
       }
     }
     const eligibleContractors = [...activeSemiMonthly, ...orphanedSemiContractors];
-    let count24 = 0;
+    let count23 = 0;
     for (const contractor of eligibleContractors) {
       for (const period of periods) {
         const existing = await db.select().from(contractorInvoices).where(
@@ -16412,11 +16436,11 @@ var ContractorInvoiceGenerationService = {
         for (const adjId of adjustmentIdsToLink) {
           await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq25(contractorAdjustments.id, adjId));
         }
-        count24++;
+        count23++;
         console.log(`[ContractorInvoice] Created semi-monthly invoice ${invoiceNumber} for contractor #${contractor.id} (${totalAmount.toFixed(2)} ${currency})`);
       }
     }
-    return count24;
+    return count23;
   },
   /**
    * Generate invoices for milestone contractors from locked data.
@@ -16435,7 +16459,7 @@ var ContractorInvoiceGenerationService = {
         isNull3(contractorMilestones.invoiceId)
       )
     );
-    let count24 = 0;
+    let count23 = 0;
     const contractorsWithAdjAttached = /* @__PURE__ */ new Set();
     for (const milestone of lockedMilestones) {
       const contractorResult = await db.select().from(contractors).where(eq25(contractors.id, milestone.contractorId)).limit(1);
@@ -16505,10 +16529,10 @@ var ContractorInvoiceGenerationService = {
       for (const adjId of adjustmentIdsToLink) {
         await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq25(contractorAdjustments.id, adjId));
       }
-      count24++;
+      count23++;
       console.log(`[ContractorInvoice] Created milestone invoice ${invoiceNumber} for contractor #${contractor.id} milestone #${milestone.id} (${totalAmount.toFixed(2)} ${currency})`);
     }
-    return count24;
+    return count23;
   },
   /**
    * Legacy entry point - kept for backward compatibility but now delegates to generateFromLockedData.
@@ -17047,13 +17071,13 @@ async function runOverdueInvoiceDetection() {
     return { overdueCount: 0 };
   }
   const { invoices: invoices2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-  const { eq: eq72, and: and58, lt: lt3, isNotNull: isNotNull3 } = await import("drizzle-orm");
+  const { eq: eq72, and: and59, lt: lt3, isNotNull: isNotNull3 } = await import("drizzle-orm");
   const now = /* @__PURE__ */ new Date();
   const beijingOffset = 8 * 60;
   const beijingDate = new Date(now.getTime() + (beijingOffset - now.getTimezoneOffset()) * 6e4);
   const todayStr = beijingDate.toISOString().split("T")[0];
   const overdueInvoices = await db.select({ id: invoices2.id, invoiceNumber: invoices2.invoiceNumber, dueDate: invoices2.dueDate, customerId: invoices2.customerId }).from(invoices2).where(
-    and58(
+    and59(
       eq72(invoices2.status, "sent"),
       isNotNull3(invoices2.dueDate),
       lt3(invoices2.dueDate, todayStr)
@@ -20736,7 +20760,7 @@ var notificationsRouter = router({
     const userRoles = (ctx.user.role || "").split(",");
     const roleConditions = userRoles.map((role) => eq33(notifications.targetRole, role.trim()));
     return await db.query.notifications.findMany({
-      where: (t4, { and: and58, or: or11, eq: eq72 }) => and58(
+      where: (t4, { and: and59, or: or11, eq: eq72 }) => and59(
         eq72(t4.targetPortal, "admin"),
         eq72(t4.isRead, false),
         or11(
@@ -22325,14 +22349,14 @@ var quotationRouter = router({
     if (input.search) {
     }
     const items = await db.query.quotations.findMany({
-      where: (quotations2, { eq: eq72, or: or11, and: and58, like: like13 }) => {
+      where: (quotations2, { eq: eq72, or: or11, and: and59, like: like13 }) => {
         const conditions = [];
         if (input.customerId) conditions.push(eq72(quotations2.customerId, input.customerId));
         if (input.leadId) conditions.push(eq72(quotations2.leadId, input.leadId));
         if (input.search) {
           conditions.push(like13(quotations2.quotationNumber, `%${input.search}%`));
         }
-        return and58(...conditions);
+        return and59(...conditions);
       },
       orderBy: (quotations2, { desc: desc32 }) => [desc32(quotations2.createdAt)],
       limit: input.limit,
@@ -23890,6 +23914,7 @@ var portalEmployeesRouter = portalRouter({
       id: leaveBalances.id,
       leaveTypeId: leaveBalances.leaveTypeId,
       leaveTypeName: leaveTypes.leaveTypeName,
+      applicableGender: leaveTypes.applicableGender,
       year: leaveBalances.year,
       totalEntitlement: leaveBalances.totalEntitlement,
       used: leaveBalances.used,
@@ -24068,7 +24093,8 @@ var portalEmployeesRouter = portalRouter({
       leaveTypeName: leaveTypes.leaveTypeName,
       annualEntitlement: leaveTypes.annualEntitlement,
       isPaid: leaveTypes.isPaid,
-      requiresApproval: leaveTypes.requiresApproval
+      requiresApproval: leaveTypes.requiresApproval,
+      applicableGender: leaveTypes.applicableGender
     }).from(leaveTypes).where(eq45(leaveTypes.countryCode, input.countryCode));
     return types;
   }),
@@ -25000,7 +25026,8 @@ var portalLeaveRouter = portalRouter({
       totalEntitlement: leaveBalances.totalEntitlement,
       used: leaveBalances.used,
       remaining: leaveBalances.remaining,
-      leaveTypeName: leaveTypes.leaveTypeName
+      leaveTypeName: leaveTypes.leaveTypeName,
+      applicableGender: leaveTypes.applicableGender
     }).from(leaveBalances).leftJoin(leaveTypes, eq47(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq47(leaveBalances.employeeId, input.employeeId));
     return balances;
   }),
@@ -25044,6 +25071,15 @@ var portalLeaveRouter = portalRouter({
         code: "BAD_REQUEST",
         message: `Payroll run for ${endPayrollMonth} is already ${existingPayroll.status}. Leave requests cannot be added.`
       });
+    }
+    const [leaveTypeGenderInfo] = await db.select({ applicableGender: leaveTypes.applicableGender, leaveTypeName: leaveTypes.leaveTypeName }).from(leaveTypes).where(eq47(leaveTypes.id, input.leaveTypeId)).limit(1);
+    if (leaveTypeGenderInfo) {
+      const applicable = leaveTypeGenderInfo.applicableGender || "all";
+      const [empGenderInfo] = await db.select({ gender: employees.gender }).from(employees).where(eq47(employees.id, input.employeeId)).limit(1);
+      const empGender = empGenderInfo?.gender;
+      if (applicable !== "all" && empGender && empGender !== "other" && empGender !== "prefer_not_to_say" && applicable !== empGender) {
+        throw new TRPCError32({ code: "BAD_REQUEST", message: `This leave type (${leaveTypeGenderInfo.leaveTypeName}) is only applicable to ${applicable} employees.` });
+      }
     }
     const totalDays = parseFloat(input.days);
     const crossMonth = isLeavesCrossMonth(input.startDate, input.endDate);
@@ -28239,14 +28275,12 @@ init_schema();
 import { TRPCError as TRPCError47 } from "@trpc/server";
 import { eq as eq63, and as and51, sql as sql30, desc as desc26, count as count20, inArray as inArray19 } from "drizzle-orm";
 var workerDashboardRouter = workerRouter({
-  /**
-   * Get dashboard summary — returns different data based on workerType
-   */
   getSummary: protectedWorkerProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError47({ code: "INTERNAL_SERVER_ERROR" });
     const { workerUser } = ctx;
-    if (workerUser.workerType === "contractor" && workerUser.contractorId) {
+    const role = workerUser.activeRole || workerUser.workerType;
+    if (role === "contractor" && workerUser.contractorId) {
       const [pendingMilestones] = await db.select({ count: count20() }).from(contractorMilestones).where(
         and51(
           eq63(contractorMilestones.contractorId, workerUser.contractorId),
@@ -28280,7 +28314,7 @@ var workerDashboardRouter = workerRouter({
         totalPaid: totalPaid?.total ?? "0",
         recentInvoices
       };
-    } else if (workerUser.workerType === "employee" && workerUser.employeeId) {
+    } else if (role === "employee" && workerUser.employeeId) {
       const [pendingLeave] = await db.select({ count: count20() }).from(leaveRecords).where(
         and51(
           eq63(leaveRecords.employeeId, workerUser.employeeId),
@@ -28293,28 +28327,77 @@ var workerDashboardRouter = workerRouter({
           eq63(reimbursements.status, "submitted")
         )
       );
-      const latestPayslip = await db.select({
-        id: employeePayslips.id,
-        payPeriod: employeePayslips.payPeriod,
-        payDate: employeePayslips.payDate,
-        netAmount: employeePayslips.netAmount,
-        grossAmount: employeePayslips.grossAmount,
-        currency: employeePayslips.currency
-      }).from(employeePayslips).where(
+      let latestPayslip = null;
+      const payslipDocs = await db.select({
+        id: employeeDocuments.id,
+        documentName: employeeDocuments.documentName,
+        uploadedAt: employeeDocuments.uploadedAt
+      }).from(employeeDocuments).where(
+        and51(
+          eq63(employeeDocuments.employeeId, workerUser.employeeId),
+          eq63(employeeDocuments.documentType, "payslip")
+        )
+      ).orderBy(desc26(employeeDocuments.uploadedAt)).limit(1);
+      if (payslipDocs.length > 0) {
+        const doc = payslipDocs[0];
+        latestPayslip = {
+          id: doc.id,
+          payPeriod: doc.documentName || "Payslip",
+          payDate: doc.uploadedAt ? new Date(doc.uploadedAt).toISOString().slice(0, 10) : null,
+          netAmount: null,
+          grossAmount: null,
+          currency: workerUser.currency
+        };
+      }
+      if (!latestPayslip) {
+        const payslipRecords = await db.select({
+          id: employeePayslips.id,
+          payPeriod: employeePayslips.payPeriod,
+          payDate: employeePayslips.payDate,
+          netAmount: employeePayslips.netAmount,
+          grossAmount: employeePayslips.grossAmount,
+          currency: employeePayslips.currency
+        }).from(employeePayslips).where(
+          and51(
+            eq63(employeePayslips.employeeId, workerUser.employeeId),
+            eq63(employeePayslips.isPublished, true)
+          )
+        ).orderBy(desc26(employeePayslips.payPeriod)).limit(1);
+        if (payslipRecords.length > 0) {
+          latestPayslip = payslipRecords[0];
+        }
+      }
+      const [docCount] = await db.select({ count: count20() }).from(employeeDocuments).where(
+        and51(
+          eq63(employeeDocuments.employeeId, workerUser.employeeId),
+          eq63(employeeDocuments.documentType, "payslip")
+        )
+      );
+      const [psCount] = await db.select({ count: count20() }).from(employeePayslips).where(
         and51(
           eq63(employeePayslips.employeeId, workerUser.employeeId),
           eq63(employeePayslips.isPublished, true)
         )
-      ).orderBy(desc26(employeePayslips.payPeriod)).limit(1);
+      );
       return {
         workerType: "employee",
         pendingLeave: pendingLeave?.count ?? 0,
         pendingReimbursements: pendingReimbursements?.count ?? 0,
-        latestPayslip: latestPayslip[0] ?? null
+        latestPayslip,
+        totalPayslips: (docCount?.count ?? 0) + (psCount?.count ?? 0)
+      };
+    }
+    if (role === "employee") {
+      return {
+        workerType: "employee",
+        pendingLeave: 0,
+        pendingReimbursements: 0,
+        latestPayslip: null,
+        totalPayslips: 0
       };
     }
     return {
-      workerType: workerUser.workerType,
+      workerType: "contractor",
       pendingMilestones: 0,
       pendingInvoices: 0,
       totalPaid: "0",
@@ -28399,14 +28482,24 @@ var workerLeaveRouter = workerRouter({
       used: leaveBalances.used,
       remaining: leaveBalances.remaining,
       leaveTypeName: leaveTypes.leaveTypeName,
-      isPaid: leaveTypes.isPaid
+      isPaid: leaveTypes.isPaid,
+      applicableGender: leaveTypes.applicableGender
     }).from(leaveBalances).innerJoin(leaveTypes, eq65(leaveBalances.leaveTypeId, leaveTypes.id)).where(
       and53(
         eq65(leaveBalances.employeeId, employeeId),
         eq65(leaveBalances.year, currentYear)
       )
     );
-    return balances;
+    const [empInfo] = await db.select({ gender: employees.gender }).from(employees).where(eq65(employees.id, employeeId)).limit(1);
+    const empGender = empInfo?.gender;
+    const filteredBalances = balances.filter((b) => {
+      const applicable = b.applicableGender || "all";
+      if (applicable === "all") return true;
+      if (!empGender || empGender === "other" || empGender === "prefer_not_to_say") return true;
+      if (applicable === empGender) return true;
+      return (b.used ?? 0) > 0;
+    });
+    return filteredBalances;
   }),
   /**
    * Get available leave types for the employee's country
@@ -28423,9 +28516,18 @@ var workerLeaveRouter = workerRouter({
       id: leaveTypes.id,
       leaveTypeName: leaveTypes.leaveTypeName,
       isPaid: leaveTypes.isPaid,
-      countryCode: leaveTypes.countryCode
+      countryCode: leaveTypes.countryCode,
+      applicableGender: leaveTypes.applicableGender
     }).from(leaveTypes).where(eq65(leaveTypes.countryCode, emp.country));
-    return types;
+    const [empGenderInfo] = await db.select({ gender: employees.gender }).from(employees).where(eq65(employees.id, employeeId)).limit(1);
+    const empGender = empGenderInfo?.gender;
+    const filteredTypes = types.filter((lt3) => {
+      const applicable = lt3.applicableGender || "all";
+      if (applicable === "all") return true;
+      if (!empGender || empGender === "other" || empGender === "prefer_not_to_say") return true;
+      return applicable === empGender;
+    });
+    return filteredTypes;
   }),
   /**
    * Check leave balance before submission.
@@ -28581,10 +28683,18 @@ var workerLeaveRouter = workerRouter({
     const [leaveType] = await db.select({
       id: leaveTypes.id,
       isPaid: leaveTypes.isPaid,
-      leaveTypeName: leaveTypes.leaveTypeName
+      leaveTypeName: leaveTypes.leaveTypeName,
+      applicableGender: leaveTypes.applicableGender
     }).from(leaveTypes).where(eq65(leaveTypes.id, input.leaveTypeId));
     if (!leaveType) {
       throw new TRPCError49({ code: "NOT_FOUND", message: "Leave type not found" });
+    }
+    if (leaveType.applicableGender && leaveType.applicableGender !== "all") {
+      const [empGenderInfo] = await db.select({ gender: employees.gender }).from(employees).where(eq65(employees.id, employeeId)).limit(1);
+      const empGender = empGenderInfo?.gender;
+      if (empGender && empGender !== "other" && empGender !== "prefer_not_to_say" && leaveType.applicableGender !== empGender) {
+        throw new TRPCError49({ code: "BAD_REQUEST", message: `This leave type (${leaveType.leaveTypeName}) is only applicable to ${leaveType.applicableGender} employees.` });
+      }
     }
     const totalDays = parseFloat(input.days);
     const isPaid = leaveType.isPaid !== false;
@@ -28906,10 +29016,10 @@ import { z as z53 } from "zod";
 import { TRPCError as TRPCError51 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq67, and as and55, desc as desc30, count as count23 } from "drizzle-orm";
+import { eq as eq67, and as and55, desc as desc30 } from "drizzle-orm";
 var workerPayslipsRouter = workerRouter({
   /**
-   * List my payslips (only published ones) with pagination
+   * List payslips — merges employee_documents (documentType=payslip) + employee_payslips
    */
   list: employeeOnlyProcedure.input(
     z53.object({
@@ -28920,13 +29030,21 @@ var workerPayslipsRouter = workerRouter({
     const db = await getDb();
     if (!db) throw new TRPCError51({ code: "INTERNAL_SERVER_ERROR" });
     const employeeId = ctx.workerUser.employeeId;
-    const offset = (input.page - 1) * input.pageSize;
-    const whereCondition = and55(
-      eq67(employeePayslips.employeeId, employeeId),
-      eq67(employeePayslips.isPublished, true)
-    );
-    const [totalResult] = await db.select({ count: count23() }).from(employeePayslips).where(whereCondition);
-    const items = await db.select({
+    const payslipDocs = await db.select({
+      id: employeeDocuments.id,
+      documentName: employeeDocuments.documentName,
+      fileUrl: employeeDocuments.fileUrl,
+      mimeType: employeeDocuments.mimeType,
+      fileSize: employeeDocuments.fileSize,
+      notes: employeeDocuments.notes,
+      uploadedAt: employeeDocuments.uploadedAt
+    }).from(employeeDocuments).where(
+      and55(
+        eq67(employeeDocuments.employeeId, employeeId),
+        eq67(employeeDocuments.documentType, "payslip")
+      )
+    ).orderBy(desc30(employeeDocuments.uploadedAt));
+    const payslipRecords = await db.select({
       id: employeePayslips.id,
       payPeriod: employeePayslips.payPeriod,
       payDate: employeePayslips.payDate,
@@ -28935,33 +29053,108 @@ var workerPayslipsRouter = workerRouter({
       currency: employeePayslips.currency,
       grossAmount: employeePayslips.grossAmount,
       netAmount: employeePayslips.netAmount,
-      publishedAt: employeePayslips.publishedAt
-    }).from(employeePayslips).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc30(employeePayslips.payPeriod));
-    return {
-      items,
-      total: totalResult?.count ?? 0,
-      page: input.page,
-      pageSize: input.pageSize
-    };
-  }),
-  /**
-   * Get a single payslip detail (for download)
-   */
-  getById: employeeOnlyProcedure.input(z53.object({ id: z53.number() })).query(async ({ input, ctx }) => {
-    const db = await getDb();
-    if (!db) throw new TRPCError51({ code: "INTERNAL_SERVER_ERROR" });
-    const employeeId = ctx.workerUser.employeeId;
-    const [payslip] = await db.select().from(employeePayslips).where(
+      publishedAt: employeePayslips.publishedAt,
+      notes: employeePayslips.notes
+    }).from(employeePayslips).where(
       and55(
-        eq67(employeePayslips.id, input.id),
         eq67(employeePayslips.employeeId, employeeId),
         eq67(employeePayslips.isPublished, true)
       )
-    );
-    if (!payslip) {
-      throw new TRPCError51({ code: "NOT_FOUND", message: "Payslip not found" });
+    ).orderBy(desc30(employeePayslips.payPeriod));
+    const allItems = [];
+    for (const doc of payslipDocs) {
+      allItems.push({
+        id: doc.id,
+        source: "document",
+        payPeriod: doc.documentName || "Payslip",
+        payDate: doc.uploadedAt ? new Date(doc.uploadedAt).toISOString().slice(0, 10) : null,
+        fileName: doc.documentName,
+        fileUrl: doc.fileUrl,
+        currency: ctx.workerUser.currency || null,
+        grossAmount: null,
+        netAmount: null,
+        publishedAt: doc.uploadedAt,
+        notes: doc.notes
+      });
     }
-    return payslip;
+    for (const ps of payslipRecords) {
+      allItems.push({
+        id: ps.id,
+        source: "payslip",
+        payPeriod: ps.payPeriod,
+        payDate: ps.payDate,
+        fileName: ps.fileName,
+        fileUrl: ps.fileUrl,
+        currency: ps.currency,
+        grossAmount: ps.grossAmount,
+        netAmount: ps.netAmount,
+        publishedAt: ps.publishedAt,
+        notes: ps.notes
+      });
+    }
+    allItems.sort((a, b) => {
+      const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+      const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      if (dateA !== dateB) return dateB - dateA;
+      return b.payPeriod.localeCompare(a.payPeriod);
+    });
+    const total = allItems.length;
+    const offset = (input.page - 1) * input.pageSize;
+    const items = allItems.slice(offset, offset + input.pageSize);
+    return { items, total, page: input.page, pageSize: input.pageSize };
+  }),
+  /**
+   * Get a single payslip detail — supports both sources
+   */
+  getById: employeeOnlyProcedure.input(z53.object({
+    id: z53.number(),
+    source: z53.enum(["payslip", "document"]).default("document")
+  })).query(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError51({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    if (input.source === "document") {
+      const [doc] = await db.select().from(employeeDocuments).where(
+        and55(
+          eq67(employeeDocuments.id, input.id),
+          eq67(employeeDocuments.employeeId, employeeId),
+          eq67(employeeDocuments.documentType, "payslip")
+        )
+      );
+      if (!doc) {
+        throw new TRPCError51({ code: "NOT_FOUND", message: "Payslip document not found" });
+      }
+      return {
+        id: doc.id,
+        source: "document",
+        payPeriod: doc.documentName || "Payslip",
+        payDate: doc.uploadedAt ? new Date(doc.uploadedAt).toISOString().slice(0, 10) : null,
+        fileName: doc.documentName,
+        fileUrl: doc.fileUrl,
+        fileKey: doc.fileKey,
+        mimeType: doc.mimeType,
+        currency: ctx.workerUser.currency || null,
+        grossAmount: null,
+        netAmount: null,
+        notes: doc.notes,
+        publishedAt: doc.uploadedAt
+      };
+    } else {
+      const [payslip] = await db.select().from(employeePayslips).where(
+        and55(
+          eq67(employeePayslips.id, input.id),
+          eq67(employeePayslips.employeeId, employeeId),
+          eq67(employeePayslips.isPublished, true)
+        )
+      );
+      if (!payslip) {
+        throw new TRPCError51({ code: "NOT_FOUND", message: "Payslip not found" });
+      }
+      return {
+        ...payslip,
+        source: "payslip"
+      };
+    }
   })
 });
 
@@ -28969,7 +29162,7 @@ var workerPayslipsRouter = workerRouter({
 import { TRPCError as TRPCError52 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq68, desc as desc31 } from "drizzle-orm";
+import { eq as eq68, and as and56, ne as ne4, desc as desc31 } from "drizzle-orm";
 var workerDocumentsRouter = workerRouter({
   /**
    * List my documents — returns different data based on workerType
@@ -28988,7 +29181,12 @@ var workerDocumentsRouter = workerRouter({
         fileSize: employeeDocuments.fileSize,
         notes: employeeDocuments.notes,
         uploadedAt: employeeDocuments.uploadedAt
-      }).from(employeeDocuments).where(eq68(employeeDocuments.employeeId, workerUser.employeeId)).orderBy(desc31(employeeDocuments.uploadedAt));
+      }).from(employeeDocuments).where(
+        and56(
+          eq68(employeeDocuments.employeeId, workerUser.employeeId),
+          ne4(employeeDocuments.documentType, "payslip")
+        )
+      ).orderBy(desc31(employeeDocuments.uploadedAt));
       return { workerType: "employee", documents: docs };
     } else if (workerUser.workerType === "contractor" && workerUser.contractorId) {
       const docs = await db.select({
@@ -29080,7 +29278,7 @@ function serveStatic(app) {
 init_portalAuth();
 init_db2();
 init_schema();
-import { eq as eq69, and as and56 } from "drizzle-orm";
+import { eq as eq69, and as and57 } from "drizzle-orm";
 async function createApp(options = {}) {
   const app = express2();
   const server = createServer(app);
@@ -29194,7 +29392,7 @@ async function createApp(options = {}) {
         res.status(500).json({ error: "Database unavailable" });
         return;
       }
-      const [invoice] = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber }).from(invoices).where(and56(eq69(invoices.id, invoiceId), eq69(invoices.customerId, portalUser.customerId)));
+      const [invoice] = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber }).from(invoices).where(and57(eq69(invoices.id, invoiceId), eq69(invoices.customerId, portalUser.customerId)));
       if (!invoice) {
         res.status(404).json({ error: "Invoice not found" });
         return;
@@ -29385,7 +29583,7 @@ async function seedDefaultAdmin() {
 init_db2();
 init_schema();
 import "dotenv/config";
-import { eq as eq71, and as and57 } from "drizzle-orm";
+import { eq as eq71, and as and58 } from "drizzle-orm";
 
 // server/seed/data/socialInsuranceRules.ts
 var socialInsuranceRules = [
@@ -44014,7 +44212,7 @@ async function seedSystemData(db) {
   console.log("[Seed] Checking system data (Countries, Leave Types, Holidays)...");
   const countries = await readJsonFile("data-exports/baseline/countries_config.json");
   if (countries) {
-    let count24 = 0;
+    let count23 = 0;
     for (const country of countries) {
       const { id, ...data } = country;
       const formatted = parseDates(data, ["createdAt", "updatedAt"]);
@@ -44029,9 +44227,9 @@ async function seedSystemData(db) {
           updatedAt: /* @__PURE__ */ new Date()
         }
       });
-      count24++;
+      count23++;
     }
-    console.log(`[Seed] Processed ${count24} countries`);
+    console.log(`[Seed] Processed ${count23} countries`);
     const validCodes = new Set(countries.map((c) => c.countryCode || c.code));
     const allDbCountries = await db.select({ countryCode: countriesConfig.countryCode }).from(countriesConfig);
     const orphanCodes = allDbCountries.map((r) => r.countryCode).filter((code) => !validCodes.has(code));
@@ -44045,31 +44243,31 @@ async function seedSystemData(db) {
   }
   const ltData = await readJsonFile("data-exports/baseline/leave_types.json");
   if (ltData) {
-    let count24 = 0;
+    let count23 = 0;
     for (const lt3 of ltData) {
       const { id, ...data } = lt3;
       const formatted = parseDates(data, ["createdAt", "updatedAt"]);
       const existing = await db.query.leaveTypes.findFirst({
-        where: and57(
+        where: and58(
           eq71(leaveTypes.countryCode, formatted.countryCode),
           eq71(leaveTypes.leaveTypeName, formatted.leaveTypeName)
         )
       });
       if (!existing) {
         await db.insert(leaveTypes).values(formatted);
-        count24++;
+        count23++;
       }
     }
-    console.log(`[Seed] Added ${count24} new leave types`);
+    console.log(`[Seed] Added ${count23} new leave types`);
   }
   const holidays = await readJsonFile("data-exports/baseline/public_holidays.json");
   if (holidays) {
-    let count24 = 0;
+    let count23 = 0;
     for (const h of holidays) {
       const { id, ...data } = h;
       const formatted = parseDates(data, ["createdAt", "updatedAt"]);
       const existing = await db.query.publicHolidays.findFirst({
-        where: and57(
+        where: and58(
           eq71(publicHolidays.countryCode, formatted.countryCode),
           eq71(publicHolidays.year, formatted.year),
           eq71(publicHolidays.holidayDate, formatted.holidayDate),
@@ -44078,18 +44276,18 @@ async function seedSystemData(db) {
       });
       if (!existing) {
         await db.insert(publicHolidays).values(formatted);
-        count24++;
+        count23++;
       }
     }
-    console.log(`[Seed] Added ${count24} new holidays`);
+    console.log(`[Seed] Added ${count23} new holidays`);
   }
 }
 async function seedSocialInsuranceData(db) {
   console.log("[Seed] Checking social insurance rules...");
-  let count24 = 0;
+  let count23 = 0;
   for (const rule of socialInsuranceRules) {
     const existing = await db.select().from(countrySocialInsuranceItems).where(
-      and57(
+      and58(
         eq71(countrySocialInsuranceItems.countryCode, rule.countryCode),
         eq71(countrySocialInsuranceItems.itemKey, rule.itemKey),
         eq71(countrySocialInsuranceItems.effectiveYear, rule.effectiveYear)
@@ -44097,10 +44295,10 @@ async function seedSocialInsuranceData(db) {
     ).limit(1);
     if (existing.length === 0) {
       await db.insert(countrySocialInsuranceItems).values(rule);
-      count24++;
+      count23++;
     }
   }
-  console.log(`[Seed] Added ${count24} new social insurance rules (total defined: ${socialInsuranceRules.length})`);
+  console.log(`[Seed] Added ${count23} new social insurance rules (total defined: ${socialInsuranceRules.length})`);
 }
 async function seedAIProviderConfigs(db) {
   console.log("[Seed] Checking AI provider configurations...");
@@ -44157,7 +44355,7 @@ async function seedCountryGuides(db) {
     }
     try {
       const existing = await db.query.countryGuideChapters.findFirst({
-        where: and57(
+        where: and58(
           eq71(countryGuideChapters.countryCode, ch.countryCode),
           eq71(countryGuideChapters.chapterKey, ch.chapterKey)
         )
@@ -44459,6 +44657,13 @@ var REQUIRED_COLUMNS = [
     table: "leave_records",
     column: "payrollRunId",
     type: "INTEGER"
+  },
+  // ── leave_types (gender-based filtering) ──
+  {
+    table: "leave_types",
+    column: "applicableGender",
+    type: "TEXT NOT NULL",
+    defaultValue: "'all'"
   }
 ];
 var BACKFILL_QUERIES = [
@@ -44472,7 +44677,10 @@ var BACKFILL_QUERIES = [
   // Backfill contractor_milestones.customerId from contractors table
   `UPDATE "contractor_milestones" SET "customerId" = (
     SELECT "customerId" FROM "contractors" WHERE "contractors"."id" = "contractor_milestones"."contractorId"
-  ) WHERE "customerId" = 0`
+  ) WHERE "customerId" = 0`,
+  // Backfill leave_types.applicableGender based on leave type name keywords
+  `UPDATE "leave_types" SET "applicableGender" = 'female' WHERE LOWER("leaveTypeName") LIKE '%maternity%'`,
+  `UPDATE "leave_types" SET "applicableGender" = 'male' WHERE LOWER("leaveTypeName") LIKE '%paternity%'`
 ];
 async function runAutoMigrations() {
   const dbUrl = process.env.DATABASE_URL;

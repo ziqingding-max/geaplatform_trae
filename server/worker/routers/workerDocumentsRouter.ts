@@ -20,7 +20,7 @@ import {
   contractorDocuments,
   contractorContracts,
 } from "../../../drizzle/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, ne, desc } from "drizzle-orm";
 
 export const workerDocumentsRouter = workerRouter({
   /**
@@ -33,6 +33,7 @@ export const workerDocumentsRouter = workerRouter({
     const { workerUser } = ctx;
 
     if (workerUser.workerType === "employee" && workerUser.employeeId) {
+      // Exclude payslip documents — they are shown in the dedicated Payslips page
       const docs = await db
         .select({
           id: employeeDocuments.id,
@@ -45,7 +46,12 @@ export const workerDocumentsRouter = workerRouter({
           uploadedAt: employeeDocuments.uploadedAt,
         })
         .from(employeeDocuments)
-        .where(eq(employeeDocuments.employeeId, workerUser.employeeId))
+        .where(
+          and(
+            eq(employeeDocuments.employeeId, workerUser.employeeId),
+            ne(employeeDocuments.documentType, "payslip")
+          )
+        )
         .orderBy(desc(employeeDocuments.uploadedAt));
 
       return { workerType: "employee" as const, documents: docs };
