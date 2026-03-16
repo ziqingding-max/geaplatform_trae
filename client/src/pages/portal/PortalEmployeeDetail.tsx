@@ -460,8 +460,8 @@ export default function PortalEmployeeDetail() {
                   </Card>
                 ) : (
                   <div className="space-y-3">
-                    {employee.contracts!.map((contract) => (
-                      <Card key={contract.id}>
+                    {employee.contracts!.map((contract: any) => (
+                      <Card key={`${contract.source || "contract"}-${contract.id}`}>
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
@@ -472,18 +472,22 @@ export default function PortalEmployeeDetail() {
                                 <p className="text-sm font-medium">{contract.contractType || t("portal_employees.contracts.employmentContract")}</p>
                                 <p className="text-xs text-muted-foreground">
                                   {contract.effectiveDate && `${t("portal_employees.contracts.effective")}: ${formatDate(contract.effectiveDate)}`}
-                                  {contract.expiryDate && ` — ${t("portal_employees.contracts.expires")}: ${formatDate(contract.expiryDate)}`}
+                                  {contract.expiryDate && ` \u2014 ${t("portal_employees.contracts.expires")}: ${formatDate(contract.expiryDate)}`}
+                                  {!contract.effectiveDate && !contract.expiryDate && contract.uploadedAt && `Uploaded: ${formatDate(contract.uploadedAt)}`}
+                                  {contract.notes && ` \u00b7 ${contract.notes}`}
                                 </p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline" className={
-                                contract.status === "signed" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                                contract.status === "draft" ? "bg-gray-50 text-gray-600 border-gray-200" :
-                                "bg-amber-50 text-amber-700 border-amber-200"
-                              }>
-                                {contract.status || "draft"}
-                              </Badge>
+                              {contract.status && (
+                                <Badge variant="outline" className={
+                                  contract.status === "signed" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                  contract.status === "draft" ? "bg-gray-50 text-gray-600 border-gray-200" :
+                                  "bg-amber-50 text-amber-700 border-amber-200"
+                                }>
+                                  {contract.status}
+                                </Badge>
+                              )}
                               {contract.fileUrl && (
                                 <Button variant="ghost" size="sm" asChild>
                                   <a href={contract.fileUrl} target="_blank" rel="noopener noreferrer">

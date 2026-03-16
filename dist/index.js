@@ -3588,9 +3588,9 @@ async function listInvoices(filters = {}, limit = 50, offset = 0) {
   if (filters.invoiceType) conditions.push(eq4(invoices.invoiceType, filters.invoiceType));
   if (filters.invoiceMonth) conditions.push(eq4(invoices.invoiceMonth, filters.invoiceMonth));
   if (filters.excludeCreditNotes) {
-    const { ne: ne5, and: and59 } = await import("drizzle-orm");
-    conditions.push(ne5(invoices.invoiceType, "credit_note"));
-    conditions.push(ne5(invoices.invoiceType, "deposit_refund"));
+    const { ne: ne4, and: and59 } = await import("drizzle-orm");
+    conditions.push(ne4(invoices.invoiceType, "credit_note"));
+    conditions.push(ne4(invoices.invoiceType, "deposit_refund"));
   }
   const where = conditions.length > 0 ? and3(...conditions) : void 0;
   const [data, totalResult] = await Promise.all([
@@ -4198,12 +4198,12 @@ async function lockSubmittedReimbursements(monthStr, countryCode, payrollRunId) 
 async function getEmployeeMonthlyRevenue(employeeId, serviceMonth) {
   const db = await getDb();
   if (!db) return { total: 0, breakdown: [] };
-  const { ne: ne5 } = await import("drizzle-orm");
+  const { ne: ne4 } = await import("drizzle-orm");
   const monthInvoices = await db.select({ id: invoices.id }).from(invoices).where(
     and3(
       sql`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth}`,
-      ne5(invoices.invoiceType, "credit_note"),
-      ne5(invoices.invoiceType, "deposit_refund")
+      ne4(invoices.invoiceType, "credit_note"),
+      ne4(invoices.invoiceType, "deposit_refund")
     )
   );
   if (monthInvoices.length === 0) return { total: 0, breakdown: [] };
@@ -4216,7 +4216,7 @@ async function getEmployeeMonthlyRevenue(employeeId, serviceMonth) {
     and3(
       eq4(invoiceItems.employeeId, employeeId),
       inArray2(invoiceItems.invoiceId, invoiceIds),
-      ne5(invoiceItems.itemType, "deposit")
+      ne4(invoiceItems.itemType, "deposit")
     )
   );
   const breakdownMap = {};
@@ -4240,12 +4240,12 @@ async function getAllEmployeesMonthlyRevenue(serviceMonth) {
   const db = await getDb();
   if (!db) return [];
   const { employees: employees2, customers: customers2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-  const { ne: ne5 } = await import("drizzle-orm");
+  const { ne: ne4 } = await import("drizzle-orm");
   const monthInvoices = await db.select({ id: invoices.id }).from(invoices).where(
     and3(
       sql`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth}`,
-      ne5(invoices.invoiceType, "credit_note"),
-      ne5(invoices.invoiceType, "deposit_refund")
+      ne4(invoices.invoiceType, "credit_note"),
+      ne4(invoices.invoiceType, "deposit_refund")
     )
   );
   if (monthInvoices.length === 0) return [];
@@ -4257,7 +4257,7 @@ async function getAllEmployeesMonthlyRevenue(serviceMonth) {
   }).from(invoiceItems).where(
     and3(
       inArray2(invoiceItems.invoiceId, invoiceIds),
-      ne5(invoiceItems.itemType, "deposit")
+      ne4(invoiceItems.itemType, "deposit")
     )
   );
   const empMap = {};
@@ -8594,8 +8594,8 @@ async function generateInvoicePdf(options) {
       doc.text(formatNum(item.localAmount || item.amount), cols.amount.x, tableY, { width: cols.amount.w, align: "right" });
       tableY += 11;
       doc.fontSize(7).fillColor("#888888");
-      const desc32 = item.description.length > 80 ? item.description.slice(0, 77) + "..." : item.description;
-      smartText(desc32, cols.item.x + 2, tableY, { width: cols.item.w + cols.curr.w + cols.qty.w - 2 });
+      const desc33 = item.description.length > 80 ? item.description.slice(0, 77) + "..." : item.description;
+      smartText(desc33, cols.item.x + 2, tableY, { width: cols.item.w + cols.curr.w + cols.qty.w - 2 });
       tableY += 14;
     }
     tableY += 6;
@@ -22358,7 +22358,7 @@ var quotationRouter = router({
         }
         return and59(...conditions);
       },
-      orderBy: (quotations2, { desc: desc32 }) => [desc32(quotations2.createdAt)],
+      orderBy: (quotations2, { desc: desc33 }) => [desc33(quotations2.createdAt)],
       limit: input.limit,
       offset: input.offset,
       with: {
@@ -23802,7 +23802,7 @@ var portalDashboardRouter = portalRouter({
 // server/portal/routers/portalEmployeesRouter.ts
 import { z as z33 } from "zod";
 import { TRPCError as TRPCError30 } from "@trpc/server";
-import { sql as sql20, eq as eq45, and as and36, count as count10 } from "drizzle-orm";
+import { sql as sql20, eq as eq45, and as and36, count as count10, notInArray, desc as desc19 } from "drizzle-orm";
 import crypto5 from "crypto";
 init_db2();
 init_schema();
@@ -23893,7 +23893,20 @@ var portalEmployeesRouter = portalRouter({
     if (!emp) {
       throw new TRPCError30({ code: "NOT_FOUND", message: "Employee not found" });
     }
-    const contracts = await db.select({
+    const contractDocs = await db.select({
+      id: employeeDocuments.id,
+      documentName: employeeDocuments.documentName,
+      fileUrl: employeeDocuments.fileUrl,
+      mimeType: employeeDocuments.mimeType,
+      notes: employeeDocuments.notes,
+      uploadedAt: employeeDocuments.uploadedAt
+    }).from(employeeDocuments).where(
+      and36(
+        eq45(employeeDocuments.employeeId, input.id),
+        eq45(employeeDocuments.documentType, "contract")
+      )
+    ).orderBy(desc19(employeeDocuments.uploadedAt));
+    const structuredContracts = await db.select({
       id: employeeContracts.id,
       contractType: employeeContracts.contractType,
       fileUrl: employeeContracts.fileUrl,
@@ -23902,6 +23915,35 @@ var portalEmployeesRouter = portalRouter({
       expiryDate: employeeContracts.expiryDate,
       status: employeeContracts.status
     }).from(employeeContracts).where(eq45(employeeContracts.employeeId, input.id));
+    const contracts = [];
+    for (const doc of contractDocs) {
+      contracts.push({
+        id: doc.id,
+        source: "document",
+        contractType: doc.documentName || "Contract",
+        fileUrl: doc.fileUrl,
+        signedDate: null,
+        effectiveDate: null,
+        expiryDate: null,
+        status: null,
+        notes: doc.notes,
+        uploadedAt: doc.uploadedAt
+      });
+    }
+    for (const c of structuredContracts) {
+      contracts.push({
+        id: c.id,
+        source: "contract",
+        contractType: c.contractType || "Employment Contract",
+        fileUrl: c.fileUrl,
+        signedDate: c.signedDate,
+        effectiveDate: c.effectiveDate,
+        expiryDate: c.expiryDate,
+        status: c.status,
+        notes: null,
+        uploadedAt: null
+      });
+    }
     const documents = await db.select({
       id: employeeDocuments.id,
       documentType: employeeDocuments.documentType,
@@ -23909,7 +23951,12 @@ var portalEmployeesRouter = portalRouter({
       fileUrl: employeeDocuments.fileUrl,
       mimeType: employeeDocuments.mimeType,
       uploadedAt: employeeDocuments.uploadedAt
-    }).from(employeeDocuments).where(eq45(employeeDocuments.employeeId, input.id));
+    }).from(employeeDocuments).where(
+      and36(
+        eq45(employeeDocuments.employeeId, input.id),
+        notInArray(employeeDocuments.documentType, ["payslip", "contract"])
+      )
+    );
     const balances = await db.select({
       id: leaveBalances.id,
       leaveTypeId: leaveBalances.leaveTypeId,
@@ -26622,7 +26669,7 @@ var portalReimbursementsRouter = portalRouter({
 
 // server/portal/routers/portalKnowledgeBaseRouter.ts
 import { z as z40 } from "zod";
-import { and as and43, desc as desc20, eq as eq52, inArray as inArray16, isNull as isNull5, or as or9 } from "drizzle-orm";
+import { and as and43, desc as desc21, eq as eq52, inArray as inArray16, isNull as isNull5, or as or9 } from "drizzle-orm";
 import { TRPCError as TRPCError37 } from "@trpc/server";
 init_db2();
 init_schema();
@@ -26647,7 +26694,7 @@ var portalKnowledgeBaseRouter = portalRouter({
         eq52(knowledgeItems.status, "published"),
         or9(eq52(knowledgeItems.customerId, customerId), isNull5(knowledgeItems.customerId))
       )
-    ).orderBy(desc20(knowledgeItems.publishedAt), desc20(knowledgeItems.createdAt)).limit(500);
+    ).orderBy(desc21(knowledgeItems.publishedAt), desc21(knowledgeItems.createdAt)).limit(500);
     const topicCounts = topics.reduce((acc, topic) => {
       acc[topic] = items.filter((item) => item.topic === topic).length;
       return acc;
@@ -26824,7 +26871,7 @@ import { z as z42 } from "zod";
 init_db2();
 init_schema();
 init_financeService();
-import { eq as eq54, desc as desc21, sql as sql28 } from "drizzle-orm";
+import { eq as eq54, desc as desc22, sql as sql28 } from "drizzle-orm";
 import { TRPCError as TRPCError38 } from "@trpc/server";
 var portalWalletRouter = portalRouter({
   get: protectedPortalProcedure.input(z42.object({
@@ -26908,7 +26955,7 @@ var portalWalletRouter = portalRouter({
     const wallet = await walletService.getWallet(ctx.portalUser.customerId, input.currency);
     const txs = await db.query.walletTransactions.findMany({
       where: eq54(walletTransactions.walletId, wallet.id),
-      orderBy: [desc21(walletTransactions.createdAt)],
+      orderBy: [desc22(walletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
     });
@@ -26931,7 +26978,7 @@ var portalWalletRouter = portalRouter({
 // server/portal/routers/portalContractorsRouter.ts
 import { z as z43 } from "zod";
 import { TRPCError as TRPCError39 } from "@trpc/server";
-import { eq as eq55, and as and46, like as like12, count as count17, desc as desc22, or as or10 } from "drizzle-orm";
+import { eq as eq55, and as and46, like as like12, count as count17, desc as desc23, or as or10 } from "drizzle-orm";
 init_db2();
 init_schema();
 var PORTAL_CONTRACTOR_LIST_FIELDS = {
@@ -26981,7 +27028,7 @@ var portalContractorsRouter = portalRouter({
     const where = and46(...conditions);
     const offset = (input.page - 1) * input.pageSize;
     const [items, totalResult] = await Promise.all([
-      db.select(PORTAL_CONTRACTOR_LIST_FIELDS).from(contractors).where(where).limit(input.pageSize).offset(offset).orderBy(desc22(contractors.createdAt)),
+      db.select(PORTAL_CONTRACTOR_LIST_FIELDS).from(contractors).where(where).limit(input.pageSize).offset(offset).orderBy(desc23(contractors.createdAt)),
       db.select({ count: count17() }).from(contractors).where(where)
     ]);
     return {
@@ -27161,7 +27208,7 @@ var portalContractorsRouter = portalRouter({
 // server/portal/routers/portalMilestonesRouter.ts
 import { z as z44 } from "zod";
 import { TRPCError as TRPCError40 } from "@trpc/server";
-import { eq as eq56, and as and47, desc as desc23, inArray as inArray17 } from "drizzle-orm";
+import { eq as eq56, and as and47, desc as desc24, inArray as inArray17 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalMilestonesRouter = portalRouter({
@@ -27202,7 +27249,7 @@ var portalMilestonesRouter = portalRouter({
       completedAt: contractorMilestones.completedAt,
       clientApprovedAt: contractorMilestones.clientApprovedAt,
       createdAt: contractorMilestones.createdAt
-    }).from(contractorMilestones).where(and47(...conditions)).orderBy(desc23(contractorMilestones.createdAt));
+    }).from(contractorMilestones).where(and47(...conditions)).orderBy(desc24(contractorMilestones.createdAt));
     const contractorMap = /* @__PURE__ */ new Map();
     if (milestones.length > 0) {
       const uniqueIds = Array.from(new Set(milestones.map((m) => m.contractorId)));
@@ -28089,7 +28136,7 @@ import { z as z48 } from "zod";
 import { TRPCError as TRPCError45 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq61, desc as desc24, and as and49, count as count18 } from "drizzle-orm";
+import { eq as eq61, desc as desc25, and as and49, count as count18 } from "drizzle-orm";
 var workerInvoicesRouter = workerRouter({
   /**
    * List my invoices with pagination and optional status filter
@@ -28119,7 +28166,7 @@ var workerInvoicesRouter = workerRouter({
       totalAmount: contractorInvoices.totalAmount,
       status: contractorInvoices.status,
       createdAt: contractorInvoices.createdAt
-    }).from(contractorInvoices).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc24(contractorInvoices.createdAt));
+    }).from(contractorInvoices).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc25(contractorInvoices.createdAt));
     return {
       items,
       total: totalResult?.count ?? 0,
@@ -28153,7 +28200,7 @@ import { z as z49 } from "zod";
 import { TRPCError as TRPCError46 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq62, desc as desc25, and as and50, count as count19 } from "drizzle-orm";
+import { eq as eq62, desc as desc26, and as and50, count as count19 } from "drizzle-orm";
 var workerMilestonesRouter = workerRouter({
   /**
    * List my milestones with pagination and optional status filter
@@ -28196,7 +28243,7 @@ var workerMilestonesRouter = workerRouter({
       clientRejectionReason: contractorMilestones.clientRejectionReason,
       adminRejectionReason: contractorMilestones.adminRejectionReason,
       createdAt: contractorMilestones.createdAt
-    }).from(contractorMilestones).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc25(contractorMilestones.createdAt));
+    }).from(contractorMilestones).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc26(contractorMilestones.createdAt));
     return {
       items,
       total: totalResult?.count ?? 0,
@@ -28273,7 +28320,7 @@ var workerMilestonesRouter = workerRouter({
 init_connection();
 init_schema();
 import { TRPCError as TRPCError47 } from "@trpc/server";
-import { eq as eq63, and as and51, sql as sql30, desc as desc26, count as count20, inArray as inArray19 } from "drizzle-orm";
+import { eq as eq63, and as and51, sql as sql30, desc as desc27, count as count20, inArray as inArray19 } from "drizzle-orm";
 var workerDashboardRouter = workerRouter({
   getSummary: protectedWorkerProcedure.query(async ({ ctx }) => {
     const db = await getDb();
@@ -28306,7 +28353,7 @@ var workerDashboardRouter = workerRouter({
         currency: contractorInvoices.currency,
         status: contractorInvoices.status,
         invoiceDate: contractorInvoices.invoiceDate
-      }).from(contractorInvoices).where(eq63(contractorInvoices.contractorId, workerUser.contractorId)).orderBy(desc26(contractorInvoices.createdAt)).limit(5);
+      }).from(contractorInvoices).where(eq63(contractorInvoices.contractorId, workerUser.contractorId)).orderBy(desc27(contractorInvoices.createdAt)).limit(5);
       return {
         workerType: "contractor",
         pendingMilestones: pendingMilestones?.count ?? 0,
@@ -28337,7 +28384,7 @@ var workerDashboardRouter = workerRouter({
           eq63(employeeDocuments.employeeId, workerUser.employeeId),
           eq63(employeeDocuments.documentType, "payslip")
         )
-      ).orderBy(desc26(employeeDocuments.uploadedAt)).limit(1);
+      ).orderBy(desc27(employeeDocuments.uploadedAt)).limit(1);
       if (payslipDocs.length > 0) {
         const doc = payslipDocs[0];
         latestPayslip = {
@@ -28362,7 +28409,7 @@ var workerDashboardRouter = workerRouter({
             eq63(employeePayslips.employeeId, workerUser.employeeId),
             eq63(employeePayslips.isPublished, true)
           )
-        ).orderBy(desc26(employeePayslips.payPeriod)).limit(1);
+        ).orderBy(desc27(employeePayslips.payPeriod)).limit(1);
         if (payslipRecords.length > 0) {
           latestPayslip = payslipRecords[0];
         }
@@ -28411,7 +28458,7 @@ import { z as z50 } from "zod";
 import { TRPCError as TRPCError48 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq64, and as and52, desc as desc27 } from "drizzle-orm";
+import { eq as eq64, and as and52, desc as desc28 } from "drizzle-orm";
 var workerNotificationsRouter = workerRouter({
   /**
    * Get unread notifications
@@ -28425,7 +28472,7 @@ var workerNotificationsRouter = workerRouter({
         eq64(notifications.targetUserId, ctx.workerUser.id),
         eq64(notifications.isRead, false)
       )
-    ).orderBy(desc27(notifications.createdAt)).limit(input.limit);
+    ).orderBy(desc28(notifications.createdAt)).limit(input.limit);
   }),
   /**
    * Mark as read
@@ -28464,7 +28511,7 @@ import { z as z51 } from "zod";
 import { TRPCError as TRPCError49 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq65, and as and53, desc as desc28, count as count21 } from "drizzle-orm";
+import { eq as eq65, and as and53, desc as desc29, count as count21 } from "drizzle-orm";
 var workerLeaveRouter = workerRouter({
   /**
    * Get leave balances for current year
@@ -28644,7 +28691,7 @@ var workerLeaveRouter = workerRouter({
       createdAt: leaveRecords.createdAt,
       leaveTypeName: leaveTypes.leaveTypeName,
       isPaid: leaveTypes.isPaid
-    }).from(leaveRecords).innerJoin(leaveTypes, eq65(leaveRecords.leaveTypeId, leaveTypes.id)).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc28(leaveRecords.createdAt));
+    }).from(leaveRecords).innerJoin(leaveTypes, eq65(leaveRecords.leaveTypeId, leaveTypes.id)).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc29(leaveRecords.createdAt));
     return {
       items,
       total: totalResult?.count ?? 0,
@@ -28867,7 +28914,7 @@ import { z as z52 } from "zod";
 import { TRPCError as TRPCError50 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq66, and as and54, desc as desc29, count as count22 } from "drizzle-orm";
+import { eq as eq66, and as and54, desc as desc30, count as count22 } from "drizzle-orm";
 var workerReimbursementsRouter = workerRouter({
   /**
    * List my reimbursements with pagination and optional status filter
@@ -28905,7 +28952,7 @@ var workerReimbursementsRouter = workerRouter({
       clientRejectionReason: reimbursements.clientRejectionReason,
       adminRejectionReason: reimbursements.adminRejectionReason,
       createdAt: reimbursements.createdAt
-    }).from(reimbursements).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc29(reimbursements.createdAt));
+    }).from(reimbursements).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc30(reimbursements.createdAt));
     return {
       items,
       total: totalResult?.count ?? 0,
@@ -29016,7 +29063,7 @@ import { z as z53 } from "zod";
 import { TRPCError as TRPCError51 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq67, and as and55, desc as desc30 } from "drizzle-orm";
+import { eq as eq67, and as and55, desc as desc31 } from "drizzle-orm";
 var workerPayslipsRouter = workerRouter({
   /**
    * List payslips — merges employee_documents (documentType=payslip) + employee_payslips
@@ -29043,7 +29090,7 @@ var workerPayslipsRouter = workerRouter({
         eq67(employeeDocuments.employeeId, employeeId),
         eq67(employeeDocuments.documentType, "payslip")
       )
-    ).orderBy(desc30(employeeDocuments.uploadedAt));
+    ).orderBy(desc31(employeeDocuments.uploadedAt));
     const payslipRecords = await db.select({
       id: employeePayslips.id,
       payPeriod: employeePayslips.payPeriod,
@@ -29060,7 +29107,7 @@ var workerPayslipsRouter = workerRouter({
         eq67(employeePayslips.employeeId, employeeId),
         eq67(employeePayslips.isPublished, true)
       )
-    ).orderBy(desc30(employeePayslips.payPeriod));
+    ).orderBy(desc31(employeePayslips.payPeriod));
     const allItems = [];
     for (const doc of payslipDocs) {
       allItems.push({
@@ -29162,10 +29209,11 @@ var workerPayslipsRouter = workerRouter({
 import { TRPCError as TRPCError52 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq68, and as and56, ne as ne4, desc as desc31 } from "drizzle-orm";
+import { eq as eq68, and as and56, notInArray as notInArray2, desc as desc32 } from "drizzle-orm";
 var workerDocumentsRouter = workerRouter({
   /**
-   * List my documents — returns different data based on workerType
+   * List my documents — excludes payslip and contract types for employees
+   * (payslips shown in Payslips page, contracts shown in Contracts tab)
    */
   listDocuments: protectedWorkerProcedure.query(async ({ ctx }) => {
     const db = await getDb();
@@ -29184,9 +29232,9 @@ var workerDocumentsRouter = workerRouter({
       }).from(employeeDocuments).where(
         and56(
           eq68(employeeDocuments.employeeId, workerUser.employeeId),
-          ne4(employeeDocuments.documentType, "payslip")
+          notInArray2(employeeDocuments.documentType, ["payslip", "contract"])
         )
-      ).orderBy(desc31(employeeDocuments.uploadedAt));
+      ).orderBy(desc32(employeeDocuments.uploadedAt));
       return { workerType: "employee", documents: docs };
     } else if (workerUser.workerType === "contractor" && workerUser.contractorId) {
       const docs = await db.select({
@@ -29198,20 +29246,33 @@ var workerDocumentsRouter = workerRouter({
         fileSize: contractorDocuments.fileSize,
         notes: contractorDocuments.notes,
         uploadedAt: contractorDocuments.uploadedAt
-      }).from(contractorDocuments).where(eq68(contractorDocuments.contractorId, workerUser.contractorId)).orderBy(desc31(contractorDocuments.uploadedAt));
+      }).from(contractorDocuments).where(eq68(contractorDocuments.contractorId, workerUser.contractorId)).orderBy(desc32(contractorDocuments.uploadedAt));
       return { workerType: "contractor", documents: docs };
     }
     return { workerType: workerUser.workerType, documents: [] };
   }),
   /**
-   * List my contracts — returns different data based on workerType
+   * List my contracts — merges employee_documents (documentType=contract) + employee_contracts
    */
   listContracts: protectedWorkerProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError52({ code: "INTERNAL_SERVER_ERROR" });
     const { workerUser } = ctx;
     if (workerUser.workerType === "employee" && workerUser.employeeId) {
-      const contracts = await db.select({
+      const contractDocs = await db.select({
+        id: employeeDocuments.id,
+        documentName: employeeDocuments.documentName,
+        fileUrl: employeeDocuments.fileUrl,
+        mimeType: employeeDocuments.mimeType,
+        notes: employeeDocuments.notes,
+        uploadedAt: employeeDocuments.uploadedAt
+      }).from(employeeDocuments).where(
+        and56(
+          eq68(employeeDocuments.employeeId, workerUser.employeeId),
+          eq68(employeeDocuments.documentType, "contract")
+        )
+      ).orderBy(desc32(employeeDocuments.uploadedAt));
+      const structuredContracts = await db.select({
         id: employeeContracts.id,
         contractType: employeeContracts.contractType,
         fileUrl: employeeContracts.fileUrl,
@@ -29220,7 +29281,41 @@ var workerDocumentsRouter = workerRouter({
         expiryDate: employeeContracts.expiryDate,
         status: employeeContracts.status,
         createdAt: employeeContracts.createdAt
-      }).from(employeeContracts).where(eq68(employeeContracts.employeeId, workerUser.employeeId)).orderBy(desc31(employeeContracts.createdAt));
+      }).from(employeeContracts).where(eq68(employeeContracts.employeeId, workerUser.employeeId)).orderBy(desc32(employeeContracts.createdAt));
+      const contracts = [];
+      for (const doc of contractDocs) {
+        contracts.push({
+          id: doc.id,
+          source: "document",
+          contractType: doc.documentName || "Contract",
+          fileUrl: doc.fileUrl,
+          signedDate: null,
+          effectiveDate: null,
+          expiryDate: null,
+          status: null,
+          notes: doc.notes,
+          createdAt: doc.uploadedAt
+        });
+      }
+      for (const c of structuredContracts) {
+        contracts.push({
+          id: c.id,
+          source: "contract",
+          contractType: c.contractType || "Employment Contract",
+          fileUrl: c.fileUrl,
+          signedDate: c.signedDate,
+          effectiveDate: c.effectiveDate,
+          expiryDate: c.expiryDate,
+          status: c.status,
+          notes: null,
+          createdAt: c.createdAt
+        });
+      }
+      contracts.sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+      });
       return { workerType: "employee", contracts };
     } else if (workerUser.workerType === "contractor" && workerUser.contractorId) {
       const contracts = await db.select({
@@ -29232,8 +29327,15 @@ var workerDocumentsRouter = workerRouter({
         expiryDate: contractorContracts.expiryDate,
         status: contractorContracts.status,
         createdAt: contractorContracts.createdAt
-      }).from(contractorContracts).where(eq68(contractorContracts.contractorId, workerUser.contractorId)).orderBy(desc31(contractorContracts.createdAt));
-      return { workerType: "contractor", contracts };
+      }).from(contractorContracts).where(eq68(contractorContracts.contractorId, workerUser.contractorId)).orderBy(desc32(contractorContracts.createdAt));
+      return {
+        workerType: "contractor",
+        contracts: contracts.map((c) => ({
+          ...c,
+          source: "contract",
+          notes: null
+        }))
+      };
     }
     return { workerType: workerUser.workerType, contracts: [] };
   })

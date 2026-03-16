@@ -8,7 +8,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { sql, eq, and, like, count, inArray } from "drizzle-orm";
+import { sql, eq, and, like, count, inArray, notInArray, desc } from "drizzle-orm";
 import crypto from "crypto";
 import {
   protectedPortalProcedure,
@@ -147,8 +147,26 @@ export const portalEmployeesRouter = portalRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
       }
 
-      // Get contracts
-      const contracts = await db
+      // Get contracts — merge employee_documents (documentType=contract) + employee_contracts
+      const contractDocs = await db
+        .select({
+          id: employeeDocuments.id,
+          documentName: employeeDocuments.documentName,
+          fileUrl: employeeDocuments.fileUrl,
+          mimeType: employeeDocuments.mimeType,
+          notes: employeeDocuments.notes,
+          uploadedAt: employeeDocuments.uploadedAt,
+        })
+        .from(employeeDocuments)
+        .where(
+          and(
+            eq(employeeDocuments.employeeId, input.id),
+            eq(employeeDocuments.documentType, "contract")
+          )
+        )
+        .orderBy(desc(employeeDocuments.uploadedAt));
+
+      const structuredContracts = await db
         .select({
           id: employeeContracts.id,
           contractType: employeeContracts.contractType,
@@ -161,7 +179,38 @@ export const portalEmployeesRouter = portalRouter({
         .from(employeeContracts)
         .where(eq(employeeContracts.employeeId, input.id));
 
-      // Get documents
+      // Merge into unified contracts list
+      const contracts: any[] = [];
+      for (const doc of contractDocs) {
+        contracts.push({
+          id: doc.id,
+          source: "document",
+          contractType: doc.documentName || "Contract",
+          fileUrl: doc.fileUrl,
+          signedDate: null,
+          effectiveDate: null,
+          expiryDate: null,
+          status: null,
+          notes: doc.notes,
+          uploadedAt: doc.uploadedAt,
+        });
+      }
+      for (const c of structuredContracts) {
+        contracts.push({
+          id: c.id,
+          source: "contract",
+          contractType: c.contractType || "Employment Contract",
+          fileUrl: c.fileUrl,
+          signedDate: c.signedDate,
+          effectiveDate: c.effectiveDate,
+          expiryDate: c.expiryDate,
+          status: c.status,
+          notes: null,
+          uploadedAt: null,
+        });
+      }
+
+      // Get documents — exclude payslip and contract (shown in dedicated tabs)
       const documents = await db
         .select({
           id: employeeDocuments.id,
@@ -172,7 +221,12 @@ export const portalEmployeesRouter = portalRouter({
           uploadedAt: employeeDocuments.uploadedAt,
         })
         .from(employeeDocuments)
-        .where(eq(employeeDocuments.employeeId, input.id));
+        .where(
+          and(
+            eq(employeeDocuments.employeeId, input.id),
+            notInArray(employeeDocuments.documentType, ["payslip", "contract"])
+          )
+        );
 
       // Get leave balances with leave type names and gender applicability
       const balances = await db
