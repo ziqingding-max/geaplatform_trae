@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import { getDb } from '../../server/services/db/connection';
 import { walletService } from '../../server/services/walletService';
-import { customers, customerWallets, walletTransactions, invoices } from '../../drizzle/schema';
+import { customers, customerWallets, customerFrozenWallets, walletTransactions, frozenWalletTransactions, invoices } from '../../drizzle/schema';
 import { eq, sql } from 'drizzle-orm';
 
 async function runTests() {
@@ -77,8 +77,7 @@ async function runTests() {
     console.log('Test 2: should handle frozen wallet transactions correctly');
     const frozenWallet = await walletService.getFrozenWallet(testCustomerId, 'USD');
     
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
+    // Credit 20.00 into frozen wallet
     await walletService.frozenTransact({
       walletId: frozenWallet.id,
       type: 'deposit_in',
@@ -89,11 +88,16 @@ async function runTests() {
       description: 'Test deposit freeze'
     });
     
+    // FIX: Use schema column reference (customerFrozenWallets.id) compared to actual value (frozenWallet.id)
+    // Previous bug: eq(frozenWallet.id, frozenWallet.id) was always true (number self-comparison),
+    // causing the query to return the first frozen wallet row in DB instead of the test-created one.
     let currentFrozen = await db.query.customerFrozenWallets.findFirst({
-      where: eq(frozenWallet.id, frozenWallet.id)
+      where: eq(customerFrozenWallets.id, frozenWallet.id)
     });
-    assert.strictEqual(Number(currentFrozen.balance), 20.00, 'Frozen balance should be 20.00');
+    console.log(`  After deposit_in: frozen balance = ${currentFrozen!.balance}`);
+    assert.strictEqual(Number(currentFrozen!.balance), 20.00, 'Frozen balance should be 20.00 after deposit');
     
+    // Debit 10.00 from frozen wallet (simulating partial refund)
     await walletService.frozenTransact({
       walletId: frozenWallet.id,
       type: 'deposit_refund',
@@ -105,9 +109,10 @@ async function runTests() {
     });
     
     currentFrozen = await db.query.customerFrozenWallets.findFirst({
-      where: eq(frozenWallet.id, frozenWallet.id)
+      where: eq(customerFrozenWallets.id, frozenWallet.id)
     });
-    assert.strictEqual(Number(currentFrozen.balance), 10.00, 'Frozen balance should be 10.00');
+    console.log(`  After deposit_refund: frozen balance = ${currentFrozen!.balance}`);
+    assert.strictEqual(Number(currentFrozen!.balance), 10.00, 'Frozen balance should be 10.00 after refund');
     console.log('✅ Test 2 Passed');
 
   } catch (err: any) {
@@ -117,12 +122,24 @@ async function runTests() {
   } finally {
     // --- CLEANUP ---
     console.log('Cleaning up test data...');
-    if (db && testCustomerId) {
-      const wallet = await db.query.customerWallets.findFirst({ where: eq(customers.id, testCustomerId) });
+    if (db && testCustomerId!) {
+      // Clean up frozen wallet transactions and frozen wallet
+      const frozenWallet = await db.query.customerFrozenWallets.findFirst({
+        where: eq(customerFrozenWallets.customerId, testCustomerId)
+      });
+      if (frozenWallet) {
+        await db.delete(frozenWalletTransactions).where(eq(frozenWalletTransactions.walletId, frozenWallet.id));
+        await db.delete(customerFrozenWallets).where(eq(customerFrozenWallets.id, frozenWallet.id));
+      }
+      // Clean up main wallet transactions and wallet
+      const wallet = await db.query.customerWallets.findFirst({
+        where: eq(customerWallets.customerId, testCustomerId)
+      });
       if (wallet) {
         await db.delete(walletTransactions).where(eq(walletTransactions.walletId, wallet.id));
+        await db.delete(customerWallets).where(eq(customerWallets.id, wallet.id));
       }
-      if (testInvoiceId) {
+      if (testInvoiceId!) {
         await db.delete(invoices).where(eq(invoices.id, testInvoiceId));
       }
       await db.delete(customers).where(eq(customers.id, testCustomerId));
