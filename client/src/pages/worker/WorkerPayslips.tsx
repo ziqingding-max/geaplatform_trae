@@ -2,7 +2,7 @@ import { useState } from "react";
 import { workerTrpc } from "@/lib/workerTrpc";
 import WorkerLayout from "./WorkerLayout";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Wallet, Download, ChevronRight } from "lucide-react";
+import { Loader2, Wallet, Download, ChevronRight, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,15 +13,23 @@ import {
 
 export default function WorkerPayslips() {
   const [page, setPage] = useState(1);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedItem, setSelectedItem] = useState<{ id: number; source: "payslip" | "document" } | null>(null);
 
   const { data, isLoading } = workerTrpc.payslips.list.useQuery({ page, pageSize: 20 });
   const { data: detail } = workerTrpc.payslips.getById.useQuery(
-    { id: selectedId! },
-    { enabled: !!selectedId }
+    { id: selectedItem?.id!, source: selectedItem?.source || "payslip" },
+    { enabled: !!selectedItem }
   );
 
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
+
+  const formatCurrency = (amount: string | null, currency: string | null) => {
+    if (!amount) return "--";
+    return parseFloat(amount).toLocaleString("en-US", {
+      style: "currency",
+      currency: currency || "USD",
+    });
+  };
 
   return (
     <WorkerLayout>
@@ -45,24 +53,40 @@ export default function WorkerPayslips() {
             {/* Mobile: Card List */}
             <div className="space-y-3 md:hidden">
               {data?.items.map((ps: any) => (
-                <Card key={ps.id} className="cursor-pointer active:bg-muted/50" onClick={() => setSelectedId(ps.id)}>
+                <Card
+                  key={`${ps.source}-${ps.id}`}
+                  className="cursor-pointer active:bg-muted/50"
+                  onClick={() => setSelectedItem({ id: ps.id, source: ps.source })}
+                >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium">{ps.payPeriod}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium truncate">{ps.payPeriod}</p>
+                          {ps.source === "document" && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600">
+                              <FileText className="w-3 h-3 mr-0.5" />
+                              Doc
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-muted-foreground mt-0.5">
-                          {ps.payDate ? `Paid: ${ps.payDate}` : ""}
+                          {ps.payDate ? `${ps.source === "document" ? "Uploaded" : "Paid"}: ${ps.payDate}` : ""}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="text-right">
-                          <p className="font-bold">
-                            {parseFloat(ps.netAmount || "0").toLocaleString("en-US", { style: "currency", currency: ps.currency || "USD" })}
-                          </p>
-                          {ps.grossAmount && (
-                            <p className="text-xs text-muted-foreground">
-                              Gross: {parseFloat(ps.grossAmount).toLocaleString("en-US", { style: "currency", currency: ps.currency || "USD" })}
-                            </p>
+                          {ps.netAmount ? (
+                            <>
+                              <p className="font-bold">{formatCurrency(ps.netAmount, ps.currency)}</p>
+                              {ps.grossAmount && (
+                                <p className="text-xs text-muted-foreground">
+                                  Gross: {formatCurrency(ps.grossAmount, ps.currency)}
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">View document</p>
                           )}
                         </div>
                         <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -79,8 +103,9 @@ export default function WorkerPayslips() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Pay Period</th>
-                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Pay Date</th>
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Pay Period / Name</th>
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Date</th>
+                      <th className="text-left p-4 text-sm font-medium text-muted-foreground">Source</th>
                       <th className="text-right p-4 text-sm font-medium text-muted-foreground">Gross</th>
                       <th className="text-right p-4 text-sm font-medium text-muted-foreground">Net</th>
                       <th className="text-left p-4 text-sm font-medium text-muted-foreground">File</th>
@@ -89,14 +114,29 @@ export default function WorkerPayslips() {
                   </thead>
                   <tbody>
                     {data?.items.map((ps: any) => (
-                      <tr key={ps.id} className="border-b last:border-0 hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedId(ps.id)}>
+                      <tr
+                        key={`${ps.source}-${ps.id}`}
+                        className="border-b last:border-0 hover:bg-muted/50 cursor-pointer"
+                        onClick={() => setSelectedItem({ id: ps.id, source: ps.source })}
+                      >
                         <td className="p-4 font-medium">{ps.payPeriod}</td>
                         <td className="p-4 text-sm">{ps.payDate || "--"}</td>
+                        <td className="p-4">
+                          {ps.source === "document" ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600">
+                              Document
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-50 text-green-600">
+                              Payslip
+                            </span>
+                          )}
+                        </td>
                         <td className="p-4 text-right text-sm">
-                          {ps.grossAmount ? parseFloat(ps.grossAmount).toLocaleString("en-US", { style: "currency", currency: ps.currency || "USD" }) : "--"}
+                          {formatCurrency(ps.grossAmount, ps.currency)}
                         </td>
                         <td className="p-4 text-right font-bold">
-                          {parseFloat(ps.netAmount || "0").toLocaleString("en-US", { style: "currency", currency: ps.currency || "USD" })}
+                          {formatCurrency(ps.netAmount, ps.currency)}
                         </td>
                         <td className="p-4">
                           {ps.fileUrl ? (
@@ -134,7 +174,7 @@ export default function WorkerPayslips() {
         )}
 
         {/* Payslip Detail Dialog */}
-        <Dialog open={!!selectedId} onOpenChange={(open) => !open && setSelectedId(null)}>
+        <Dialog open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Payslip Detail</DialogTitle>
@@ -143,28 +183,38 @@ export default function WorkerPayslips() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground">Pay Period</p>
+                    <p className="text-sm text-muted-foreground">
+                      {detail.source === "document" ? "Document Name" : "Pay Period"}
+                    </p>
                     <p className="font-medium">{detail.payPeriod}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground">Pay Date</p>
+                    <p className="text-sm text-muted-foreground">
+                      {detail.source === "document" ? "Upload Date" : "Pay Date"}
+                    </p>
                     <p className="font-medium">{detail.payDate || "--"}</p>
                   </div>
                   {detail.grossAmount && (
                     <div>
                       <p className="text-sm text-muted-foreground">Gross Amount</p>
-                      <p className="font-medium">
-                        {parseFloat(detail.grossAmount).toLocaleString("en-US", { style: "currency", currency: detail.currency || "USD" })}
-                      </p>
+                      <p className="font-medium">{formatCurrency(detail.grossAmount, detail.currency)}</p>
                     </div>
                   )}
-                  <div>
-                    <p className="text-sm text-muted-foreground">Net Amount</p>
-                    <p className="text-lg font-bold">
-                      {parseFloat(detail.netAmount || "0").toLocaleString("en-US", { style: "currency", currency: detail.currency || "USD" })}
+                  {detail.netAmount && (
+                    <div>
+                      <p className="text-sm text-muted-foreground">Net Amount</p>
+                      <p className="text-lg font-bold">{formatCurrency(detail.netAmount, detail.currency)}</p>
+                    </div>
+                  )}
+                </div>
+
+                {detail.source === "document" && !detail.netAmount && !detail.grossAmount && (
+                  <div className="rounded-md bg-muted/50 p-3">
+                    <p className="text-sm text-muted-foreground">
+                      This payslip was uploaded as a document. Download the file to view the details.
                     </p>
                   </div>
-                </div>
+                )}
 
                 {detail.notes && (
                   <div>

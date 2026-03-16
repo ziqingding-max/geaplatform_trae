@@ -28240,13 +28240,14 @@ import { TRPCError as TRPCError47 } from "@trpc/server";
 import { eq as eq63, and as and51, sql as sql30, desc as desc26, count as count20, inArray as inArray19 } from "drizzle-orm";
 var workerDashboardRouter = workerRouter({
   /**
-   * Get dashboard summary — returns different data based on workerType
+   * Get dashboard summary — returns different data based on activeRole
    */
   getSummary: protectedWorkerProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError47({ code: "INTERNAL_SERVER_ERROR" });
     const { workerUser } = ctx;
-    if (workerUser.workerType === "contractor" && workerUser.contractorId) {
+    const role = workerUser.activeRole || workerUser.workerType;
+    if (role === "contractor" && workerUser.contractorId) {
       const [pendingMilestones] = await db.select({ count: count20() }).from(contractorMilestones).where(
         and51(
           eq63(contractorMilestones.contractorId, workerUser.contractorId),
@@ -28280,7 +28281,7 @@ var workerDashboardRouter = workerRouter({
         totalPaid: totalPaid?.total ?? "0",
         recentInvoices
       };
-    } else if (workerUser.workerType === "employee" && workerUser.employeeId) {
+    } else if (role === "employee" && workerUser.employeeId) {
       const [pendingLeave] = await db.select({ count: count20() }).from(leaveRecords).where(
         and51(
           eq63(leaveRecords.employeeId, workerUser.employeeId),
@@ -28293,7 +28294,8 @@ var workerDashboardRouter = workerRouter({
           eq63(reimbursements.status, "submitted")
         )
       );
-      const latestPayslip = await db.select({
+      let latestPayslip = null;
+      const payslipRecords = await db.select({
         id: employeePayslips.id,
         payPeriod: employeePayslips.payPeriod,
         payDate: employeePayslips.payDate,
@@ -28306,15 +28308,66 @@ var workerDashboardRouter = workerRouter({
           eq63(employeePayslips.isPublished, true)
         )
       ).orderBy(desc26(employeePayslips.payPeriod)).limit(1);
+      if (payslipRecords.length > 0) {
+        const ps = payslipRecords[0];
+        latestPayslip = { ...ps, source: "payslip" };
+      }
+      if (!latestPayslip) {
+        const payslipDocs = await db.select({
+          id: employeeDocuments.id,
+          documentName: employeeDocuments.documentName,
+          fileUrl: employeeDocuments.fileUrl,
+          uploadedAt: employeeDocuments.uploadedAt
+        }).from(employeeDocuments).where(
+          and51(
+            eq63(employeeDocuments.employeeId, workerUser.employeeId),
+            eq63(employeeDocuments.documentType, "payslip")
+          )
+        ).orderBy(desc26(employeeDocuments.uploadedAt)).limit(1);
+        if (payslipDocs.length > 0) {
+          const doc = payslipDocs[0];
+          latestPayslip = {
+            id: doc.id,
+            payPeriod: doc.documentName || "Payslip",
+            payDate: doc.uploadedAt ? new Date(doc.uploadedAt).toISOString().slice(0, 10) : null,
+            netAmount: null,
+            grossAmount: null,
+            currency: workerUser.currency,
+            source: "document"
+          };
+        }
+      }
+      const [payslipDocCount] = await db.select({ count: count20() }).from(employeeDocuments).where(
+        and51(
+          eq63(employeeDocuments.employeeId, workerUser.employeeId),
+          eq63(employeeDocuments.documentType, "payslip")
+        )
+      );
+      const [payslipRecordCount] = await db.select({ count: count20() }).from(employeePayslips).where(
+        and51(
+          eq63(employeePayslips.employeeId, workerUser.employeeId),
+          eq63(employeePayslips.isPublished, true)
+        )
+      );
       return {
         workerType: "employee",
         pendingLeave: pendingLeave?.count ?? 0,
         pendingReimbursements: pendingReimbursements?.count ?? 0,
-        latestPayslip: latestPayslip[0] ?? null
+        latestPayslip,
+        totalPayslips: (payslipDocCount?.count ?? 0) + (payslipRecordCount?.count ?? 0)
+      };
+    }
+    if (role === "employee") {
+      return {
+        workerType: "employee",
+        pendingLeave: 0,
+        pendingReimbursements: 0,
+        latestPayslip: null,
+        totalPayslips: 0
       };
     }
     return {
-      workerType: workerUser.workerType,
+      workerType: "contractor",
       pendingMilestones: 0,
       pendingInvoices: 0,
       totalPaid: "0",
@@ -28906,10 +28959,10 @@ import { z as z53 } from "zod";
 import { TRPCError as TRPCError51 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq67, and as and55, desc as desc30, count as count23 } from "drizzle-orm";
+import { eq as eq67, and as and55, desc as desc30 } from "drizzle-orm";
 var workerPayslipsRouter = workerRouter({
   /**
-   * List my payslips (only published ones) with pagination
+   * List my payslips (merged from employee_payslips + employee_documents) with pagination
    */
   list: employeeOnlyProcedure.input(
     z53.object({
@@ -28920,13 +28973,7 @@ var workerPayslipsRouter = workerRouter({
     const db = await getDb();
     if (!db) throw new TRPCError51({ code: "INTERNAL_SERVER_ERROR" });
     const employeeId = ctx.workerUser.employeeId;
-    const offset = (input.page - 1) * input.pageSize;
-    const whereCondition = and55(
-      eq67(employeePayslips.employeeId, employeeId),
-      eq67(employeePayslips.isPublished, true)
-    );
-    const [totalResult] = await db.select({ count: count23() }).from(employeePayslips).where(whereCondition);
-    const items = await db.select({
+    const payslipRecords = await db.select({
       id: employeePayslips.id,
       payPeriod: employeePayslips.payPeriod,
       payDate: employeePayslips.payDate,
@@ -28935,33 +28982,130 @@ var workerPayslipsRouter = workerRouter({
       currency: employeePayslips.currency,
       grossAmount: employeePayslips.grossAmount,
       netAmount: employeePayslips.netAmount,
-      publishedAt: employeePayslips.publishedAt
-    }).from(employeePayslips).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc30(employeePayslips.payPeriod));
+      publishedAt: employeePayslips.publishedAt,
+      notes: employeePayslips.notes
+    }).from(employeePayslips).where(
+      and55(
+        eq67(employeePayslips.employeeId, employeeId),
+        eq67(employeePayslips.isPublished, true)
+      )
+    ).orderBy(desc30(employeePayslips.payPeriod));
+    const payslipDocs = await db.select({
+      id: employeeDocuments.id,
+      documentName: employeeDocuments.documentName,
+      fileUrl: employeeDocuments.fileUrl,
+      mimeType: employeeDocuments.mimeType,
+      fileSize: employeeDocuments.fileSize,
+      notes: employeeDocuments.notes,
+      uploadedAt: employeeDocuments.uploadedAt
+    }).from(employeeDocuments).where(
+      and55(
+        eq67(employeeDocuments.employeeId, employeeId),
+        eq67(employeeDocuments.documentType, "payslip")
+      )
+    ).orderBy(desc30(employeeDocuments.uploadedAt));
+    const allItems = [];
+    for (const ps of payslipRecords) {
+      allItems.push({
+        id: ps.id,
+        source: "payslip",
+        payPeriod: ps.payPeriod,
+        payDate: ps.payDate,
+        fileName: ps.fileName,
+        fileUrl: ps.fileUrl,
+        currency: ps.currency,
+        grossAmount: ps.grossAmount,
+        netAmount: ps.netAmount,
+        publishedAt: ps.publishedAt,
+        notes: ps.notes
+      });
+    }
+    for (const doc of payslipDocs) {
+      allItems.push({
+        id: doc.id,
+        source: "document",
+        payPeriod: doc.documentName || "Payslip",
+        payDate: doc.uploadedAt ? new Date(doc.uploadedAt).toISOString().slice(0, 10) : null,
+        fileName: doc.documentName,
+        fileUrl: doc.fileUrl,
+        currency: ctx.workerUser.currency || null,
+        grossAmount: null,
+        netAmount: null,
+        publishedAt: doc.uploadedAt,
+        notes: doc.notes
+      });
+    }
+    allItems.sort((a, b) => {
+      const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+      const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+      if (dateA !== dateB) return dateB - dateA;
+      return b.payPeriod.localeCompare(a.payPeriod);
+    });
+    const total = allItems.length;
+    const offset = (input.page - 1) * input.pageSize;
+    const items = allItems.slice(offset, offset + input.pageSize);
     return {
       items,
-      total: totalResult?.count ?? 0,
+      total,
       page: input.page,
       pageSize: input.pageSize
     };
   }),
   /**
    * Get a single payslip detail (for download)
+   * Supports both employee_payslips and employee_documents sources
    */
-  getById: employeeOnlyProcedure.input(z53.object({ id: z53.number() })).query(async ({ input, ctx }) => {
+  getById: employeeOnlyProcedure.input(z53.object({
+    id: z53.number(),
+    source: z53.enum(["payslip", "document"]).default("payslip")
+  })).query(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError51({ code: "INTERNAL_SERVER_ERROR" });
     const employeeId = ctx.workerUser.employeeId;
-    const [payslip] = await db.select().from(employeePayslips).where(
-      and55(
-        eq67(employeePayslips.id, input.id),
-        eq67(employeePayslips.employeeId, employeeId),
-        eq67(employeePayslips.isPublished, true)
-      )
-    );
-    if (!payslip) {
-      throw new TRPCError51({ code: "NOT_FOUND", message: "Payslip not found" });
+    if (input.source === "payslip") {
+      const [payslip] = await db.select().from(employeePayslips).where(
+        and55(
+          eq67(employeePayslips.id, input.id),
+          eq67(employeePayslips.employeeId, employeeId),
+          eq67(employeePayslips.isPublished, true)
+        )
+      );
+      if (!payslip) {
+        throw new TRPCError51({ code: "NOT_FOUND", message: "Payslip not found" });
+      }
+      return {
+        ...payslip,
+        source: "payslip"
+      };
+    } else {
+      const [doc] = await db.select().from(employeeDocuments).where(
+        and55(
+          eq67(employeeDocuments.id, input.id),
+          eq67(employeeDocuments.employeeId, employeeId),
+          eq67(employeeDocuments.documentType, "payslip")
+        )
+      );
+      if (!doc) {
+        throw new TRPCError51({ code: "NOT_FOUND", message: "Payslip document not found" });
+      }
+      return {
+        id: doc.id,
+        source: "document",
+        payPeriod: doc.documentName || "Payslip",
+        payDate: doc.uploadedAt ? new Date(doc.uploadedAt).toISOString().slice(0, 10) : null,
+        fileName: doc.documentName,
+        fileUrl: doc.fileUrl,
+        fileKey: doc.fileKey,
+        mimeType: doc.mimeType,
+        currency: ctx.workerUser.currency || null,
+        grossAmount: null,
+        netAmount: null,
+        notes: doc.notes,
+        publishedAt: doc.uploadedAt,
+        isPublished: true,
+        employeeId: doc.employeeId
+      };
     }
-    return payslip;
   })
 });
 
