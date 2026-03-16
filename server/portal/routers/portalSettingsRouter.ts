@@ -184,6 +184,7 @@ export const portalSettingsRouter = portalRouter({
         annualEntitlement: customerLeavePolicies.annualEntitlement,
         expiryRule: customerLeavePolicies.expiryRule,
         carryOverDays: customerLeavePolicies.carryOverDays,
+        clientConfirmed: customerLeavePolicies.clientConfirmed,
         leaveTypeName: leaveTypes.leaveTypeName,
         countryName: countriesConfig.countryName,
         statutoryMinimum: leaveTypes.annualEntitlement,
@@ -242,6 +243,7 @@ export const portalSettingsRouter = portalRouter({
           annualEntitlement: input.annualEntitlement,
           expiryRule: input.expiryRule,
           carryOverDays: input.carryOverDays,
+          clientConfirmed: true,
         })
         .where(eq(customerLeavePolicies.id, input.id));
 

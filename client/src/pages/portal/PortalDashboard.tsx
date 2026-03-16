@@ -121,6 +121,7 @@ function PendingTasksCard({ tasks }: { tasks: Array<{ type: string; count: numbe
               adjustments: ArrowUpDown,
               leave: CalendarDays,
               invoices: Receipt,
+              reimbursements: DollarSign,
               leave_policy_setup: Settings,
             };
             const colors: Record<string, string> = {
@@ -128,6 +129,7 @@ function PendingTasksCard({ tasks }: { tasks: Array<{ type: string; count: numbe
               adjustments: "text-amber-500 bg-amber-500/10",
               leave: "text-purple-500 bg-purple-500/10",
               invoices: "text-red-500 bg-red-500/10",
+              reimbursements: "text-green-500 bg-green-500/10",
               leave_policy_setup: "text-emerald-500 bg-emerald-500/10",
             };
             const TaskIcon = icons[task.type] || AlertCircle;
@@ -516,6 +518,12 @@ export default function PortalDashboard() {
                   count: stats?.pendingAdjustments ?? 0,
                   label: t("portal_dashboard.pending_tasks.pending_adjustments"),
                   href: portalPath("/adjustments"),
+                },
+                {
+                  type: "reimbursements",
+                  count: stats?.pendingReimbursements ?? 0,
+                  label: t("portal_dashboard.pending_tasks.pending_reimbursements"),
+                  href: portalPath("/reimbursements"),
                 },
                 {
                   type: "leave_policy_setup",
