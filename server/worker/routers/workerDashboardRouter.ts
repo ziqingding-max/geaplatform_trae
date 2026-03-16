@@ -1,9 +1,12 @@
 /**
  * Worker Dashboard Router
  *
- * Returns dashboard summary data based on worker type:
- * - Contractor: pending milestones, pending invoices, total paid
- * - Employee: pending leave requests, pending reimbursements, latest payslip
+ * Returns dashboard summary data based on activeRole:
+ * - Contractor: pending milestones, pending invoices, total paid, recent invoices
+ * - Employee: pending leave, pending reimbursements, latest payslip, total payslips
+ *
+ * Payslip data comes from employee_documents (documentType=payslip) as primary source,
+ * with employee_payslips (isPublished=true) as secondary source.
  */
 
 import { workerRouter, protectedWorkerProcedure } from "../workerTrpc";
@@ -15,21 +18,19 @@ import {
   reimbursements,
   leaveRecords,
   employeePayslips,
+  employeeDocuments,
 } from "../../../drizzle/schema";
 import { eq, and, sql, desc, count, inArray } from "drizzle-orm";
 
 export const workerDashboardRouter = workerRouter({
-  /**
-   * Get dashboard summary — returns different data based on workerType
-   */
   getSummary: protectedWorkerProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
     const { workerUser } = ctx;
+    const role = workerUser.activeRole || workerUser.workerType;
 
-    if (workerUser.workerType === "contractor" && workerUser.contractorId) {
-      // Pending milestones (status = pending or submitted)
+    if (role === "contractor" && workerUser.contractorId) {
       const [pendingMilestones] = await db
         .select({ count: count() })
         .from(contractorMilestones)
@@ -40,7 +41,6 @@ export const workerDashboardRouter = workerRouter({
           )
         );
 
-      // Pending invoices (status = pending_approval)
       const [pendingInvoices] = await db
         .select({ count: count() })
         .from(contractorInvoices)
@@ -51,7 +51,6 @@ export const workerDashboardRouter = workerRouter({
           )
         );
 
-      // Total paid amount
       const [totalPaid] = await db
         .select({ total: sql<string>`COALESCE(SUM(CAST(${contractorInvoices.totalAmount} AS REAL)), 0)` })
         .from(contractorInvoices)
@@ -62,7 +61,6 @@ export const workerDashboardRouter = workerRouter({
           )
         );
 
-      // Recent invoices (last 5)
       const recentInvoices = await db
         .select({
           id: contractorInvoices.id,
@@ -84,8 +82,7 @@ export const workerDashboardRouter = workerRouter({
         totalPaid: totalPaid?.total ?? "0",
         recentInvoices,
       };
-    } else if (workerUser.workerType === "employee" && workerUser.employeeId) {
-      // Pending leave requests (status = submitted)
+    } else if (role === "employee" && workerUser.employeeId) {
       const [pendingLeave] = await db
         .select({ count: count() })
         .from(leaveRecords)
@@ -96,7 +93,6 @@ export const workerDashboardRouter = workerRouter({
           )
         );
 
-      // Pending reimbursements (status = submitted)
       const [pendingReimbursements] = await db
         .select({ count: count() })
         .from(reimbursements)
@@ -107,37 +103,112 @@ export const workerDashboardRouter = workerRouter({
           )
         );
 
-      // Latest payslip
-      const latestPayslip = await db
+      // Latest payslip — check employee_documents (primary) then employee_payslips (secondary)
+      let latestPayslip: {
+        id: number;
+        payPeriod: string;
+        payDate: string | null;
+        netAmount: string | null;
+        grossAmount: string | null;
+        currency: string | null;
+      } | null = null;
+
+      // Primary: employee_documents with documentType = "payslip"
+      const payslipDocs = await db
         .select({
-          id: employeePayslips.id,
-          payPeriod: employeePayslips.payPeriod,
-          payDate: employeePayslips.payDate,
-          netAmount: employeePayslips.netAmount,
-          grossAmount: employeePayslips.grossAmount,
-          currency: employeePayslips.currency,
+          id: employeeDocuments.id,
+          documentName: employeeDocuments.documentName,
+          uploadedAt: employeeDocuments.uploadedAt,
         })
+        .from(employeeDocuments)
+        .where(
+          and(
+            eq(employeeDocuments.employeeId, workerUser.employeeId),
+            eq(employeeDocuments.documentType, "payslip")
+          )
+        )
+        .orderBy(desc(employeeDocuments.uploadedAt))
+        .limit(1);
+
+      if (payslipDocs.length > 0) {
+        const doc = payslipDocs[0];
+        latestPayslip = {
+          id: doc.id,
+          payPeriod: doc.documentName || "Payslip",
+          payDate: doc.uploadedAt ? new Date(doc.uploadedAt).toISOString().slice(0, 10) : null,
+          netAmount: null,
+          grossAmount: null,
+          currency: workerUser.currency,
+        };
+      }
+
+      // Secondary: employee_payslips (published)
+      if (!latestPayslip) {
+        const payslipRecords = await db
+          .select({
+            id: employeePayslips.id,
+            payPeriod: employeePayslips.payPeriod,
+            payDate: employeePayslips.payDate,
+            netAmount: employeePayslips.netAmount,
+            grossAmount: employeePayslips.grossAmount,
+            currency: employeePayslips.currency,
+          })
+          .from(employeePayslips)
+          .where(
+            and(
+              eq(employeePayslips.employeeId, workerUser.employeeId),
+              eq(employeePayslips.isPublished, true)
+            )
+          )
+          .orderBy(desc(employeePayslips.payPeriod))
+          .limit(1);
+
+        if (payslipRecords.length > 0) {
+          latestPayslip = payslipRecords[0];
+        }
+      }
+
+      // Total payslip count (both sources)
+      const [docCount] = await db
+        .select({ count: count() })
+        .from(employeeDocuments)
+        .where(
+          and(
+            eq(employeeDocuments.employeeId, workerUser.employeeId),
+            eq(employeeDocuments.documentType, "payslip")
+          )
+        );
+      const [psCount] = await db
+        .select({ count: count() })
         .from(employeePayslips)
         .where(
           and(
             eq(employeePayslips.employeeId, workerUser.employeeId),
             eq(employeePayslips.isPublished, true)
           )
-        )
-        .orderBy(desc(employeePayslips.payPeriod))
-        .limit(1);
+        );
 
       return {
         workerType: "employee" as const,
         pendingLeave: pendingLeave?.count ?? 0,
         pendingReimbursements: pendingReimbursements?.count ?? 0,
-        latestPayslip: latestPayslip[0] ?? null,
+        latestPayslip,
+        totalPayslips: (docCount?.count ?? 0) + (psCount?.count ?? 0),
       };
     }
 
-    // Fallback for edge cases
+    // Fallback — return correct shape based on role
+    if (role === "employee") {
+      return {
+        workerType: "employee" as const,
+        pendingLeave: 0,
+        pendingReimbursements: 0,
+        latestPayslip: null,
+        totalPayslips: 0,
+      };
+    }
     return {
-      workerType: workerUser.workerType,
+      workerType: "contractor" as const,
       pendingMilestones: 0,
       pendingInvoices: 0,
       totalPaid: "0",

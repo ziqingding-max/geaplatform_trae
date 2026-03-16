@@ -100,13 +100,13 @@ export default function WorkerDocuments() {
               ) : (
                 <div className="space-y-3">
                   {contractsData.contracts.map((contract: any) => (
-                    <Card key={contract.id}>
+                    <Card key={`${contract.source}-${contract.id}`}>
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-medium">{contract.contractType}</p>
-                              <ContractStatusBadge status={contract.status} />
+                              {contract.status && <ContractStatusBadge status={contract.status} />}
                             </div>
                             <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground flex-wrap">
                               {contract.effectiveDate && (
@@ -117,6 +117,12 @@ export default function WorkerDocuments() {
                               )}
                               {contract.signedDate && (
                                 <span>Signed: {contract.signedDate}</span>
+                              )}
+                              {!contract.effectiveDate && !contract.expiryDate && !contract.signedDate && contract.createdAt && (
+                                <span>Uploaded: {new Date(contract.createdAt).toLocaleDateString()}</span>
+                              )}
+                              {contract.notes && (
+                                <span>{contract.notes}</span>
                               )}
                             </div>
                           </div>
