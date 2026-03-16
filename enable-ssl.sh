@@ -265,23 +265,9 @@ server {
         proxy_read_timeout 120s;
     }
 
-    # 已经以 /worker 开头的请求直接代理
-    location /worker {
-        proxy_pass http://gea_app;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-    }
-
-    # worker.geahr.com 根路径和非 /worker 路径重写为 /worker 前缀
+    # 所有请求直接代理到 Node.js（不做 rewrite）
+    # 前端 SPA 通过 isWorkerDomain() 检测域名后自动路由到 Worker Portal
     location / {
-        rewrite ^/\$ /worker/ break;
-        rewrite ^/(?!worker/)(.*)$ /worker/\$1 break;
         proxy_pass http://gea_app;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
