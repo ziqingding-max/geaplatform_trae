@@ -1,4 +1,5 @@
 import { workerTrpc } from "@/lib/workerTrpc";
+import { workerPath } from "@/lib/workerBasePath";
 import WorkerLayout from "./WorkerLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, DollarSign, FileText, Flag, CalendarDays, Receipt, Wallet } from "lucide-react";
@@ -46,7 +47,7 @@ function ContractorDashboard({ data }: { data: any }) {
   return (
     <>
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        <Link href="/worker/milestones">
+        <Link href={workerPath("/milestones")}>
           <Card className="cursor-pointer hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pending Milestones</CardTitle>
@@ -59,7 +60,7 @@ function ContractorDashboard({ data }: { data: any }) {
           </Card>
         </Link>
 
-        <Link href="/worker/invoices">
+        <Link href={workerPath("/invoices")}>
           <Card className="cursor-pointer hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pending Invoices</CardTitle>
@@ -92,7 +93,7 @@ function ContractorDashboard({ data }: { data: any }) {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Recent Invoices</CardTitle>
-              <Link href="/worker/invoices">
+              <Link href={workerPath("/invoices")}>
                 <a className="text-sm text-primary hover:underline">View all</a>
               </Link>
             </div>
@@ -125,7 +126,7 @@ function EmployeeDashboard({ data }: { data: any }) {
   return (
     <>
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        <Link href="/worker/leave">
+        <Link href={workerPath("/leave")}>
           <Card className="cursor-pointer hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pending Leave</CardTitle>
@@ -138,7 +139,7 @@ function EmployeeDashboard({ data }: { data: any }) {
           </Card>
         </Link>
 
-        <Link href="/worker/reimbursements">
+        <Link href={workerPath("/reimbursements")}>
           <Card className="cursor-pointer hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pending Expenses</CardTitle>
@@ -151,7 +152,7 @@ function EmployeeDashboard({ data }: { data: any }) {
           </Card>
         </Link>
 
-        <Link href="/worker/payslips">
+        <Link href={workerPath("/payslips")}>
           <Card className="cursor-pointer hover:shadow-md transition-shadow">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Latest Payslip</CardTitle>

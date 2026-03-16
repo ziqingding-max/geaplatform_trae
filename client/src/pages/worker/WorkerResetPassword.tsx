@@ -7,6 +7,7 @@
 import { useState, useMemo } from "react";
 import { Link, useSearch, useLocation } from "wouter";
 import { workerTrpc } from "@/lib/workerTrpc";
+import { workerPath } from "@/lib/workerBasePath";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -77,7 +78,7 @@ export default function WorkerResetPassword() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/worker/forgot-password">
+            <Link href={workerPath("/forgot-password")}>
               <Button className="w-full">Request New Reset Link</Button>
             </Link>
           </CardContent>
@@ -115,10 +116,10 @@ export default function WorkerResetPassword() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Link href="/worker/forgot-password">
+            <Link href={workerPath("/forgot-password")}>
               <Button className="w-full">Request New Reset Link</Button>
             </Link>
-            <Link href="/worker/login">
+            <Link href={workerPath("/login")}>
               <Button variant="ghost" className="w-full">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to Login
@@ -145,7 +146,7 @@ export default function WorkerResetPassword() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Link href="/worker/login">
+            <Link href={workerPath("/login")}>
               <Button className="w-full">Go to Login</Button>
             </Link>
           </CardContent>
@@ -215,7 +216,7 @@ export default function WorkerResetPassword() {
               {resetPasswordMutation.isPending ? "Resetting..." : "Reset Password"}
             </Button>
 
-            <Link href="/worker/login">
+            <Link href={workerPath("/login")}>
               <Button variant="ghost" className="w-full">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Back to Login

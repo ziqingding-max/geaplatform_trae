@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { workerTrpc } from "@/lib/workerTrpc";
+import { workerPath } from "@/lib/workerBasePath";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -77,7 +78,7 @@ export default function WorkerForgotPassword() {
                 >
                   Try a different email
                 </Button>
-                <Link href="/worker/login">
+                <Link href={workerPath("/login")}>
                   <Button variant="ghost" className="w-full">
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Back to Login
@@ -135,7 +136,7 @@ export default function WorkerForgotPassword() {
                 {forgotPasswordMutation.isPending ? "Sending..." : "Send Reset Link"}
               </Button>
 
-              <Link href="/worker/login">
+              <Link href={workerPath("/login")}>
                 <Button variant="ghost" className="w-full">
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   Back to Login
