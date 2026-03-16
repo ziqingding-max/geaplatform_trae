@@ -48,6 +48,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
 import { portalTrpc } from "@/lib/portalTrpc";
+import { workerTrpc } from "@/lib/workerTrpc";
 import { Loader2 } from "lucide-react";
 import { isPortalDomain, getPortalBasePath, isWorkerDomain } from "@/lib/portalBasePath";
 
@@ -108,10 +109,10 @@ const portalTrpcClient = portalTrpc.createClient({
 
 // Separate QueryClient for worker portal
 const workerQueryClient = new QueryClient();
-const workerTrpcClient = portalTrpc.createClient({ // Reusing portalTrpc config for now, can be split if needed
+const workerTrpcClient = workerTrpc.createClient({
   links: [
     httpBatchLink({
-      url: "/api/worker", // Distinct API endpoint
+      url: "/api/worker",
       transformer: superjson,
       fetch(input, init) {
         return globalThis.fetch(input, {
@@ -132,7 +133,7 @@ function WorkerRouter() {
   const redirectPath = isWorkerSubdomain ? "/dashboard" : "/worker/dashboard";
   
   return (
-    <portalTrpc.Provider client={workerTrpcClient} queryClient={workerQueryClient}>
+    <workerTrpc.Provider client={workerTrpcClient} queryClient={workerQueryClient}>
       <QueryClientProvider client={workerQueryClient}>
         <Suspense fallback={<PortalFallback />}>
           <Switch>
@@ -155,7 +156,7 @@ function WorkerRouter() {
           </Switch>
         </Suspense>
       </QueryClientProvider>
-    </portalTrpc.Provider>
+    </workerTrpc.Provider>
   );
 }
 
