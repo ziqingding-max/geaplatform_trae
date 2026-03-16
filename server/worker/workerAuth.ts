@@ -5,12 +5,18 @@
  * Uses email/password + JWT stored in a separate cookie (WORKER_COOKIE_NAME).
  *
  * Supports both Contractor (AOR) and Employee (EOR) worker types.
- * Each worker_user links to either a contractor OR an employee (mutually exclusive).
+ * A single worker_user CAN link to BOTH a contractor AND an employee (dual-identity).
+ *
+ * Dual-identity flow:
+ * 1. Login returns hasDualIdentity flag + available roles
+ * 2. If dual, frontend shows a role selection page
+ * 3. User picks a role -> switchRole mutation re-signs JWT with activeRole
+ * 4. All subsequent requests use activeRole to determine permissions
  *
  * Security guarantees:
  * 1. Worker JWT tokens are signed with a different prefix
  * 2. Worker cookie name is different
- * 3. Worker context injects workerId/contractorId/employeeId
+ * 3. Worker context injects workerId/contractorId/employeeId + activeRole
  */
 
 import bcrypt from "bcryptjs";
@@ -41,8 +47,13 @@ export interface WorkerUserContext {
   email: string;
   contractorId: number | null;
   employeeId: number | null;
+  /** Whether this user has both contractor and employee identities */
+  hasDualIdentity: boolean;
+  /** The currently active role (from JWT). For dual-identity users, this is the selected role. */
+  activeRole: WorkerType;
+  /** Legacy alias for activeRole — used by identity-based middleware */
   workerType: WorkerType;
-  // Resolved profile info (populated during auth)
+  // Resolved profile info (populated during auth based on activeRole)
   customerId: number | null;
   workerName: string | null;
   country: string | null;
@@ -55,6 +66,9 @@ export interface WorkerJwtPayload {
   email: string;
   contractorId: number | null;
   employeeId: number | null;
+  /** The currently active role. For dual-identity users, set after role selection. */
+  activeRole: WorkerType;
+  /** Legacy field — kept for backward compat */
   workerType: WorkerType;
   iss: string; // "gea-worker"
 }
@@ -176,11 +190,26 @@ export function getWorkerTokenFromRequest(req: Request): string | null {
 // Helper: Determine worker type from workerUser record
 // ============================================================================
 
+/**
+ * Resolve the default worker type. For dual-identity users, defaults to "contractor".
+ * The actual active role is determined by the JWT's activeRole field.
+ */
 export function resolveWorkerType(user: { contractorId: number | null; employeeId: number | null }): WorkerType {
+  if (user.contractorId && user.employeeId) {
+    // Dual identity — default to contractor; user will pick via role selection
+    return "contractor";
+  }
   if (user.contractorId) return "contractor";
   if (user.employeeId) return "employee";
   // Default to contractor for backward compatibility
   return "contractor";
+}
+
+/**
+ * Check if a worker_users record has both identities
+ */
+export function hasDualIdentity(user: { contractorId: number | null; employeeId: number | null }): boolean {
+  return !!(user.contractorId && user.employeeId);
 }
 
 // ============================================================================
@@ -194,7 +223,7 @@ export async function authenticateWorkerRequest(req: Request): Promise<WorkerUse
   const payload = await verifyWorkerToken(token);
   if (!payload) return null;
 
-  const db = await getDb();
+  const db = getDb();
   if (!db) return null;
 
   // Verify worker user exists and is active
@@ -211,16 +240,18 @@ export async function authenticateWorkerRequest(req: Request): Promise<WorkerUse
 
   if (!user) return null;
 
-  const workerType = resolveWorkerType(user);
+  const isDual = hasDualIdentity(user);
+  // Use the activeRole from JWT (set during login or switchRole)
+  const activeRole: WorkerType = payload.activeRole || resolveWorkerType(user);
 
-  // Resolve profile info based on worker type
+  // Resolve profile info based on ACTIVE ROLE (not just any linked identity)
   let customerId: number | null = null;
   let workerName: string | null = null;
   let country: string | null = null;
   let currency: string | null = null;
   let paymentFrequency: string | null = null;
 
-  if (workerType === "contractor" && user.contractorId) {
+  if (activeRole === "contractor" && user.contractorId) {
     const [contractor] = await db
       .select({
         customerId: contractors.customerId,
@@ -240,7 +271,7 @@ export async function authenticateWorkerRequest(req: Request): Promise<WorkerUse
       currency = contractor.currency;
       paymentFrequency = contractor.paymentFrequency;
     }
-  } else if (workerType === "employee" && user.employeeId) {
+  } else if (activeRole === "employee" && user.employeeId) {
     const [employee] = await db
       .select({
         customerId: employees.customerId,
@@ -265,7 +296,9 @@ export async function authenticateWorkerRequest(req: Request): Promise<WorkerUse
     email: user.email,
     contractorId: user.contractorId,
     employeeId: user.employeeId,
-    workerType,
+    hasDualIdentity: isDual,
+    activeRole,
+    workerType: activeRole, // Legacy alias
     customerId,
     workerName,
     country,

@@ -7,27 +7,26 @@
  *
  * Business Rules:
  * - Each employee/contractor can have at most one worker_users record.
- * - The invite flow: create worker_users record (inactive) -> send invite email -> worker sets password -> account activated.
- * - This service does NOT modify Admin or Client Portal pages; it only provides backend APIs.
- *
- * TODO (Phase 2 - Admin/Client Portal UI):
- * - Add "Invite to Worker Portal" button on Admin contractor/employee detail pages.
- * - Add "Invite to Worker Portal" button on Client Portal people detail pages.
+ * - A single worker_users record CAN link to BOTH a contractorId AND an employeeId
+ *   (dual-identity: same person is both an Employee and a Contractor).
+ * - When inviting, if the email already has a worker_users record with the OTHER identity,
+ *   we APPEND the new identity to the existing record instead of creating a new one.
+ * - The invite flow: create/update worker_users record -> send invite email -> worker sets password -> account activated.
  */
 
 import { getDb } from "./db/connection";
 import { workerUsers, contractors, employees, customers } from "../../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import crypto from "crypto";
 import { sendWorkerPortalInviteEmail } from "./authEmailService";
 
 interface ProvisionWorkerInput {
-  /** Exactly one of these must be provided */
+  /** Exactly one of these must be provided per call */
   contractorId?: number;
   employeeId?: number;
   /** If not provided, will be looked up from the contractor/employee record */
   email?: string;
-  /** Base URL for the invite link (e.g., "https://worker.geahr.com" or "http://localhost:5000/worker") */
+  /** Base URL for the invite link */
   baseUrl?: string;
   /** Whether to send the invite email. Defaults to true. */
   sendEmail?: boolean;
@@ -38,11 +37,14 @@ interface ProvisionResult {
   email: string;
   inviteToken: string;
   alreadyExists: boolean;
+  /** True if we appended a new identity to an existing record */
+  identityAppended: boolean;
 }
 
 /**
  * Create a Worker Portal account for an employee or contractor.
- * If the account already exists, returns the existing record info.
+ * If the email already has a worker_users record (possibly for the other identity),
+ * we append the new identity to the existing record.
  */
 export async function provisionWorkerUser(input: ProvisionWorkerInput): Promise<ProvisionResult> {
   const db = getDb();
@@ -54,26 +56,28 @@ export async function provisionWorkerUser(input: ProvisionWorkerInput): Promise<
     throw new Error("Either contractorId or employeeId must be provided");
   }
   if (contractorId && employeeId) {
-    throw new Error("Cannot provide both contractorId and employeeId");
+    throw new Error("Cannot provide both contractorId and employeeId in a single call");
   }
 
-  // Check if worker_users record already exists
-  const existingConditions = contractorId
+  // ── Step 1: Check if this specific contractor/employee already has a worker_users record ──
+  const specificCondition = contractorId
     ? eq(workerUsers.contractorId, contractorId)
     : eq(workerUsers.employeeId, employeeId!);
 
-  const [existing] = await db.select().from(workerUsers).where(existingConditions).limit(1);
+  const [existingByIdentity] = await db.select().from(workerUsers).where(specificCondition).limit(1);
 
-  if (existing) {
+  if (existingByIdentity) {
+    // This contractor/employee already has an account — return existing
     return {
-      workerUserId: existing.id,
-      email: existing.email,
-      inviteToken: existing.inviteToken || existing.resetToken || "",
+      workerUserId: existingByIdentity.id,
+      email: existingByIdentity.email,
+      inviteToken: existingByIdentity.inviteToken || existingByIdentity.resetToken || "",
       alreadyExists: true,
+      identityAppended: false,
     };
   }
 
-  // Look up the employee/contractor to get email and other details
+  // ── Step 2: Look up the employee/contractor to get email ──
   let email = input.email || "";
   let workerName = "";
   let workerType: "employee" | "contractor" = contractorId ? "contractor" : "employee";
@@ -98,20 +102,46 @@ export async function provisionWorkerUser(input: ProvisionWorkerInput): Promise<
     throw new Error("Cannot create worker account: no email address found");
   }
 
-  // Look up company name
+  // ── Step 3: Check if the same EMAIL already has a worker_users record (other identity) ──
+  const [existingByEmail] = await db.select().from(workerUsers).where(eq(workerUsers.email, email)).limit(1);
+
+  if (existingByEmail) {
+    // Same email already has an account — APPEND the new identity
+    const updateData: Record<string, any> = {};
+    if (contractorId && !existingByEmail.contractorId) {
+      updateData.contractorId = contractorId;
+    } else if (employeeId && !existingByEmail.employeeId) {
+      updateData.employeeId = employeeId;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await db.update(workerUsers).set(updateData).where(eq(workerUsers.id, existingByEmail.id));
+    }
+
+    return {
+      workerUserId: existingByEmail.id,
+      email: existingByEmail.email,
+      inviteToken: existingByEmail.inviteToken || existingByEmail.resetToken || "",
+      alreadyExists: true,
+      identityAppended: Object.keys(updateData).length > 0,
+    };
+  }
+
+  // ── Step 4: No existing record at all — create a new one ──
+  // Look up company name for email
   if (customerId) {
     const [customer] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
     companyName = customer?.companyName || "your company";
   }
 
-  // Generate invite token (used for initial password setup)
+  // Generate invite token
   const inviteToken = crypto.randomBytes(32).toString("hex");
   const inviteTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
   // Create worker_users record
   const [newWorkerUser] = await db.insert(workerUsers).values({
     email,
-    passwordHash: "", // Empty until worker sets password via invite link
+    passwordHash: "",
     contractorId: contractorId || null,
     employeeId: employeeId || null,
     inviteToken: inviteToken,
@@ -133,7 +163,6 @@ export async function provisionWorkerUser(input: ProvisionWorkerInput): Promise<
       });
     } catch (err) {
       console.error("[WorkerProvisioning] Failed to send invite email:", err);
-      // Don't throw — the account is created, email can be resent later
     }
   }
 
@@ -142,6 +171,7 @@ export async function provisionWorkerUser(input: ProvisionWorkerInput): Promise<
     email,
     inviteToken,
     alreadyExists: false,
+    identityAppended: false,
   };
 }
 
@@ -165,7 +195,7 @@ export async function resendWorkerInvite(workerUserId: number, baseUrl?: string)
     inviteExpiresAt: inviteTokenExpiry,
   }).where(eq(workerUsers.id, workerUserId));
 
-  // Determine worker info for email
+  // Determine worker info for email — prefer contractor identity for the email template
   let workerName = "";
   let workerType: "employee" | "contractor" = "contractor";
   let companyName = "";

@@ -98,7 +98,7 @@ const requireContractor = t.middleware(async ({ ctx, next }) => {
     });
   }
 
-  if (ctx.workerUser.workerType !== "contractor" || !ctx.workerUser.contractorId) {
+  if (ctx.workerUser.activeRole !== "contractor" || !ctx.workerUser.contractorId) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "This feature is only available for contractors",
@@ -127,7 +127,7 @@ const requireEmployee = t.middleware(async ({ ctx, next }) => {
     });
   }
 
-  if (ctx.workerUser.workerType !== "employee" || !ctx.workerUser.employeeId) {
+  if (ctx.workerUser.activeRole !== "employee" || !ctx.workerUser.employeeId) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "This feature is only available for employees",

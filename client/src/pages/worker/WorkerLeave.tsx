@@ -2,11 +2,12 @@ import { useState } from "react";
 import { workerTrpc } from "@/lib/workerTrpc";
 import WorkerLayout from "./WorkerLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, CalendarDays, Plus, X } from "lucide-react";
+import { Loader2, CalendarDays, Plus, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -17,6 +18,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -50,21 +52,47 @@ export default function WorkerLeave() {
   const [days, setDays] = useState("");
   const [reason, setReason] = useState("");
 
+  // Insufficient balance dialog state
+  const [insufficientDialogOpen, setInsufficientDialogOpen] = useState(false);
+  const [balanceInfo, setBalanceInfo] = useState<{
+    remaining: number;
+    requested: number;
+    paidDays: number;
+    unpaidDays: number;
+  } | null>(null);
+
   const utils = workerTrpc.useUtils();
 
   const { data: balances, isLoading: balancesLoading } = workerTrpc.leave.getBalances.useQuery();
+  const { data: leaveTypes } = workerTrpc.leave.getLeaveTypes.useQuery();
   const { data, isLoading } = workerTrpc.leave.list.useQuery({ page, pageSize: 20 });
 
   const submitMutation = workerTrpc.leave.submit.useMutation({
-    onSuccess: () => {
-      toast.success("Leave request submitted");
+    onSuccess: (result) => {
+      if (result.balanceSplit) {
+        toast.success(`Leave submitted: ${result.paidDays} paid + ${result.unpaidDays} unpaid days`);
+      } else {
+        toast.success("Leave request submitted");
+      }
       setCreateDialogOpen(false);
+      setInsufficientDialogOpen(false);
       resetForm();
       utils.leave.list.invalidate();
       utils.leave.getBalances.invalidate();
       utils.dashboard.getSummary.invalidate();
     },
     onError: (err: any) => {
+      // Check if this is an INSUFFICIENT_BALANCE error
+      try {
+        const parsed = JSON.parse(err.message);
+        if (parsed.type === "INSUFFICIENT_BALANCE") {
+          setBalanceInfo(parsed);
+          setInsufficientDialogOpen(true);
+          return;
+        }
+      } catch {
+        // Not a JSON error, show as regular error
+      }
       toast.error(err.message || "Failed to submit leave request");
     },
   });
@@ -89,7 +117,7 @@ export default function WorkerLeave() {
     setReason("");
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (confirmAutoSplit: boolean = false) => {
     if (!leaveTypeId || !startDate || !endDate || !days) {
       toast.error("Please fill in all required fields");
       return;
@@ -100,7 +128,12 @@ export default function WorkerLeave() {
       endDate,
       days,
       reason: reason || undefined,
+      confirmAutoSplit,
     });
+  };
+
+  const handleConfirmAutoSplit = () => {
+    handleSubmit(true);
   };
 
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
@@ -164,6 +197,7 @@ export default function WorkerLeave() {
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground mt-1">
+                          {record.leaveTypeName && <span className="font-medium">{record.leaveTypeName}{record.isPaid === false ? " (Unpaid)" : ""} · </span>}
                           {record.days} day(s)
                           {record.reason && <span> — {record.reason}</span>}
                         </p>
@@ -221,11 +255,14 @@ export default function WorkerLeave() {
                     <SelectValue placeholder="Select leave type" />
                   </SelectTrigger>
                   <SelectContent>
-                    {balances?.map((b: any) => (
-                      <SelectItem key={b.leaveTypeId} value={b.leaveTypeId.toString()}>
-                        {b.leaveTypeName} ({b.remaining} remaining)
-                      </SelectItem>
-                    ))}
+                    {leaveTypes?.map((lt: any) => {
+                      const balance = balances?.find((b: any) => b.leaveTypeId === lt.id);
+                      return (
+                        <SelectItem key={lt.id} value={lt.id.toString()}>
+                          {lt.leaveTypeName}{lt.isPaid === false ? " (Unpaid)" : ""}{balance ? ` (${balance.remaining} remaining)` : ""}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
@@ -263,8 +300,59 @@ export default function WorkerLeave() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => { setCreateDialogOpen(false); resetForm(); }}>Cancel</Button>
-              <Button onClick={handleSubmit} disabled={submitMutation.isPending || !leaveTypeId || !startDate || !endDate || !days}>
+              <Button onClick={() => handleSubmit(false)} disabled={submitMutation.isPending || !leaveTypeId || !startDate || !endDate || !days}>
                 {submitMutation.isPending ? "Submitting..." : "Submit"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Insufficient Balance Confirmation Dialog */}
+        <Dialog open={insufficientDialogOpen} onOpenChange={(open) => { if (!open) setInsufficientDialogOpen(false); }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                Insufficient Leave Balance
+              </DialogTitle>
+              <DialogDescription>
+                Your leave balance is not enough for this request.
+              </DialogDescription>
+            </DialogHeader>
+            {balanceInfo && (
+              <div className="space-y-4">
+                <Alert variant="default" className="border-amber-200 bg-amber-50">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-800">Balance Warning</AlertTitle>
+                  <AlertDescription className="text-amber-700">
+                    You requested <strong>{balanceInfo.requested} days</strong> but only have <strong>{balanceInfo.remaining} days</strong> remaining.
+                  </AlertDescription>
+                </Alert>
+
+                <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                  <p className="text-sm font-medium">Auto-split proposal:</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-green-50 rounded-md p-3 text-center">
+                      <p className="text-2xl font-bold text-green-700">{balanceInfo.paidDays}</p>
+                      <p className="text-xs text-green-600 font-medium">Paid Leave</p>
+                    </div>
+                    <div className="bg-orange-50 rounded-md p-3 text-center">
+                      <p className="text-2xl font-bold text-orange-700">{balanceInfo.unpaidDays}</p>
+                      <p className="text-xs text-orange-600 font-medium">Unpaid Leave</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    The system will automatically split your request into paid and unpaid portions.
+                  </p>
+                </div>
+              </div>
+            )}
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => setInsufficientDialogOpen(false)} className="w-full sm:w-auto">
+                Cancel
+              </Button>
+              <Button onClick={handleConfirmAutoSplit} disabled={submitMutation.isPending} className="w-full sm:w-auto">
+                {submitMutation.isPending ? "Submitting..." : "Confirm & Submit"}
               </Button>
             </DialogFooter>
           </DialogContent>

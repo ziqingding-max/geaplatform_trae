@@ -221,7 +221,7 @@ import {
   index as index2,
   uniqueIndex as uniqueIndex2
 } from "drizzle-orm/sqlite-core";
-var contractors, contractorInvoices, contractorInvoiceItems, contractorMilestones, contractorAdjustments, workerUsers, migrationIdMap;
+var contractors, contractorInvoices, contractorInvoiceItems, contractorMilestones, contractorAdjustments, contractorDocuments, contractorContracts, employeePayslips, workerUsers, migrationIdMap;
 var init_aor_schema = __esm({
   "drizzle/aor-schema.ts"() {
     "use strict";
@@ -369,6 +369,12 @@ var init_aor_schema = __esm({
         ] }).default("pending").notNull(),
         dueDate: text2("dueDate"),
         completedAt: integer2("completedAt", { mode: "timestamp_ms" }),
+        // Deliverable files uploaded by worker when submitting
+        deliverableFileUrl: text2("deliverableFileUrl"),
+        deliverableFileKey: text2("deliverableFileKey", { length: 500 }),
+        deliverableFileName: text2("deliverableFileName", { length: 255 }),
+        submissionNote: text2("submissionNote"),
+        // Worker's note when submitting the milestone
         // Approval tracking (aligned with EOR adjustments)
         submittedBy: integer2("submittedBy"),
         // Worker user ID who submitted
@@ -446,6 +452,103 @@ var init_aor_schema = __esm({
         caEffectiveMonthIdx: index2("ca_effective_month_idx").on(table.effectiveMonth)
       })
     );
+    contractorDocuments = sqliteTable2(
+      "contractor_documents",
+      {
+        id: integer2("id").primaryKey({ autoIncrement: true }),
+        contractorId: integer2("contractorId").notNull(),
+        documentType: text2("documentType", { enum: [
+          "agreement",
+          // Contractor agreement / SOW
+          "nda",
+          // Non-disclosure agreement
+          "passport",
+          "national_id",
+          "tax_form",
+          // W-9, W-8BEN, etc.
+          "insurance",
+          // Liability insurance
+          "certification",
+          // Professional certifications
+          "other"
+        ] }).notNull(),
+        documentName: text2("documentName", { length: 255 }).notNull(),
+        fileUrl: text2("fileUrl").notNull(),
+        fileKey: text2("fileKey", { length: 500 }).notNull(),
+        mimeType: text2("mimeType", { length: 100 }),
+        fileSize: integer2("fileSize"),
+        notes: text2("notes"),
+        uploadedAt: integer2("uploadedAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        createdAt: integer2("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer2("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+      },
+      (table) => ({
+        cdContractorIdIdx: index2("cd_contractor_id_idx").on(table.contractorId),
+        cdDocTypeIdx: index2("cd_doc_type_idx").on(table.documentType)
+      })
+    );
+    contractorContracts = sqliteTable2(
+      "contractor_contracts",
+      {
+        id: integer2("id").primaryKey({ autoIncrement: true }),
+        contractorId: integer2("contractorId").notNull(),
+        contractType: text2("contractType", { length: 100 }),
+        // e.g. "Service Agreement", "SOW", "Amendment"
+        fileUrl: text2("fileUrl"),
+        fileKey: text2("fileKey", { length: 500 }),
+        signedDate: text2("signedDate"),
+        effectiveDate: text2("effectiveDate"),
+        expiryDate: text2("expiryDate"),
+        status: text2("status", { enum: ["draft", "signed", "expired", "terminated"] }).default("draft").notNull(),
+        createdAt: integer2("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer2("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+      },
+      (table) => ({
+        ccContractorIdIdx: index2("cc_contractor_id_idx").on(table.contractorId),
+        ccStatusIdx: index2("cc_status_idx").on(table.status)
+      })
+    );
+    employeePayslips = sqliteTable2(
+      "employee_payslips",
+      {
+        id: integer2("id").primaryKey({ autoIncrement: true }),
+        employeeId: integer2("employeeId").notNull(),
+        customerId: integer2("customerId").notNull(),
+        // Auto-filled from employee
+        // Period
+        payPeriod: text2("payPeriod").notNull(),
+        // YYYY-MM format, e.g. "2026-03"
+        payDate: text2("payDate"),
+        // Actual pay date, e.g. "2026-03-25"
+        // File
+        fileUrl: text2("fileUrl").notNull(),
+        fileKey: text2("fileKey", { length: 500 }).notNull(),
+        fileName: text2("fileName", { length: 255 }).notNull(),
+        mimeType: text2("mimeType", { length: 100 }).default("application/pdf"),
+        fileSize: integer2("fileSize"),
+        // Metadata
+        currency: text2("currency", { length: 3 }),
+        grossAmount: text2("grossAmount"),
+        // Optional summary for display
+        netAmount: text2("netAmount"),
+        // Optional summary for display
+        notes: text2("notes"),
+        // Publishing control: only published payslips are visible to workers
+        isPublished: integer2("isPublished", { mode: "boolean" }).default(false).notNull(),
+        publishedAt: integer2("publishedAt", { mode: "timestamp_ms" }),
+        uploadedBy: integer2("uploadedBy"),
+        // Admin user ID who uploaded
+        createdAt: integer2("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+        updatedAt: integer2("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => /* @__PURE__ */ new Date()).notNull()
+      },
+      (table) => ({
+        epEmployeeIdIdx: index2("ep_employee_id_idx").on(table.employeeId),
+        epCustomerIdIdx: index2("ep_customer_id_idx").on(table.customerId),
+        epPayPeriodIdx: index2("ep_pay_period_idx").on(table.payPeriod),
+        epPublishedIdx: index2("ep_published_idx").on(table.isPublished),
+        epEmployeePeriodIdx: uniqueIndex2("ep_employee_period_idx").on(table.employeeId, table.payPeriod)
+      })
+    );
     workerUsers = sqliteTable2(
       "worker_users",
       {
@@ -453,7 +556,10 @@ var init_aor_schema = __esm({
         email: text2("email", { length: 320 }).unique().notNull(),
         passwordHash: text2("passwordHash", { length: 255 }),
         contractorId: integer2("contractorId").unique(),
-        // 1:1 link to contractor profile
+        // 1:1 link to contractor profile (AOR)
+        employeeId: integer2("employeeId").unique(),
+        // 1:1 link to employee profile (EOR)
+        // Worker type derived from which ID is set: "contractor" if contractorId, "employee" if employeeId
         isActive: integer2("isActive", { mode: "boolean" }).default(true).notNull(),
         isEmailVerified: integer2("isEmailVerified", { mode: "boolean" }).default(false).notNull(),
         inviteToken: text2("inviteToken", { length: 255 }),
@@ -466,7 +572,8 @@ var init_aor_schema = __esm({
       },
       (table) => ({
         wuEmailIdx: uniqueIndex2("wu_email_idx").on(table.email),
-        wuContractorIdIdx: uniqueIndex2("wu_contractor_id_idx").on(table.contractorId)
+        wuContractorIdIdx: uniqueIndex2("wu_contractor_id_idx").on(table.contractorId),
+        wuEmployeeIdIdx: uniqueIndex2("wu_employee_id_idx").on(table.employeeId)
       })
     );
     migrationIdMap = sqliteTable2(
@@ -498,6 +605,8 @@ __export(schema_exports, {
   billInvoiceAllocations: () => billInvoiceAllocations,
   billingEntities: () => billingEntities,
   contractorAdjustments: () => contractorAdjustments,
+  contractorContracts: () => contractorContracts,
+  contractorDocuments: () => contractorDocuments,
   contractorInvoiceItems: () => contractorInvoiceItems,
   contractorInvoices: () => contractorInvoices,
   contractorMilestones: () => contractorMilestones,
@@ -522,6 +631,7 @@ __export(schema_exports, {
   customers: () => customers,
   employeeContracts: () => employeeContracts,
   employeeDocuments: () => employeeDocuments,
+  employeePayslips: () => employeePayslips,
   employees: () => employees,
   exchangeRates: () => exchangeRates,
   frozenWalletTransactions: () => frozenWalletTransactions,
@@ -2299,6 +2409,8 @@ __export(relations_exports, {
   adjustmentsRelations: () => adjustmentsRelations,
   billInvoiceAllocationsRelations: () => billInvoiceAllocationsRelations,
   contractorAdjustmentsRelations: () => contractorAdjustmentsRelations,
+  contractorContractsRelations: () => contractorContractsRelations,
+  contractorDocumentsRelations: () => contractorDocumentsRelations,
   contractorInvoiceItemsRelations: () => contractorInvoiceItemsRelations,
   contractorInvoicesRelations: () => contractorInvoicesRelations,
   contractorMilestonesRelations: () => contractorMilestonesRelations,
@@ -2315,6 +2427,7 @@ __export(relations_exports, {
   customersRelations: () => customersRelations,
   employeeContractsRelations: () => employeeContractsRelations,
   employeeDocumentsRelations: () => employeeDocumentsRelations,
+  employeePayslipsRelations: () => employeePayslipsRelations,
   employeesRelations: () => employeesRelations,
   invoiceItemsRelations: () => invoiceItemsRelations,
   invoicesRelations: () => invoicesRelations,
@@ -2339,7 +2452,7 @@ __export(relations_exports, {
   workerUsersRelations: () => workerUsersRelations
 });
 import { relations } from "drizzle-orm";
-var countriesConfigRelations, leaveTypesRelations, publicHolidaysRelations, customersRelations, customerContactsRelations, customerPricingRelations, customerContractsRelations, customerLeavePoliciesRelations, employeesRelations, employeeContractsRelations, employeeDocumentsRelations, leaveBalancesRelations, leaveRecordsRelations, adjustmentsRelations, reimbursementsRelations, payrollRunsRelations, payrollItemsRelations, invoicesRelations, invoiceItemsRelations, creditNoteApplicationsRelations, vendorsRelations, vendorBillsRelations, vendorBillItemsRelations, billInvoiceAllocationsRelations, salesLeadsRelations, salesActivitiesRelations, leadChangeLogsRelations, onboardingInvitesRelations, countrySocialInsuranceItemsRelations, countryGuideChaptersRelations, salaryBenchmarksRelations, quotationsRelations, salesDocumentsRelations, contractorsRelations, contractorInvoicesRelations, contractorInvoiceItemsRelations, contractorMilestonesRelations, contractorAdjustmentsRelations, workerUsersRelations, customerWalletsRelations, walletTransactionsRelations;
+var countriesConfigRelations, leaveTypesRelations, publicHolidaysRelations, customersRelations, customerContactsRelations, customerPricingRelations, customerContractsRelations, customerLeavePoliciesRelations, employeesRelations, employeeContractsRelations, employeeDocumentsRelations, leaveBalancesRelations, leaveRecordsRelations, adjustmentsRelations, reimbursementsRelations, payrollRunsRelations, payrollItemsRelations, invoicesRelations, invoiceItemsRelations, creditNoteApplicationsRelations, vendorsRelations, vendorBillsRelations, vendorBillItemsRelations, billInvoiceAllocationsRelations, salesLeadsRelations, salesActivitiesRelations, leadChangeLogsRelations, onboardingInvitesRelations, countrySocialInsuranceItemsRelations, countryGuideChaptersRelations, salaryBenchmarksRelations, quotationsRelations, salesDocumentsRelations, contractorsRelations, contractorInvoicesRelations, contractorInvoiceItemsRelations, contractorMilestonesRelations, contractorAdjustmentsRelations, workerUsersRelations, contractorDocumentsRelations, contractorContractsRelations, employeePayslipsRelations, customerWalletsRelations, walletTransactionsRelations;
 var init_relations = __esm({
   "drizzle/relations.ts"() {
     "use strict";
@@ -2627,6 +2740,8 @@ var init_relations = __esm({
       invoices: many(contractorInvoices),
       milestones: many(contractorMilestones),
       adjustments: many(contractorAdjustments),
+      documents: many(contractorDocuments),
+      contracts: many(contractorContracts),
       workerUser: one(workerUsers)
     }));
     contractorInvoicesRelations = relations(contractorInvoices, ({ one, many }) => ({
@@ -2662,6 +2777,32 @@ var init_relations = __esm({
       contractor: one(contractors, {
         fields: [workerUsers.contractorId],
         references: [contractors.id]
+      }),
+      employee: one(employees, {
+        fields: [workerUsers.employeeId],
+        references: [employees.id]
+      })
+    }));
+    contractorDocumentsRelations = relations(contractorDocuments, ({ one }) => ({
+      contractor: one(contractors, {
+        fields: [contractorDocuments.contractorId],
+        references: [contractors.id]
+      })
+    }));
+    contractorContractsRelations = relations(contractorContracts, ({ one }) => ({
+      contractor: one(contractors, {
+        fields: [contractorContracts.contractorId],
+        references: [contractors.id]
+      })
+    }));
+    employeePayslipsRelations = relations(employeePayslips, ({ one }) => ({
+      employee: one(employees, {
+        fields: [employeePayslips.employeeId],
+        references: [employees.id]
+      }),
+      customer: one(customers, {
+        fields: [employeePayslips.customerId],
+        references: [customers.id]
       })
     }));
     customerWalletsRelations = relations(customerWallets, ({ one, many }) => ({
@@ -3036,7 +3177,10 @@ async function getActiveEmployeesForPayroll(countryCode) {
   if (!db) return [];
   return await db.select().from(employees).where(and2(
     eq3(employees.country, countryCode),
-    eq3(employees.status, "active"),
+    or(
+      eq3(employees.status, "active"),
+      eq3(employees.status, "offboarding")
+    ),
     ne(employees.serviceType, "aor")
     // Exclude AOR
   ));
@@ -3090,11 +3234,23 @@ async function getContractSignedEmployeesReadyForActivation(dateStr) {
     lte(employees.startDate, dateStr)
   ));
 }
+async function getOffboardingEmployeesReadyForTermination(dateStr) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(employees).where(and2(
+    eq3(employees.status, "offboarding"),
+    lte(employees.endDate, dateStr)
+  ));
+}
 async function getCountriesWithActiveEmployees() {
   const db = await getDb();
   if (!db) return [];
   const result = await db.select({ country: employees.country }).from(employees).where(and2(
-    eq3(employees.status, "active"),
+    or(
+      eq3(employees.status, "active"),
+      eq3(employees.status, "offboarding"),
+      eq3(employees.status, "on_leave")
+    ),
     ne(employees.serviceType, "aor")
     // Exclude AOR
   )).groupBy(employees.country);
@@ -3105,7 +3261,11 @@ async function getEmployeesForPayrollMonth(country, monthStart, monthEnd) {
   if (!db) return [];
   return await db.select().from(employees).where(and2(
     eq3(employees.country, country),
-    eq3(employees.status, "active"),
+    or(
+      eq3(employees.status, "active"),
+      eq3(employees.status, "offboarding"),
+      eq3(employees.status, "on_leave")
+    ),
     ne(employees.serviceType, "aor")
     // Exclude AOR
   ));
@@ -3307,7 +3467,10 @@ async function getActiveLeaveRecordsForDate(employeeId, date) {
     eq3(leaveRecords.employeeId, employeeId),
     lte(leaveRecords.startDate, date),
     gte(leaveRecords.endDate, date),
-    eq3(leaveRecords.status, "approved")
+    or(
+      eq3(leaveRecords.status, "admin_approved"),
+      eq3(leaveRecords.status, "locked")
+    )
   ));
 }
 async function getAllActiveLeaveRecordsForDate(dateStr) {
@@ -3317,7 +3480,6 @@ async function getAllActiveLeaveRecordsForDate(dateStr) {
     lte(leaveRecords.startDate, dateStr),
     gte(leaveRecords.endDate, dateStr),
     or(
-      eq3(leaveRecords.status, "approved"),
       eq3(leaveRecords.status, "admin_approved"),
       eq3(leaveRecords.status, "locked")
     )
@@ -3335,7 +3497,6 @@ async function getOnLeaveEmployeesWithExpiredLeave(todayStr) {
       lte(leaveRecords.startDate, dateStr),
       gte(leaveRecords.endDate, dateStr),
       or(
-        eq3(leaveRecords.status, "approved"),
         eq3(leaveRecords.status, "admin_approved"),
         eq3(leaveRecords.status, "locked")
       )
@@ -3413,7 +3574,7 @@ async function listInvoices(filters = {}, limit = 50, offset = 0) {
   if (filters.invoiceType) conditions.push(eq4(invoices.invoiceType, filters.invoiceType));
   if (filters.invoiceMonth) conditions.push(eq4(invoices.invoiceMonth, filters.invoiceMonth));
   if (filters.excludeCreditNotes) {
-    const { ne: ne4, and: and53 } = await import("drizzle-orm");
+    const { ne: ne4, and: and58 } = await import("drizzle-orm");
     conditions.push(ne4(invoices.invoiceType, "credit_note"));
     conditions.push(ne4(invoices.invoiceType, "deposit_refund"));
   }
@@ -4064,7 +4225,7 @@ async function getEmployeeMonthlyRevenue(employeeId, serviceMonth) {
 async function getAllEmployeesMonthlyRevenue(serviceMonth) {
   const db = await getDb();
   if (!db) return [];
-  const { employees: employees2, customers: customers3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+  const { employees: employees2, customers: customers2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
   const { ne: ne4 } = await import("drizzle-orm");
   const monthInvoices = await db.select({ id: invoices.id }).from(invoices).where(
     and3(
@@ -4107,7 +4268,7 @@ async function getAllEmployeesMonthlyRevenue(serviceMonth) {
     country: employees2.country
   }).from(employees2).where(inArray2(employees2.id, empIds));
   const customerIds = Array.from(new Set(empRows.map((e) => e.customerId)));
-  const custRows = customerIds.length > 0 ? await db.select({ id: customers3.id, companyName: customers3.companyName }).from(customers3).where(inArray2(customers3.id, customerIds)) : [];
+  const custRows = customerIds.length > 0 ? await db.select({ id: customers2.id, companyName: customers2.companyName }).from(customers2).where(inArray2(customers2.id, customerIds)) : [];
   const custMap = {};
   for (const c of custRows) {
     custMap[c.id] = c.companyName;
@@ -4798,6 +4959,7 @@ __export(db_exports, {
   getLeaveTypeById: () => getLeaveTypeById,
   getLockedContractorAdjustments: () => getLockedContractorAdjustments,
   getLockedContractorMilestones: () => getLockedContractorMilestones,
+  getOffboardingEmployeesReadyForTermination: () => getOffboardingEmployeesReadyForTermination,
   getOnLeaveEmployeesWithExpiredLeave: () => getOnLeaveEmployeesWithExpiredLeave,
   getPayrollItemById: () => getPayrollItemById,
   getPayrollRunById: () => getPayrollRunById,
@@ -4995,6 +5157,174 @@ var init_env = __esm({
   }
 });
 
+// server/services/emailLayout.ts
+function getLogoImg() {
+  const appUrl = (process.env.ADMIN_APP_URL || "").replace(/\/+$/, "");
+  if (appUrl) {
+    return `<img src="${appUrl}/brand/gea-logo-email.png" alt="GEA - Global Employment Advisors" width="220" style="display:block;margin:0 auto;max-width:220px;height:auto;" />`;
+  }
+  return `<span style="color:#ffffff;font-size:20px;font-weight:bold;letter-spacing:1px;">GEA \u2014 Global Employment Advisors</span>`;
+}
+function renderEmailLayout(bodyHtml, options) {
+  const logoImg = getLogoImg();
+  const preheaderHtml = options.preheader ? `<div style="display:none;font-size:1px;color:#f4f5f7;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${options.preheader}</div>` : "";
+  const footerContent = buildFooter(options.audience);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+<title>GEA Notification</title>
+<!--[if mso]>
+<noscript>
+<xml>
+<o:OfficeDocumentSettings>
+<o:PixelsPerInch>96</o:PixelsPerInch>
+</o:OfficeDocumentSettings>
+</xml>
+</noscript>
+<![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:${BG_BODY};font-family:Arial,'Helvetica Neue',Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
+${preheaderHtml}
+
+<!-- Outer wrapper -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:${BG_BODY};">
+<tr>
+<td align="center" style="padding:24px 16px;">
+
+<!-- Email container -->
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;width:100%;background-color:${BG_CARD};border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+
+<!-- ========== HEADER ========== -->
+<tr>
+<td style="background-color:${BRAND_GREEN};padding:28px 32px;text-align:center;">
+${logoImg}
+</td>
+</tr>
+
+<!-- Gold accent line -->
+<tr>
+<td style="background-color:${BRAND_GOLD};height:3px;font-size:0;line-height:0;">&nbsp;</td>
+</tr>
+
+<!-- ========== BODY ========== -->
+<tr>
+<td style="padding:32px 32px 24px 32px;color:${TEXT_PRIMARY};font-size:15px;line-height:1.65;">
+${bodyHtml}
+</td>
+</tr>
+
+<!-- ========== FOOTER ========== -->
+${footerContent}
+
+</table>
+<!-- /Email container -->
+
+</td>
+</tr>
+</table>
+<!-- /Outer wrapper -->
+
+</body>
+</html>`;
+}
+function buildFooter(audience) {
+  const year = (/* @__PURE__ */ new Date()).getFullYear();
+  const aboutSection = audience === "client" ? `
+<tr>
+<td style="padding:0 32px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+<tr>
+<td style="border-top:1px solid ${BORDER_LIGHT};padding:20px 0 0 0;">
+<p style="margin:0 0 8px 0;font-size:13px;font-weight:bold;color:${BRAND_GREEN};">About GEA (Global Employment Advisors)</p>
+<p style="margin:0;font-size:12px;line-height:1.6;color:${TEXT_MUTED};">As CGL Group's overseas business sub-brand, GEA helps enterprises navigate emerging markets across the full lifecycle \u2014 from Access to Implementation, from Development to Reorganization \u2014 providing comprehensive, end-to-end human resources services and solutions.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>` : "";
+  const supportLine = audience === "admin" ? `This is an internal system notification.` : `Questions? Contact us at <a href="mailto:support@bestgea.com" style="color:${BRAND_GREEN};text-decoration:none;">support@bestgea.com</a>`;
+  return `
+${aboutSection}
+
+<!-- Bottom footer -->
+<tr>
+<td style="padding:20px 32px 24px 32px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+<tr>
+<td style="border-top:1px solid ${BORDER_LIGHT};padding:20px 0 0 0;text-align:center;">
+<p style="margin:0 0 6px 0;font-size:12px;color:${TEXT_MUTED};">${supportLine}</p>
+<p style="margin:0;font-size:11px;color:#aaaaaa;">&copy; ${year} Global Employment Advisors (GEA). All rights reserved.</p>
+</td>
+</tr>
+</table>
+</td>
+</tr>`;
+}
+function emailButton(text4, href, color = BRAND_GREEN) {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;">
+<tr>
+<td align="center" style="background-color:${color};border-radius:6px;">
+<a href="${href}" target="_blank" style="display:inline-block;padding:12px 28px;color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;border-radius:6px;">
+${text4}
+</a>
+</td>
+</tr>
+</table>`;
+}
+function emailInfoCard(rows) {
+  const rowsHtml = rows.map(
+    (r) => `<tr>
+<td style="padding:8px 12px;font-size:13px;color:${TEXT_SECONDARY};border-bottom:1px solid ${BORDER_LIGHT};width:40%;font-weight:600;">${r.label}</td>
+<td style="padding:8px 12px;font-size:13px;color:${TEXT_PRIMARY};border-bottom:1px solid ${BORDER_LIGHT};">${r.value}</td>
+</tr>`
+  ).join("\n");
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f9fafb;border:1px solid ${BORDER_LIGHT};border-radius:6px;margin:16px 0;overflow:hidden;">
+${rowsHtml}
+</table>`;
+}
+function emailBanner(text4, type = "info") {
+  const colors = {
+    warning: { bg: "#fffbeb", border: "#f59e0b", text: "#92400e" },
+    danger: { bg: "#fef2f2", border: "#ef4444", text: "#991b1b" },
+    success: { bg: "#f0fdf4", border: "#22c55e", text: "#166534" },
+    info: { bg: "#eff6ff", border: "#3b82f6", text: "#1e40af" }
+  };
+  const c = colors[type];
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0;">
+<tr>
+<td style="background-color:${c.bg};border-left:4px solid ${c.border};padding:12px 16px;border-radius:4px;">
+<p style="margin:0;font-size:14px;font-weight:600;color:${c.text};">${text4}</p>
+</td>
+</tr>
+</table>`;
+}
+function emailAmountDisplay(currency, amount) {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0;">
+<tr>
+<td align="center" style="padding:16px;background-color:#f9fafb;border-radius:6px;">
+<p style="margin:0;font-size:28px;font-weight:bold;color:${BRAND_GREEN};">${currency} ${amount}</p>
+</td>
+</tr>
+</table>`;
+}
+var BRAND_GREEN, BRAND_GOLD, TEXT_PRIMARY, TEXT_SECONDARY, TEXT_MUTED, BG_BODY, BG_CARD, BORDER_LIGHT;
+var init_emailLayout = __esm({
+  "server/services/emailLayout.ts"() {
+    "use strict";
+    BRAND_GREEN = "#005430";
+    BRAND_GOLD = "#D4A843";
+    TEXT_PRIMARY = "#1a1a1a";
+    TEXT_SECONDARY = "#555555";
+    TEXT_MUTED = "#888888";
+    BG_BODY = "#f4f5f7";
+    BG_CARD = "#ffffff";
+    BORDER_LIGHT = "#e5e7eb";
+  }
+});
+
 // server/_core/notification.ts
 var notification_exports = {};
 __export(notification_exports, {
@@ -5024,11 +5354,17 @@ async function notifyOwner(payload) {
         pass: ENV.emailSmtpPass
       }
     });
+    const bodyHtml = `
+${emailBanner(title, "warning")}
+<p style="font-size:15px;color:#1a1a1a;line-height:1.65;">${content.replace(/\n/g, "<br/>")}</p>
+<p style="margin-top:20px;font-size:13px;color:#888;">This is an automated system alert from the GEA platform.<br/>Timestamp: ${(/* @__PURE__ */ new Date()).toISOString()}</p>
+`;
+    const html = renderEmailLayout(bodyHtml, { audience: "admin", preheader: title });
     await transporter.sendMail({
       from: `GEA Admin <${ENV.emailFrom}>`,
       to: ENV.emailAdmin,
       subject: `[GEA System Alert] ${title}`,
-      text: content
+      html
     });
     return true;
   } catch (error) {
@@ -5041,6 +5377,7 @@ var init_notification = __esm({
   "server/_core/notification.ts"() {
     "use strict";
     init_env();
+    init_emailLayout();
     TITLE_MAX_LENGTH = 1200;
     CONTENT_MAX_LENGTH = 2e4;
     trimValue = (value) => value.trim();
@@ -5083,10 +5420,10 @@ __export(portalAuth_exports, {
   authenticatePortalRequest: () => authenticatePortalRequest,
   clearPortalCookie: () => clearPortalCookie,
   generateInviteToken: () => generateInviteToken2,
-  generateResetToken: () => generateResetToken,
+  generateResetToken: () => generateResetToken2,
   getInviteExpiryDate: () => getInviteExpiryDate2,
   getPortalTokenFromRequest: () => getPortalTokenFromRequest,
-  getResetExpiryDate: () => getResetExpiryDate,
+  getResetExpiryDate: () => getResetExpiryDate2,
   hashPassword: () => hashPassword2,
   setPortalCookie: () => setPortalCookie,
   signPortalToken: () => signPortalToken,
@@ -5132,10 +5469,10 @@ function generateInviteToken2() {
 function getInviteExpiryDate2() {
   return new Date(Date.now() + PORTAL_INVITE_EXPIRY_HOURS * 60 * 60 * 1e3);
 }
-function generateResetToken() {
+function generateResetToken2() {
   return crypto2.randomBytes(32).toString("hex");
 }
-function getResetExpiryDate() {
+function getResetExpiryDate2() {
   return new Date(Date.now() + RESET_TOKEN_EXPIRY_HOURS * 60 * 60 * 1e3);
 }
 function setPortalCookie(res, token) {
@@ -5226,12 +5563,12 @@ __export(knowledgeInternalGeneratorService_exports, {
 });
 import * as fs2 from "fs";
 import * as path2 from "path";
-import { eq as eq30, and as and25, asc } from "drizzle-orm";
+import { eq as eq31, and as and26, asc } from "drizzle-orm";
 async function loadCountryGuideChapters(db, countryCode) {
   const dbChapters = await db.select().from(countryGuideChapters).where(
-    and25(
-      eq30(countryGuideChapters.countryCode, countryCode),
-      eq30(countryGuideChapters.status, "published")
+    and26(
+      eq31(countryGuideChapters.countryCode, countryCode),
+      eq31(countryGuideChapters.status, "published")
     )
   ).orderBy(asc(countryGuideChapters.sortOrder));
   if (dbChapters.length > 0) {
@@ -5775,7 +6112,7 @@ async function generateKnowledgeFromInternalData(options) {
     "terminationGuide",
     "workingConditions"
   ];
-  const allCountries = await db.select().from(countriesConfig).where(eq30(countriesConfig.isActive, true));
+  const allCountries = await db.select().from(countriesConfig).where(eq31(countriesConfig.isActive, true));
   const targetCountries = options?.countryCodes?.length ? allCountries.filter((c) => options.countryCodes.includes(c.countryCode)) : allCountries;
   console.log(`[KnowledgeGenerator] Processing ${targetCountries.length} countries, types: ${typesToGenerate.join(", ")}`);
   const allArticles = [];
@@ -5811,7 +6148,7 @@ async function generateKnowledgeFromInternalData(options) {
         result.byType.workingConditions += articles.length;
       }
       if (typesToGenerate.includes("socialInsurance")) {
-        const siItems = await db.select().from(countrySocialInsuranceItems).where(eq30(countrySocialInsuranceItems.countryCode, cc)).orderBy(asc(countrySocialInsuranceItems.sortOrder));
+        const siItems = await db.select().from(countrySocialInsuranceItems).where(eq31(countrySocialInsuranceItems.countryCode, cc)).orderBy(asc(countrySocialInsuranceItems.sortOrder));
         if (siItems.length > 0) {
           const articles = generateSocialInsuranceArticle(cc, siItems, countryName);
           allArticles.push(...articles);
@@ -5819,7 +6156,7 @@ async function generateKnowledgeFromInternalData(options) {
         }
       }
       if (typesToGenerate.includes("publicHolidays")) {
-        const holidays = await db.select().from(publicHolidays).where(eq30(publicHolidays.countryCode, cc)).orderBy(asc(publicHolidays.holidayDate));
+        const holidays = await db.select().from(publicHolidays).where(eq31(publicHolidays.countryCode, cc)).orderBy(asc(publicHolidays.holidayDate));
         if (holidays.length > 0) {
           const articles = generatePublicHolidaysArticle(cc, holidays, countryName);
           allArticles.push(...articles);
@@ -5827,7 +6164,7 @@ async function generateKnowledgeFromInternalData(options) {
         }
       }
       if (typesToGenerate.includes("leaveEntitlements")) {
-        const leaves = await db.select().from(leaveTypes).where(eq30(leaveTypes.countryCode, cc));
+        const leaves = await db.select().from(leaveTypes).where(eq31(leaveTypes.countryCode, cc));
         if (leaves.length > 0) {
           const articles = generateLeaveEntitlementsArticle(cc, leaves, countryName, {
             statutoryAnnualLeave: country.statutoryAnnualLeave,
@@ -5892,7 +6229,7 @@ import express2 from "express";
 import helmet from "helmet";
 import { createServer } from "http";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import rateLimit2 from "express-rate-limit";
+import rateLimit3 from "express-rate-limit";
 
 // server/_core/authRoutes.ts
 init_db2();
@@ -5973,11 +6310,18 @@ async function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 var INVITE_EXPIRY_HOURS = 72;
+var RESET_EXPIRY_HOURS = 1;
 function generateInviteToken() {
   return crypto.randomBytes(32).toString("hex");
 }
 function getInviteExpiryDate() {
   return new Date(Date.now() + INVITE_EXPIRY_HOURS * 60 * 60 * 1e3);
+}
+function generateResetToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+function getResetExpiryDate() {
+  return new Date(Date.now() + RESET_EXPIRY_HOURS * 60 * 60 * 1e3);
 }
 function setAdminCookie(req, res, token) {
   const cookieOptions = getSessionCookieOptions(req);
@@ -6084,6 +6428,356 @@ function registerAuthRoutes(app) {
   app.post("/api/auth/logout", (req, res) => {
     clearAdminCookie(req, res);
     res.json({ success: true });
+  });
+}
+
+// server/_core/adminForgotPassword.ts
+init_db2();
+import rateLimit2 from "express-rate-limit";
+
+// server/services/authEmailService.ts
+init_emailLayout();
+async function sendEmail(payload) {
+  const nodemailer2 = (await import("nodemailer")).default;
+  const { ENV: ENV2 } = await Promise.resolve().then(() => (init_env(), env_exports));
+  if (!ENV2.emailSmtpHost || !ENV2.emailSmtpUser) {
+    console.log(`[Auth Email - Dev] To: ${payload.to} | Subject: ${payload.subject}`);
+    console.log(`[Auth Email - Dev] (SMTP not configured, email not sent)`);
+    return;
+  }
+  const transporter = nodemailer2.createTransport({
+    host: ENV2.emailSmtpHost,
+    port: Number(ENV2.emailSmtpPort) || 587,
+    secure: Number(ENV2.emailSmtpPort) === 465,
+    auth: {
+      user: ENV2.emailSmtpUser,
+      pass: ENV2.emailSmtpPass
+    }
+  });
+  await transporter.sendMail({
+    from: `GEA <${ENV2.emailFrom}>`,
+    to: payload.to,
+    subject: payload.subject,
+    html: payload.html
+  });
+  console.log(`[Auth Email] Sent "${payload.subject}" to ${payload.to}`);
+}
+async function sendAdminInviteEmail(params) {
+  const body = `
+<p>Dear ${params.name},</p>
+<p>You have been invited to join the <strong>GEA Admin Panel</strong> as a team member. Your account has been created with the following details:</p>
+${emailInfoCard([
+    { label: "Name", value: params.name },
+    { label: "Email", value: params.to },
+    { label: "Role(s)", value: params.roles }
+  ])}
+<p>To activate your account, please click the button below to set your password:</p>
+${emailButton("Accept Invitation & Set Password", params.inviteUrl)}
+${emailBanner("This invitation link will expire in 7 days. If you did not expect this invitation, please ignore this email.", "info")}
+<p>Once activated, you can log in at the GEA Admin Panel to begin managing operations.</p>
+<p>Best regards,<br><strong>GEA System</strong><br>Global Employment Advisors</p>`;
+  const html = renderEmailLayout(body, {
+    audience: "admin",
+    preheader: "You've been invited to the GEA Admin Panel"
+  });
+  await sendEmail({
+    to: params.to,
+    subject: "You're Invited to GEA Admin Panel \u2014 Set Up Your Account",
+    html
+  });
+}
+async function sendAdminPasswordResetEmail(params) {
+  const body = `
+${emailBanner("Your password has been reset by an administrator.", "warning")}
+<p>Dear ${params.name},</p>
+<p>An administrator has reset your password for the GEA Admin Panel. Please use the temporary password below to log in:</p>
+${emailInfoCard([
+    { label: "Email", value: params.to },
+    { label: "Temporary Password", value: `<code style="font-size:16px;font-weight:bold;color:#005430;background:#f0fdf4;padding:2px 8px;border-radius:4px;">${params.tempPassword}</code>` }
+  ])}
+${emailBanner("We strongly recommend changing your password after logging in for security.", "info")}
+${emailButton("Log In to Admin Panel", params.loginUrl)}
+<p>If you did not request this password reset, please contact your system administrator immediately.</p>
+<p>Best regards,<br><strong>GEA System</strong><br>Global Employment Advisors</p>`;
+  const html = renderEmailLayout(body, {
+    audience: "admin",
+    preheader: "Your GEA Admin password has been reset"
+  });
+  await sendEmail({
+    to: params.to,
+    subject: "Your GEA Admin Password Has Been Reset",
+    html
+  });
+}
+async function sendPortalInviteEmail(params) {
+  const roleDisplay = params.portalRole === "admin" ? "Administrator" : params.portalRole === "hr" ? "HR Manager" : params.portalRole === "finance" ? "Finance Manager" : params.portalRole === "viewer" ? "Viewer" : params.portalRole;
+  const body = `
+<p>Dear ${params.contactName},</p>
+<p>You have been invited to join the <strong>GEA Client Portal</strong> for <strong>${params.companyName}</strong>. The Client Portal gives you access to manage employees, view invoices, track onboarding progress, and more.</p>
+${emailInfoCard([
+    { label: "Company", value: params.companyName },
+    { label: "Your Email", value: params.to },
+    { label: "Portal Role", value: roleDisplay }
+  ])}
+<p>To get started, click the button below to set your password and activate your account:</p>
+${emailButton("Accept Invitation & Set Up Account", params.inviteUrl)}
+${emailBanner("This invitation link will expire in 7 days. If you did not expect this invitation, please ignore this email.", "info")}
+<p>If you have any questions, please contact us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`;
+  const html = renderEmailLayout(body, {
+    audience: "client",
+    preheader: `You've been invited to the GEA Client Portal for ${params.companyName}`
+  });
+  await sendEmail({
+    to: params.to,
+    subject: `You're Invited to the GEA Client Portal \u2014 ${params.companyName}`,
+    html
+  });
+}
+async function sendPortalPasswordResetEmail(params) {
+  const body = `
+<p>Dear ${params.contactName},</p>
+<p>We received a request to reset your password for the GEA Client Portal. If you made this request, please click the button below to set a new password:</p>
+${emailButton("Reset Your Password", params.resetUrl)}
+${emailBanner("This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email \u2014 your password will remain unchanged.", "info")}
+<p>For security reasons, this link can only be used once. If you need to reset your password again, please visit the login page and request a new link.</p>
+<p>If you have any concerns about your account security, please contact us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Security Team</strong><br>Global Employment Advisors</p>`;
+  const html = renderEmailLayout(body, {
+    audience: "client",
+    preheader: "Reset your GEA Client Portal password"
+  });
+  await sendEmail({
+    to: params.to,
+    subject: "Reset Your GEA Client Portal Password",
+    html
+  });
+}
+async function sendOnboardingInviteEmail(params) {
+  const body = `
+<p>Dear ${params.employeeName},</p>
+<p>Welcome! <strong>${params.companyName}</strong> has invited you to complete your onboarding with <strong>Global Employment Advisors (GEA)</strong>.</p>
+<p>As your Employer of Record (EOR), GEA will handle your employment administration, payroll, and compliance. To get started, we need you to fill in some personal and employment information.</p>
+${emailInfoCard([
+    { label: "Company", value: params.companyName },
+    { label: "Your Email", value: params.to }
+  ])}
+<p>Please click the button below to complete your onboarding form:</p>
+${emailButton("Complete Onboarding Form", params.inviteUrl)}
+${emailBanner("This link will expire in 72 hours. Please complete the form before it expires.", "info")}
+<p>If you have any questions about the onboarding process, please contact your HR representative at ${params.companyName} or reach out to us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`;
+  const html = renderEmailLayout(body, {
+    audience: "worker",
+    preheader: `Complete your onboarding with ${params.companyName} via GEA`
+  });
+  await sendEmail({
+    to: params.to,
+    subject: `Complete Your Onboarding \u2014 ${params.companyName} via GEA`,
+    html
+  });
+}
+async function sendWorkerPasswordResetEmail(params) {
+  const body = `
+<p>Dear ${params.workerName},</p>
+<p>We received a request to reset your password for the GEA Worker Portal. If you made this request, please click the button below to set a new password:</p>
+${emailButton("Reset Your Password", params.resetUrl)}
+${emailBanner("This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email \u2014 your password will remain unchanged.", "info")}
+<p>For security reasons, this link can only be used once. If you need to reset your password again, please visit the login page and request a new link.</p>
+<p>If you have any concerns about your account security, please contact us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Security Team</strong><br>Global Employment Advisors</p>`;
+  const html = renderEmailLayout(body, {
+    audience: "worker",
+    preheader: "Reset your GEA Worker Portal password"
+  });
+  await sendEmail({
+    to: params.to,
+    subject: "Reset Your GEA Worker Portal Password",
+    html
+  });
+}
+async function sendAdminForgotPasswordEmail(params) {
+  const body = `
+<p>Dear ${params.name},</p>
+<p>We received a request to reset your password for the GEA Admin Panel. If you made this request, please click the button below to set a new password:</p>
+${emailButton("Reset Your Password", params.resetUrl)}
+${emailBanner("This link will expire in 1 hour. If you did not request a password reset, you can safely ignore this email \u2014 your password will remain unchanged.", "info")}
+<p>For security reasons, this link can only be used once. If you need to reset your password again, please visit the login page and request a new link.</p>
+<p>If you have any concerns about your account security, please contact your system administrator immediately.</p>
+<p>Best regards,<br><strong>GEA Security Team</strong><br>Global Employment Advisors</p>`;
+  const html = renderEmailLayout(body, {
+    audience: "admin",
+    preheader: "Reset your GEA Admin Panel password"
+  });
+  await sendEmail({
+    to: params.to,
+    subject: "Reset Your GEA Admin Panel Password",
+    html
+  });
+}
+async function sendPortalPasswordChangedEmail(params) {
+  const body = `
+${emailBanner("Your Client Portal password has been reset by a GEA administrator.", "warning")}
+<p>Dear ${params.contactName},</p>
+<p>A GEA administrator has reset your password for the Client Portal. Please use the new credentials below to log in:</p>
+${emailInfoCard([
+    { label: "Email", value: params.to },
+    { label: "New Password", value: `<code style="font-size:16px;font-weight:bold;color:#005430;background:#f0fdf4;padding:2px 8px;border-radius:4px;">${params.newPassword}</code>` }
+  ])}
+${emailBanner("We strongly recommend changing your password after logging in for security.", "info")}
+${emailButton("Log In to Client Portal", params.loginUrl)}
+<p>If you did not expect this change, please contact your GEA account manager or email us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Security Team</strong><br>Global Employment Advisors</p>`;
+  const html = renderEmailLayout(body, {
+    audience: "client",
+    preheader: "Your GEA Client Portal password has been reset"
+  });
+  await sendEmail({
+    to: params.to,
+    subject: "Your GEA Client Portal Password Has Been Reset",
+    html
+  });
+}
+async function sendWorkerPortalInviteEmail(params) {
+  const typeLabel = params.workerType === "employee" ? "employee" : "contractor";
+  const body = `
+<p>Dear ${params.workerName},</p>
+<p>You have been invited to join the <strong>GEA Worker Portal</strong> as a ${typeLabel} of <strong>${params.companyName}</strong>.</p>
+<p>The Worker Portal gives you access to manage your work-related information, including:</p>
+<ul>
+  ${params.workerType === "employee" ? `
+  <li>View and download your payslips</li>
+  <li>Submit leave requests</li>
+  <li>Submit expense reimbursements</li>
+  ` : `
+  <li>View your invoices</li>
+  <li>Submit milestone deliverables</li>
+  `}
+  <li>View your documents and contracts</li>
+  <li>Manage your profile information</li>
+</ul>
+<p>To get started, please click the button below to set your password and activate your account:</p>
+${emailButton("Activate Your Account", params.inviteUrl)}
+${emailBanner("This invitation link will expire in 7 days. If you did not expect this invitation, please ignore this email.", "info")}
+<p>If you have any questions, please contact your HR representative at ${params.companyName} or reach out to us at <a href="mailto:support@bestgea.com" style="color:#005430;">support@bestgea.com</a>.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`;
+  const html = renderEmailLayout(body, {
+    audience: "worker",
+    preheader: `You've been invited to the GEA Worker Portal by ${params.companyName}`
+  });
+  await sendEmail({
+    to: params.to,
+    subject: `Welcome to GEA Worker Portal \u2014 ${params.companyName}`,
+    html
+  });
+}
+
+// server/_core/adminForgotPassword.ts
+function registerAdminForgotPasswordRoutes(app) {
+  const forgotPasswordLimiter = rateLimit2({
+    windowMs: 15 * 60 * 1e3,
+    // 15 minutes
+    limit: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many password reset requests. Please try again later." }
+  });
+  app.post("/api/auth/forgot-password", forgotPasswordLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        res.status(400).json({ error: "Email is required" });
+        return;
+      }
+      const user = await getUserByEmail(email.toLowerCase().trim());
+      if (user && user.isActive && user.passwordHash) {
+        const resetToken = generateResetToken();
+        const resetExpiresAt = getResetExpiryDate();
+        await updateUser(user.id, {
+          resetToken,
+          resetExpiresAt
+        });
+        const adminOrigin = process.env.ADMIN_APP_URL || `${req.protocol}://${req.get("host")}`;
+        const resetUrl = `${adminOrigin}/reset-password?token=${resetToken}`;
+        try {
+          await sendAdminForgotPasswordEmail({
+            to: user.email || email,
+            name: user.name || "Admin User",
+            resetUrl
+          });
+        } catch (emailErr) {
+          console.error("[AdminAuth] Failed to send forgot password email:", emailErr);
+        }
+      }
+      res.json({
+        success: true,
+        message: "If an account exists with this email, a password reset link has been sent."
+      });
+    } catch (error) {
+      console.error("[AdminAuth] Forgot password failed:", error);
+      res.status(500).json({ error: "Failed to process request" });
+    }
+  });
+  app.post("/api/auth/verify-reset", async (req, res) => {
+    try {
+      const { token } = req.body;
+      if (!token) {
+        res.json({ valid: false, reason: "Missing token" });
+        return;
+      }
+      const user = await getUserByResetToken(token);
+      if (!user) {
+        res.json({ valid: false, reason: "Invalid reset link" });
+        return;
+      }
+      if (user.resetExpiresAt && /* @__PURE__ */ new Date() > new Date(user.resetExpiresAt)) {
+        res.json({ valid: false, reason: "Reset link has expired" });
+        return;
+      }
+      res.json({
+        valid: true,
+        email: user.email,
+        name: user.name
+      });
+    } catch (error) {
+      console.error("[AdminAuth] Verify reset token failed:", error);
+      res.status(500).json({ valid: false, reason: "Server error" });
+    }
+  });
+  app.post("/api/auth/reset-password", async (req, res) => {
+    try {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) {
+        res.status(400).json({ error: "Token and new password are required" });
+        return;
+      }
+      if (newPassword.length < 8) {
+        res.status(400).json({ error: "Password must be at least 8 characters" });
+        return;
+      }
+      const user = await getUserByResetToken(token);
+      if (!user) {
+        res.status(400).json({ error: "Invalid or expired reset link" });
+        return;
+      }
+      if (user.resetExpiresAt && /* @__PURE__ */ new Date() > new Date(user.resetExpiresAt)) {
+        res.status(400).json({ error: "Reset link has expired. Please request a new one." });
+        return;
+      }
+      const passwordHash = await hashPassword(newPassword);
+      await updateUser(user.id, {
+        passwordHash,
+        resetToken: null,
+        resetExpiresAt: null
+      });
+      res.json({
+        success: true,
+        message: "Password has been reset successfully. You can now log in with your new password."
+      });
+    } catch (error) {
+      console.error("[AdminAuth] Reset password failed:", error);
+      res.status(500).json({ error: "Failed to reset password" });
+    }
   });
 }
 
@@ -6668,7 +7362,8 @@ var customersRouter = router({
           phone: z3.string().optional(),
           role: z3.string().optional(),
           isPrimary: z3.boolean().optional(),
-          hasPortalAccess: z3.boolean().optional()
+          hasPortalAccess: z3.boolean().optional(),
+          portalRole: z3.enum(["admin", "hr_manager", "finance", "viewer"]).optional()
         })
       })
     ).mutation(async ({ input, ctx }) => {
@@ -6767,6 +7462,22 @@ var customersRouter = router({
         entityId: input.contactId,
         changes: JSON.stringify({ action: "portal_invite", portalRole: input.portalRole })
       });
+      try {
+        const { customers: custTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+        const custRows = await db.select({ companyName: custTable.companyName }).from(custTable).where(eqOp(custTable.id, contact.customerId)).limit(1);
+        const companyName = custRows[0]?.companyName || "Your Company";
+        const portalOrigin = process.env.PORTAL_APP_URL || `${ctx.req.protocol}://${ctx.req.get("host")}`;
+        const inviteUrl = `${portalOrigin}/register?token=${inviteToken}`;
+        await sendPortalInviteEmail({
+          to: contact.email,
+          contactName: contact.contactName,
+          companyName,
+          portalRole: input.portalRole,
+          inviteUrl
+        });
+      } catch (err) {
+        console.error("[Customers] Failed to send portal invite email:", err);
+      }
       return {
         success: true,
         inviteToken,
@@ -6831,6 +7542,17 @@ var customersRouter = router({
         entityId: input.contactId,
         changes: JSON.stringify({ action: "admin_reset_password" })
       });
+      try {
+        const loginUrl = process.env.PORTAL_APP_URL ? `${process.env.PORTAL_APP_URL}/login` : "https://app.geahr.com/login";
+        await sendPortalPasswordChangedEmail({
+          to: contact.email,
+          contactName: contact.contactName || "User",
+          newPassword: input.newPassword,
+          loginUrl
+        });
+      } catch (err) {
+        console.error("[Customers] Failed to send portal password reset email:", err);
+      }
       return { success: true, contactName: contact.contactName, email: contact.email };
     })
   }),
@@ -6853,11 +7575,11 @@ var customersRouter = router({
     download: userProcedure.input(z3.object({ id: z3.number() })).mutation(async ({ input }) => {
       const { getDb: getDb2 } = await Promise.resolve().then(() => (init_db2(), db_exports));
       const { customerContracts: customerContracts3 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const { eq: eq67 } = await import("drizzle-orm");
+      const { eq: eq72 } = await import("drizzle-orm");
       const db = await getDb2();
       if (!db) throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       const contract = await db.query.customerContracts.findFirst({
-        where: eq67(customerContracts3.id, input.id)
+        where: eq72(customerContracts3.id, input.id)
       });
       if (!contract) throw new TRPCError4({ code: "NOT_FOUND", message: "Contract not found" });
       if (contract.fileKey) {
@@ -6950,12 +7672,26 @@ var customersRouter = router({
       return { success: true };
     })
   }),
-  // Admin impersonation: generate a short-lived portal token for a customer's primary contact
-  generatePortalToken: adminProcedure2.input(z3.object({ customerId: z3.number() })).mutation(async ({ input, ctx }) => {
+  // Admin impersonation: generate a short-lived portal token for a specific contact or the primary contact
+  generatePortalToken: adminProcedure2.input(z3.object({ customerId: z3.number(), contactId: z3.number().optional() })).mutation(async ({ input, ctx }) => {
     const contacts = await listCustomerContacts(input.customerId);
-    const portalContact = contacts.find((c) => c.isPortalActive && c.hasPortalAccess) || contacts.find((c) => c.hasPortalAccess);
-    if (!portalContact) {
-      throw new TRPCError4({ code: "NOT_FOUND", message: "No portal-enabled contact found for this customer. Please invite a contact first." });
+    let portalContact;
+    if (input.contactId) {
+      portalContact = contacts.find((c) => c.id === input.contactId && c.isPortalActive && c.hasPortalAccess);
+      if (!portalContact) {
+        throw new TRPCError4({ code: "NOT_FOUND", message: "This contact does not have active portal access." });
+      }
+    } else {
+      const primaryContact = contacts.find((c) => c.isPrimary && c.isPortalActive && c.hasPortalAccess);
+      if (primaryContact) {
+        portalContact = primaryContact;
+      } else {
+        const anyActive = contacts.find((c) => c.isPortalActive && c.hasPortalAccess);
+        if (!anyActive) {
+          throw new TRPCError4({ code: "NOT_FOUND", message: "No portal-enabled contact found for this customer. Please invite a contact first." });
+        }
+        portalContact = anyActive;
+      }
     }
     const customer = await getCustomerById(input.customerId);
     if (!customer) {
@@ -7844,8 +8580,8 @@ async function generateInvoicePdf(options) {
       doc.text(formatNum(item.localAmount || item.amount), cols.amount.x, tableY, { width: cols.amount.w, align: "right" });
       tableY += 11;
       doc.fontSize(7).fillColor("#888888");
-      const desc27 = item.description.length > 80 ? item.description.slice(0, 77) + "..." : item.description;
-      smartText(desc27, cols.item.x + 2, tableY, { width: cols.item.w + cols.curr.w + cols.qty.w - 2 });
+      const desc32 = item.description.length > 80 ? item.description.slice(0, 77) + "..." : item.description;
+      smartText(desc32, cols.item.x + 2, tableY, { width: cols.item.w + cols.curr.w + cols.qty.w - 2 });
       tableY += 14;
     }
     tableY += 6;
@@ -7954,146 +8690,551 @@ function formatNum(val) {
 
 // server/services/notificationConstants.ts
 var DEFAULT_RULES = {
+  // ─────────────────────────────────────────────────────────
+  // 1. INVOICE SENT — Client-facing
+  // ─────────────────────────────────────────────────────────
   invoice_sent: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["client:finance", "client:admin", "admin:finance_manager"],
+    audience: "client",
     templates: {
       en: {
-        emailSubject: "Invoice #{{invoiceNumber}} from GEA",
-        emailBody: "<p>Dear {{contactName}},</p><p>Please find attached invoice #{{invoiceNumber}} for {{currency}} {{amount}}.</p><p>Due Date: {{dueDate}}</p><p>Best regards,<br>GEA Team</p>",
+        emailSubject: "Invoice #{{invoiceNumber}} from Global Employment Advisors",
+        emailBody: `<p>Dear {{contactName}},</p>
+<p>Thank you for your continued partnership with GEA. A new invoice has been generated for your account. Please find the details below:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Invoice Number" value="#{{invoiceNumber}}" />
+<GEA_ROW label="Amount Due" value="{{currency}} {{amount}}" />
+<GEA_ROW label="Due Date" value="{{dueDate}}" />
+</GEA_INFO_CARD>
+<p>The invoice PDF is attached to this email for your records. If you have any questions regarding this invoice, please don't hesitate to reach out to your dedicated account manager.</p>
+<GEA_BUTTON text="View in Client Portal" href="https://app.geahr.com" />
+<p>Best regards,<br><strong>GEA Finance Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "Invoice #{{invoiceNumber}} has been sent."
       },
       zh: {
-        emailSubject: "\u53D1\u7968 #{{invoiceNumber}} - GEA",
-        emailBody: "<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p><p>\u9644\u4EF6\u662F\u60A8\u7684\u53D1\u7968 #{{invoiceNumber}}\uFF0C\u91D1\u989D {{currency}} {{amount}}\u3002</p><p>\u5230\u671F\u65E5\uFF1A{{dueDate}}</p><p>\u795D\u597D\uFF0C<br>GEA \u56E2\u961F</p>",
+        emailSubject: "\u53D1\u7968 #{{invoiceNumber}} \u2014 Global Employment Advisors",
+        emailBody: `<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p>
+<p>\u611F\u8C22\u60A8\u4E0E GEA \u7684\u6301\u7EED\u5408\u4F5C\u3002\u6211\u4EEC\u5DF2\u4E3A\u60A8\u751F\u6210\u4E00\u4EFD\u65B0\u7684\u53D1\u7968\uFF0C\u8BE6\u60C5\u5982\u4E0B\uFF1A</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u53D1\u7968\u7F16\u53F7" value="#{{invoiceNumber}}" />
+<GEA_ROW label="\u5E94\u4ED8\u91D1\u989D" value="{{currency}} {{amount}}" />
+<GEA_ROW label="\u5230\u671F\u65E5" value="{{dueDate}}" />
+</GEA_INFO_CARD>
+<p>\u53D1\u7968 PDF \u5DF2\u9644\u5728\u6B64\u90AE\u4EF6\u4E2D\u3002\u5982\u60A8\u5BF9\u6B64\u53D1\u7968\u6709\u4EFB\u4F55\u7591\u95EE\uFF0C\u8BF7\u968F\u65F6\u8054\u7CFB\u60A8\u7684\u5BA2\u6237\u7ECF\u7406\u3002</p>
+<GEA_BUTTON text="\u524D\u5F80\u5BA2\u6237\u95E8\u6237\u67E5\u770B" href="https://app.geahr.com" />
+<p>\u795D\u597D\uFF0C<br><strong>GEA \u8D22\u52A1\u56E2\u961F</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u53D1\u9001\u3002"
       }
     }
   },
+  // ─────────────────────────────────────────────────────────
+  // 2. INVOICE OVERDUE — Client-facing (urgent)
+  // ─────────────────────────────────────────────────────────
   invoice_overdue: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["client:finance", "client:admin", "admin:customer_manager"],
+    audience: "client",
     templates: {
       en: {
-        emailSubject: "OVERDUE: Invoice #{{invoiceNumber}}",
-        emailBody: "<p>Dear {{contactName}},</p><p>This is a reminder that invoice #{{invoiceNumber}} was due on {{dueDate}}.</p><p>Please arrange payment immediately.</p>",
+        emailSubject: "Payment Overdue: Invoice #{{invoiceNumber}} \u2014 Action Required",
+        emailBody: `<GEA_BANNER type="warning" text="This invoice is past due. Please arrange payment at your earliest convenience." />
+<p>Dear {{contactName}},</p>
+<p>We would like to bring to your attention that the following invoice remains unpaid past its due date:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Invoice Number" value="#{{invoiceNumber}}" />
+<GEA_ROW label="Original Due Date" value="{{dueDate}}" />
+<GEA_ROW label="Status" value="<span style='color:#ef4444;font-weight:bold;'>OVERDUE</span>" />
+</GEA_INFO_CARD>
+<p>To avoid any disruption to your services, we kindly request that payment be arranged as soon as possible. If payment has already been made, please disregard this notice and accept our thanks.</p>
+<p>Should you have any questions or need to discuss payment arrangements, please contact your account manager or reply to this email.</p>
+<GEA_BUTTON text="View Invoice Details" href="https://app.geahr.com" color="#ef4444" />
+<p>Best regards,<br><strong>GEA Finance Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "Invoice #{{invoiceNumber}} is overdue."
       },
       zh: {
-        emailSubject: "\u903E\u671F\u63D0\u9192\uFF1A\u53D1\u7968 #{{invoiceNumber}}",
-        emailBody: "<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p><p>\u6E29\u99A8\u63D0\u9192\uFF1A\u60A8\u7684\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u4E8E {{dueDate}} \u5230\u671F\u3002</p><p>\u8BF7\u5C3D\u5FEB\u5B89\u6392\u4ED8\u6B3E\u3002</p>",
+        emailSubject: "\u4ED8\u6B3E\u903E\u671F\u63D0\u9192\uFF1A\u53D1\u7968 #{{invoiceNumber}} \u2014 \u8BF7\u5C3D\u5FEB\u5904\u7406",
+        emailBody: `<GEA_BANNER type="warning" text="\u6B64\u53D1\u7968\u5DF2\u903E\u671F\uFF0C\u8BF7\u5C3D\u5FEB\u5B89\u6392\u4ED8\u6B3E\u3002" />
+<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p>
+<p>\u6211\u4EEC\u6CE8\u610F\u5230\u4EE5\u4E0B\u53D1\u7968\u5DF2\u8D85\u8FC7\u4ED8\u6B3E\u671F\u9650\uFF0C\u5C1A\u672A\u6536\u5230\u6B3E\u9879\uFF1A</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u53D1\u7968\u7F16\u53F7" value="#{{invoiceNumber}}" />
+<GEA_ROW label="\u539F\u5230\u671F\u65E5" value="{{dueDate}}" />
+<GEA_ROW label="\u72B6\u6001" value="<span style='color:#ef4444;font-weight:bold;'>\u5DF2\u903E\u671F</span>" />
+</GEA_INFO_CARD>
+<p>\u4E3A\u907F\u514D\u5F71\u54CD\u60A8\u7684\u670D\u52A1\uFF0C\u8BF7\u5C3D\u5FEB\u5B89\u6392\u4ED8\u6B3E\u3002\u5982\u60A8\u5DF2\u5B8C\u6210\u4ED8\u6B3E\uFF0C\u8BF7\u5FFD\u7565\u6B64\u901A\u77E5\u3002</p>
+<p>\u5982\u6709\u4EFB\u4F55\u7591\u95EE\u6216\u9700\u8981\u8BA8\u8BBA\u4ED8\u6B3E\u5B89\u6392\uFF0C\u8BF7\u8054\u7CFB\u60A8\u7684\u5BA2\u6237\u7ECF\u7406\u6216\u56DE\u590D\u6B64\u90AE\u4EF6\u3002</p>
+<GEA_BUTTON text="\u67E5\u770B\u53D1\u7968\u8BE6\u60C5" href="https://app.geahr.com" color="#ef4444" />
+<p>\u795D\u597D\uFF0C<br><strong>GEA \u8D22\u52A1\u56E2\u961F</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u903E\u671F\u3002"
       }
     }
   },
+  // ─────────────────────────────────────────────────────────
+  // 3. PAYROLL DRAFT CREATED — Admin-only (in-app only)
+  // ─────────────────────────────────────────────────────────
   payroll_draft_created: {
     enabled: true,
     channels: ["in_app"],
     recipients: ["admin:operations_manager"],
+    audience: "admin",
     templates: {
       en: {
-        emailSubject: "Payroll Draft Ready",
-        emailBody: "Payroll draft for {{period}} has been created.",
+        emailSubject: "Payroll Draft Ready for Review \u2014 {{period}}",
+        emailBody: `<p>Dear Admin,</p>
+<p>A payroll draft for <strong>{{period}}</strong> has been automatically generated and is ready for your review.</p>
+<GEA_BUTTON text="Review Payroll Draft" href="https://admin.geahr.com" />
+<p>\u2014 GEA System</p>`,
         inAppMessage: "Payroll draft for {{period}} is ready for review."
       },
       zh: {
-        emailSubject: "\u5DE5\u8D44\u5355\u8349\u7A3F\u5DF2\u751F\u6210",
-        emailBody: "{{period}} \u7684\u5DE5\u8D44\u5355\u8349\u7A3F\u5DF2\u751F\u6210\u3002",
+        emailSubject: "\u5DE5\u8D44\u5355\u8349\u7A3F\u5DF2\u751F\u6210 \u2014 {{period}}",
+        emailBody: `<p>\u7BA1\u7406\u5458\u60A8\u597D\uFF0C</p>
+<p><strong>{{period}}</strong> \u7684\u5DE5\u8D44\u5355\u8349\u7A3F\u5DF2\u81EA\u52A8\u751F\u6210\uFF0C\u8BF7\u524D\u5F80\u540E\u53F0\u5BA1\u6838\u3002</p>
+<GEA_BUTTON text="\u5BA1\u6838\u5DE5\u8D44\u5355" href="https://admin.geahr.com" />
+<p>\u2014 GEA \u7CFB\u7EDF</p>`,
         inAppMessage: "{{period}} \u7684\u5DE5\u8D44\u5355\u8349\u7A3F\u5DF2\u751F\u6210\uFF0C\u8BF7\u5BA1\u6838\u3002"
       }
     }
   },
+  // ─────────────────────────────────────────────────────────
+  // 4. NEW EMPLOYEE REQUEST — Admin notification
+  // ─────────────────────────────────────────────────────────
   new_employee_request: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["admin:operations_manager"],
+    audience: "admin",
     templates: {
       en: {
-        emailSubject: "New Employee Onboarding Request",
-        emailBody: "Customer {{customerName}} has requested onboarding for {{employeeName}}.",
+        emailSubject: "New Employee Onboarding Request \u2014 {{employeeName}} from {{customerName}}",
+        emailBody: `<GEA_BANNER type="info" text="A new employee onboarding request has been submitted and requires your review." />
+<p>Dear Admin,</p>
+<p>Customer <strong>{{customerName}}</strong> has submitted a new employee onboarding request through the Client Portal. Please review the details below:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Employee Name" value="{{employeeName}}" />
+<GEA_ROW label="Customer" value="{{customerName}}" />
+<GEA_ROW label="Service Type" value="{{serviceType}}" />
+<GEA_ROW label="Requested Start Date" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>Please review this request and begin the onboarding process at your earliest convenience.</p>
+<GEA_BUTTON text="Review in Admin Panel" href="https://admin.geahr.com" />
+<p>\u2014 GEA System</p>`,
         inAppMessage: "New onboarding request: {{employeeName}} from {{customerName}}."
       },
       zh: {
-        emailSubject: "\u65B0\u5458\u5DE5\u5165\u804C\u7533\u8BF7",
-        emailBody: "\u5BA2\u6237 {{customerName}} \u4E3A {{employeeName}} \u63D0\u4EA4\u4E86\u5165\u804C\u7533\u8BF7\u3002",
+        emailSubject: "\u65B0\u5458\u5DE5\u5165\u804C\u7533\u8BF7 \u2014 {{customerName}} \u7684 {{employeeName}}",
+        emailBody: `<GEA_BANNER type="info" text="\u6536\u5230\u65B0\u7684\u5458\u5DE5\u5165\u804C\u7533\u8BF7\uFF0C\u8BF7\u5C3D\u5FEB\u5BA1\u6838\u3002" />
+<p>\u7BA1\u7406\u5458\u60A8\u597D\uFF0C</p>
+<p>\u5BA2\u6237 <strong>{{customerName}}</strong> \u901A\u8FC7\u5BA2\u6237\u95E8\u6237\u63D0\u4EA4\u4E86\u4E00\u4EFD\u65B0\u7684\u5458\u5DE5\u5165\u804C\u7533\u8BF7\uFF0C\u8BE6\u60C5\u5982\u4E0B\uFF1A</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u5458\u5DE5\u59D3\u540D" value="{{employeeName}}" />
+<GEA_ROW label="\u5BA2\u6237\u540D\u79F0" value="{{customerName}}" />
+<GEA_ROW label="\u670D\u52A1\u7C7B\u578B" value="{{serviceType}}" />
+<GEA_ROW label="\u671F\u671B\u5165\u804C\u65E5\u671F" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>\u8BF7\u5C3D\u5FEB\u5BA1\u6838\u6B64\u7533\u8BF7\u5E76\u542F\u52A8\u5165\u804C\u6D41\u7A0B\u3002</p>
+<GEA_BUTTON text="\u524D\u5F80\u7BA1\u7406\u540E\u53F0\u5BA1\u6838" href="https://admin.geahr.com" />
+<p>\u2014 GEA \u7CFB\u7EDF</p>`,
         inAppMessage: "\u6536\u5230 {{customerName}} \u63D0\u4EA4\u7684 {{employeeName}} \u5165\u804C\u7533\u8BF7\u3002"
       }
     }
   },
+  // ─────────────────────────────────────────────────────────
+  // 5. WORKER INVITE — Worker-facing
+  // ─────────────────────────────────────────────────────────
   worker_invite: {
     enabled: true,
     channels: ["email"],
     recipients: ["worker:user"],
-    // Special role for worker
+    audience: "worker",
     templates: {
       en: {
-        emailSubject: "Invitation to GEA Worker Portal",
-        emailBody: '<p>Dear {{workerName}},</p><p>You have been invited to the GEA Worker Portal.</p><p>Please click the link below to set up your account:</p><p><a href="{{inviteLink}}">Accept Invitation</a></p>',
+        emailSubject: "Welcome to GEA \u2014 Set Up Your Worker Portal Account",
+        emailBody: `<p>Dear {{workerName}},</p>
+<p>Welcome to <strong>Global Employment Advisors (GEA)</strong>! You have been invited to join the GEA Worker Portal, where you can manage your employment information, view payslips, submit invoices, and more.</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Portal" value="GEA Worker Portal" />
+<GEA_ROW label="Your Email" value="{{workerEmail}}" />
+</GEA_INFO_CARD>
+<p>To get started, please click the button below to set up your password and activate your account:</p>
+<GEA_BUTTON text="Accept Invitation & Set Up Account" href="{{inviteLink}}" />
+<GEA_BANNER type="info" text="This invitation link will expire in 7 days. If you did not expect this invitation, please ignore this email." />
+<p>If you have any questions about your onboarding process, feel free to reach out to us.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "Welcome to GEA Worker Portal!"
       },
       zh: {
-        emailSubject: "GEA \u5458\u5DE5\u95E8\u6237\u9080\u8BF7",
-        emailBody: '<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p><p>\u60A8\u5DF2\u88AB\u9080\u8BF7\u52A0\u5165 GEA \u5458\u5DE5\u95E8\u6237\u3002</p><p>\u8BF7\u70B9\u51FB\u4E0B\u65B9\u94FE\u63A5\u8BBE\u7F6E\u60A8\u7684\u8D26\u6237\uFF1A</p><p><a href="{{inviteLink}}">\u63A5\u53D7\u9080\u8BF7</a></p>',
+        emailSubject: "\u6B22\u8FCE\u52A0\u5165 GEA \u2014 \u8BBE\u7F6E\u60A8\u7684\u5458\u5DE5\u95E8\u6237\u8D26\u6237",
+        emailBody: `<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p>
+<p>\u6B22\u8FCE\u52A0\u5165 <strong>Global Employment Advisors (GEA)</strong>\uFF01\u60A8\u5DF2\u88AB\u9080\u8BF7\u52A0\u5165 GEA \u5458\u5DE5\u95E8\u6237\uFF0C\u5728\u8FD9\u91CC\u60A8\u53EF\u4EE5\u7BA1\u7406\u60A8\u7684\u96C7\u4F63\u4FE1\u606F\u3001\u67E5\u770B\u5DE5\u8D44\u5355\u3001\u63D0\u4EA4\u53D1\u7968\u7B49\u3002</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u95E8\u6237" value="GEA \u5458\u5DE5\u95E8\u6237" />
+<GEA_ROW label="\u60A8\u7684\u90AE\u7BB1" value="{{workerEmail}}" />
+</GEA_INFO_CARD>
+<p>\u8BF7\u70B9\u51FB\u4E0B\u65B9\u6309\u94AE\u8BBE\u7F6E\u5BC6\u7801\u5E76\u6FC0\u6D3B\u60A8\u7684\u8D26\u6237\uFF1A</p>
+<GEA_BUTTON text="\u63A5\u53D7\u9080\u8BF7\u5E76\u8BBE\u7F6E\u8D26\u6237" href="{{inviteLink}}" />
+<GEA_BANNER type="info" text="\u6B64\u9080\u8BF7\u94FE\u63A5\u5C06\u5728 7 \u5929\u540E\u8FC7\u671F\u3002\u5982\u679C\u60A8\u672A\u9884\u671F\u6536\u5230\u6B64\u9080\u8BF7\uFF0C\u8BF7\u5FFD\u7565\u6B64\u90AE\u4EF6\u3002" />
+<p>\u5982\u60A8\u5BF9\u5165\u804C\u6D41\u7A0B\u6709\u4EFB\u4F55\u7591\u95EE\uFF0C\u8BF7\u968F\u65F6\u8054\u7CFB\u6211\u4EEC\u3002</p>
+<p>\u795D\u597D\uFF0C<br><strong>GEA \u8FD0\u8425\u56E2\u961F</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "\u6B22\u8FCE\u6765\u5230 GEA \u5458\u5DE5\u95E8\u6237\uFF01"
       }
     }
   },
+  // ─────────────────────────────────────────────────────────
+  // 6. WORKER INVOICE READY — Worker-facing
+  // ─────────────────────────────────────────────────────────
   worker_invoice_ready: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["worker:user"],
+    audience: "worker",
     templates: {
       en: {
-        emailSubject: "Invoice #{{invoiceNumber}} Ready",
-        emailBody: "<p>Dear {{workerName}},</p><p>Your invoice #{{invoiceNumber}} for {{period}} is now ready.</p>",
+        emailSubject: "Your Invoice #{{invoiceNumber}} Is Ready \u2014 {{period}}",
+        emailBody: `<p>Dear {{workerName}},</p>
+<p>Your invoice for the period of <strong>{{period}}</strong> has been generated and is now available in your Worker Portal.</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Invoice Number" value="#{{invoiceNumber}}" />
+<GEA_ROW label="Period" value="{{period}}" />
+</GEA_INFO_CARD>
+<p>You can view and download the invoice by logging into your portal:</p>
+<GEA_BUTTON text="View Invoice in Portal" href="https://worker.geahr.com" />
+<p>If you have any questions, please don't hesitate to contact us.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "Invoice #{{invoiceNumber}} is ready for review."
       },
       zh: {
-        emailSubject: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u751F\u6210",
-        emailBody: "<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p><p>\u60A8\u7684 {{period}} \u53D1\u7968 #{{invoiceNumber}} \u5DF2\u751F\u6210\u3002</p>",
+        emailSubject: "\u60A8\u7684\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u751F\u6210 \u2014 {{period}}",
+        emailBody: `<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p>
+<p>\u60A8 <strong>{{period}}</strong> \u671F\u95F4\u7684\u53D1\u7968\u5DF2\u751F\u6210\uFF0C\u53EF\u5728\u5458\u5DE5\u95E8\u6237\u4E2D\u67E5\u770B\u3002</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u53D1\u7968\u7F16\u53F7" value="#{{invoiceNumber}}" />
+<GEA_ROW label="\u671F\u95F4" value="{{period}}" />
+</GEA_INFO_CARD>
+<p>\u8BF7\u767B\u5F55\u95E8\u6237\u67E5\u770B\u548C\u4E0B\u8F7D\u53D1\u7968\uFF1A</p>
+<GEA_BUTTON text="\u524D\u5F80\u95E8\u6237\u67E5\u770B\u53D1\u7968" href="https://worker.geahr.com" />
+<p>\u5982\u6709\u4EFB\u4F55\u7591\u95EE\uFF0C\u8BF7\u968F\u65F6\u8054\u7CFB\u6211\u4EEC\u3002</p>
+<p>\u795D\u597D\uFF0C<br><strong>GEA \u8FD0\u8425\u56E2\u961F</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "\u53D1\u7968 #{{invoiceNumber}} \u5DF2\u751F\u6210\uFF0C\u8BF7\u67E5\u770B\u3002"
       }
     }
   },
+  // ─────────────────────────────────────────────────────────
+  // 7. WORKER PAYMENT SENT — Worker-facing
+  // ─────────────────────────────────────────────────────────
   worker_payment_sent: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["worker:user"],
+    audience: "worker",
     templates: {
       en: {
-        emailSubject: "Payment Sent: {{currency}} {{amount}}",
-        emailBody: "<p>Dear {{workerName}},</p><p>We have processed a payment of {{currency}} {{amount}} for invoice #{{invoiceNumber}}.</p>",
+        emailSubject: "Payment Sent: {{currency}} {{amount}} \u2014 Invoice #{{invoiceNumber}}",
+        emailBody: `<GEA_BANNER type="success" text="Your payment has been processed and sent successfully." />
+<p>Dear {{workerName}},</p>
+<p>We are pleased to confirm that a payment has been processed for your account:</p>
+<GEA_AMOUNT currency="{{currency}}" amount="{{amount}}" />
+<GEA_INFO_CARD>
+<GEA_ROW label="Invoice Number" value="#{{invoiceNumber}}" />
+<GEA_ROW label="Amount" value="{{currency}} {{amount}}" />
+<GEA_ROW label="Status" value="<span style='color:#22c55e;font-weight:bold;'>Sent</span>" />
+</GEA_INFO_CARD>
+<p>Please allow 1\u20133 business days for the funds to arrive in your account, depending on your bank's processing time.</p>
+<GEA_BUTTON text="View Payment Details" href="https://worker.geahr.com" />
+<p>Best regards,<br><strong>GEA Finance Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "Payment of {{currency}} {{amount}} has been sent."
       },
       zh: {
-        emailSubject: "\u4ED8\u6B3E\u5DF2\u53D1\u9001\uFF1A{{currency}} {{amount}}",
-        emailBody: "<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p><p>\u6211\u4EEC\u5DF2\u5904\u7406\u53D1\u7968 #{{invoiceNumber}} \u7684\u4ED8\u6B3E\uFF0C\u91D1\u989D\u4E3A {{currency}} {{amount}}\u3002</p>",
+        emailSubject: "\u4ED8\u6B3E\u5DF2\u53D1\u9001\uFF1A{{currency}} {{amount}} \u2014 \u53D1\u7968 #{{invoiceNumber}}",
+        emailBody: `<GEA_BANNER type="success" text="\u60A8\u7684\u4ED8\u6B3E\u5DF2\u5904\u7406\u5E76\u6210\u529F\u53D1\u9001\u3002" />
+<p>\u5C0A\u656C\u7684 {{workerName}}\uFF0C</p>
+<p>\u6211\u4EEC\u5F88\u9AD8\u5174\u786E\u8BA4\u60A8\u7684\u8D26\u6237\u5DF2\u5904\u7406\u4E00\u7B14\u4ED8\u6B3E\uFF1A</p>
+<GEA_AMOUNT currency="{{currency}}" amount="{{amount}}" />
+<GEA_INFO_CARD>
+<GEA_ROW label="\u53D1\u7968\u7F16\u53F7" value="#{{invoiceNumber}}" />
+<GEA_ROW label="\u91D1\u989D" value="{{currency}} {{amount}}" />
+<GEA_ROW label="\u72B6\u6001" value="<span style='color:#22c55e;font-weight:bold;'>\u5DF2\u53D1\u9001</span>" />
+</GEA_INFO_CARD>
+<p>\u6839\u636E\u60A8\u94F6\u884C\u7684\u5904\u7406\u65F6\u95F4\uFF0C\u8D44\u91D1\u9884\u8BA1\u5C06\u5728 1-3 \u4E2A\u5DE5\u4F5C\u65E5\u5185\u5230\u8D26\u3002</p>
+<GEA_BUTTON text="\u67E5\u770B\u4ED8\u6B3E\u8BE6\u60C5" href="https://worker.geahr.com" />
+<p>\u795D\u597D\uFF0C<br><strong>GEA \u8D22\u52A1\u56E2\u961F</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "\u6B3E\u9879 {{currency}} {{amount}} \u5DF2\u6C47\u51FA\u3002"
       }
     }
   },
+  // ─────────────────────────────────────────────────────────
+  // 8. LEAVE POLICY COUNTRY ACTIVATED — Client-facing
+  // ─────────────────────────────────────────────────────────
   leave_policy_country_activated: {
     enabled: true,
     channels: ["email", "in_app"],
     recipients: ["client:admin", "client:hr"],
+    audience: "client",
     templates: {
       en: {
         emailSubject: "New Country Leave Policy Activated: {{countryName}}",
-        emailBody: "<p>Dear {{contactName}},</p><p>A new country <strong>{{countryName}}</strong> has been activated for leave policy management based on employee onboarding.</p><p>Statutory leave policies have been automatically initialized with default entitlements. Please review and customize the leave policies in your <strong>Settings > Leave Policies</strong> page to match your company's requirements.</p><p>Best regards,<br>GEA Team</p>",
+        emailBody: `<GEA_BANNER type="info" text="A new country has been activated for leave policy management." />
+<p>Dear {{contactName}},</p>
+<p>Based on recent employee onboarding activity, a new country has been activated in your leave policy management system:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Country" value="{{countryName}}" />
+<GEA_ROW label="Status" value="<span style='color:#22c55e;font-weight:bold;'>Active</span>" />
+</GEA_INFO_CARD>
+<p>Statutory leave policies for <strong>{{countryName}}</strong> have been automatically initialized with default entitlements based on local labor regulations. We recommend reviewing and customizing these policies to align with your company's specific requirements.</p>
+<GEA_BUTTON text="Review Leave Policies" href="https://app.geahr.com" />
+<p>If you need assistance configuring leave policies, our team is here to help.</p>
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "New country {{countryName}} activated. Please configure leave policies in Settings."
       },
       zh: {
         emailSubject: "\u65B0\u56FD\u5BB6\u5047\u671F\u653F\u7B56\u5DF2\u6FC0\u6D3B\uFF1A{{countryName}}",
-        emailBody: "<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p><p>\u57FA\u4E8E\u5458\u5DE5\u5165\u804C\uFF0C\u65B0\u56FD\u5BB6 <strong>{{countryName}}</strong> \u7684\u5047\u671F\u653F\u7B56\u7BA1\u7406\u5DF2\u6FC0\u6D3B\u3002</p><p>\u6CD5\u5B9A\u5047\u671F\u653F\u7B56\u5DF2\u6309\u9ED8\u8BA4\u6807\u51C6\u81EA\u52A8\u521D\u59CB\u5316\u3002\u8BF7\u524D\u5F80 <strong>\u8BBE\u7F6E > \u5047\u671F\u653F\u7B56</strong> \u9875\u9762\uFF0C\u6839\u636E\u8D35\u516C\u53F8\u7684\u8981\u6C42\u5BA1\u6838\u548C\u81EA\u5B9A\u4E49\u5047\u671F\u653F\u7B56\u3002</p><p>\u795D\u597D\uFF0C<br>GEA \u56E2\u961F</p>",
+        emailBody: `<GEA_BANNER type="info" text="\u65B0\u56FD\u5BB6\u7684\u5047\u671F\u653F\u7B56\u7BA1\u7406\u5DF2\u6FC0\u6D3B\u3002" />
+<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p>
+<p>\u57FA\u4E8E\u8FD1\u671F\u7684\u5458\u5DE5\u5165\u804C\u6D3B\u52A8\uFF0C\u60A8\u7684\u5047\u671F\u653F\u7B56\u7BA1\u7406\u7CFB\u7EDF\u4E2D\u5DF2\u6FC0\u6D3B\u4E00\u4E2A\u65B0\u56FD\u5BB6\uFF1A</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u56FD\u5BB6" value="{{countryName}}" />
+<GEA_ROW label="\u72B6\u6001" value="<span style='color:#22c55e;font-weight:bold;'>\u5DF2\u6FC0\u6D3B</span>" />
+</GEA_INFO_CARD>
+<p><strong>{{countryName}}</strong> \u7684\u6CD5\u5B9A\u5047\u671F\u653F\u7B56\u5DF2\u6839\u636E\u5F53\u5730\u52B3\u52A8\u6CD5\u89C4\u81EA\u52A8\u521D\u59CB\u5316\u9ED8\u8BA4\u6807\u51C6\u3002\u5EFA\u8BAE\u60A8\u5BA1\u6838\u5E76\u6839\u636E\u8D35\u516C\u53F8\u7684\u5177\u4F53\u8981\u6C42\u8FDB\u884C\u81EA\u5B9A\u4E49\u8C03\u6574\u3002</p>
+<GEA_BUTTON text="\u5BA1\u6838\u5047\u671F\u653F\u7B56" href="https://app.geahr.com" />
+<p>\u5982\u9700\u534F\u52A9\u914D\u7F6E\u5047\u671F\u653F\u7B56\uFF0C\u6211\u4EEC\u7684\u56E2\u961F\u968F\u65F6\u4E3A\u60A8\u63D0\u4F9B\u5E2E\u52A9\u3002</p>
+<p>\u795D\u597D\uFF0C<br><strong>GEA \u8FD0\u8425\u56E2\u961F</strong><br>Global Employment Advisors</p>`,
         inAppMessage: "\u65B0\u56FD\u5BB6 {{countryName}} \u5DF2\u6FC0\u6D3B\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u914D\u7F6E\u5047\u671F\u653F\u7B56\u3002"
+      }
+    }
+  },
+  // ─────────────────────────────────────────────────────────
+  // 9. EMPLOYEE TERMINATION REQUEST — Admin notification
+  // ─────────────────────────────────────────────────────────
+  employee_termination_request: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["admin:operations_manager", "admin:customer_manager"],
+    audience: "admin",
+    templates: {
+      en: {
+        emailSubject: "Employee Termination Request: {{employeeName}} ({{employeeCode}})",
+        emailBody: `<GEA_BANNER type="warning" text="An employee termination request has been submitted and requires your review." />
+<p>Dear Admin,</p>
+<p>Customer <strong>{{customerName}}</strong> has submitted a termination request through the Client Portal. Please review the details below:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Employee Name" value="{{employeeName}}" />
+<GEA_ROW label="Employee Code" value="{{employeeCode}}" />
+<GEA_ROW label="Customer" value="{{customerName}}" />
+<GEA_ROW label="Requested Last Working Day" value="{{requestedEndDate}}" />
+<GEA_ROW label="Reason" value="{{reason}}" />
+<GEA_ROW label="Requested By" value="{{requestedBy}}" />
+</GEA_INFO_CARD>
+<p>Please review this request carefully and take appropriate action in the Admin panel. Ensure all local labor law requirements are considered before processing.</p>
+<GEA_BUTTON text="Review in Admin Panel" href="https://admin.geahr.com" />
+<p>\u2014 GEA System</p>`,
+        inAppMessage: "Termination request: {{employeeName}} ({{employeeCode}}) from {{customerName}}. Last day: {{requestedEndDate}}."
+      },
+      zh: {
+        emailSubject: "\u5458\u5DE5\u7EC8\u6B62\u7533\u8BF7\uFF1A{{employeeName}} ({{employeeCode}})",
+        emailBody: `<GEA_BANNER type="warning" text="\u6536\u5230\u5458\u5DE5\u7EC8\u6B62\u7533\u8BF7\uFF0C\u8BF7\u5C3D\u5FEB\u5BA1\u6838\u3002" />
+<p>\u7BA1\u7406\u5458\u60A8\u597D\uFF0C</p>
+<p>\u5BA2\u6237 <strong>{{customerName}}</strong> \u901A\u8FC7\u5BA2\u6237\u95E8\u6237\u63D0\u4EA4\u4E86\u4E00\u4EFD\u7EC8\u6B62\u7533\u8BF7\uFF0C\u8BE6\u60C5\u5982\u4E0B\uFF1A</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u5458\u5DE5\u59D3\u540D" value="{{employeeName}}" />
+<GEA_ROW label="\u5458\u5DE5\u7F16\u53F7" value="{{employeeCode}}" />
+<GEA_ROW label="\u5BA2\u6237\u540D\u79F0" value="{{customerName}}" />
+<GEA_ROW label="\u7533\u8BF7\u7684\u6700\u540E\u5DE5\u4F5C\u65E5" value="{{requestedEndDate}}" />
+<GEA_ROW label="\u539F\u56E0" value="{{reason}}" />
+<GEA_ROW label="\u7533\u8BF7\u4EBA" value="{{requestedBy}}" />
+</GEA_INFO_CARD>
+<p>\u8BF7\u4ED4\u7EC6\u5BA1\u6838\u6B64\u7533\u8BF7\uFF0C\u5E76\u5728\u7BA1\u7406\u540E\u53F0\u91C7\u53D6\u76F8\u5E94\u64CD\u4F5C\u3002\u5904\u7406\u524D\u8BF7\u786E\u4FDD\u5DF2\u8003\u8651\u5F53\u5730\u52B3\u52A8\u6CD5\u7684\u76F8\u5173\u8981\u6C42\u3002</p>
+<GEA_BUTTON text="\u524D\u5F80\u7BA1\u7406\u540E\u53F0\u5BA1\u6838" href="https://admin.geahr.com" />
+<p>\u2014 GEA \u7CFB\u7EDF</p>`,
+        inAppMessage: "\u7EC8\u6B62\u7533\u8BF7\uFF1A{{customerName}} \u7684 {{employeeName}} ({{employeeCode}})\uFF0C\u6700\u540E\u5DE5\u4F5C\u65E5\uFF1A{{requestedEndDate}}\u3002"
+      }
+    }
+  },
+  // ─────────────────────────────────────────────────────────
+  // 10. CONTRACTOR TERMINATION REQUEST — Admin notification
+  // ─────────────────────────────────────────────────────────
+  contractor_termination_request: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["admin:operations_manager", "admin:customer_manager"],
+    audience: "admin",
+    templates: {
+      en: {
+        emailSubject: "Contractor Termination Request: {{contractorName}} ({{contractorCode}})",
+        emailBody: `<GEA_BANNER type="warning" text="A contractor termination request has been submitted and requires your review." />
+<p>Dear Admin,</p>
+<p>Customer <strong>{{customerName}}</strong> has submitted a contractor termination request through the Client Portal. Please review the details below:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Contractor Name" value="{{contractorName}}" />
+<GEA_ROW label="Contractor Code" value="{{contractorCode}}" />
+<GEA_ROW label="Customer" value="{{customerName}}" />
+<GEA_ROW label="Requested End Date" value="{{requestedEndDate}}" />
+<GEA_ROW label="Reason" value="{{reason}}" />
+<GEA_ROW label="Requested By" value="{{requestedBy}}" />
+</GEA_INFO_CARD>
+<p>Please review this request and take appropriate action in the Admin panel.</p>
+<GEA_BUTTON text="Review in Admin Panel" href="https://admin.geahr.com" />
+<p>\u2014 GEA System</p>`,
+        inAppMessage: "Termination request: {{contractorName}} ({{contractorCode}}) from {{customerName}}. End date: {{requestedEndDate}}."
+      },
+      zh: {
+        emailSubject: "\u627F\u5305\u5546\u7EC8\u6B62\u7533\u8BF7\uFF1A{{contractorName}} ({{contractorCode}})",
+        emailBody: `<GEA_BANNER type="warning" text="\u6536\u5230\u627F\u5305\u5546\u7EC8\u6B62\u7533\u8BF7\uFF0C\u8BF7\u5C3D\u5FEB\u5BA1\u6838\u3002" />
+<p>\u7BA1\u7406\u5458\u60A8\u597D\uFF0C</p>
+<p>\u5BA2\u6237 <strong>{{customerName}}</strong> \u901A\u8FC7\u5BA2\u6237\u95E8\u6237\u63D0\u4EA4\u4E86\u4E00\u4EFD\u627F\u5305\u5546\u7EC8\u6B62\u7533\u8BF7\uFF0C\u8BE6\u60C5\u5982\u4E0B\uFF1A</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u627F\u5305\u5546\u59D3\u540D" value="{{contractorName}}" />
+<GEA_ROW label="\u627F\u5305\u5546\u7F16\u53F7" value="{{contractorCode}}" />
+<GEA_ROW label="\u5BA2\u6237\u540D\u79F0" value="{{customerName}}" />
+<GEA_ROW label="\u7533\u8BF7\u7684\u7ED3\u675F\u65E5\u671F" value="{{requestedEndDate}}" />
+<GEA_ROW label="\u539F\u56E0" value="{{reason}}" />
+<GEA_ROW label="\u7533\u8BF7\u4EBA" value="{{requestedBy}}" />
+</GEA_INFO_CARD>
+<p>\u8BF7\u5BA1\u6838\u6B64\u7533\u8BF7\uFF0C\u5E76\u5728\u7BA1\u7406\u540E\u53F0\u91C7\u53D6\u76F8\u5E94\u64CD\u4F5C\u3002</p>
+<GEA_BUTTON text="\u524D\u5F80\u7BA1\u7406\u540E\u53F0\u5BA1\u6838" href="https://admin.geahr.com" />
+<p>\u2014 GEA \u7CFB\u7EDF</p>`,
+        inAppMessage: "\u7EC8\u6B62\u7533\u8BF7\uFF1A{{customerName}} \u7684 {{contractorName}} ({{contractorCode}})\uFF0C\u7ED3\u675F\u65E5\u671F\uFF1A{{requestedEndDate}}\u3002"
+      }
+    }
+  },
+  // ─────────────────────────────────────────────────────────
+  // 11. EMPLOYEE ONBOARDING COMPLETED — Client + Admin notification
+  // ─────────────────────────────────────────────────────────
+  employee_onboarding_completed: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["client:admin", "client:hr_manager", "admin:operations_manager"],
+    audience: "client",
+    templates: {
+      en: {
+        emailSubject: "Employee Onboarding Completed: {{employeeName}}",
+        emailBody: `<GEA_BANNER type="success" text="An employee has completed their onboarding process." />
+<p>Dear {{contactName}},</p>
+<p>We're pleased to inform you that the following employee has successfully completed their onboarding:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Employee Name" value="{{employeeName}}" />
+<GEA_ROW label="Position" value="{{position}}" />
+<GEA_ROW label="Country" value="{{country}}" />
+<GEA_ROW label="Start Date" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>The employee's information has been submitted and is now being reviewed by the GEA team. You will be notified once the employee is fully activated.</p>
+<GEA_BUTTON text="View in Client Portal" href="https://app.geahr.com" />
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`,
+        inAppMessage: "{{employeeName}} has completed onboarding."
+      },
+      zh: {
+        emailSubject: "\u5458\u5DE5\u5165\u804C\u5B8C\u6210\uFF1A{{employeeName}}",
+        emailBody: `<GEA_BANNER type="success" text="\u5458\u5DE5\u5DF2\u5B8C\u6210\u5165\u804C\u6D41\u7A0B\u3002" />
+<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p>
+<p>\u6211\u4EEC\u5F88\u9AD8\u5174\u901A\u77E5\u60A8\uFF0C\u4EE5\u4E0B\u5458\u5DE5\u5DF2\u6210\u529F\u5B8C\u6210\u5165\u804C\u6D41\u7A0B\uFF1A</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u5458\u5DE5\u59D3\u540D" value="{{employeeName}}" />
+<GEA_ROW label="\u804C\u4F4D" value="{{position}}" />
+<GEA_ROW label="\u56FD\u5BB6" value="{{country}}" />
+<GEA_ROW label="\u5165\u804C\u65E5\u671F" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>\u8BE5\u5458\u5DE5\u7684\u4FE1\u606F\u5DF2\u63D0\u4EA4\uFF0CGEA \u56E2\u961F\u6B63\u5728\u5BA1\u6838\u4E2D\u3002\u5458\u5DE5\u5B8C\u5168\u6FC0\u6D3B\u540E\u6211\u4EEC\u4F1A\u901A\u77E5\u60A8\u3002</p>
+<GEA_BUTTON text="\u524D\u5F80\u5BA2\u6237\u95E8\u6237\u67E5\u770B" href="https://app.geahr.com" />
+<p>\u795D\u597D\uFF0C<br><strong>GEA \u8FD0\u8425\u56E2\u961F</strong><br>Global Employment Advisors</p>`,
+        inAppMessage: "{{employeeName}} \u5DF2\u5B8C\u6210\u5165\u804C\u3002"
+      }
+    }
+  },
+  // ─────────────────────────────────────────────────────────
+  // 12. EMPLOYEE ACTIVATED — Client notification
+  // ─────────────────────────────────────────────────────────
+  employee_activated: {
+    enabled: true,
+    channels: ["email", "in_app"],
+    recipients: ["client:admin", "client:hr_manager"],
+    audience: "client",
+    templates: {
+      en: {
+        emailSubject: "Employee Activated: {{employeeName}} ({{employeeCode}})",
+        emailBody: `<GEA_BANNER type="success" text="An employee has been activated and is now fully onboarded." />
+<p>Dear {{contactName}},</p>
+<p>Great news! The following employee has been activated and is now fully set up in the GEA system:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Employee Name" value="{{employeeName}}" />
+<GEA_ROW label="Employee Code" value="{{employeeCode}}" />
+<GEA_ROW label="Country" value="{{country}}" />
+<GEA_ROW label="Start Date" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>Payroll and benefits are now being processed. You can view the employee's details in the Client Portal.</p>
+<GEA_BUTTON text="View Employee" href="https://app.geahr.com" />
+<p>Best regards,<br><strong>GEA Operations Team</strong><br>Global Employment Advisors</p>`,
+        inAppMessage: "{{employeeName}} ({{employeeCode}}) has been activated."
+      },
+      zh: {
+        emailSubject: "\u5458\u5DE5\u5DF2\u6FC0\u6D3B\uFF1A{{employeeName}} ({{employeeCode}})",
+        emailBody: `<GEA_BANNER type="success" text="\u5458\u5DE5\u5DF2\u6FC0\u6D3B\uFF0C\u5165\u804C\u6D41\u7A0B\u5168\u90E8\u5B8C\u6210\u3002" />
+<p>\u5C0A\u656C\u7684 {{contactName}}\uFF0C</p>
+<p>\u597D\u6D88\u606F\uFF01\u4EE5\u4E0B\u5458\u5DE5\u5DF2\u5728 GEA \u7CFB\u7EDF\u4E2D\u6FC0\u6D3B\uFF1A</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u5458\u5DE5\u59D3\u540D" value="{{employeeName}}" />
+<GEA_ROW label="\u5458\u5DE5\u7F16\u53F7" value="{{employeeCode}}" />
+<GEA_ROW label="\u56FD\u5BB6" value="{{country}}" />
+<GEA_ROW label="\u5165\u804C\u65E5\u671F" value="{{startDate}}" />
+</GEA_INFO_CARD>
+<p>\u85AA\u8D44\u548C\u798F\u5229\u6B63\u5728\u5904\u7406\u4E2D\u3002\u60A8\u53EF\u4EE5\u5728\u5BA2\u6237\u95E8\u6237\u4E2D\u67E5\u770B\u8BE5\u5458\u5DE5\u7684\u8BE6\u7EC6\u4FE1\u606F\u3002</p>
+<GEA_BUTTON text="\u67E5\u770B\u5458\u5DE5" href="https://app.geahr.com" />
+<p>\u795D\u597D\uFF0C<br><strong>GEA \u8FD0\u8425\u56E2\u961F</strong><br>Global Employment Advisors</p>`,
+        inAppMessage: "{{employeeName}} ({{employeeCode}}) \u5DF2\u6FC0\u6D3B\u3002"
+      }
+    }
+  },
+  // ─────────────────────────────────────────────────────────
+  // 13. ADMIN PENDING APPROVAL ALERT — Admin daily digest
+  // ─────────────────────────────────────────────────────────
+  admin_pending_approval_alert: {
+    enabled: true,
+    channels: ["email"],
+    recipients: ["admin:operations_manager", "admin:customer_manager"],
+    audience: "admin",
+    templates: {
+      en: {
+        emailSubject: "Action Required: {{totalPending}} Pending Items for {{period}}",
+        emailBody: `<GEA_BANNER type="warning" text="You have pending items that missed the payroll lock window and require immediate attention." />
+<p>Dear Admin,</p>
+<p>The following items for <strong>{{period}}</strong> are still pending approval and were NOT included in the payroll lock. They will be delayed to next month's payroll unless approved immediately:</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="Pending Adjustments" value="{{pendingAdjustments}}" />
+<GEA_ROW label="Pending Reimbursements" value="{{pendingReimbursements}}" />
+<GEA_ROW label="Pending Leave" value="{{pendingLeave}}" />
+<GEA_ROW label="Total Pending" value="{{totalPending}}" />
+</GEA_INFO_CARD>
+<p>{{message}}</p>
+<p>Please log in to the Admin Panel to review and approve these items as soon as possible.</p>
+<GEA_BUTTON text="Go to Admin Panel" href="https://admin.geahr.com" />
+<p>\u2014 GEA System</p>`,
+        inAppMessage: "{{totalPending}} pending items for {{period}} need approval."
+      },
+      zh: {
+        emailSubject: "\u9700\u8981\u64CD\u4F5C\uFF1A{{period}} \u6709 {{totalPending}} \u4E2A\u5F85\u5BA1\u6279\u9879\u76EE",
+        emailBody: `<GEA_BANNER type="warning" text="\u60A8\u6709\u672A\u5BA1\u6279\u7684\u9879\u76EE\u9519\u8FC7\u4E86\u5DE5\u8D44\u9501\u5B9A\u7A97\u53E3\uFF0C\u9700\u8981\u7ACB\u5373\u5904\u7406\u3002" />
+<p>\u7BA1\u7406\u5458\u60A8\u597D\uFF0C</p>
+<p><strong>{{period}}</strong> \u7684\u4EE5\u4E0B\u9879\u76EE\u4ECD\u5728\u7B49\u5F85\u5BA1\u6279\uFF0C\u672A\u88AB\u7EB3\u5165\u5DE5\u8D44\u9501\u5B9A\u3002\u5982\u4E0D\u5C3D\u5FEB\u5BA1\u6279\uFF0C\u5C06\u5EF6\u8FDF\u5230\u4E0B\u6708\u7684\u5DE5\u8D44\u5355\uFF1A</p>
+<GEA_INFO_CARD>
+<GEA_ROW label="\u5F85\u5904\u7406\u8C03\u6574" value="{{pendingAdjustments}}" />
+<GEA_ROW label="\u5F85\u5904\u7406\u62A5\u9500" value="{{pendingReimbursements}}" />
+<GEA_ROW label="\u5F85\u5904\u7406\u5047\u671F" value="{{pendingLeave}}" />
+<GEA_ROW label="\u5F85\u5904\u7406\u603B\u8BA1" value="{{totalPending}}" />
+</GEA_INFO_CARD>
+<p>{{message}}</p>
+<p>\u8BF7\u5C3D\u5FEB\u767B\u5F55\u7BA1\u7406\u540E\u53F0\u5BA1\u6838\u5E76\u5904\u7406\u8FD9\u4E9B\u9879\u76EE\u3002</p>
+<GEA_BUTTON text="\u524D\u5F80\u7BA1\u7406\u540E\u53F0" href="https://admin.geahr.com" />
+<p>\u2014 GEA \u7CFB\u7EDF</p>`,
+        inAppMessage: "{{period}} \u6709 {{totalPending}} \u4E2A\u5F85\u5BA1\u6279\u9879\u76EE\u3002"
       }
     }
   }
 };
 
 // server/services/notificationService.ts
+init_emailLayout();
 var notificationService = {
   /**
    * Main entry point to send notifications.
@@ -8134,7 +9275,12 @@ var notificationService = {
         const lang = recipient.language || "en";
         const template = config.templates[lang] || config.templates.en;
         const emailSubject = this.renderTemplate(template.emailSubject, event.data);
-        const emailBody = this.renderTemplate(template.emailBody, { ...event.data, contactName: recipient.name });
+        const rawBody = this.renderTemplate(template.emailBody, { ...event.data, contactName: recipient.name, workerName: recipient.name });
+        const processedBody = this.processCustomTags(rawBody);
+        const emailBody = renderEmailLayout(processedBody, {
+          audience: config.audience || "admin",
+          preheader: emailSubject
+        });
         const inAppMessage = this.renderTemplate(template.inAppMessage, event.data);
         if (config.channels.includes("in_app")) {
           await db.insert(notifications).values({
@@ -8269,7 +9415,36 @@ var notificationService = {
       return data[key] !== void 0 ? String(data[key]) : "";
     });
   },
-  // Temporary internal mailer until we refactor _core/notification.ts
+  /**
+   * Process custom GEA email tags into actual HTML.
+   * Supported tags:
+   *   <GEA_INFO_CARD> ... <GEA_ROW label="..." value="..." /> ... </GEA_INFO_CARD>
+   *   <GEA_BUTTON text="..." href="..." [color="..."] />
+   *   <GEA_BANNER type="warning|danger|success|info" text="..." />
+   *   <GEA_AMOUNT currency="..." amount="..." />
+   */
+  processCustomTags(html) {
+    html = html.replace(/<GEA_INFO_CARD>([\s\S]*?)<\/GEA_INFO_CARD>/g, (_match, inner) => {
+      const rows = [];
+      const rowRegex = /<GEA_ROW\s+label="([^"]*?)"\s+value="([^"]*?)"\s*\/>/g;
+      let m;
+      while ((m = rowRegex.exec(inner)) !== null) {
+        rows.push({ label: m[1], value: m[2] });
+      }
+      return emailInfoCard(rows);
+    });
+    html = html.replace(/<GEA_BUTTON\s+text="([^"]*?)"\s+href="([^"]*?)"(?:\s+color="([^"]*?)")?\s*\/>/g, (_match, text4, href, color) => {
+      return emailButton(text4, href, color || void 0);
+    });
+    html = html.replace(/<GEA_BANNER\s+type="([^"]*?)"\s+text="([^"]*?)"\s*\/>/g, (_match, type, text4) => {
+      return emailBanner(text4, type);
+    });
+    html = html.replace(/<GEA_AMOUNT\s+currency="([^"]*?)"\s+amount="([^"]*?)"\s*\/>/g, (_match, currency, amount) => {
+      return emailAmountDisplay(currency, amount);
+    });
+    return html;
+  },
+  // Internal mailer using nodemailer + Alibaba Cloud DirectMail SMTP
   async sendRawEmail(payload) {
     const nodemailer2 = (await import("nodemailer")).default;
     const { ENV: ENV2 } = await Promise.resolve().then(() => (init_env(), env_exports));
@@ -8347,7 +9522,153 @@ async function autoInitializeLeavePolicyForCountry(customerId, countryCode) {
 
 // server/routers/employees.ts
 init_schema();
-import { eq as eq15, desc as desc8, and as and13 } from "drizzle-orm";
+
+// server/services/workerProvisioningService.ts
+init_connection();
+init_schema();
+import { eq as eq15 } from "drizzle-orm";
+import crypto3 from "crypto";
+async function provisionWorkerUser(input) {
+  const db = getDb();
+  if (!db) throw new Error("Database unavailable");
+  const { contractorId, employeeId, sendEmail: shouldSendEmail = true } = input;
+  if (!contractorId && !employeeId) {
+    throw new Error("Either contractorId or employeeId must be provided");
+  }
+  if (contractorId && employeeId) {
+    throw new Error("Cannot provide both contractorId and employeeId in a single call");
+  }
+  const specificCondition = contractorId ? eq15(workerUsers.contractorId, contractorId) : eq15(workerUsers.employeeId, employeeId);
+  const [existingByIdentity] = await db.select().from(workerUsers).where(specificCondition).limit(1);
+  if (existingByIdentity) {
+    return {
+      workerUserId: existingByIdentity.id,
+      email: existingByIdentity.email,
+      inviteToken: existingByIdentity.inviteToken || existingByIdentity.resetToken || "",
+      alreadyExists: true,
+      identityAppended: false
+    };
+  }
+  let email = input.email || "";
+  let workerName = "";
+  let workerType = contractorId ? "contractor" : "employee";
+  let companyName = "";
+  let customerId = null;
+  if (contractorId) {
+    const [contractor] = await db.select().from(contractors).where(eq15(contractors.id, contractorId)).limit(1);
+    if (!contractor) throw new Error(`Contractor ${contractorId} not found`);
+    email = email || contractor.email || "";
+    workerName = `${contractor.firstName || ""} ${contractor.lastName || ""}`.trim();
+    customerId = contractor.customerId;
+  } else if (employeeId) {
+    const [employee] = await db.select().from(employees).where(eq15(employees.id, employeeId)).limit(1);
+    if (!employee) throw new Error(`Employee ${employeeId} not found`);
+    email = email || employee.email || "";
+    workerName = `${employee.firstName || ""} ${employee.lastName || ""}`.trim();
+    customerId = employee.customerId;
+  }
+  if (!email) {
+    throw new Error("Cannot create worker account: no email address found");
+  }
+  const [existingByEmail] = await db.select().from(workerUsers).where(eq15(workerUsers.email, email)).limit(1);
+  if (existingByEmail) {
+    const updateData = {};
+    if (contractorId && !existingByEmail.contractorId) {
+      updateData.contractorId = contractorId;
+    } else if (employeeId && !existingByEmail.employeeId) {
+      updateData.employeeId = employeeId;
+    }
+    if (Object.keys(updateData).length > 0) {
+      await db.update(workerUsers).set(updateData).where(eq15(workerUsers.id, existingByEmail.id));
+    }
+    return {
+      workerUserId: existingByEmail.id,
+      email: existingByEmail.email,
+      inviteToken: existingByEmail.inviteToken || existingByEmail.resetToken || "",
+      alreadyExists: true,
+      identityAppended: Object.keys(updateData).length > 0
+    };
+  }
+  if (customerId) {
+    const [customer] = await db.select().from(customers).where(eq15(customers.id, customerId)).limit(1);
+    companyName = customer?.companyName || "your company";
+  }
+  const inviteToken = crypto3.randomBytes(32).toString("hex");
+  const inviteTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+  const [newWorkerUser] = await db.insert(workerUsers).values({
+    email,
+    passwordHash: "",
+    contractorId: contractorId || null,
+    employeeId: employeeId || null,
+    inviteToken,
+    inviteExpiresAt: inviteTokenExpiry
+  }).returning();
+  if (shouldSendEmail) {
+    const baseUrl = input.baseUrl || process.env.WORKER_PORTAL_URL || "https://worker.geahr.com";
+    const inviteUrl = `${baseUrl}/invite/${inviteToken}`;
+    try {
+      await sendWorkerPortalInviteEmail({
+        to: email,
+        workerName: workerName || email,
+        companyName,
+        workerType,
+        inviteUrl
+      });
+    } catch (err) {
+      console.error("[WorkerProvisioning] Failed to send invite email:", err);
+    }
+  }
+  return {
+    workerUserId: newWorkerUser.id,
+    email,
+    inviteToken,
+    alreadyExists: false,
+    identityAppended: false
+  };
+}
+async function resendWorkerInvite(workerUserId, baseUrl) {
+  const db = getDb();
+  if (!db) throw new Error("Database unavailable");
+  const [workerUser] = await db.select().from(workerUsers).where(eq15(workerUsers.id, workerUserId)).limit(1);
+  if (!workerUser) throw new Error(`Worker user ${workerUserId} not found`);
+  const inviteToken = crypto3.randomBytes(32).toString("hex");
+  const inviteTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1e3);
+  await db.update(workerUsers).set({
+    inviteToken,
+    inviteExpiresAt: inviteTokenExpiry
+  }).where(eq15(workerUsers.id, workerUserId));
+  let workerName = "";
+  let workerType = "contractor";
+  let companyName = "";
+  if (workerUser.contractorId) {
+    const [contractor] = await db.select().from(contractors).where(eq15(contractors.id, workerUser.contractorId)).limit(1);
+    workerName = contractor ? `${contractor.firstName || ""} ${contractor.lastName || ""}`.trim() : "";
+    if (contractor?.customerId) {
+      const [customer] = await db.select().from(customers).where(eq15(customers.id, contractor.customerId)).limit(1);
+      companyName = customer?.companyName || "";
+    }
+  } else if (workerUser.employeeId) {
+    workerType = "employee";
+    const [employee] = await db.select().from(employees).where(eq15(employees.id, workerUser.employeeId)).limit(1);
+    workerName = employee ? `${employee.firstName || ""} ${employee.lastName || ""}`.trim() : "";
+    if (employee?.customerId) {
+      const [customer] = await db.select().from(customers).where(eq15(customers.id, employee.customerId)).limit(1);
+      companyName = customer?.companyName || "";
+    }
+  }
+  const url = baseUrl || process.env.WORKER_PORTAL_URL || "https://worker.geahr.com";
+  const inviteUrl = `${url}/invite/${inviteToken}`;
+  await sendWorkerPortalInviteEmail({
+    to: workerUser.email,
+    workerName: workerName || workerUser.email,
+    companyName: companyName || "your company",
+    workerType,
+    inviteUrl
+  });
+}
+
+// server/routers/employees.ts
+import { eq as eq16, desc as desc8, and as and13 } from "drizzle-orm";
 var employeesRouter = router({
   list: userProcedure.input(
     z4.object({
@@ -8559,12 +9880,30 @@ var employeesRouter = router({
       }
     }
     const isTransitioningToOnboarding = input.data.status === "onboarding";
+    const isTransitioningToOffboarding = input.data.status === "offboarding";
     const isTransitioningToTerminated = input.data.status === "terminated";
     const isReactivating = input.data.status && ["active", "onboarding", "contract_signed"].includes(input.data.status);
     let previousStatus;
     if (input.data.status) {
       const currentEmp = await getEmployeeById(input.id);
       previousStatus = currentEmp?.status;
+      if (isTransitioningToOffboarding) {
+        const effectiveEndDate = input.data.endDate || currentEmp?.endDate;
+        if (!effectiveEndDate) {
+          throw new TRPCError5({
+            code: "BAD_REQUEST",
+            message: "End date (last working day) is required when starting offboarding."
+          });
+        }
+      }
+      if (isTransitioningToTerminated && previousStatus !== "terminated") {
+        const effectiveEndDate = input.data.endDate || currentEmp?.endDate;
+        if (!effectiveEndDate) {
+          const today = /* @__PURE__ */ new Date();
+          const todayStr = today.toISOString().split("T")[0];
+          updateData.endDate = todayStr;
+        }
+      }
     }
     await updateEmployee(input.id, updateData);
     await logAuditAction({
@@ -8633,19 +9972,19 @@ var employeesRouter = router({
         const db = await getDb2();
         if (db) {
           const { invoices: invoicesTable, invoiceItems: invoiceItemsTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-          const { eq: eq67, and: and53 } = await import("drizzle-orm");
+          const { eq: eq72, and: and58 } = await import("drizzle-orm");
           const existingVisaInvoices = await db.select().from(invoicesTable).where(
-            and53(
-              eq67(invoicesTable.invoiceType, "visa_service"),
-              eq67(invoicesTable.customerId, currentEmpForVisa.customerId)
+            and58(
+              eq72(invoicesTable.invoiceType, "visa_service"),
+              eq72(invoicesTable.customerId, currentEmpForVisa.customerId)
             )
           );
           let hasActiveBilledInvoice = false;
           for (const inv of existingVisaInvoices) {
             const items = await db.select().from(invoiceItemsTable).where(
-              and53(
-                eq67(invoiceItemsTable.invoiceId, inv.id),
-                eq67(invoiceItemsTable.employeeId, input.id)
+              and58(
+                eq72(invoiceItemsTable.invoiceId, inv.id),
+                eq72(invoiceItemsTable.employeeId, input.id)
               )
             );
             if (items.length > 0) {
@@ -8654,8 +9993,8 @@ var employeesRouter = router({
                 visaServiceResult = { invoiceId: null, message: "Visa service invoice already exists and is billed" };
                 break;
               } else if (inv.status === "draft" || inv.status === "cancelled") {
-                await db.delete(invoiceItemsTable).where(eq67(invoiceItemsTable.invoiceId, inv.id));
-                await db.delete(invoicesTable).where(eq67(invoicesTable.id, inv.id));
+                await db.delete(invoiceItemsTable).where(eq72(invoiceItemsTable.invoiceId, inv.id));
+                await db.delete(invoicesTable).where(eq72(invoicesTable.id, inv.id));
               }
             }
           }
@@ -8730,7 +10069,7 @@ var employeesRouter = router({
     return await listAdjustments({ employeeId: input.employeeId, pageSize: 100 });
   }),
   // Initialize leave balances for employee based on country leave types
-  initializeLeaveBalances: customerManagerProcedure.input(z4.object({ employeeId: z4.number(), countryCode: z4.string(), year: z4.number() })).query(async ({ input }) => {
+  initializeLeaveBalances: customerManagerProcedure.input(z4.object({ employeeId: z4.number(), countryCode: z4.string(), year: z4.number() })).mutation(async ({ input }) => {
     return await initializeLeaveBalancesForEmployee(input.employeeId);
   }),
   // Create a leave balance entry
@@ -8751,7 +10090,7 @@ var employeesRouter = router({
       totalEntitlement: z4.number(),
       expiryDate: z4.string().nullable().optional()
     })
-  })).query(async ({ input }) => {
+  })).mutation(async ({ input }) => {
     const updateData = { totalEntitlement: input.data.totalEntitlement };
     if (input.data.expiryDate !== void 0) {
       updateData.expiryDate = input.data.expiryDate;
@@ -8792,18 +10131,18 @@ var employeesRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError5({ code: "INTERNAL_SERVER_ERROR" });
       const { employeeContracts: employeeContracts2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const { eq: eq67 } = await import("drizzle-orm");
-      const contracts = await db.select().from(employeeContracts2).where(eq67(employeeContracts2.id, input.id));
+      const { eq: eq72 } = await import("drizzle-orm");
+      const contracts = await db.select().from(employeeContracts2).where(eq72(employeeContracts2.id, input.id));
       const contract = contracts[0];
       if (!contract || !contract.fileKey) {
         throw new TRPCError5({ code: "NOT_FOUND", message: "Contract file not found" });
       }
       try {
-        const buffer = await storageDownload(contract.fileKey);
+        const { content, contentType } = await storageDownload(contract.fileKey);
         return {
-          content: buffer.toString("base64"),
+          content: content.toString("base64"),
           filename: contract.fileKey.split("/").pop() || "contract.pdf",
-          contentType: "application/pdf"
+          contentType: contentType || "application/pdf"
         };
       } catch (error) {
         console.error("Failed to download contract:", error);
@@ -8908,11 +10247,11 @@ var employeesRouter = router({
         throw new TRPCError5({ code: "NOT_FOUND", message: "Document not found" });
       }
       try {
-        const buffer = await storageDownload(doc.fileKey);
+        const { content, contentType } = await storageDownload(doc.fileKey);
         return {
-          content: buffer.toString("base64"),
+          content: content.toString("base64"),
           filename: doc.fileKey.split("/").pop() || "document.pdf",
-          contentType: doc.mimeType || "application/pdf"
+          contentType: contentType || doc.mimeType || "application/pdf"
         };
       } catch (error) {
         console.error("Failed to download document:", error);
@@ -8922,7 +10261,7 @@ var employeesRouter = router({
     upload: customerManagerProcedure.input(
       z4.object({
         employeeId: z4.number(),
-        documentType: z4.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "other"]),
+        documentType: z4.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "payslip", "reimbursement_receipt", "other"]),
         documentName: z4.string().min(1),
         fileBase64: z4.string(),
         fileName: z4.string(),
@@ -8966,7 +10305,42 @@ var employeesRouter = router({
       return { success: true };
     })
   }),
-  // ── Onboarding Invites (Admin view) ──────────────────────────────
+  // ── Worker Portal Invite ──────────────────────────────────────────────────
+  workerPortalStatus: userProcedure.input(z4.object({ employeeId: z4.number() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) return { hasAccount: false, workerUserId: null, email: null, passwordSet: false };
+    const [wu] = await db.select().from(workerUsers).where(eq16(workerUsers.employeeId, input.employeeId)).limit(1);
+    if (!wu) return { hasAccount: false, workerUserId: null, email: null, passwordSet: false };
+    return {
+      hasAccount: true,
+      workerUserId: wu.id,
+      email: wu.email,
+      passwordSet: !!wu.passwordHash && wu.passwordHash.length > 0
+    };
+  }),
+  inviteToWorkerPortal: customerManagerProcedure.input(z4.object({
+    employeeId: z4.number(),
+    email: z4.string().email().optional()
+  })).mutation(async ({ input, ctx }) => {
+    const result = await provisionWorkerUser({
+      employeeId: input.employeeId,
+      email: input.email
+    });
+    await logAuditAction({
+      userId: ctx.user.id,
+      userName: ctx.user.name || null,
+      action: result.alreadyExists ? "resend_worker_invite" : "invite_to_worker_portal",
+      entityType: "employee",
+      entityId: input.employeeId,
+      changes: JSON.stringify({ workerUserId: result.workerUserId, email: result.email })
+    });
+    if (result.alreadyExists) {
+      await resendWorkerInvite(result.workerUserId);
+      return { success: true, alreadyExists: true, email: result.email };
+    }
+    return { success: true, alreadyExists: false, email: result.email };
+  }),
+  // ── Onboarding Invites (Admin view) ──────────────────────────────────────────
   onboardingInvites: router({
     list: userProcedure.input(z4.object({
       customerId: z4.number().optional(),
@@ -8975,8 +10349,8 @@ var employeesRouter = router({
       const db = await getDb();
       if (!db) return [];
       const conditions = [];
-      if (input.customerId) conditions.push(eq15(onboardingInvites.customerId, input.customerId));
-      if (input.status) conditions.push(eq15(onboardingInvites.status, input.status));
+      if (input.customerId) conditions.push(eq16(onboardingInvites.customerId, input.customerId));
+      if (input.status) conditions.push(eq16(onboardingInvites.status, input.status));
       const invites = await db.select({
         id: onboardingInvites.id,
         customerId: onboardingInvites.customerId,
@@ -8988,13 +10362,13 @@ var employeesRouter = router({
         expiresAt: onboardingInvites.expiresAt,
         completedAt: onboardingInvites.completedAt,
         createdAt: onboardingInvites.createdAt
-      }).from(onboardingInvites).leftJoin(customers, eq15(onboardingInvites.customerId, customers.id)).where(conditions.length > 0 ? and13(...conditions) : void 0).orderBy(desc8(onboardingInvites.createdAt));
+      }).from(onboardingInvites).leftJoin(customers, eq16(onboardingInvites.customerId, customers.id)).where(conditions.length > 0 ? and13(...conditions) : void 0).orderBy(desc8(onboardingInvites.createdAt));
       return invites;
     }),
     delete: customerManagerProcedure.input(z4.object({ id: z4.number() })).mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError5({ code: "INTERNAL_SERVER_ERROR" });
-      await db.delete(onboardingInvites).where(eq15(onboardingInvites.id, input.id));
+      await db.delete(onboardingInvites).where(eq16(onboardingInvites.id, input.id));
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -9453,21 +10827,21 @@ var payrollRouter = router({
     const db = getDb2();
     if (db) {
       const { adjustments: adjustments2, reimbursements: reimbursements2, leaveRecords: leaveRecords2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-      const { and: and53, eq: eq67 } = await import("drizzle-orm");
-      await db.update(adjustments2).set({ status: "admin_approved", payrollRunId: null }).where(and53(
-        eq67(adjustments2.status, "locked"),
-        eq67(adjustments2.payrollRunId, payrollRunId),
-        eq67(adjustments2.employeeId, employeeId)
+      const { and: and58, eq: eq72 } = await import("drizzle-orm");
+      await db.update(adjustments2).set({ status: "admin_approved", payrollRunId: null }).where(and58(
+        eq72(adjustments2.status, "locked"),
+        eq72(adjustments2.payrollRunId, payrollRunId),
+        eq72(adjustments2.employeeId, employeeId)
       ));
-      await db.update(reimbursements2).set({ status: "admin_approved", payrollRunId: null }).where(and53(
-        eq67(reimbursements2.status, "locked"),
-        eq67(reimbursements2.payrollRunId, payrollRunId),
-        eq67(reimbursements2.employeeId, employeeId)
+      await db.update(reimbursements2).set({ status: "admin_approved", payrollRunId: null }).where(and58(
+        eq72(reimbursements2.status, "locked"),
+        eq72(reimbursements2.payrollRunId, payrollRunId),
+        eq72(reimbursements2.employeeId, employeeId)
       ));
-      await db.update(leaveRecords2).set({ status: "admin_approved", payrollRunId: null }).where(and53(
-        eq67(leaveRecords2.status, "locked"),
-        eq67(leaveRecords2.payrollRunId, payrollRunId),
-        eq67(leaveRecords2.employeeId, employeeId)
+      await db.update(leaveRecords2).set({ status: "admin_approved", payrollRunId: null }).where(and58(
+        eq72(leaveRecords2.status, "locked"),
+        eq72(leaveRecords2.payrollRunId, payrollRunId),
+        eq72(leaveRecords2.employeeId, employeeId)
       ));
     }
     await deletePayrollItem(input.id);
@@ -9496,22 +10870,22 @@ var payrollRouter = router({
     const db = getDb2();
     if (!db) throw new Error("Database not initialized");
     const { leaveRecords: leaveRecords2, adjustments: adjustments2, reimbursements: reimbursements2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-    const { and: and53, eq: eq67, inArray: inArray19, sql: sql28, gte: gte5, lt: lt3 } = await import("drizzle-orm");
+    const { and: and58, eq: eq72, inArray: inArray21, sql: sql31, gte: gte5, lt: lt3 } = await import("drizzle-orm");
     const monthStartDate = prevMonthDate;
     const [y, m] = prevMonthPrefix.split("-").map(Number);
     const nextMonth = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, "0")}-01`;
-    const pendingLeaves = await db.select({ count: sql28`count(*)` }).from(leaveRecords2).where(and53(
-      inArray19(leaveRecords2.status, ["submitted", "client_approved"]),
+    const pendingLeaves = await db.select({ count: sql31`count(*)` }).from(leaveRecords2).where(and58(
+      inArray21(leaveRecords2.status, ["submitted", "client_approved"]),
       gte5(leaveRecords2.startDate, monthStartDate),
       lt3(leaveRecords2.startDate, nextMonth)
     ));
-    const pendingAdjustments = await db.select({ count: sql28`count(*)` }).from(adjustments2).where(and53(
-      inArray19(adjustments2.status, ["submitted", "client_approved"]),
-      eq67(adjustments2.effectiveMonth, prevMonthDate)
+    const pendingAdjustments = await db.select({ count: sql31`count(*)` }).from(adjustments2).where(and58(
+      inArray21(adjustments2.status, ["submitted", "client_approved"]),
+      eq72(adjustments2.effectiveMonth, prevMonthDate)
     ));
-    const pendingReimbursements = await db.select({ count: sql28`count(*)` }).from(reimbursements2).where(and53(
-      inArray19(reimbursements2.status, ["submitted", "client_approved"]),
-      eq67(reimbursements2.effectiveMonth, prevMonthDate)
+    const pendingReimbursements = await db.select({ count: sql31`count(*)` }).from(reimbursements2).where(and58(
+      inArray21(reimbursements2.status, ["submitted", "client_approved"]),
+      eq72(reimbursements2.effectiveMonth, prevMonthDate)
     ));
     return {
       pendingLeaves: Number(pendingLeaves[0]?.count ?? 0),
@@ -9685,19 +11059,19 @@ var payrollRouter = router({
 import { z as z6 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq18, sql as sql8 } from "drizzle-orm";
+import { eq as eq19, sql as sql8 } from "drizzle-orm";
 import { TRPCError as TRPCError8 } from "@trpc/server";
 
 // server/services/creditNoteService.ts
 init_db2();
 init_schema();
 init_db2();
-import { eq as eq17, like as like9, and as and15 } from "drizzle-orm";
+import { eq as eq18, like as like9, and as and15 } from "drizzle-orm";
 
 // server/services/walletService.ts
 init_connection();
 init_schema();
-import { eq as eq16, and as and14 } from "drizzle-orm";
+import { eq as eq17, and as and14 } from "drizzle-orm";
 import { TRPCError as TRPCError7 } from "@trpc/server";
 var WalletService = class {
   /**
@@ -9708,7 +11082,7 @@ var WalletService = class {
     const db = externalTx || getDb();
     if (!db) throw new Error("Database not initialized");
     const existing = await db.query.customerWallets.findFirst({
-      where: (t4, { and: and53, eq: eq67 }) => and53(eq67(t4.customerId, customerId), eq67(t4.currency, currency))
+      where: (t4, { and: and58, eq: eq72 }) => and58(eq72(t4.customerId, customerId), eq72(t4.currency, currency))
     });
     if (existing) return existing;
     const [inserted] = await db.insert(customerWallets).values({
@@ -9731,7 +11105,7 @@ var WalletService = class {
     const amountNum = parseFloat(params.amount);
     if (amountNum <= 0) throw new Error("Transaction amount must be positive");
     const wallet = await tx.query.customerWallets.findFirst({
-      where: eq16(customerWallets.id, params.walletId)
+      where: eq17(customerWallets.id, params.walletId)
     });
     if (!wallet) throw new Error(`Wallet ${params.walletId} not found`);
     const currentBalance = parseFloat(wallet.balance);
@@ -9752,7 +11126,7 @@ var WalletService = class {
       version: wallet.version + 1
     }).where(
       // Ensure version hasn't changed since read
-      and14(eq16(customerWallets.id, params.walletId), eq16(customerWallets.version, wallet.version))
+      and14(eq17(customerWallets.id, params.walletId), eq17(customerWallets.version, wallet.version))
     );
     if (result.rowsAffected === 0) {
       throw new TRPCError7({
@@ -9801,7 +11175,7 @@ var WalletService = class {
     const total = parseFloat(totalAmount);
     if (balance <= 0) return "0";
     let invoiceLabel = `#${invoiceId}`;
-    const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq16(invoices.id, invoiceId)).limit(1);
+    const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq17(invoices.id, invoiceId)).limit(1);
     if (invoiceRecord.length > 0 && invoiceRecord[0].invoiceNumber) {
       invoiceLabel = invoiceRecord[0].invoiceNumber;
     }
@@ -9827,7 +11201,7 @@ var WalletService = class {
     const db = getDb();
     let invoiceLabel = `#${invoiceId}`;
     if (db) {
-      const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq16(invoices.id, invoiceId)).limit(1);
+      const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq17(invoices.id, invoiceId)).limit(1);
       if (invoiceRecord.length > 0 && invoiceRecord[0].invoiceNumber) {
         invoiceLabel = invoiceRecord[0].invoiceNumber;
       }
@@ -9852,7 +11226,7 @@ var WalletService = class {
     const db = externalTx || getDb();
     if (!db) throw new Error("Database not initialized");
     const existing = await db.query.customerFrozenWallets.findFirst({
-      where: (t4, { and: and53, eq: eq67 }) => and53(eq67(t4.customerId, customerId), eq67(t4.currency, currency))
+      where: (t4, { and: and58, eq: eq72 }) => and58(eq72(t4.customerId, customerId), eq72(t4.currency, currency))
     });
     if (existing) return existing;
     const [inserted] = await db.insert(customerFrozenWallets).values({
@@ -9873,7 +11247,7 @@ var WalletService = class {
     const amountNum = parseFloat(params.amount);
     if (amountNum <= 0) throw new Error("Transaction amount must be positive");
     const wallet = await tx.query.customerFrozenWallets.findFirst({
-      where: eq16(customerFrozenWallets.id, params.walletId)
+      where: eq17(customerFrozenWallets.id, params.walletId)
     });
     if (!wallet) throw new Error(`Frozen Wallet ${params.walletId} not found`);
     const currentBalance = parseFloat(wallet.balance);
@@ -9893,7 +11267,7 @@ var WalletService = class {
       balance: newBalance.toFixed(2),
       version: wallet.version + 1
     }).where(
-      and14(eq16(customerFrozenWallets.id, params.walletId), eq16(customerFrozenWallets.version, wallet.version))
+      and14(eq17(customerFrozenWallets.id, params.walletId), eq17(customerFrozenWallets.version, wallet.version))
     );
     if (result.rowsAffected === 0) {
       throw new TRPCError7({
@@ -9937,10 +11311,10 @@ var WalletService = class {
     const db = getDb();
     if (!db) throw new Error("Database not initialized");
     const existingTx = await db.query.frozenWalletTransactions.findFirst({
-      where: (t4, { and: and53, eq: eq67 }) => and53(
-        eq67(t4.type, "deposit_in"),
-        eq67(t4.referenceId, invoiceId),
-        eq67(t4.referenceType, "invoice")
+      where: (t4, { and: and58, eq: eq72 }) => and58(
+        eq72(t4.type, "deposit_in"),
+        eq72(t4.referenceId, invoiceId),
+        eq72(t4.referenceType, "invoice")
       )
     });
     if (existingTx) {
@@ -9948,7 +11322,7 @@ var WalletService = class {
       return { wallet: null, transaction: existingTx, skipped: true };
     }
     let invoiceLabel = `#${invoiceId}`;
-    const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq16(invoices.id, invoiceId)).limit(1);
+    const invoiceRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq17(invoices.id, invoiceId)).limit(1);
     if (invoiceRecord.length > 0 && invoiceRecord[0].invoiceNumber) {
       invoiceLabel = invoiceRecord[0].invoiceNumber;
     }
@@ -9973,7 +11347,7 @@ var WalletService = class {
     const db = externalTx || getDb();
     let cnLabel = `#${creditNoteId}`;
     if (db) {
-      const cnRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq16(invoices.id, creditNoteId)).limit(1);
+      const cnRecord = await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq17(invoices.id, creditNoteId)).limit(1);
       if (cnRecord.length > 0 && cnRecord[0].invoiceNumber) {
         cnLabel = cnRecord[0].invoiceNumber;
       }
@@ -10008,6 +11382,39 @@ var WalletService = class {
       createdBy
     });
   }
+  /**
+   * Release funds from frozen wallet directly to main wallet.
+   * This is an atomic operation: debit frozen wallet + credit main wallet in a single transaction.
+   */
+  async releaseFrozenToMain(customerId, currency, amount, reason, createdBy) {
+    const db = getDb();
+    if (!db) throw new Error("Database not initialized");
+    return await db.transaction(async (tx) => {
+      const frozenWallet = await this.getFrozenWallet(customerId, currency, tx);
+      await this._frozenTransactWithTx(tx, {
+        walletId: frozenWallet.id,
+        type: "deposit_release",
+        amount,
+        direction: "debit",
+        referenceId: 0,
+        referenceType: "manual",
+        description: `Released to operating account: ${reason}`,
+        createdBy
+      });
+      const mainWallet = await this.getWallet(customerId, currency, tx);
+      const result = await this._transactWithTx(tx, {
+        walletId: mainWallet.id,
+        type: "manual_adjustment",
+        amount,
+        direction: "credit",
+        referenceId: 0,
+        referenceType: "manual",
+        description: `Received from frozen deposit: ${reason}`,
+        createdBy
+      });
+      return result;
+    });
+  }
 };
 var walletService = new WalletService();
 
@@ -10017,7 +11424,7 @@ async function approveCreditNote(creditNoteId, approvedBy, disposition) {
   if (!db) throw new Error("Database not initialized");
   return await db.transaction(async (tx) => {
     const creditNote = await tx.query.invoices.findFirst({
-      where: eq17(invoices.id, creditNoteId)
+      where: eq18(invoices.id, creditNoteId)
     });
     if (!creditNote) throw new Error("Credit note not found");
     if (creditNote.invoiceType !== "credit_note" && creditNote.invoiceType !== "deposit_refund") {
@@ -10028,7 +11435,7 @@ async function approveCreditNote(creditNoteId, approvedBy, disposition) {
     }
     const finalDisposition = disposition || creditNote.creditNoteDisposition || "to_wallet";
     if (disposition) {
-      await tx.update(invoices).set({ creditNoteDisposition: disposition }).where(eq17(invoices.id, creditNoteId));
+      await tx.update(invoices).set({ creditNoteDisposition: disposition }).where(eq18(invoices.id, creditNoteId));
     }
     if (creditNote.relatedInvoiceId) {
       const relatedInvoice = await getInvoiceById(creditNote.relatedInvoiceId);
@@ -10068,7 +11475,7 @@ async function approveCreditNote(creditNoteId, approvedBy, disposition) {
       paidAmount: creditNote.total,
       // Negative amount
       amountDue: "0"
-    }).where(eq17(invoices.id, creditNoteId));
+    }).where(eq18(invoices.id, creditNoteId));
     return { success: true, message: `Credit note approved (${finalDisposition})` };
   });
 }
@@ -10125,8 +11532,8 @@ async function generateCreditNote(params) {
       }
       const existingRefunds = await db.select({ id: invoices.id, status: invoices.status }).from(invoices).where(
         and15(
-          eq17(invoices.relatedInvoiceId, params.originalInvoiceId),
-          eq17(invoices.invoiceType, "deposit_refund")
+          eq18(invoices.relatedInvoiceId, params.originalInvoiceId),
+          eq18(invoices.invoiceType, "deposit_refund")
         )
       );
       const hasActiveRefund = existingRefunds.some(
@@ -10140,8 +11547,8 @@ async function generateCreditNote(params) {
       }
       const existingCreditNotes = await db.select({ id: invoices.id, status: invoices.status }).from(invoices).where(
         and15(
-          eq17(invoices.relatedInvoiceId, params.originalInvoiceId),
-          eq17(invoices.invoiceType, "credit_note")
+          eq18(invoices.relatedInvoiceId, params.originalInvoiceId),
+          eq18(invoices.invoiceType, "credit_note")
         )
       );
       const hasActiveCreditNote = existingCreditNotes.some(
@@ -10154,8 +11561,8 @@ async function generateCreditNote(params) {
     if (originalInvoice.invoiceType !== "deposit") {
       const existingCreditNotes = await db.select({ total: invoices.total, status: invoices.status }).from(invoices).where(
         and15(
-          eq17(invoices.relatedInvoiceId, params.originalInvoiceId),
-          eq17(invoices.invoiceType, "credit_note")
+          eq18(invoices.relatedInvoiceId, params.originalInvoiceId),
+          eq18(invoices.invoiceType, "credit_note")
         )
       );
       const existingCreditTotal = existingCreditNotes.filter((cn) => cn.status !== "cancelled").reduce((sum3, cn) => sum3 + Math.abs(parseFloat(cn.total?.toString() ?? "0")), 0);
@@ -10496,7 +11903,7 @@ var invoicesRouter = router({
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
-    const [customer] = await db.select({ id: customers.id }).from(customers).where(eq18(customers.id, input.customerId)).limit(1);
+    const [customer] = await db.select({ id: customers.id }).from(customers).where(eq19(customers.id, input.customerId)).limit(1);
     if (!customer) {
       throw new TRPCError8({ code: "BAD_REQUEST", message: `Customer with ID ${input.customerId} does not exist` });
     }
@@ -11081,7 +12488,7 @@ Excess Credited: ${invoice2.currency} ${paymentResult.difference}`
     }
     const db = getDb();
     if (db) {
-      const children = await db.select().from(invoices).where(eq18(invoices.relatedInvoiceId, input.id));
+      const children = await db.select().from(invoices).where(eq19(invoices.relatedInvoiceId, input.id));
       if (children.length > 0) {
         throw new TRPCError8({ code: "PRECONDITION_FAILED", message: "Cannot delete invoice referenced by other invoices. Void/Cancel downstream invoices first." });
       }
@@ -11128,7 +12535,18 @@ Excess Credited: ${invoice2.currency} ${paymentResult.difference}`
     }).from(invoices).orderBy(sql8`${invoices.invoiceMonth} DESC, ${invoices.createdAt} DESC`);
     const monthMap = /* @__PURE__ */ new Map();
     for (const inv of allInvoices) {
-      const monthKey = inv.invoiceMonth ? new Date(inv.invoiceMonth).toISOString().slice(0, 7) : inv.createdAt ? new Date(inv.createdAt).toISOString().slice(0, 7) : "unknown";
+      let monthKey = "unknown";
+      if (inv.invoiceMonth) {
+        if (/^\d{4}-\d{2}$/.test(inv.invoiceMonth)) {
+          monthKey = inv.invoiceMonth;
+        } else {
+          const d = new Date(inv.invoiceMonth);
+          monthKey = isNaN(d.getTime()) ? "unknown" : d.toISOString().slice(0, 7);
+        }
+      } else if (inv.createdAt) {
+        const d = new Date(inv.createdAt);
+        monthKey = isNaN(d.getTime()) ? "unknown" : d.toISOString().slice(0, 7);
+      }
       if (!monthMap.has(monthKey)) {
         monthMap.set(monthKey, {
           month: monthKey,
@@ -11147,13 +12565,17 @@ Excess Credited: ${invoice2.currency} ${paymentResult.difference}`
       if (inv.customerId) entry.customers.add(inv.customerId);
       const ccy = inv.currency || "USD";
       if (!entry.currencyBreakdowns.has(ccy)) {
-        entry.currencyBreakdowns.set(ccy, { totalAmount: 0, paidAmount: 0, depositAmount: 0, invoiceCount: 0 });
+        entry.currencyBreakdowns.set(ccy, { totalAmount: 0, paidAmount: 0, depositAmount: 0, depositPaidAmount: 0, depositCount: 0, invoiceCount: 0 });
       }
       const ccyEntry = entry.currencyBreakdowns.get(ccy);
       const invTotal = parseFloat(inv.total?.toString() ?? "0");
       if (inv.status !== "cancelled") {
         if (inv.invoiceType === "deposit") {
           ccyEntry.depositAmount += invTotal;
+          ccyEntry.depositCount++;
+          if (inv.status === "paid" && inv.paidAmount) {
+            ccyEntry.depositPaidAmount += parseFloat(inv.paidAmount.toString());
+          }
         } else if (inv.invoiceType === "credit_note" || inv.invoiceType === "deposit_refund") {
         } else {
           ccyEntry.invoiceCount++;
@@ -11164,18 +12586,20 @@ Excess Credited: ${invoice2.currency} ${paymentResult.difference}`
         }
       }
     }
-    const result = Array.from(monthMap.values()).map(({ customers: customers3, currencyBreakdowns, ...rest }) => {
+    const result = Array.from(monthMap.values()).map(({ customers: customers2, currencyBreakdowns, ...rest }) => {
       const currencies = Array.from(currencyBreakdowns.entries()).map(([currency, data]) => ({
         currency,
         totalAmount: data.totalAmount,
         paidAmount: data.paidAmount,
         depositAmount: data.depositAmount,
+        depositPaidAmount: data.depositPaidAmount,
+        depositCount: data.depositCount,
         invoiceCount: data.invoiceCount,
         collectionRate: data.totalAmount > 0 ? Math.round(data.paidAmount / data.totalAmount * 1e4) / 100 : 0
       })).sort((a, b) => b.totalAmount - a.totalAmount);
       return {
         ...rest,
-        customerCount: customers3.size,
+        customerCount: customers2.size,
         currencies
       };
     }).sort((a, b) => b.month.localeCompare(a.month)).slice(0, input.limit);
@@ -11390,7 +12814,7 @@ import { z as z7 } from "zod";
 // server/services/invoiceGenerationService.ts
 init_schema();
 init_db2();
-import { eq as eq19, and as and17, isNull as isNull2, inArray as inArray5, desc as desc9 } from "drizzle-orm";
+import { eq as eq20, and as and17, isNull as isNull2, inArray as inArray5, desc as desc9 } from "drizzle-orm";
 async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnings = []) {
   try {
     const db = await getDb();
@@ -11398,7 +12822,7 @@ async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnin
     const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
     const nonApprovedRuns = await db.select().from(payrollRuns).where(
       and17(
-        eq19(payrollRuns.payrollMonth, payrollMonthStr),
+        eq20(payrollRuns.payrollMonth, payrollMonthStr),
         inArray5(payrollRuns.status, ["draft", "pending_approval", "rejected"])
       )
     );
@@ -11410,8 +12834,8 @@ async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnin
     const aorResult = await generateAorInvoices(payrollMonth, monthLabel, warnings);
     const approvedRuns = await db.select().from(payrollRuns).where(
       and17(
-        eq19(payrollRuns.payrollMonth, payrollMonthStr),
-        eq19(payrollRuns.status, "approved")
+        eq20(payrollRuns.payrollMonth, payrollMonthStr),
+        eq20(payrollRuns.status, "approved")
       )
     );
     if (approvedRuns.length === 0 && (!aorResult.invoiceIds || aorResult.invoiceIds.length === 0)) {
@@ -11429,7 +12853,7 @@ async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnin
         item: payrollItems,
         employee: employees,
         run: payrollRuns
-      }).from(payrollItems).innerJoin(employees, eq19(payrollItems.employeeId, employees.id)).innerJoin(payrollRuns, eq19(payrollItems.payrollRunId, payrollRuns.id)).where(inArray5(payrollItems.payrollRunId, runIds));
+      }).from(payrollItems).innerJoin(employees, eq20(payrollItems.employeeId, employees.id)).innerJoin(payrollRuns, eq20(payrollItems.payrollRunId, payrollRuns.id)).where(inArray5(payrollItems.payrollRunId, runIds));
     }
     const groups = /* @__PURE__ */ new Map();
     for (const row of payrollItemsData) {
@@ -11447,13 +12871,13 @@ async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnin
       const customerId = parseInt(customerIdStr);
       const existing = await db.select().from(invoices).where(
         and17(
-          eq19(invoices.customerId, customerId),
-          eq19(invoices.invoiceMonth, payrollMonthStr),
+          eq20(invoices.customerId, customerId),
+          eq20(invoices.invoiceMonth, payrollMonthStr),
           inArray5(invoices.invoiceType, ["monthly_eor", "monthly_visa_eor"])
         )
       );
       const existingForCurrency = existing.find((i) => i.currency === currency);
-      const customerResult = await db.select().from(customers).where(eq19(customers.id, customerId)).limit(1);
+      const customerResult = await db.select().from(customers).where(eq20(customers.id, customerId)).limit(1);
       if (customerResult.length === 0) continue;
       const customer = customerResult[0];
       const settlementCurrency = customer.settlementCurrency || "USD";
@@ -11508,7 +12932,7 @@ async function generateInvoicesFromPayroll(payrollMonth, monthLabel = "", warnin
           exchangeRateWithMarkup: rateWithMarkup.toString(),
           employeeId: empId
         });
-        const ccResult = await db.select().from(countriesConfig).where(eq19(countriesConfig.countryCode, employee.country)).limit(1);
+        const ccResult = await db.select().from(countriesConfig).where(eq20(countriesConfig.countryCode, employee.country)).limit(1);
         const cc = ccResult.length > 0 ? ccResult[0] : null;
         const fee = await getServiceFeeRate(
           customerId,
@@ -11592,7 +13016,7 @@ async function generateAorInvoices(payrollMonth, monthLabel, warnings) {
   const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
   const unbilledInvoices = await db.select().from(contractorInvoices).where(
     and17(
-      eq19(contractorInvoices.status, "approved"),
+      eq20(contractorInvoices.status, "approved"),
       isNull2(contractorInvoices.clientInvoiceId)
     )
   );
@@ -11608,7 +13032,7 @@ async function generateAorInvoices(payrollMonth, monthLabel, warnings) {
   for (const [key, batch] of Array.from(groups.entries())) {
     const [customerIdStr, currency] = key.split("|");
     const customerId = parseInt(customerIdStr);
-    const customerResult = await db.select().from(customers).where(eq19(customers.id, customerId)).limit(1);
+    const customerResult = await db.select().from(customers).where(eq20(customers.id, customerId)).limit(1);
     if (customerResult.length === 0) continue;
     const customer = customerResult[0];
     const settlementCurrency = customer.settlementCurrency || "USD";
@@ -11633,7 +13057,7 @@ async function generateAorInvoices(payrollMonth, monthLabel, warnings) {
     const contractorIds = /* @__PURE__ */ new Set();
     for (const inv of batch) {
       contractorIds.add(inv.contractorId);
-      const contractorResult = await db.select().from(contractors).where(eq19(contractors.id, inv.contractorId)).limit(1);
+      const contractorResult = await db.select().from(contractors).where(eq20(contractors.id, inv.contractorId)).limit(1);
       const contractorName = contractorResult.length > 0 ? `${contractorResult[0].firstName} ${contractorResult[0].lastName}` : `Contractor #${inv.contractorId}`;
       const amountLocal = parseFloat(inv.totalAmount);
       const amountSettlement = amountLocal * rateWithMarkup;
@@ -11660,11 +13084,11 @@ async function generateAorInvoices(payrollMonth, monthLabel, warnings) {
       });
     }
     let totalFee = 0;
-    for (const cid of contractorIds) {
-      const contractorResult = await db.select().from(contractors).where(eq19(contractors.id, cid)).limit(1);
+    for (const cid of Array.from(contractorIds)) {
+      const contractorResult = await db.select().from(contractors).where(eq20(contractors.id, cid)).limit(1);
       if (contractorResult.length === 0) continue;
       const ctr = contractorResult[0];
-      const ccResult = await db.select().from(countriesConfig).where(eq19(countriesConfig.countryCode, ctr.country)).limit(1);
+      const ccResult = await db.select().from(countriesConfig).where(eq20(countriesConfig.countryCode, ctr.country)).limit(1);
       const cc = ccResult.length > 0 ? ccResult[0] : null;
       const fee = await getServiceFeeRate(
         customerId,
@@ -11737,7 +13161,7 @@ async function getInvoiceGenerationStatus(payrollMonth) {
   const db = await getDb();
   if (!db) return null;
   const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
-  const monthInvoices = await db.select({ status: invoices.status }).from(invoices).where(eq19(invoices.invoiceMonth, payrollMonthStr));
+  const monthInvoices = await db.select({ status: invoices.status }).from(invoices).where(eq20(invoices.invoiceMonth, payrollMonthStr));
   const statusCounts = {};
   for (const inv of monthInvoices) {
     const s = inv.status || "unknown";
@@ -11754,8 +13178,8 @@ async function regenerateInvoices(payrollMonth) {
   const payrollMonthStr = payrollMonth.toISOString().slice(0, 10);
   const drafts = await db.select({ id: invoices.id, customerId: invoices.customerId, invoiceType: invoices.invoiceType, notes: invoices.notes }).from(invoices).where(
     and17(
-      eq19(invoices.invoiceMonth, payrollMonthStr),
-      eq19(invoices.status, "draft"),
+      eq20(invoices.invoiceMonth, payrollMonthStr),
+      eq20(invoices.status, "draft"),
       inArray5(invoices.invoiceType, ["monthly_eor", "monthly_visa_eor", "monthly_aor"])
     )
   );
@@ -11781,7 +13205,7 @@ async function regenerateInvoices(payrollMonth) {
     for (const inv of newInvoices) {
       const key = `${inv.customerId}_${inv.invoiceType}`;
       if (savedNotes[key]) {
-        await db.update(invoices).set({ notes: savedNotes[key] }).where(eq19(invoices.id, inv.id));
+        await db.update(invoices).set({ notes: savedNotes[key] }).where(eq20(invoices.id, inv.id));
       }
     }
   }
@@ -11791,7 +13215,7 @@ async function regenerateSingleInvoice(invoiceId) {
   const db = await getDb();
   if (!db) return { success: false, message: "Database unavailable" };
   const invoice = await db.query.invoices.findFirst({
-    where: eq19(invoices.id, invoiceId)
+    where: eq20(invoices.id, invoiceId)
   });
   if (!invoice) return { success: false, message: "Invoice not found" };
   if (invoice.status !== "draft") {
@@ -11804,10 +13228,10 @@ async function regenerateSingleInvoice(invoiceId) {
   const savedCustomerId = invoice.customerId;
   const savedInvoiceType = invoice.invoiceType;
   if (invoice.invoiceType === "monthly_aor") {
-    await db.update(contractorInvoices).set({ clientInvoiceId: null }).where(eq19(contractorInvoices.clientInvoiceId, invoiceId));
+    await db.update(contractorInvoices).set({ clientInvoiceId: null }).where(eq20(contractorInvoices.clientInvoiceId, invoiceId));
   }
-  await db.delete(invoiceItems).where(eq19(invoiceItems.invoiceId, invoiceId));
-  await db.delete(invoices).where(eq19(invoices.id, invoiceId));
+  await db.delete(invoiceItems).where(eq20(invoiceItems.invoiceId, invoiceId));
+  await db.delete(invoices).where(eq20(invoices.id, invoiceId));
   const payrollMonth = new Date(invoice.invoiceMonth);
   const monthLabel = payrollMonth.toLocaleDateString("en", { month: "short", year: "numeric" });
   const result = await generateInvoicesFromPayroll(payrollMonth, monthLabel);
@@ -11815,7 +13239,7 @@ async function regenerateSingleInvoice(invoiceId) {
     const newInvoices = await db.select({ id: invoices.id, customerId: invoices.customerId, invoiceType: invoices.invoiceType }).from(invoices).where(inArray5(invoices.id, result.invoiceIds));
     for (const inv of newInvoices) {
       if (inv.customerId === savedCustomerId && inv.invoiceType === savedInvoiceType) {
-        await db.update(invoices).set({ notes: savedNotes }).where(eq19(invoices.id, inv.id));
+        await db.update(invoices).set({ notes: savedNotes }).where(eq20(invoices.id, inv.id));
         break;
       }
     }
@@ -11830,9 +13254,9 @@ async function getServiceFeeRate(customerId, countryCode, serviceType, countryCo
   if (serviceType === "aor") {
     const aorFixedPrice = await db.select().from(customerPricing).where(
       and17(
-        eq19(customerPricing.customerId, customerId),
-        eq19(customerPricing.isActive, true),
-        eq19(customerPricing.pricingType, "client_aor_fixed")
+        eq20(customerPricing.customerId, customerId),
+        eq20(customerPricing.isActive, true),
+        eq20(customerPricing.pricingType, "client_aor_fixed")
       )
     ).limit(1);
     if (aorFixedPrice.length > 0 && aorFixedPrice[0].fixedPrice) {
@@ -11843,11 +13267,11 @@ async function getServiceFeeRate(customerId, countryCode, serviceType, countryCo
   }
   const countryPrice = await db.select().from(customerPricing).where(
     and17(
-      eq19(customerPricing.customerId, customerId),
-      eq19(customerPricing.isActive, true),
-      eq19(customerPricing.pricingType, "country_specific"),
-      eq19(customerPricing.countryCode, countryCode),
-      eq19(customerPricing.serviceType, serviceType)
+      eq20(customerPricing.customerId, customerId),
+      eq20(customerPricing.isActive, true),
+      eq20(customerPricing.pricingType, "country_specific"),
+      eq20(customerPricing.countryCode, countryCode),
+      eq20(customerPricing.serviceType, serviceType)
     )
   ).limit(1);
   if (countryPrice.length > 0 && countryPrice[0].fixedPrice) {
@@ -11856,9 +13280,9 @@ async function getServiceFeeRate(customerId, countryCode, serviceType, countryCo
   } else {
     const globalDiscount = await db.select().from(customerPricing).where(
       and17(
-        eq19(customerPricing.customerId, customerId),
-        eq19(customerPricing.isActive, true),
-        eq19(customerPricing.pricingType, "global_discount")
+        eq20(customerPricing.customerId, customerId),
+        eq20(customerPricing.isActive, true),
+        eq20(customerPricing.pricingType, "global_discount")
       )
     ).limit(1);
     let standardRate = 0;
@@ -11896,8 +13320,8 @@ async function getExchangeRateWithFallback(from, to, date) {
   if (rate) return { ...rate, isFallback: false };
   const latest = await db.query.exchangeRates.findFirst({
     where: and17(
-      eq19(exchangeRates.fromCurrency, from),
-      eq19(exchangeRates.toCurrency, to)
+      eq20(exchangeRates.fromCurrency, from),
+      eq20(exchangeRates.toCurrency, to)
     ),
     orderBy: [desc9(exchangeRates.effectiveDate)]
   });
@@ -12320,7 +13744,7 @@ import { TRPCError as TRPCError9 } from "@trpc/server";
 import { z as z9 } from "zod";
 init_db2();
 init_schema();
-import { and as and18, eq as eq20, sql as sql9, ne as ne3 } from "drizzle-orm";
+import { and as and18, eq as eq21, sql as sql9, ne as ne3 } from "drizzle-orm";
 
 // server/utils/cutoff.ts
 init_db2();
@@ -12499,18 +13923,18 @@ function formatDate(date) {
   return `${y}-${m}-${d}`;
 }
 function countWorkingDays(start, end, workingDaysPerWeek) {
-  let count19 = 0;
+  let count24 = 0;
   const current = new Date(start);
   while (current <= end) {
     const dayOfWeek = current.getDay();
     if (workingDaysPerWeek >= 6) {
-      if (dayOfWeek !== 0) count19++;
+      if (dayOfWeek !== 0) count24++;
     } else {
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) count19++;
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) count24++;
     }
     current.setDate(current.getDate() + 1);
   }
-  return count19;
+  return count24;
 }
 function getLastBusinessDay(referenceDate) {
   const year = referenceDate.getUTCFullYear();
@@ -12538,17 +13962,33 @@ async function adjustLeaveBalance(employeeId, leaveTypeId, deltaDays, year) {
   if (!balance) {
     return { warning: "No leave balance found for this leave type and year" };
   }
-  const newUsed = (balance.used ?? 0) + deltaDays;
+  const newUsed = Math.max(0, (balance.used ?? 0) + deltaDays);
   const newRemaining = (balance.remaining ?? 0) - deltaDays;
   let warning;
-  if (newRemaining < 0) {
-    warning = "Leave balance will be negative (" + newRemaining + " days remaining). Proceeding anyway.";
+  if (newRemaining < 0 && deltaDays > 0) {
+    warning = "Leave balance would be negative (" + newRemaining + " days remaining). Capped at 0.";
   }
   await updateLeaveBalance(balance.id, {
-    used: Math.max(0, newUsed),
-    remaining: newRemaining
+    used: newUsed,
+    remaining: deltaDays > 0 ? Math.max(0, newRemaining) : newRemaining
   });
   return { warning };
+}
+async function findUnpaidLeaveType(countryCode) {
+  const db = await getDb();
+  if (!db) return null;
+  const [unpaidType] = await db.select({ id: leaveTypes.id, leaveTypeName: leaveTypes.leaveTypeName }).from(leaveTypes).where(and18(eq21(leaveTypes.countryCode, countryCode), eq21(leaveTypes.isPaid, false))).limit(1);
+  return unpaidType || null;
+}
+async function isLeaveTypePaid(leaveTypeId) {
+  const lt3 = await getLeaveTypeById(leaveTypeId);
+  return lt3?.isPaid !== false;
+}
+async function getRemainingBalance(employeeId, leaveTypeId, year) {
+  const balances = await listLeaveBalances(employeeId, year);
+  const balance = balances.find((b) => b.leaveTypeId === leaveTypeId);
+  if (!balance) return null;
+  return Number(balance.remaining ?? 0);
 }
 function getEffectiveMonthFromEndDate(endDate) {
   const parts = endDate.split("-");
@@ -12579,7 +14019,7 @@ async function findOverlappingLeave(employeeId, startDate, endDate, excludeIds =
   const db = await getDb();
   if (!db) return [];
   const conditions = [
-    eq20(leaveRecords.employeeId, employeeId),
+    eq21(leaveRecords.employeeId, employeeId),
     // Overlap: existing.start <= new.end AND existing.end >= new.start
     sql9`${leaveRecords.startDate} <= ${endDate}`,
     sql9`${leaveRecords.endDate} >= ${startDate}`,
@@ -12662,24 +14102,87 @@ var leaveRouter = router({
       const overlapDetails = overlapping.map((o) => `${o.startDate} to ${o.endDate} (${o.days} days)`).join("; ");
       throw new TRPCError9({ code: "BAD_REQUEST", message: `Duplicate leave detected: employee already has leave records overlapping with this period: ${overlapDetails}. Please adjust the dates or cancel the existing record first.` });
     }
+    const isPaid = await isLeaveTypePaid(input.leaveTypeId);
+    const year = parseInt(input.endDate.split("-")[0], 10);
+    let paidDays = totalDays;
+    let unpaidDays = 0;
+    let unpaidLeaveTypeId = null;
+    let balanceSplit = false;
+    if (isPaid) {
+      const remaining = await getRemainingBalance(input.employeeId, input.leaveTypeId, year);
+      if (remaining !== null && totalDays > remaining) {
+        paidDays = Math.max(0, remaining);
+        unpaidDays = totalDays - paidDays;
+        const unpaidType = await findUnpaidLeaveType(employee.country);
+        if (!unpaidType) {
+          throw new TRPCError9({ code: "BAD_REQUEST", message: `Insufficient leave balance (${remaining} days remaining, ${totalDays} requested). No Unpaid Leave type found for country ${employee.country}.` });
+        }
+        unpaidLeaveTypeId = unpaidType.id;
+        balanceSplit = true;
+      }
+    }
     const createdIds = [];
     const balanceWarnings = [];
-    for (const split of splits) {
-      const result = await createLeaveRecord({
-        employeeId: input.employeeId,
-        leaveTypeId: input.leaveTypeId,
-        startDate: split.startDate,
-        endDate: split.endDate,
-        days: String(split.days),
-        reason: crossMonth ? `${input.reason || ""}${input.reason ? " | " : ""}[Split ${split.payrollMonth}: ${split.startDate} to ${split.endDate}]`.trim() : input.reason,
-        status: "submitted",
-        submittedBy: ctx.user.id
-      });
-      const insertId = result[0]?.insertId;
-      if (insertId) createdIds.push(insertId);
-      const year = parseInt(split.endDate.split("-")[0], 10);
-      const balResult = await adjustLeaveBalance(input.employeeId, input.leaveTypeId, split.days, year);
-      if (balResult.warning) balanceWarnings.push(balResult.warning);
+    if (balanceSplit && paidDays > 0) {
+      const paidRatio = paidDays / totalDays;
+      for (const split of splits) {
+        const splitPaidDays = Math.round(split.days * paidRatio * 10) / 10;
+        if (splitPaidDays <= 0) continue;
+        const result = await createLeaveRecord({
+          employeeId: input.employeeId,
+          leaveTypeId: input.leaveTypeId,
+          startDate: split.startDate,
+          endDate: split.endDate,
+          days: String(splitPaidDays),
+          reason: `${input.reason || ""}${input.reason ? " | " : ""}[Paid portion: ${splitPaidDays} days]`.trim(),
+          status: "submitted",
+          submittedBy: ctx.user.id
+        });
+        const insertId = result[0]?.insertId;
+        if (insertId) createdIds.push(insertId);
+        const splitYear = parseInt(split.endDate.split("-")[0], 10);
+        await adjustLeaveBalance(input.employeeId, input.leaveTypeId, splitPaidDays, splitYear);
+      }
+    } else if (balanceSplit && paidDays <= 0) {
+    } else {
+      for (const split of splits) {
+        const result = await createLeaveRecord({
+          employeeId: input.employeeId,
+          leaveTypeId: input.leaveTypeId,
+          startDate: split.startDate,
+          endDate: split.endDate,
+          days: String(split.days),
+          reason: crossMonth ? `${input.reason || ""}${input.reason ? " | " : ""}[Split ${split.payrollMonth}: ${split.startDate} to ${split.endDate}]`.trim() : input.reason,
+          status: "submitted",
+          submittedBy: ctx.user.id
+        });
+        const insertId = result[0]?.insertId;
+        if (insertId) createdIds.push(insertId);
+        if (isPaid) {
+          const splitYear = parseInt(split.endDate.split("-")[0], 10);
+          const balResult = await adjustLeaveBalance(input.employeeId, input.leaveTypeId, split.days, splitYear);
+          if (balResult.warning) balanceWarnings.push(balResult.warning);
+        }
+      }
+    }
+    if (balanceSplit && unpaidDays > 0 && unpaidLeaveTypeId) {
+      const unpaidRatio = unpaidDays / totalDays;
+      for (const split of splits) {
+        const splitUnpaidDays = Math.round(split.days * unpaidRatio * 10) / 10;
+        if (splitUnpaidDays <= 0) continue;
+        const result = await createLeaveRecord({
+          employeeId: input.employeeId,
+          leaveTypeId: unpaidLeaveTypeId,
+          startDate: split.startDate,
+          endDate: split.endDate,
+          days: String(splitUnpaidDays),
+          reason: `${input.reason || ""}${input.reason ? " | " : ""}[Unpaid portion: ${splitUnpaidDays} days \u2014 auto-split due to insufficient balance]`.trim(),
+          status: "submitted",
+          submittedBy: ctx.user.id
+        });
+        const insertId = result[0]?.insertId;
+        if (insertId) createdIds.push(insertId);
+      }
     }
     await logAuditAction({
       userId: ctx.user.id,
@@ -12691,7 +14194,10 @@ var leaveRouter = router({
         crossMonth,
         splitCount: splits.length,
         splits: crossMonth ? splits : void 0,
-        createdIds
+        createdIds,
+        balanceSplit,
+        paidDays: balanceSplit ? paidDays : void 0,
+        unpaidDays: balanceSplit ? unpaidDays : void 0
       })
     });
     return {
@@ -12699,7 +14205,10 @@ var leaveRouter = router({
       splitCount: splits.length,
       crossMonth,
       splits,
-      balanceWarnings: balanceWarnings.length > 0 ? balanceWarnings : void 0
+      balanceWarnings: balanceWarnings.length > 0 ? balanceWarnings : void 0,
+      balanceSplit,
+      paidDays: balanceSplit ? paidDays : void 0,
+      unpaidDays: balanceSplit ? unpaidDays : void 0
     };
   }),
   update: operationsManagerProcedure.input(
@@ -13239,12 +14748,11 @@ var reimbursementsRouter = router({
       throw new TRPCError11({ code: "NOT_FOUND", message: "Receipt not found" });
     }
     try {
-      const buffer = await storageDownload(item.receiptFileKey);
+      const { content, contentType } = await storageDownload(item.receiptFileKey);
       return {
-        content: buffer.toString("base64"),
+        content: content.toString("base64"),
         filename: item.receiptFileKey.split("/").pop() || "receipt.pdf",
-        contentType: "application/pdf"
-        // Simplified, ideally store mimeType
+        contentType: contentType || "application/pdf"
       };
     } catch (error) {
       console.error("Failed to download receipt:", error);
@@ -13437,7 +14945,7 @@ var reimbursementsRouter = router({
 // server/routers/dashboard.ts
 init_db2();
 init_schema();
-import { eq as eq21, and as and19, sql as sql10, count as count7, desc as desc10, inArray as inArray6, isNotNull } from "drizzle-orm";
+import { eq as eq22, and as and19, sql as sql10, count as count7, desc as desc10, inArray as inArray6, isNotNull } from "drizzle-orm";
 function getLastNMonths(n) {
   const months = [];
   const now = /* @__PURE__ */ new Date();
@@ -13483,7 +14991,7 @@ var dashboardRouter = router({
       employeeTrend.push(empResult?.count ?? 0);
       const [custResult] = await db.select({ count: count7() }).from(customers).where(and19(
         sql10`${customers.createdAt} <= ${monthEnd}`,
-        eq21(customers.status, "active")
+        eq22(customers.status, "active")
       ));
       customerTrend.push(custResult?.count ?? 0);
       const [invResult] = await db.select({ count: count7() }).from(invoices).where(and19(
@@ -13516,20 +15024,20 @@ var dashboardRouter = router({
       total: sql10`COALESCE(SUM(${invoices.total}), 0)`,
       count: count7()
     }).from(invoices).where(and19(
-      eq21(invoices.status, "paid"),
+      eq22(invoices.status, "paid"),
       sql10`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
     ));
     const [depositTotal] = await db.select({
       total: sql10`COALESCE(SUM(${invoices.total}), 0)`,
       count: count7()
     }).from(invoices).where(and19(
-      eq21(invoices.status, "paid"),
-      eq21(invoices.invoiceType, "deposit")
+      eq22(invoices.status, "paid"),
+      eq22(invoices.invoiceType, "deposit")
     ));
     const [serviceFeeTotal] = await db.select({
       total: sql10`COALESCE(SUM(ii.amount), 0)`
     }).from(invoices).innerJoin(sql10`invoice_items ii`, sql10`ii.invoiceId = ${invoices.id}`).where(and19(
-      eq21(invoices.status, "paid"),
+      eq22(invoices.status, "paid"),
       sql10`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
       sql10`ii.itemType IN ('eor_service_fee', 'visa_eor_service_fee', 'aor_service_fee')`
     ));
@@ -13538,7 +15046,7 @@ var dashboardRouter = router({
     }).from(invoices).where(inArray6(invoices.status, ["sent", "overdue"]));
     const [overdue] = await db.select({
       total: sql10`COALESCE(SUM(${invoices.total}), 0)`
-    }).from(invoices).where(eq21(invoices.status, "overdue"));
+    }).from(invoices).where(eq22(invoices.status, "overdue"));
     const months = getLastNMonths(12);
     const monthlyRevenue = [];
     for (const m of months) {
@@ -13549,7 +15057,7 @@ var dashboardRouter = router({
         total: sql10`COALESCE(SUM(${invoices.total}), 0)`,
         count: count7()
       }).from(invoices).where(and19(
-        eq21(invoices.status, "paid"),
+        eq22(invoices.status, "paid"),
         sql10`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
         sql10`(${invoices.paidDate} >= ${monthStart} AND ${invoices.paidDate} < ${nextMonth})
             OR (${invoices.paidDate} IS NULL AND ${invoices.createdAt} >= ${monthStart} AND ${invoices.createdAt} < ${nextMonth})`
@@ -13557,7 +15065,7 @@ var dashboardRouter = router({
       const [monthServiceFee] = await db.select({
         total: sql10`COALESCE(SUM(ii.amount), 0)`
       }).from(invoices).innerJoin(sql10`invoice_items ii`, sql10`ii.invoiceId = ${invoices.id}`).where(and19(
-        eq21(invoices.status, "paid"),
+        eq22(invoices.status, "paid"),
         sql10`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
         sql10`ii.itemType IN ('eor_service_fee', 'visa_eor_service_fee', 'aor_service_fee')`,
         sql10`(${invoices.paidDate} >= ${monthStart} AND ${invoices.paidDate} < ${nextMonth})
@@ -13595,9 +15103,9 @@ var dashboardRouter = router({
       status: payrollRuns.status,
       count: count7()
     }).from(payrollRuns).groupBy(payrollRuns.status);
-    const [pendingPayrolls] = await db.select({ count: count7() }).from(payrollRuns).where(eq21(payrollRuns.status, "pending_approval"));
-    const [pendingAdj] = await db.select({ count: count7() }).from(adjustments).where(eq21(adjustments.status, "submitted"));
-    const [pendingLeaves] = await db.select({ count: count7() }).from(leaveRecords).where(eq21(leaveRecords.status, "submitted"));
+    const [pendingPayrolls] = await db.select({ count: count7() }).from(payrollRuns).where(eq22(payrollRuns.status, "pending_approval"));
+    const [pendingAdj] = await db.select({ count: count7() }).from(adjustments).where(eq22(adjustments.status, "submitted"));
+    const [pendingLeaves] = await db.select({ count: count7() }).from(leaveRecords).where(eq22(leaveRecords.status, "submitted"));
     const recentPayrollRuns = await db.select({
       id: payrollRuns.id,
       countryCode: payrollRuns.countryCode,
@@ -13608,7 +15116,7 @@ var dashboardRouter = router({
       createdAt: payrollRuns.createdAt
     }).from(payrollRuns).orderBy(desc10(payrollRuns.createdAt)).limit(10);
     const [onboarding] = await db.select({ count: count7() }).from(employees).where(inArray6(employees.status, ["pending_review", "documents_incomplete", "onboarding", "contract_signed"]));
-    const [offboarding] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "offboarding"));
+    const [offboarding] = await db.select({ count: count7() }).from(employees).where(eq22(employees.status, "offboarding"));
     return {
       payrollByStatus: payrollByStatus.map((r) => ({ status: r.status, count: r.count })),
       pendingApprovals: {
@@ -13648,16 +15156,16 @@ var dashboardRouter = router({
     const todayStr = now.toISOString().slice(0, 10);
     const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
     const nextMonthStart = now.getMonth() === 11 ? `${now.getFullYear() + 1}-01-01` : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, "0")}-01`;
-    const [activeResult] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "active"));
-    const [onLeaveResult] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "on_leave"));
+    const [activeResult] = await db.select({ count: count7() }).from(employees).where(eq22(employees.status, "active"));
+    const [onLeaveResult] = await db.select({ count: count7() }).from(employees).where(eq22(employees.status, "on_leave"));
     const [onboardingResult] = await db.select({ count: count7() }).from(employees).where(inArray6(employees.status, ["pending_review", "documents_incomplete", "onboarding", "contract_signed"]));
-    const [offboardingResult] = await db.select({ count: count7() }).from(employees).where(eq21(employees.status, "offboarding"));
+    const [offboardingResult] = await db.select({ count: count7() }).from(employees).where(eq22(employees.status, "offboarding"));
     const [newHiresResult] = await db.select({ count: count7() }).from(employees).where(and19(
       sql10`${employees.startDate} >= ${currentMonthStart}`,
       sql10`${employees.startDate} < ${nextMonthStart}`
     ));
     const [terminationsResult] = await db.select({ count: count7() }).from(employees).where(and19(
-      eq21(employees.status, "terminated"),
+      eq22(employees.status, "terminated"),
       sql10`${employees.updatedAt} >= ${currentMonthStart}`,
       sql10`${employees.updatedAt} < ${nextMonthStart}`
     ));
@@ -13672,11 +15180,11 @@ var dashboardRouter = router({
         firstName: employees.firstName,
         lastName: employees.lastName,
         employeeCode: employees.employeeCode
-      }).from(employeeContracts).innerJoin(employees, eq21(employeeContracts.employeeId, employees.id)).where(and19(
+      }).from(employeeContracts).innerJoin(employees, eq22(employeeContracts.employeeId, employees.id)).where(and19(
         isNotNull(employeeContracts.expiryDate),
         sql10`${employeeContracts.expiryDate} >= ${todayStr}`,
         sql10`${employeeContracts.expiryDate} <= ${futureDateStr}`,
-        eq21(employeeContracts.status, "signed"),
+        eq22(employeeContracts.status, "signed"),
         inArray6(employees.status, ["active", "on_leave"])
       )).orderBy(employeeContracts.expiryDate);
       return results.map((r) => ({
@@ -13706,13 +15214,13 @@ var dashboardRouter = router({
         sql10`${employees.startDate} < ${mNextMonth}`
       ));
       const [termInMonth] = await db.select({ count: count7() }).from(employees).where(and19(
-        eq21(employees.status, "terminated"),
+        eq22(employees.status, "terminated"),
         sql10`${employees.updatedAt} >= ${monthStart}`,
         sql10`${employees.updatedAt} < ${mNextMonth}`
       ));
       const [onLeaveAtMonth] = await db.select({ count: count7() }).from(employees).where(and19(
         sql10`${employees.createdAt} <= ${monthEnd}`,
-        eq21(employees.status, "on_leave")
+        eq22(employees.status, "on_leave")
       ));
       monthlyWorkforce.push({
         month: m,
@@ -13946,8 +15454,8 @@ import { z as z13 } from "zod";
 import { TRPCError as TRPCError13 } from "@trpc/server";
 init_db2();
 init_schema();
-import { eq as eq22 } from "drizzle-orm";
-import crypto3 from "crypto";
+import { eq as eq23 } from "drizzle-orm";
+import crypto4 from "crypto";
 var userManagementRouter = router({
   list: adminProcedure2.input(
     z13.object({
@@ -14024,7 +15532,7 @@ var userManagementRouter = router({
     const inviteToken = generateInviteToken();
     const inviteExpiresAt = getInviteExpiryDate();
     const roleStr = serializeRoles(roles);
-    const openId = `invite_${crypto3.randomBytes(16).toString("hex")}`;
+    const openId = `invite_${crypto4.randomBytes(16).toString("hex")}`;
     const db = await getDb();
     if (!db) throw new TRPCError13({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     await db.insert(users).values({
@@ -14050,6 +15558,16 @@ var userManagementRouter = router({
     });
     const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
     const inviteUrl = `${origin}/invite?token=${inviteToken}`;
+    try {
+      await sendAdminInviteEmail({
+        to: input.email.toLowerCase().trim(),
+        name: input.name,
+        inviteUrl,
+        roles: roles.join(", ")
+      });
+    } catch (err) {
+      console.error("[UserMgmt] Failed to send invite email:", err);
+    }
     return {
       success: true,
       inviteUrl,
@@ -14104,7 +15622,7 @@ var userManagementRouter = router({
       inviteToken: null,
       inviteExpiresAt: null,
       lastSignedIn: /* @__PURE__ */ new Date()
-    }).where(eq22(users.id, user.id));
+    }).where(eq23(users.id, user.id));
     const payload = {
       sub: String(user.id),
       email: user.email || "",
@@ -14144,7 +15662,7 @@ var userManagementRouter = router({
     const newHash = await hashPassword(input.newPassword);
     const db = await getDb();
     if (!db) throw new TRPCError13({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    await db.update(users).set({ passwordHash: newHash }).where(eq22(users.id, ctx.user.id));
+    await db.update(users).set({ passwordHash: newHash }).where(eq23(users.id, ctx.user.id));
     return { success: true };
   }),
   /**
@@ -14159,14 +15677,14 @@ var userManagementRouter = router({
     if (user.id === ctx.user.id) {
       throw new TRPCError13({ code: "BAD_REQUEST", message: "Cannot reset your own password here. Use Change Password instead." });
     }
-    const tempPassword = crypto3.randomBytes(6).toString("base64url").slice(0, 12);
+    const tempPassword = crypto4.randomBytes(6).toString("base64url").slice(0, 12);
     const passwordHash = await hashPassword(tempPassword);
     const db = await getDb();
     if (!db) throw new TRPCError13({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     await db.update(users).set({
       passwordHash,
       mustChangePassword: true
-    }).where(eq22(users.id, input.id));
+    }).where(eq23(users.id, input.id));
     await logAuditAction({
       userId: ctx.user.id,
       userName: ctx.user.name || null,
@@ -14175,6 +15693,17 @@ var userManagementRouter = router({
       entityId: input.id,
       changes: JSON.stringify({ targetUser: user.email })
     });
+    try {
+      const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
+      await sendAdminPasswordResetEmail({
+        to: user.email || "",
+        name: user.name || "Admin",
+        tempPassword,
+        loginUrl: `${origin}/login`
+      });
+    } catch (err) {
+      console.error("[UserMgmt] Failed to send password reset email:", err);
+    }
     return {
       success: true,
       temporaryPassword: tempPassword,
@@ -14197,9 +15726,19 @@ var userManagementRouter = router({
     const inviteExpiresAt = getInviteExpiryDate();
     const db = await getDb();
     if (!db) throw new TRPCError13({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    await db.update(users).set({ inviteToken, inviteExpiresAt }).where(eq22(users.id, input.id));
+    await db.update(users).set({ inviteToken, inviteExpiresAt }).where(eq23(users.id, input.id));
     const origin = `${ctx.req.protocol}://${ctx.req.get("host")}`;
     const inviteUrl = `${origin}/invite?token=${inviteToken}`;
+    try {
+      await sendAdminInviteEmail({
+        to: user.email || "",
+        name: user.name || "User",
+        inviteUrl,
+        roles: user.role || ""
+      });
+    } catch (err) {
+      console.error("[UserMgmt] Failed to resend invite email:", err);
+    }
     return { success: true, inviteUrl, inviteToken };
   })
 });
@@ -14233,7 +15772,7 @@ init_db2();
 // server/services/exchangeRateFetchService.ts
 init_db2();
 init_schema();
-import { eq as eq23 } from "drizzle-orm";
+import { eq as eq24 } from "drizzle-orm";
 var EXCHANGERATE_API_URL = "https://open.er-api.com/v6/latest";
 var FRANKFURTER_BASE_URL = "https://api.frankfurter.dev/v1";
 var FRANKFURTER_SUPPORTED = /* @__PURE__ */ new Set([
@@ -14326,7 +15865,7 @@ async function getDefaultMarkup() {
   try {
     const db = await getDb();
     if (!db) return 5;
-    const result = await db.select().from(systemConfig).where(eq23(systemConfig.configKey, "exchange_rate_markup_percentage")).limit(1);
+    const result = await db.select().from(systemConfig).where(eq24(systemConfig.configKey, "exchange_rate_markup_percentage")).limit(1);
     if (result.length > 0) {
       return parseFloat(result[0].configValue) || 5;
     }
@@ -14598,7 +16137,7 @@ init_db2();
 // server/services/contractorInvoiceGenerationService.ts
 init_connection();
 init_schema();
-import { eq as eq24, and as and20, isNull as isNull3 } from "drizzle-orm";
+import { eq as eq25, and as and20, isNull as isNull3 } from "drizzle-orm";
 var ContractorInvoiceGenerationService = {
   /**
    * Generate contractor invoices from locked data for a specific month.
@@ -14639,6 +16178,8 @@ var ContractorInvoiceGenerationService = {
    * Creates 1 invoice per contractor per month:
    * - Base monthly rate as service_fee line item
    * - All locked adjustments for the month as separate line items
+   *
+   * DATA-DRIVEN: Also includes terminated contractors who have orphaned locked adjustments.
    */
   async processMonthlyFromLocked(effectiveMonth, year, month) {
     const db = await getDb();
@@ -14647,27 +16188,45 @@ var ContractorInvoiceGenerationService = {
     const lastDay = new Date(year, month, 0).getDate();
     const periodEnd = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
     const invoiceDate = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-    const eligibleContractors = await db.select().from(contractors).where(
+    const activeContractors = await db.select().from(contractors).where(
       and20(
-        eq24(contractors.status, "active"),
-        eq24(contractors.paymentFrequency, "monthly")
+        eq25(contractors.status, "active"),
+        eq25(contractors.paymentFrequency, "monthly")
       )
     );
-    let count19 = 0;
+    const activeIds = new Set(activeContractors.map((c) => c.id));
+    const orphanedAdj = await db.select({ contractorId: contractorAdjustments.contractorId }).from(contractorAdjustments).where(
+      and20(
+        eq25(contractorAdjustments.effectiveMonth, effectiveMonth),
+        eq25(contractorAdjustments.status, "locked"),
+        isNull3(contractorAdjustments.invoiceId)
+      )
+    ).groupBy(contractorAdjustments.contractorId);
+    const orphanedContractors = [];
+    for (const row of orphanedAdj) {
+      if (activeIds.has(row.contractorId)) continue;
+      const [ctr] = await db.select().from(contractors).where(and20(eq25(contractors.id, row.contractorId), eq25(contractors.paymentFrequency, "monthly"))).limit(1);
+      if (ctr) {
+        orphanedContractors.push(ctr);
+        console.log(`[ContractorInvoice] RESCUE: Including terminated monthly contractor #${ctr.id} - has orphaned locked adjustments`);
+      }
+    }
+    const eligibleContractors = [...activeContractors, ...orphanedContractors];
+    let count24 = 0;
     for (const contractor of eligibleContractors) {
       const existing = await db.select().from(contractorInvoices).where(
         and20(
-          eq24(contractorInvoices.contractorId, contractor.id),
-          eq24(contractorInvoices.periodStart, periodStart),
-          eq24(contractorInvoices.periodEnd, periodEnd)
+          eq25(contractorInvoices.contractorId, contractor.id),
+          eq25(contractorInvoices.periodStart, periodStart),
+          eq25(contractorInvoices.periodEnd, periodEnd)
         )
       ).limit(1);
       if (existing.length > 0) continue;
       const lockedAdjustments = await db.select().from(contractorAdjustments).where(
         and20(
-          eq24(contractorAdjustments.contractorId, contractor.id),
-          eq24(contractorAdjustments.effectiveMonth, effectiveMonth),
-          eq24(contractorAdjustments.status, "locked"),
+          eq25(contractorAdjustments.contractorId, contractor.id),
+          eq25(contractorAdjustments.effectiveMonth, effectiveMonth),
+          eq25(contractorAdjustments.status, "locked"),
           isNull3(contractorAdjustments.invoiceId)
         )
       );
@@ -14722,12 +16281,12 @@ var ContractorInvoiceGenerationService = {
       const itemsWithId = lineItems.map((item) => ({ ...item, invoiceId: invoice.id }));
       await db.insert(contractorInvoiceItems).values(itemsWithId);
       for (const adjId of adjustmentIdsToLink) {
-        await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq24(contractorAdjustments.id, adjId));
+        await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq25(contractorAdjustments.id, adjId));
       }
-      count19++;
+      count24++;
       console.log(`[ContractorInvoice] Created monthly invoice ${invoiceNumber} for contractor #${contractor.id} (${totalAmount.toFixed(2)} ${currency})`);
     }
-    return count19;
+    return count24;
   },
   /**
    * Generate invoices for semi-monthly contractors from locked data.
@@ -14755,20 +16314,38 @@ var ContractorInvoiceGenerationService = {
         // Adjustments only in second half
       }
     ];
-    const eligibleContractors = await db.select().from(contractors).where(
+    const activeSemiMonthly = await db.select().from(contractors).where(
       and20(
-        eq24(contractors.status, "active"),
-        eq24(contractors.paymentFrequency, "semi_monthly")
+        eq25(contractors.status, "active"),
+        eq25(contractors.paymentFrequency, "semi_monthly")
       )
     );
-    let count19 = 0;
+    const activeSemiIds = new Set(activeSemiMonthly.map((c) => c.id));
+    const orphanedSemiAdj = await db.select({ contractorId: contractorAdjustments.contractorId }).from(contractorAdjustments).where(
+      and20(
+        eq25(contractorAdjustments.effectiveMonth, effectiveMonth),
+        eq25(contractorAdjustments.status, "locked"),
+        isNull3(contractorAdjustments.invoiceId)
+      )
+    ).groupBy(contractorAdjustments.contractorId);
+    const orphanedSemiContractors = [];
+    for (const row of orphanedSemiAdj) {
+      if (activeSemiIds.has(row.contractorId)) continue;
+      const [ctr] = await db.select().from(contractors).where(and20(eq25(contractors.id, row.contractorId), eq25(contractors.paymentFrequency, "semi_monthly"))).limit(1);
+      if (ctr) {
+        orphanedSemiContractors.push(ctr);
+        console.log(`[ContractorInvoice] RESCUE: Including terminated semi-monthly contractor #${ctr.id} - has orphaned locked adjustments`);
+      }
+    }
+    const eligibleContractors = [...activeSemiMonthly, ...orphanedSemiContractors];
+    let count24 = 0;
     for (const contractor of eligibleContractors) {
       for (const period of periods) {
         const existing = await db.select().from(contractorInvoices).where(
           and20(
-            eq24(contractorInvoices.contractorId, contractor.id),
-            eq24(contractorInvoices.periodStart, period.periodStart),
-            eq24(contractorInvoices.periodEnd, period.periodEnd)
+            eq25(contractorInvoices.contractorId, contractor.id),
+            eq25(contractorInvoices.periodStart, period.periodStart),
+            eq25(contractorInvoices.periodEnd, period.periodEnd)
           )
         ).limit(1);
         if (existing.length > 0) continue;
@@ -14791,9 +16368,9 @@ var ContractorInvoiceGenerationService = {
         if (period.includeAdjustments) {
           const lockedAdjustments = await db.select().from(contractorAdjustments).where(
             and20(
-              eq24(contractorAdjustments.contractorId, contractor.id),
-              eq24(contractorAdjustments.effectiveMonth, effectiveMonth),
-              eq24(contractorAdjustments.status, "locked"),
+              eq25(contractorAdjustments.contractorId, contractor.id),
+              eq25(contractorAdjustments.effectiveMonth, effectiveMonth),
+              eq25(contractorAdjustments.status, "locked"),
               isNull3(contractorAdjustments.invoiceId)
             )
           );
@@ -14833,13 +16410,13 @@ var ContractorInvoiceGenerationService = {
         const itemsWithId = lineItems.map((item) => ({ ...item, invoiceId: invoice.id }));
         await db.insert(contractorInvoiceItems).values(itemsWithId);
         for (const adjId of adjustmentIdsToLink) {
-          await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq24(contractorAdjustments.id, adjId));
+          await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq25(contractorAdjustments.id, adjId));
         }
-        count19++;
+        count24++;
         console.log(`[ContractorInvoice] Created semi-monthly invoice ${invoiceNumber} for contractor #${contractor.id} (${totalAmount.toFixed(2)} ${currency})`);
       }
     }
-    return count19;
+    return count24;
   },
   /**
    * Generate invoices for milestone contractors from locked data.
@@ -14853,15 +16430,15 @@ var ContractorInvoiceGenerationService = {
     const invoiceDate = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     const lockedMilestones = await db.select().from(contractorMilestones).where(
       and20(
-        eq24(contractorMilestones.effectiveMonth, effectiveMonth),
-        eq24(contractorMilestones.status, "locked"),
+        eq25(contractorMilestones.effectiveMonth, effectiveMonth),
+        eq25(contractorMilestones.status, "locked"),
         isNull3(contractorMilestones.invoiceId)
       )
     );
-    let count19 = 0;
+    let count24 = 0;
     const contractorsWithAdjAttached = /* @__PURE__ */ new Set();
     for (const milestone of lockedMilestones) {
-      const contractorResult = await db.select().from(contractors).where(eq24(contractors.id, milestone.contractorId)).limit(1);
+      const contractorResult = await db.select().from(contractors).where(eq25(contractors.id, milestone.contractorId)).limit(1);
       if (contractorResult.length === 0) continue;
       const contractor = contractorResult[0];
       const lineItems = [];
@@ -14880,9 +16457,9 @@ var ContractorInvoiceGenerationService = {
       if (!contractorsWithAdjAttached.has(contractor.id)) {
         const lockedAdjustments = await db.select().from(contractorAdjustments).where(
           and20(
-            eq24(contractorAdjustments.contractorId, contractor.id),
-            eq24(contractorAdjustments.effectiveMonth, effectiveMonth),
-            eq24(contractorAdjustments.status, "locked"),
+            eq25(contractorAdjustments.contractorId, contractor.id),
+            eq25(contractorAdjustments.effectiveMonth, effectiveMonth),
+            eq25(contractorAdjustments.status, "locked"),
             isNull3(contractorAdjustments.invoiceId)
           )
         );
@@ -14924,14 +16501,14 @@ var ContractorInvoiceGenerationService = {
       const invoice = result[0];
       const itemsWithId = lineItems.map((item) => ({ ...item, invoiceId: invoice.id }));
       await db.insert(contractorInvoiceItems).values(itemsWithId);
-      await db.update(contractorMilestones).set({ invoiceId: invoice.id }).where(eq24(contractorMilestones.id, milestone.id));
+      await db.update(contractorMilestones).set({ invoiceId: invoice.id }).where(eq25(contractorMilestones.id, milestone.id));
       for (const adjId of adjustmentIdsToLink) {
-        await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq24(contractorAdjustments.id, adjId));
+        await db.update(contractorAdjustments).set({ invoiceId: invoice.id }).where(eq25(contractorAdjustments.id, adjId));
       }
-      count19++;
+      count24++;
       console.log(`[ContractorInvoice] Created milestone invoice ${invoiceNumber} for contractor #${contractor.id} milestone #${milestone.id} (${totalAmount.toFixed(2)} ${currency})`);
     }
-    return count19;
+    return count24;
   },
   /**
    * Legacy entry point - kept for backward compatibility but now delegates to generateFromLockedData.
@@ -14952,7 +16529,7 @@ function generateContractorInvoiceNumber(contractorId, year, month, suffix) {
 
 // server/cronJobs.ts
 init_schema();
-import { eq as eq25 } from "drizzle-orm";
+import { eq as eq26, and as and21, sql as sql12 } from "drizzle-orm";
 function getWorkingDaysInMonth(year, month, workingDaysPerWeek = 5) {
   const daysInMonth = new Date(year, month, 0).getDate();
   let workingDays = 0;
@@ -14966,33 +16543,46 @@ function getWorkingDaysInMonth(year, month, workingDaysPerWeek = 5) {
   }
   return workingDays;
 }
-function getWorkingDaysFromDate(year, month, startDay, workingDaysPerWeek = 5) {
-  const daysInMonth = new Date(year, month, 0).getDate();
-  let workingDays = 0;
-  for (let d = startDay; d <= daysInMonth; d++) {
-    const dayOfWeek = new Date(year, month - 1, d).getDay();
-    if (workingDaysPerWeek >= 6) {
-      if (dayOfWeek !== 0) workingDays++;
-    } else {
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) workingDays++;
-    }
-  }
-  return workingDays;
-}
-function calculateProRata(baseSalary, startDate, payrollYear, payrollMonth, workingDaysPerWeek = 5) {
+function calculateProRata(baseSalary, startDate, payrollYear, payrollMonth, workingDaysPerWeek = 5, endDate) {
   const totalWorkingDays = getWorkingDaysInMonth(payrollYear, payrollMonth, workingDaysPerWeek);
   const startYear = startDate.getFullYear();
   const startMonth = startDate.getMonth() + 1;
   const startDay = startDate.getDate();
-  if (startYear < payrollYear || startYear === payrollYear && startMonth < payrollMonth) {
+  let effectiveStartDay = 1;
+  let effectiveEndDay = new Date(payrollYear, payrollMonth, 0).getDate();
+  const startedThisMonth = startYear === payrollYear && startMonth === payrollMonth;
+  const startedAfterThisMonth = startYear > payrollYear || startYear === payrollYear && startMonth > payrollMonth;
+  if (startedAfterThisMonth) {
+    return { proRataAmount: 0, totalWorkingDays, workedDays: 0 };
+  }
+  if (startedThisMonth) {
+    effectiveStartDay = startDay;
+  }
+  if (endDate) {
+    const endYear = endDate.getFullYear();
+    const endMonth = endDate.getMonth() + 1;
+    const endDay = endDate.getDate();
+    if (endYear < payrollYear || endYear === payrollYear && endMonth < payrollMonth) {
+      return { proRataAmount: 0, totalWorkingDays, workedDays: 0 };
+    }
+    if (endYear === payrollYear && endMonth === payrollMonth) {
+      effectiveEndDay = endDay;
+    }
+  }
+  if (!startedThisMonth && effectiveEndDay === new Date(payrollYear, payrollMonth, 0).getDate()) {
     return { proRataAmount: baseSalary, totalWorkingDays, workedDays: totalWorkingDays };
   }
-  if (startYear === payrollYear && startMonth === payrollMonth) {
-    const workedDays = getWorkingDaysFromDate(payrollYear, payrollMonth, startDay, workingDaysPerWeek);
-    const proRataAmount = totalWorkingDays > 0 ? baseSalary * workedDays / totalWorkingDays : 0;
-    return { proRataAmount: Math.round(proRataAmount * 100) / 100, totalWorkingDays, workedDays };
+  let workedDays = 0;
+  for (let d = effectiveStartDay; d <= effectiveEndDay; d++) {
+    const dayOfWeek = new Date(payrollYear, payrollMonth - 1, d).getDay();
+    if (workingDaysPerWeek >= 6) {
+      if (dayOfWeek !== 0) workedDays++;
+    } else {
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) workedDays++;
+    }
   }
-  return { proRataAmount: 0, totalWorkingDays, workedDays: 0 };
+  const proRataAmount = totalWorkingDays > 0 ? baseSalary * workedDays / totalWorkingDays : 0;
+  return { proRataAmount: Math.round(proRataAmount * 100) / 100, totalWorkingDays, workedDays };
 }
 async function runEmployeeAutoActivation() {
   const today = /* @__PURE__ */ new Date();
@@ -15011,6 +16601,16 @@ async function runEmployeeAutoActivation() {
     await updateEmployee(emp.id, { status: "active" });
     activated++;
     console.log(`[CronJob] Activated employee ${emp.employeeCode} (${emp.firstName} ${emp.lastName})`);
+    notificationService.send({
+      type: "employee_activated",
+      customerId: emp.customerId,
+      data: {
+        employeeName: `${emp.firstName} ${emp.lastName}`,
+        employeeCode: emp.employeeCode,
+        country: emp.country,
+        startDate: emp.startDate
+      }
+    }).catch((err) => console.error(`[CronJob] Failed to send activation notification for ${emp.employeeCode}:`, err));
     try {
       await autoInitializeLeavePolicyForCountry(emp.customerId, emp.country);
     } catch (err) {
@@ -15073,13 +16673,7 @@ async function runEmployeeAutoActivation() {
           currentMonth
         );
         if (proRataAmount > 0) {
-          let nextMonth = currentMonth + 1;
-          let nextYear = currentYear;
-          if (nextMonth > 12) {
-            nextMonth = 1;
-            nextYear++;
-          }
-          const effectiveMonth = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
+          const effectiveMonth = `${currentYear}-${String(currentMonth).padStart(2, "0")}-01`;
           await createAdjustment({
             employeeId: emp.id,
             customerId: emp.customerId,
@@ -15088,7 +16682,8 @@ async function runEmployeeAutoActivation() {
             amount: String(proRataAmount),
             currency: emp.salaryCurrency ?? "USD",
             effectiveMonth,
-            status: "submitted",
+            status: "admin_approved",
+            // System-generated: skip manual approval chain to ensure auto-lock picks it up
             description: `Sign-on bonus - pro-rata compensation for ${workedDays}/${totalWorkingDays} working days in ${currentYear}-${String(currentMonth).padStart(2, "0")} (started ${emp.startDate})`
           });
           console.log(`[CronJob] Created Sign-on Bonus for ${emp.employeeCode}: ${proRataAmount} ${emp.salaryCurrency ?? "USD"} (${workedDays}/${totalWorkingDays} days, effectiveMonth: ${effectiveMonth})`);
@@ -15139,6 +16734,40 @@ async function runAutoLock() {
     entityId: 0,
     changes: { detail: `Auto-locked for ${prevMonthStr}: EOR(${adjLocked} adj, ${leaveLocked} leave, ${reimbLocked} reimb) + AOR(${ctrAdjLocked} ctr_adj, ${ctrMilLocked} ctr_mil)` }
   });
+  try {
+    const { getDb: getDbConn } = await Promise.resolve().then(() => (init_db2(), db_exports));
+    const alertDb = await getDbConn();
+    if (alertDb) {
+      const { adjustments: adjustments2, reimbursements: reimbursements2, leaveRecords: leaveRecords2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { inArray: inArr } = await import("drizzle-orm");
+      const pendingStatuses = ["submitted", "client_approved"];
+      const pendingAdjCount = await alertDb.select({ id: adjustments2.id }).from(adjustments2).where(and21(eq26(adjustments2.effectiveMonth, prevMonthDate), inArr(adjustments2.status, pendingStatuses)));
+      const pendingReimbCount = await alertDb.select({ id: reimbursements2.id }).from(reimbursements2).where(and21(eq26(reimbursements2.effectiveMonth, prevMonthDate), inArr(reimbursements2.status, pendingStatuses)));
+      const pendingLeaveCount = await alertDb.select({ id: leaveRecords2.id }).from(leaveRecords2).where(and21(
+        inArr(leaveRecords2.status, pendingStatuses),
+        // Leave records for the previous month: startDate within the month
+        sql12`${leaveRecords2.startDate} >= ${prevMonthDate}`,
+        sql12`${leaveRecords2.startDate} < ${`${currentYear}-${String(currentMonth).padStart(2, "0")}-01`}`
+      ));
+      const totalPending = pendingAdjCount.length + pendingReimbCount.length + pendingLeaveCount.length;
+      if (totalPending > 0) {
+        console.warn(`[CronJob] \u26A0\uFE0F WARNING: ${totalPending} items for ${prevMonthStr} are still pending admin approval and were NOT locked. They will be delayed to next month's payroll.`);
+        notificationService.send({
+          type: "admin_pending_approval_alert",
+          data: {
+            period: prevMonthStr,
+            pendingAdjustments: pendingAdjCount.length,
+            pendingReimbursements: pendingReimbCount.length,
+            pendingLeave: pendingLeaveCount.length,
+            totalPending,
+            message: `${totalPending} items for ${prevMonthStr} missed the lock window and need immediate admin approval to avoid a 1-month delay.`
+          }
+        }).catch((err) => console.error("Failed to send admin pending approval alert:", err));
+      }
+    }
+  } catch (alertErr) {
+    console.error("[CronJob] Failed to check pending approvals:", alertErr);
+  }
   return { adjustmentsLocked: adjLocked, leaveLocked, reimbursementsLocked: reimbLocked, contractorAdjustmentsLocked: ctrAdjLocked, contractorMilestonesLocked: ctrMilLocked };
 }
 async function runAutoCreatePayrollRuns() {
@@ -15176,7 +16805,7 @@ async function runAutoCreatePayrollRuns() {
       console.log(`[CronJob] Payroll run already exists for ${countryCode} ${targetMonthStr}, skipping`);
       continue;
     }
-    const [config] = await db.select().from(countriesConfig).where(eq25(countriesConfig.countryCode, countryCode)).limit(1);
+    const [config] = await db.select().from(countriesConfig).where(eq26(countriesConfig.countryCode, countryCode)).limit(1);
     if (!config) {
       console.log(`[CronJob] No country config for ${countryCode}, skipping`);
       continue;
@@ -15203,10 +16832,30 @@ async function runAutoCreatePayrollRuns() {
         period: targetMonthStr
       }
     }).catch((err) => console.error("Failed to send payroll notification:", err));
-    const eligibleEmployees = await getEmployeesForPayrollMonth(countryCode, targetMonthStr, targetMonthEndStr);
+    const statusBasedEmployees = await getEmployeesForPayrollMonth(countryCode, targetMonthStr, targetMonthEndStr);
     const lockedAdjustments = await getSubmittedAdjustmentsForPayroll(countryCode, prevMonthPayroll, ["locked"]);
     const lockedReimbursements = await getSubmittedReimbursementsForPayroll(countryCode, prevMonthPayroll, ["locked"]);
     const lockedUnpaidLeave = await getSubmittedUnpaidLeaveForPayroll(countryCode, `${prevYear}-${String(prevMonth).padStart(2, "0")}`, ["locked"]);
+    const statusBasedIds = new Set(statusBasedEmployees.map((e) => e.id));
+    const orphanedEmployeeIds = /* @__PURE__ */ new Set();
+    for (const adj of lockedAdjustments) {
+      if (!statusBasedIds.has(adj.employeeId)) orphanedEmployeeIds.add(adj.employeeId);
+    }
+    for (const reimb of lockedReimbursements) {
+      if (!statusBasedIds.has(reimb.employeeId)) orphanedEmployeeIds.add(reimb.employeeId);
+    }
+    for (const leave of lockedUnpaidLeave) {
+      if (!statusBasedIds.has(leave.employeeId)) orphanedEmployeeIds.add(leave.employeeId);
+    }
+    const orphanedEmployees = [];
+    for (const empId of Array.from(orphanedEmployeeIds)) {
+      const emp = await getEmployeeById(empId);
+      if (emp && emp.country === countryCode) {
+        orphanedEmployees.push(emp);
+        console.log(`[CronJob] RESCUE: Including terminated employee ${emp.employeeCode} (${emp.firstName} ${emp.lastName}) - has orphaned locked data`);
+      }
+    }
+    const eligibleEmployees = [...statusBasedEmployees, ...orphanedEmployees];
     const adjByEmployee = /* @__PURE__ */ new Map();
     for (const adj of lockedAdjustments) {
       const empId = adj.employeeId;
@@ -15257,13 +16906,15 @@ async function runAutoCreatePayrollRuns() {
     for (const emp of eligibleEmployees) {
       const baseSalary = parseFloat(emp.baseSalary?.toString() ?? "0");
       const startDate = new Date(emp.startDate);
+      const endDate = emp.endDate ? new Date(emp.endDate) : null;
       const workingDaysPerWeek = config.workingDaysPerWeek ?? 5;
       const { proRataAmount, totalWorkingDays, workedDays } = calculateProRata(
         baseSalary,
         startDate,
         targetYear,
         targetMonth,
-        workingDaysPerWeek
+        workingDaysPerWeek,
+        endDate
       );
       const adjAgg = adjByEmployee.get(emp.id) ?? { bonus: 0, allowances: 0, reimbursements: 0, otherDeductions: 0 };
       const leaveAgg = leaveByEmployee.get(emp.id) ?? { days: 0 };
@@ -15286,7 +16937,7 @@ async function runAutoCreatePayrollRuns() {
         net: String(net2),
         totalEmploymentCost: String(net2),
         currency: emp.salaryCurrency ?? config.localCurrency,
-        notes: workedDays < totalWorkingDays ? `Pro-rata: ${workedDays}/${totalWorkingDays} working days (started ${emp.startDate})` : void 0
+        notes: workedDays < totalWorkingDays ? `Pro-rata: ${workedDays}/${totalWorkingDays} working days${emp.startDate && startDate.getFullYear() === targetYear && startDate.getMonth() + 1 === targetMonth ? ` (started ${emp.startDate})` : ""}${endDate && endDate.getFullYear() === targetYear && endDate.getMonth() + 1 === targetMonth ? ` (last day ${emp.endDate})` : ""}` : void 0
       });
       totalGross += gross;
       totalDeductions += deductions;
@@ -15355,7 +17006,7 @@ async function runLeaveStatusTransition() {
   }
   const { employees: employees2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
   for (const empId of Array.from(employeesWithActiveLeave)) {
-    const [emp] = await db.select({ id: employees2.id, status: employees2.status, employeeCode: employees2.employeeCode }).from(employees2).where(eq25(employees2.id, empId)).limit(1);
+    const [emp] = await db.select({ id: employees2.id, status: employees2.status, employeeCode: employees2.employeeCode }).from(employees2).where(eq26(employees2.id, empId)).limit(1);
     if (emp && emp.status === "active") {
       await updateEmployee(empId, { status: "on_leave" });
       toOnLeave++;
@@ -15371,15 +17022,18 @@ async function runLeaveStatusTransition() {
   }
   const expiredLeaveEmps = await getOnLeaveEmployeesWithExpiredLeave(todayStr);
   for (const emp of expiredLeaveEmps) {
-    await updateEmployee(emp.id, { status: "active" });
+    const fullEmp = await getEmployeeById(emp.id);
+    const hasEndDate = fullEmp && fullEmp.endDate;
+    const restoreStatus = hasEndDate ? "offboarding" : "active";
+    await updateEmployee(emp.id, { status: restoreStatus });
     toActive++;
-    console.log(`[CronJob] Employee ${emp.employeeCode || emp.id} returned to active (leave ended)`);
+    console.log(`[CronJob] Employee ${emp.employeeCode || emp.id} returned to ${restoreStatus} (leave ended${hasEndDate ? ", has endDate \u2192 offboarding" : ""})`);
     await logAuditAction({
       userName: "System",
       action: "employee_auto_return_from_leave",
       entityType: "employee",
       entityId: emp.id,
-      changes: { detail: `Auto-transitioned on_leave \u2192 active (all leave records ended before ${todayStr})` }
+      changes: { detail: `Auto-transitioned on_leave \u2192 ${restoreStatus} (all leave records ended before ${todayStr}${hasEndDate ? ", endDate present \u2192 restored to offboarding" : ""})` }
     });
   }
   console.log(`[CronJob] Leave transition complete: ${toOnLeave} to on_leave, ${toActive} returned to active`);
@@ -15393,21 +17047,21 @@ async function runOverdueInvoiceDetection() {
     return { overdueCount: 0 };
   }
   const { invoices: invoices2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-  const { eq: eq67, and: and53, lt: lt3, isNotNull: isNotNull3 } = await import("drizzle-orm");
+  const { eq: eq72, and: and58, lt: lt3, isNotNull: isNotNull3 } = await import("drizzle-orm");
   const now = /* @__PURE__ */ new Date();
   const beijingOffset = 8 * 60;
   const beijingDate = new Date(now.getTime() + (beijingOffset - now.getTimezoneOffset()) * 6e4);
   const todayStr = beijingDate.toISOString().split("T")[0];
   const overdueInvoices = await db.select({ id: invoices2.id, invoiceNumber: invoices2.invoiceNumber, dueDate: invoices2.dueDate, customerId: invoices2.customerId }).from(invoices2).where(
-    and53(
-      eq67(invoices2.status, "sent"),
+    and58(
+      eq72(invoices2.status, "sent"),
       isNotNull3(invoices2.dueDate),
       lt3(invoices2.dueDate, todayStr)
     )
   );
   let overdueCount = 0;
   for (const inv of overdueInvoices) {
-    await db.update(invoices2).set({ status: "overdue" }).where(eq67(invoices2.id, inv.id));
+    await db.update(invoices2).set({ status: "overdue" }).where(eq72(invoices2.id, inv.id));
     overdueCount++;
     console.log(`[CronJob] Invoice ${inv.invoiceNumber || inv.id} marked as overdue (due: ${inv.dueDate})`);
     notificationService.send({
@@ -15448,13 +17102,14 @@ async function runMonthlyLeaveAccrual() {
   console.log(`[CronJob] Running monthly leave accrual for ${currentYear}-${String(currentMonth).padStart(2, "0")}`);
   const { data: activeEmployees } = await listEmployees({ status: "active", pageSize: 1e4 });
   const { data: onLeaveEmployees } = await listEmployees({ status: "on_leave", pageSize: 1e4 });
-  const allEligibleEmployees = [...activeEmployees, ...onLeaveEmployees];
+  const { data: offboardingEmployees } = await listEmployees({ status: "offboarding", pageSize: 1e4 });
+  const allEligibleEmployees = [...activeEmployees, ...onLeaveEmployees, ...offboardingEmployees];
   const newEmployees = allEligibleEmployees.filter((emp) => {
     if (!emp.startDate) return false;
     const startDate = new Date(emp.startDate);
     return startDate.getFullYear() === currentYear;
   });
-  console.log(`[CronJob] Found ${newEmployees.length} employees who started in ${currentYear} (active: ${activeEmployees.length}, on_leave: ${onLeaveEmployees.length})`);
+  console.log(`[CronJob] Found ${newEmployees.length} employees who started in ${currentYear} (active: ${activeEmployees.length}, on_leave: ${onLeaveEmployees.length}, offboarding: ${offboardingEmployees.length})`);
   let processed = 0;
   let updated = 0;
   let errors = 0;
@@ -15539,6 +17194,37 @@ async function runAutoCreateContractorInvoices() {
   });
   return result;
 }
+async function runEmployeeAutoTermination() {
+  const today = /* @__PURE__ */ new Date();
+  const beijingOffset = 8 * 60;
+  const beijingDate = new Date(today.getTime() + (beijingOffset - today.getTimezoneOffset()) * 6e4);
+  const todayStr = beijingDate.toISOString().split("T")[0];
+  console.log(`[CronJob] Employee auto-termination check for ${todayStr}`);
+  const readyEmployees = await getOffboardingEmployeesReadyForTermination(todayStr);
+  let terminated = 0;
+  for (const emp of readyEmployees) {
+    await updateEmployee(emp.id, { status: "terminated" });
+    terminated++;
+    console.log(`[CronJob] Auto-terminated employee ${emp.employeeCode} (${emp.firstName} ${emp.lastName}), endDate: ${emp.endDate}`);
+    await logAuditAction({
+      userName: "System",
+      action: "employee_auto_terminated",
+      entityType: "employee",
+      entityId: emp.id,
+      changes: { detail: `Auto-terminated: offboarding \u2192 terminated (endDate: ${emp.endDate})` }
+    });
+    try {
+      const refundResult = await generateDepositRefund(emp.id);
+      if (refundResult) {
+        console.log(`[CronJob] Deposit refund generated for employee ${emp.employeeCode}: invoice #${refundResult.invoiceId}`);
+      }
+    } catch (refundErr) {
+      console.error(`[CronJob] Failed to generate deposit refund for employee ${emp.employeeCode}:`, refundErr);
+    }
+  }
+  console.log(`[CronJob] Employee auto-termination complete: ${terminated} terminated`);
+  return { terminated };
+}
 var CRON_JOB_DEFS = [
   {
     key: "employee_activation",
@@ -15549,6 +17235,16 @@ var CRON_JOB_DEFS = [
     defaultTime: "00:01",
     defaultEnabled: true,
     runner: runEmployeeAutoActivation
+  },
+  {
+    key: "employee_termination",
+    label: "Employee Auto-Termination",
+    description: "Transitions offboarding employees to terminated when endDate arrives (symmetric to activation)",
+    frequency: "daily",
+    defaultDay: 1,
+    defaultTime: "00:01",
+    defaultEnabled: true,
+    runner: runEmployeeAutoTermination
   },
   {
     key: "auto_lock",
@@ -15563,10 +17259,10 @@ var CRON_JOB_DEFS = [
   {
     key: "payroll_create",
     label: "Auto-Create Payroll Runs & Contractor Invoices",
-    description: "Creates draft payroll runs for all countries with active employees, and generates contractor invoices",
+    description: "Creates draft payroll runs for all countries with active employees, and generates contractor invoices. Runs AFTER activation/termination (00:01) to avoid race conditions.",
     frequency: "monthly",
     defaultDay: 5,
-    defaultTime: "00:01",
+    defaultTime: "00:05",
     defaultEnabled: true,
     runner: async () => {
       const payrollResult = await runAutoCreatePayrollRuns();
@@ -15638,7 +17334,7 @@ async function getCronJobConfig(def) {
   };
 }
 async function scheduleCronJobs() {
-  for (const [key, task] of activeTasks.entries()) {
+  for (const [key, task] of Array.from(activeTasks.entries())) {
     task.stop();
     console.log(`[CronJob] Stopped existing task: ${key}`);
   }
@@ -16337,7 +18033,7 @@ var vendorBillsRouter = router({
 import { z as z20 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq26, and as and21, sql as sql12, inArray as inArray8, count as count8 } from "drizzle-orm";
+import { eq as eq27, and as and22, sql as sql13, inArray as inArray8, count as count8 } from "drizzle-orm";
 function getLastNMonths2(n, fromDate) {
   const d = fromDate ? new Date(fromDate) : /* @__PURE__ */ new Date();
   const months = [];
@@ -16407,27 +18103,27 @@ var reportsRouter = router({
       const monthStart = `${m}-01`;
       const nextMonth = mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, "0")}-01`;
       const revenueResult = await db.select({
-        total: sql12`COALESCE(SUM(${invoices.total}), 0)`,
+        total: sql13`COALESCE(SUM(${invoices.total}), 0)`,
         cnt: count8()
       }).from(invoices).where(
-        and21(
-          eq26(invoices.status, "paid"),
-          sql12`${invoices.invoiceMonth} >= ${monthStart}`,
-          sql12`${invoices.invoiceMonth} < ${nextMonth}`,
+        and22(
+          eq27(invoices.status, "paid"),
+          sql13`${invoices.invoiceMonth} >= ${monthStart}`,
+          sql13`${invoices.invoiceMonth} < ${nextMonth}`,
           // Exclude deposit & deposit_refund — they are not revenue
-          sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+          sql13`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
         )
       );
       const monthRevenue = parseFloat(revenueResult[0]?.total ?? "0");
       const invoiceCount = revenueResult[0]?.cnt ?? 0;
       const expenseResult = await db.select({
-        total: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)`,
+        total: sql13`COALESCE(SUM(${vendorBills.totalAmount}), 0)`,
         cnt: count8()
       }).from(vendorBills).where(
-        and21(
+        and22(
           inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
-          sql12`${vendorBills.billMonth} >= ${monthStart}`,
-          sql12`${vendorBills.billMonth} < ${nextMonth}`
+          sql13`${vendorBills.billMonth} >= ${monthStart}`,
+          sql13`${vendorBills.billMonth} < ${nextMonth}`
         )
       );
       const monthExpenses = parseFloat(expenseResult[0]?.total ?? "0");
@@ -16451,68 +18147,68 @@ var reportsRouter = router({
     const globalEnd = lastMonth[1] === 12 ? `${lastMonth[0] + 1}-01-01` : `${lastMonth[0]}-${String(lastMonth[1] + 1).padStart(2, "0")}-01`;
     const revenueByTypeResult = await db.select({
       type: invoices.invoiceType,
-      amount: sql12`COALESCE(SUM(${invoices.total}), 0)`
+      amount: sql13`COALESCE(SUM(${invoices.total}), 0)`
     }).from(invoices).where(
-      and21(
-        eq26(invoices.status, "paid"),
-        sql12`${invoices.invoiceMonth} >= ${globalStart}`,
-        sql12`${invoices.invoiceMonth} < ${globalEnd}`,
-        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+      and22(
+        eq27(invoices.status, "paid"),
+        sql13`${invoices.invoiceMonth} >= ${globalStart}`,
+        sql13`${invoices.invoiceMonth} < ${globalEnd}`,
+        sql13`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     ).groupBy(invoices.invoiceType);
     const expensesByCategoryResult = await db.select({
       category: vendorBills.category,
-      amount: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)`
+      amount: sql13`COALESCE(SUM(${vendorBills.totalAmount}), 0)`
     }).from(vendorBills).where(
-      and21(
+      and22(
         inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
-        sql12`${vendorBills.billMonth} >= ${globalStart}`,
-        sql12`${vendorBills.billMonth} < ${globalEnd}`
+        sql13`${vendorBills.billMonth} >= ${globalStart}`,
+        sql13`${vendorBills.billMonth} < ${globalEnd}`
       )
     ).groupBy(vendorBills.category);
     const expensesByVendorResult = await db.select({
       vendorId: vendorBills.vendorId,
       vendorName: vendors.name,
-      amount: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)`
-    }).from(vendorBills).innerJoin(vendors, eq26(vendorBills.vendorId, vendors.id)).where(
-      and21(
+      amount: sql13`COALESCE(SUM(${vendorBills.totalAmount}), 0)`
+    }).from(vendorBills).innerJoin(vendors, eq27(vendorBills.vendorId, vendors.id)).where(
+      and22(
         inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
-        sql12`${vendorBills.billMonth} >= ${globalStart}`,
-        sql12`${vendorBills.billMonth} < ${globalEnd}`
+        sql13`${vendorBills.billMonth} >= ${globalStart}`,
+        sql13`${vendorBills.billMonth} < ${globalEnd}`
       )
     ).groupBy(vendorBills.vendorId, vendors.name);
     const revenueByCustomerResult = await db.select({
       customerId: invoices.customerId,
       customerName: customers.companyName,
-      amount: sql12`COALESCE(SUM(${invoices.total}), 0)`
-    }).from(invoices).innerJoin(customers, eq26(invoices.customerId, customers.id)).where(
-      and21(
-        eq26(invoices.status, "paid"),
-        sql12`${invoices.invoiceMonth} >= ${globalStart}`,
-        sql12`${invoices.invoiceMonth} < ${globalEnd}`,
-        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+      amount: sql13`COALESCE(SUM(${invoices.total}), 0)`
+    }).from(invoices).innerJoin(customers, eq27(invoices.customerId, customers.id)).where(
+      and22(
+        eq27(invoices.status, "paid"),
+        sql13`${invoices.invoiceMonth} >= ${globalStart}`,
+        sql13`${invoices.invoiceMonth} < ${globalEnd}`,
+        sql13`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     ).groupBy(invoices.customerId, customers.companyName);
     const customerProfitResult = await db.select({
       customerId: invoices.customerId,
       customerName: customers.companyName,
-      revenue: sql12`COALESCE(SUM(DISTINCT ${invoices.total}), 0)`,
-      costAllocated: sql12`COALESCE(SUM(${billInvoiceAllocations.allocatedAmount}), 0)`
-    }).from(invoices).innerJoin(customers, eq26(invoices.customerId, customers.id)).leftJoin(billInvoiceAllocations, eq26(billInvoiceAllocations.invoiceId, invoices.id)).where(
-      and21(
-        eq26(invoices.status, "paid"),
-        sql12`${invoices.invoiceMonth} >= ${globalStart}`,
-        sql12`${invoices.invoiceMonth} < ${globalEnd}`,
-        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+      revenue: sql13`COALESCE(SUM(DISTINCT ${invoices.total}), 0)`,
+      costAllocated: sql13`COALESCE(SUM(${billInvoiceAllocations.allocatedAmount}), 0)`
+    }).from(invoices).innerJoin(customers, eq27(invoices.customerId, customers.id)).leftJoin(billInvoiceAllocations, eq27(billInvoiceAllocations.invoiceId, invoices.id)).where(
+      and22(
+        eq27(invoices.status, "paid"),
+        sql13`${invoices.invoiceMonth} >= ${globalStart}`,
+        sql13`${invoices.invoiceMonth} < ${globalEnd}`,
+        sql13`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     ).groupBy(invoices.customerId, customers.companyName);
     const unallocatedResult = await db.select({
-      total: sql12`COALESCE(SUM(${vendorBills.unallocatedAmount}), 0)`
+      total: sql13`COALESCE(SUM(${vendorBills.unallocatedAmount}), 0)`
     }).from(vendorBills).where(
-      and21(
+      and22(
         inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
-        sql12`${vendorBills.billMonth} >= ${globalStart}`,
-        sql12`${vendorBills.billMonth} < ${globalEnd}`
+        sql13`${vendorBills.billMonth} >= ${globalStart}`,
+        sql13`${vendorBills.billMonth} < ${globalEnd}`
       )
     );
     const totalUnallocated = Math.round(parseFloat(unallocatedResult[0]?.total ?? "0") * 100) / 100;
@@ -16582,41 +18278,41 @@ var reportsRouter = router({
     const nextMonthStart = now.getMonth() === 11 ? `${now.getFullYear() + 1}-01-01` : `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, "0")}-01`;
     const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const prevMonthStart = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, "0")}-01`;
-    const [curRevenue] = await db.select({ total: sql12`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and21(
-        eq26(invoices.status, "paid"),
-        sql12`${invoices.invoiceMonth} >= ${currentMonthStart}`,
-        sql12`${invoices.invoiceMonth} < ${nextMonthStart}`,
-        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+    const [curRevenue] = await db.select({ total: sql13`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and22(
+        eq27(invoices.status, "paid"),
+        sql13`${invoices.invoiceMonth} >= ${currentMonthStart}`,
+        sql13`${invoices.invoiceMonth} < ${nextMonthStart}`,
+        sql13`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     );
-    const [curExpenses] = await db.select({ total: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(
-      and21(
+    const [curExpenses] = await db.select({ total: sql13`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(
+      and22(
         inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
-        sql12`${vendorBills.billMonth} >= ${currentMonthStart}`,
-        sql12`${vendorBills.billMonth} < ${nextMonthStart}`
+        sql13`${vendorBills.billMonth} >= ${currentMonthStart}`,
+        sql13`${vendorBills.billMonth} < ${nextMonthStart}`
       )
     );
-    const [prevRevenue] = await db.select({ total: sql12`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and21(
-        eq26(invoices.status, "paid"),
-        sql12`${invoices.invoiceMonth} >= ${prevMonthStart}`,
-        sql12`${invoices.invoiceMonth} < ${currentMonthStart}`,
-        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+    const [prevRevenue] = await db.select({ total: sql13`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and22(
+        eq27(invoices.status, "paid"),
+        sql13`${invoices.invoiceMonth} >= ${prevMonthStart}`,
+        sql13`${invoices.invoiceMonth} < ${currentMonthStart}`,
+        sql13`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     );
-    const [prevExpenses] = await db.select({ total: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(
-      and21(
+    const [prevExpenses] = await db.select({ total: sql13`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(
+      and22(
         inArray8(vendorBills.status, ["paid", "approved", "partially_paid"]),
-        sql12`${vendorBills.billMonth} >= ${prevMonthStart}`,
-        sql12`${vendorBills.billMonth} < ${currentMonthStart}`
+        sql13`${vendorBills.billMonth} >= ${prevMonthStart}`,
+        sql13`${vendorBills.billMonth} < ${currentMonthStart}`
       )
     );
-    const [outstandingBills] = await db.select({ total: sql12`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(inArray8(vendorBills.status, ["pending_approval", "approved", "overdue"]));
-    const [outstandingInvoices] = await db.select({ total: sql12`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and21(
+    const [outstandingBills] = await db.select({ total: sql13`COALESCE(SUM(${vendorBills.totalAmount}), 0)` }).from(vendorBills).where(inArray8(vendorBills.status, ["pending_approval", "approved", "overdue"]));
+    const [outstandingInvoices] = await db.select({ total: sql13`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and22(
         inArray8(invoices.status, ["sent", "overdue"]),
-        sql12`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
+        sql13`${invoices.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
       )
     );
     const curRev = parseFloat(curRevenue?.total ?? "0");
@@ -16641,7 +18337,7 @@ import { z as z21 } from "zod";
 init_db2();
 init_schema();
 import { TRPCError as TRPCError17 } from "@trpc/server";
-import { eq as eq27, sql as sql13, and as and22, desc as desc11 } from "drizzle-orm";
+import { eq as eq28, sql as sql14, and as and23, desc as desc11 } from "drizzle-orm";
 var allocationsRouter = router({
   // List allocations for a specific vendor bill (with employee + invoice details)
   listByBill: userProcedure.input(z21.object({ vendorBillId: z21.number() })).query(async ({ input }) => {
@@ -16691,7 +18387,7 @@ var allocationsRouter = router({
     if (!bill) throw new TRPCError17({ code: "NOT_FOUND", message: "Vendor bill not found" });
     const db = await getDb();
     if (!db) throw new TRPCError17({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    const invRows = await db.select().from(invoices).where(eq27(invoices.id, input.invoiceId)).limit(1);
+    const invRows = await db.select().from(invoices).where(eq28(invoices.id, input.invoiceId)).limit(1);
     if (!invRows[0]) throw new TRPCError17({ code: "NOT_FOUND", message: "Invoice not found" });
     const inv = invRows[0];
     const billType = bill.billType || "operational";
@@ -16704,7 +18400,7 @@ var allocationsRouter = router({
     if (billType === "operational" && inv.invoiceType === "deposit") {
       throw new TRPCError17({ code: "BAD_REQUEST", message: "Operational vendor bills should not be allocated to deposit invoices. Use a deposit-type vendor bill instead." });
     }
-    const empRows = await db.select().from(employees).where(eq27(employees.id, input.employeeId)).limit(1);
+    const empRows = await db.select().from(employees).where(eq28(employees.id, input.employeeId)).limit(1);
     if (!empRows[0]) throw new TRPCError17({ code: "NOT_FOUND", message: "Employee not found" });
     const billAllocated = await getBillAllocatedTotal(input.vendorBillId);
     const billTotal = parseFloat(String(bill.totalAmount));
@@ -16720,10 +18416,10 @@ var allocationsRouter = router({
       const monthStr = typeof billMonth === "string" ? billMonth.substring(0, 7) : new Date(billMonth).toISOString().substring(0, 7);
       const revenueData = await getEmployeeMonthlyRevenue(input.employeeId, monthStr);
       employeeRevenue = revenueData.total;
-      const existingAllocations = await db.select({ allocatedAmount: billInvoiceAllocations.allocatedAmount }).from(billInvoiceAllocations).innerJoin(vendorBills, eq27(billInvoiceAllocations.vendorBillId, vendorBills.id)).where(
-        and22(
-          eq27(billInvoiceAllocations.employeeId, input.employeeId),
-          sql13`strftime('%Y-%m', ${vendorBills.billMonth}) = ${monthStr}`
+      const existingAllocations = await db.select({ allocatedAmount: billInvoiceAllocations.allocatedAmount }).from(billInvoiceAllocations).innerJoin(vendorBills, eq28(billInvoiceAllocations.vendorBillId, vendorBills.id)).where(
+        and23(
+          eq28(billInvoiceAllocations.employeeId, input.employeeId),
+          sql14`strftime('%Y-%m', ${vendorBills.billMonth}) = ${monthStr}`
         )
       );
       employeeAllocatedTotal = existingAllocations.reduce((sum3, a) => sum3 + parseFloat(String(a.allocatedAmount || "0")), 0);
@@ -16868,12 +18564,12 @@ var allocationsRouter = router({
     if (!db) throw new TRPCError17({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     let conditions = [];
     if (input.startMonth) {
-      conditions.push(sql13`${invoices.invoiceMonth} >= ${input.startMonth + "-01"}`);
+      conditions.push(sql14`${invoices.invoiceMonth} >= ${input.startMonth + "-01"}`);
     }
     if (input.endMonth) {
-      conditions.push(sql13`${invoices.invoiceMonth} <= ${input.endMonth + "-01"}`);
+      conditions.push(sql14`${invoices.invoiceMonth} <= ${input.endMonth + "-01"}`);
     }
-    const where = conditions.length > 0 ? and22(...conditions) : void 0;
+    const where = conditions.length > 0 ? and23(...conditions) : void 0;
     const invList = await db.select().from(invoices).where(where).orderBy(desc11(invoices.invoiceMonth));
     const results = [];
     for (const inv of invList) {
@@ -16883,7 +18579,7 @@ var allocationsRouter = router({
       const margin = revenue > 0 ? profit / revenue * 100 : 0;
       const customerRows = await db.select().from(
         (await Promise.resolve().then(() => (init_schema(), schema_exports))).customers
-      ).where(eq27((await Promise.resolve().then(() => (init_schema(), schema_exports))).customers.id, inv.customerId)).limit(1);
+      ).where(eq28((await Promise.resolve().then(() => (init_schema(), schema_exports))).customers.id, inv.customerId)).limit(1);
       results.push({
         invoiceId: inv.id,
         invoiceNumber: inv.invoiceNumber,
@@ -16917,7 +18613,7 @@ var allocationsRouter = router({
   vendorComparison: userProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError17({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    const vendorList = await db.select().from(vendors).where(eq27(vendors.status, "active"));
+    const vendorList = await db.select().from(vendors).where(eq28(vendors.status, "active"));
     const results = [];
     for (const vendor of vendorList) {
       const analysis = await getVendorProfitAnalysis(vendor.id);
@@ -17093,7 +18789,7 @@ async function uploadFileToDashScope(buffer, filename) {
 // server/routers/pdfParsing.ts
 init_db2();
 init_schema();
-import { eq as eq28, sql as sql14, inArray as inArray9, desc as desc12 } from "drizzle-orm";
+import { eq as eq29, sql as sql15, inArray as inArray9, desc as desc12 } from "drizzle-orm";
 import { TRPCError as TRPCError18 } from "@trpc/server";
 async function buildSystemContext(serviceMonth) {
   const db = await getDb();
@@ -17108,14 +18804,14 @@ async function buildSystemContext(serviceMonth) {
     jobTitle: employees.jobTitle,
     baseSalary: employees.baseSalary,
     salaryCurrency: employees.salaryCurrency
-  }).from(employees).where(eq28(employees.status, "active"));
+  }).from(employees).where(eq29(employees.status, "active"));
   const custRows = await db.select({
     id: customers.id,
     clientCode: customers.clientCode,
     companyName: customers.companyName,
     country: customers.country,
     settlementCurrency: customers.settlementCurrency
-  }).from(customers).where(eq28(customers.status, "active"));
+  }).from(customers).where(eq29(customers.status, "active"));
   let invQuery = db.select({
     id: invoices.id,
     invoiceNumber: invoices.invoiceNumber,
@@ -17129,7 +18825,7 @@ async function buildSystemContext(serviceMonth) {
   let invRows;
   if (serviceMonth) {
     invRows = await invQuery.where(
-      sql14`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth} OR strftime('%Y-%m', ${invoices.createdAt}, 'unixepoch') = ${serviceMonth}`
+      sql15`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth} OR strftime('%Y-%m', ${invoices.createdAt}, 'unixepoch') = ${serviceMonth}`
     ).orderBy(desc12(invoices.createdAt)).limit(200);
   } else {
     invRows = await invQuery.orderBy(desc12(invoices.createdAt)).limit(100);
@@ -17482,7 +19178,7 @@ CONFIDENCE SCORING RULES:
       const vendorList = await listVendors({ pageSize: 1 });
       const db = await getDb();
       if (db) {
-        const vRows = await db.select().from(vendors).where(eq28(vendors.id, input.vendorId)).limit(1);
+        const vRows = await db.select().from(vendors).where(eq29(vendors.id, input.vendorId)).limit(1);
         if (vRows[0]) {
           parsed2.vendorMatch = {
             status: "pre_selected",
@@ -17830,7 +19526,7 @@ Be precise with numbers. If a field is not found, use null.`
 import { z as z23 } from "zod";
 init_db2();
 init_schema();
-import { desc as desc13, eq as eq29, and as and24, sql as sql15 } from "drizzle-orm";
+import { desc as desc13, eq as eq30, and as and25, sql as sql16 } from "drizzle-orm";
 import { TRPCError as TRPCError19 } from "@trpc/server";
 var salesRouter = router({
   // ── List all sales leads ──────────────────────────────────────────────
@@ -17977,9 +19673,9 @@ var salesRouter = router({
       const db = getDb();
       if (db) {
         const hasSentQuotation = await db.query.quotations.findFirst({
-          where: (q, { eq: eq67, or: or10 }) => and24(
-            eq67(q.leadId, input.id),
-            or10(eq67(q.status, "sent"), eq67(q.status, "accepted"))
+          where: (q, { eq: eq72, or: or11 }) => and25(
+            eq72(q.leadId, input.id),
+            or11(eq72(q.status, "sent"), eq72(q.status, "accepted"))
           )
         });
         if (!hasSentQuotation) {
@@ -17994,9 +19690,9 @@ var salesRouter = router({
       const db = getDb();
       if (db) {
         const hasAcceptedQuotation = await db.query.quotations.findFirst({
-          where: and24(
-            eq29(quotations.leadId, input.id),
-            eq29(quotations.status, "accepted")
+          where: and25(
+            eq30(quotations.leadId, input.id),
+            eq30(quotations.status, "accepted")
           )
         });
         if (!hasAcceptedQuotation) {
@@ -18006,9 +19702,9 @@ var salesRouter = router({
           });
         }
         const msaDoc = await db.query.salesDocuments.findFirst({
-          where: and24(
-            eq29(salesDocuments.leadId, input.id),
-            eq29(salesDocuments.docType, "contract")
+          where: and25(
+            eq30(salesDocuments.leadId, input.id),
+            eq30(salesDocuments.docType, "contract")
             // Assuming 'contract' is used for MSA
           )
         });
@@ -18135,7 +19831,7 @@ var salesRouter = router({
     const db = getDb();
     if (db) {
       const latestQuotation = await db.query.quotations.findFirst({
-        where: eq29(quotations.leadId, input.leadId),
+        where: eq30(quotations.leadId, input.leadId),
         orderBy: [desc13(quotations.createdAt)]
       });
       if (latestQuotation && latestQuotation.snapshotData) {
@@ -18148,7 +19844,7 @@ var salesRouter = router({
               pricingMap.set(key, item);
             }
           }
-          for (const item of pricingMap.values()) {
+          for (const item of Array.from(pricingMap.values())) {
             if (item.serviceType === "aor") {
               await createCustomerPricing({
                 customerId,
@@ -18182,18 +19878,20 @@ var salesRouter = router({
     await updateSalesLead(input.leadId, {
       convertedCustomerId: customerId
     });
-    const salesDocs = await db.query.salesDocuments.findMany({
-      where: eq29(salesDocuments.leadId, input.leadId)
-    });
-    for (const doc of salesDocs) {
-      if (doc.docType === "contract") {
-        const contractName = doc.title || `MSA-${lead.companyName}`;
-        const now = Date.now();
-        await db.run(sql15`INSERT INTO customer_contracts ("customerId", "contractName", "contractType", "fileUrl", "fileKey", "status", "createdAt", "updatedAt") VALUES (${customerId}, ${contractName}, ${"MSA"}, ${doc.fileUrl}, ${doc.fileKey}, ${"signed"}, ${now}, ${now})`);
+    if (db) {
+      const salesDocs = await db.query.salesDocuments.findMany({
+        where: eq30(salesDocuments.leadId, input.leadId)
+      });
+      for (const doc of salesDocs) {
+        if (doc.docType === "contract") {
+          const contractName = doc.title || `MSA-${lead.companyName}`;
+          const now = Date.now();
+          await db.run(sql16`INSERT INTO customer_contracts ("customerId", "contractName", "contractType", "fileUrl", "fileKey", "status", "createdAt", "updatedAt") VALUES (${customerId}, ${contractName}, ${"MSA"}, ${doc.fileUrl}, ${doc.fileKey}, ${"signed"}, ${now}, ${now})`);
+        }
+        await db.update(salesDocuments).set({ customerId }).where(eq30(salesDocuments.id, doc.id));
       }
-      await db.update(salesDocuments).set({ customerId }).where(eq29(salesDocuments.id, doc.id));
+      await db.update(quotations).set({ customerId }).where(eq30(quotations.leadId, input.leadId));
     }
-    await db.update(quotations).set({ customerId }).where(eq29(quotations.leadId, input.leadId));
     await createSalesActivity({
       leadId: input.leadId,
       activityType: "note",
@@ -18366,7 +20064,7 @@ var salesRouter = router({
       const db = getDb();
       if (!db) return [];
       const docs = await db.query.salesDocuments.findMany({
-        where: eq29(salesDocuments.leadId, input.leadId),
+        where: eq30(salesDocuments.leadId, input.leadId),
         orderBy: [desc13(salesDocuments.createdAt)]
       });
       return await Promise.all(docs.map(async (d) => {
@@ -18398,7 +20096,7 @@ var salesRouter = router({
       const db = getDb();
       if (!db) throw new TRPCError19({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       const docNow = Date.now();
-      const insertResult = await db.run(sql15`INSERT INTO sales_documents ("leadId", "docType", "title", "fileKey", "fileUrl", "generatedBy", "createdAt") VALUES (${input.leadId}, ${input.docType}, ${input.fileName}, ${fileKey}, ${url}, ${ctx.user.id}, ${docNow})`);
+      const insertResult = await db.run(sql16`INSERT INTO sales_documents ("leadId", "docType", "title", "fileKey", "fileUrl", "generatedBy", "createdAt") VALUES (${input.leadId}, ${input.docType}, ${input.fileName}, ${fileKey}, ${url}, ${ctx.user.id}, ${docNow})`);
       const docId = Number(insertResult.lastInsertRowid);
       const doc = { id: docId, leadId: input.leadId, docType: input.docType, title: input.fileName, fileKey, fileUrl: url, generatedBy: ctx.user.id, createdAt: new Date(docNow) };
       await logAuditAction({
@@ -18414,7 +20112,7 @@ var salesRouter = router({
       const db = getDb();
       if (!db) throw new TRPCError19({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       const doc = await db.query.salesDocuments.findFirst({
-        where: eq29(salesDocuments.id, input.id)
+        where: eq30(salesDocuments.id, input.id)
       });
       if (!doc) throw new TRPCError19({ code: "NOT_FOUND", message: "Document not found" });
       if (doc.fileKey) {
@@ -18435,7 +20133,7 @@ var salesRouter = router({
     delete: crmProcedure.input(z23.object({ id: z23.number() })).mutation(async ({ input, ctx }) => {
       const db = getDb();
       if (!db) throw new TRPCError19({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-      await db.delete(salesDocuments).where(eq29(salesDocuments.id, input.id));
+      await db.delete(salesDocuments).where(eq30(salesDocuments.id, input.id));
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -18465,7 +20163,7 @@ var salesRouter = router({
 
 // server/routers/knowledgeBaseAdmin.ts
 import { z as z24 } from "zod";
-import { desc as desc14, eq as eq31, gte as gte4, inArray as inArray10 } from "drizzle-orm";
+import { desc as desc14, eq as eq32, gte as gte4, inArray as inArray10 } from "drizzle-orm";
 import { TRPCError as TRPCError20 } from "@trpc/server";
 init_db2();
 init_schema();
@@ -18795,7 +20493,7 @@ var knowledgeBaseAdminRouter = router({
         authorityReason: authority.reason,
         aiReviewedAt: /* @__PURE__ */ new Date(),
         updatedBy: ctx.user.id
-      }).where(eq31(knowledgeSources.id, input.id));
+      }).where(eq32(knowledgeSources.id, input.id));
       return { success: true, id: input.id };
     }
     const result = await db.insert(knowledgeSources).values({
@@ -18816,7 +20514,7 @@ var knowledgeBaseAdminRouter = router({
   auditSourceAuthority: adminProcedure2.input(z24.object({ sourceId: z24.number() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError20({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const [source] = await db.select().from(knowledgeSources).where(eq31(knowledgeSources.id, input.sourceId)).limit(1);
+    const [source] = await db.select().from(knowledgeSources).where(eq32(knowledgeSources.id, input.sourceId)).limit(1);
     if (!source) throw new TRPCError20({ code: "NOT_FOUND", message: "Source not found" });
     const authority = await evaluateSourceAuthorityWithAI({
       sourceName: source.name,
@@ -18828,13 +20526,13 @@ var knowledgeBaseAdminRouter = router({
       authorityLevel: authority.level,
       authorityReason: authority.reason,
       aiReviewedAt: /* @__PURE__ */ new Date()
-    }).where(eq31(knowledgeSources.id, source.id));
+    }).where(eq32(knowledgeSources.id, source.id));
     return { success: true, authority };
   }),
   ingestSourceNow: adminProcedure2.input(z24.object({ sourceId: z24.number(), customerId: z24.number().optional() })).mutation(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError20({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const [source] = await db.select().from(knowledgeSources).where(eq31(knowledgeSources.id, input.sourceId)).limit(1);
+    const [source] = await db.select().from(knowledgeSources).where(eq32(knowledgeSources.id, input.sourceId)).limit(1);
     if (!source) throw new TRPCError20({ code: "NOT_FOUND", message: "Source not found" });
     const pulled = await pullFromSource(source.url);
     if (!pulled.length) return { success: true, created: 0 };
@@ -18888,7 +20586,7 @@ ${item.content}`
         };
       })
     );
-    await db.update(knowledgeSources).set({ lastFetchedAt: /* @__PURE__ */ new Date() }).where(eq31(knowledgeSources.id, source.id));
+    await db.update(knowledgeSources).set({ lastFetchedAt: /* @__PURE__ */ new Date() }).where(eq32(knowledgeSources.id, source.id));
     return { success: true, created: drafts.length };
   }),
   generateFromInternalData: adminProcedure2.input(
@@ -18920,7 +20618,7 @@ ${item.content}`
   reviewItem: adminProcedure2.input(z24.object({ id: z24.number(), action: z24.enum(["publish", "reject"]), note: z24.string().optional() })).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError20({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const [item] = await db.select().from(knowledgeItems).where(eq31(knowledgeItems.id, input.id)).limit(1);
+    const [item] = await db.select().from(knowledgeItems).where(eq32(knowledgeItems.id, input.id)).limit(1);
     if (!item) throw new TRPCError20({ code: "NOT_FOUND", message: "Item not found" });
     await db.update(knowledgeItems).set({
       status: input.action === "publish" ? "published" : "rejected",
@@ -18928,7 +20626,7 @@ ${item.content}`
       reviewedAt: /* @__PURE__ */ new Date(),
       publishedAt: input.action === "publish" ? /* @__PURE__ */ new Date() : item.publishedAt,
       reviewNote: input.note || null
-    }).where(eq31(knowledgeItems.id, input.id));
+    }).where(eq32(knowledgeItems.id, input.id));
     return { success: true };
   })
 });
@@ -18937,7 +20635,7 @@ ${item.content}`
 import { z as z25 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq32, and as and26, desc as desc15 } from "drizzle-orm";
+import { eq as eq33, and as and27, desc as desc15 } from "drizzle-orm";
 import { TRPCError as TRPCError21 } from "@trpc/server";
 var NotificationConfigSchema = z25.object({
   enabled: z25.boolean().default(false),
@@ -18965,7 +20663,7 @@ var notificationsRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const setting = await db.query.systemSettings.findFirst({
-      where: eq32(systemSettings.key, "notification_rules")
+      where: eq33(systemSettings.key, "notification_rules")
     });
     const config = JSON.parse(JSON.stringify(DEFAULT_RULES));
     if (setting && setting.value) {
@@ -19000,7 +20698,7 @@ var notificationsRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const setting = await db.query.systemSettings.findFirst({
-      where: eq32(systemSettings.key, "notification_rules")
+      where: eq33(systemSettings.key, "notification_rules")
     });
     let rules = {};
     if (setting && setting.value) {
@@ -19036,13 +20734,13 @@ var notificationsRouter = router({
     if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const userId = ctx.user.id;
     const userRoles = (ctx.user.role || "").split(",");
-    const roleConditions = userRoles.map((role) => eq32(notifications.targetRole, role.trim()));
+    const roleConditions = userRoles.map((role) => eq33(notifications.targetRole, role.trim()));
     return await db.query.notifications.findMany({
-      where: (t4, { and: and53, or: or10, eq: eq67 }) => and53(
-        eq67(t4.targetPortal, "admin"),
-        eq67(t4.isRead, false),
-        or10(
-          eq67(t4.targetUserId, userId),
+      where: (t4, { and: and58, or: or11, eq: eq72 }) => and58(
+        eq72(t4.targetPortal, "admin"),
+        eq72(t4.isRead, false),
+        or11(
+          eq72(t4.targetUserId, userId),
           ...roleConditions
         )
       ),
@@ -19056,7 +20754,7 @@ var notificationsRouter = router({
   markAsRead: userProcedure.input(z25.object({ id: z25.number() })).mutation(async ({ ctx, input }) => {
     const db = getDb();
     if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-    await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(eq32(notifications.id, input.id));
+    await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(eq33(notifications.id, input.id));
     return { success: true };
   }),
   /**
@@ -19067,10 +20765,10 @@ var notificationsRouter = router({
     if (!db) throw new TRPCError21({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
     const userId = ctx.user.id;
     await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(
-      and26(
-        eq32(notifications.targetPortal, "admin"),
-        eq32(notifications.targetUserId, userId),
-        eq32(notifications.isRead, false)
+      and27(
+        eq33(notifications.targetPortal, "admin"),
+        eq33(notifications.targetUserId, userId),
+        eq33(notifications.isRead, false)
       )
     );
     return { success: true };
@@ -19083,7 +20781,7 @@ import { z as z26 } from "zod";
 // server/services/calculationService.ts
 init_db2();
 init_schema();
-import { eq as eq33, and as and27, or as or7, isNull as isNull4 } from "drizzle-orm";
+import { eq as eq34, and as and28, or as or8, isNull as isNull4 } from "drizzle-orm";
 var calculationService = {
   /**
    * Calculate social insurance contributions for a given salary
@@ -19092,28 +20790,28 @@ var calculationService = {
     const { countryCode, year, salary, regionCode, age } = input;
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
-    const whereClause = regionCode ? and27(
-      eq33(countrySocialInsuranceItems.countryCode, countryCode),
-      eq33(countrySocialInsuranceItems.effectiveYear, year),
-      eq33(countrySocialInsuranceItems.isActive, true),
-      or7(
-        eq33(countrySocialInsuranceItems.regionCode, regionCode),
+    const whereClause = regionCode ? and28(
+      eq34(countrySocialInsuranceItems.countryCode, countryCode),
+      eq34(countrySocialInsuranceItems.effectiveYear, year),
+      eq34(countrySocialInsuranceItems.isActive, true),
+      or8(
+        eq34(countrySocialInsuranceItems.regionCode, regionCode),
         isNull4(countrySocialInsuranceItems.regionCode)
       )
-    ) : and27(
-      eq33(countrySocialInsuranceItems.countryCode, countryCode),
-      eq33(countrySocialInsuranceItems.effectiveYear, year),
-      eq33(countrySocialInsuranceItems.isActive, true),
+    ) : and28(
+      eq34(countrySocialInsuranceItems.countryCode, countryCode),
+      eq34(countrySocialInsuranceItems.effectiveYear, year),
+      eq34(countrySocialInsuranceItems.isActive, true),
       isNull4(countrySocialInsuranceItems.regionCode)
     );
     const db_rules = await db.select().from(countrySocialInsuranceItems).where(whereClause).orderBy(countrySocialInsuranceItems.sortOrder);
     let rules = db_rules;
     if (rules.length === 0 && !regionCode) {
       const anyRules = await db.query.countrySocialInsuranceItems.findMany({
-        where: and27(
-          eq33(countrySocialInsuranceItems.countryCode, countryCode),
-          eq33(countrySocialInsuranceItems.effectiveYear, year),
-          eq33(countrySocialInsuranceItems.isActive, true)
+        where: and28(
+          eq34(countrySocialInsuranceItems.countryCode, countryCode),
+          eq34(countrySocialInsuranceItems.effectiveYear, year),
+          eq34(countrySocialInsuranceItems.isActive, true)
         ),
         orderBy: [countrySocialInsuranceItems.sortOrder]
       });
@@ -19210,7 +20908,7 @@ var calculationService = {
 // server/routers/calculationRouter.ts
 init_db2();
 init_schema();
-import { eq as eq34, and as and28, isNotNull as isNotNull2 } from "drizzle-orm";
+import { eq as eq35, and as and29, isNotNull as isNotNull2 } from "drizzle-orm";
 import { TRPCError as TRPCError22 } from "@trpc/server";
 var calculationRouter = router({
   calculateContributions: protectedProcedure.input(
@@ -19236,10 +20934,10 @@ var calculationRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError22({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     return await db.select().from(countrySocialInsuranceItems).where(
-      and28(
-        eq34(countrySocialInsuranceItems.countryCode, input.countryCode),
-        eq34(countrySocialInsuranceItems.effectiveYear, input.year),
-        eq34(countrySocialInsuranceItems.isActive, true)
+      and29(
+        eq35(countrySocialInsuranceItems.countryCode, input.countryCode),
+        eq35(countrySocialInsuranceItems.effectiveYear, input.year),
+        eq35(countrySocialInsuranceItems.isActive, true)
       )
     ).orderBy(countrySocialInsuranceItems.sortOrder);
   }),
@@ -19255,9 +20953,9 @@ var calculationRouter = router({
       regionCode: countrySocialInsuranceItems.regionCode,
       regionName: countrySocialInsuranceItems.regionName
     }).from(countrySocialInsuranceItems).where(
-      and28(
-        eq34(countrySocialInsuranceItems.countryCode, input.countryCode),
-        eq34(countrySocialInsuranceItems.effectiveYear, input.year),
+      and29(
+        eq35(countrySocialInsuranceItems.countryCode, input.countryCode),
+        eq35(countrySocialInsuranceItems.effectiveYear, input.year),
         isNotNull2(countrySocialInsuranceItems.regionCode)
       )
     );
@@ -19271,7 +20969,7 @@ import { z as z27 } from "zod";
 // server/services/quotationService.ts
 init_db2();
 init_schema();
-import { eq as eq36 } from "drizzle-orm";
+import { eq as eq37 } from "drizzle-orm";
 
 // server/services/htmlPdfService.ts
 import puppeteer from "puppeteer-core";
@@ -19843,7 +21541,7 @@ var DEFAULT_BRANDING = {
   shortName: "GEA",
   fullName: "Global Employment Advisors",
   logoUrl: null,
-  contactEmail: "sales@geahr.com"
+  contactEmail: "support@bestgea.com"
 };
 async function resolveBrandingLogo(branding) {
   if (branding.logoUrl && !branding.logoBase64) {
@@ -20092,7 +21790,7 @@ async function generateQuotationPdf(data) {
       </div>
     </div>
   `, branding);
-  const contactEmail = data.createdByEmail ?? branding.contactEmail ?? data.billingEntity?.contactEmail ?? "sales@geahr.com";
+  const contactEmail = data.createdByEmail ?? branding.contactEmail ?? data.billingEntity?.contactEmail ?? "support@bestgea.com";
   const contactName = data.createdByName ?? branding.shortName + " account manager";
   const notesHtml = data.notes ? `
     <div class="notes-box" style="margin-bottom:6mm;">
@@ -20151,19 +21849,19 @@ async function generateQuotationPdf(data) {
 // server/services/countryGuidePdfService.ts
 init_db2();
 init_schema();
-import { eq as eq35, and as and29, asc as asc2 } from "drizzle-orm";
+import { eq as eq36, and as and30, asc as asc2 } from "drizzle-orm";
 async function getDefaultBranding(db) {
-  if (!db) return { shortName: "GEA", fullName: "Global Employment Advisors", contactEmail: "sales@geahr.com" };
+  if (!db) return { shortName: "GEA", fullName: "Global Employment Advisors", contactEmail: "support@bestgea.com" };
   let entity = await db.query.billingEntities.findFirst({
-    where: and29(eq35(billingEntities.isDefault, true), eq35(billingEntities.isActive, true))
+    where: and30(eq36(billingEntities.isDefault, true), eq36(billingEntities.isActive, true))
   });
   if (!entity) {
     entity = await db.query.billingEntities.findFirst({
-      where: eq35(billingEntities.isActive, true)
+      where: eq36(billingEntities.isActive, true)
     });
   }
   if (!entity) {
-    return { shortName: "GEA", fullName: "Global Employment Advisors", contactEmail: "sales@geahr.com" };
+    return { shortName: "GEA", fullName: "Global Employment Advisors", contactEmail: "support@bestgea.com" };
   }
   const addressParts = [entity.address, entity.city, entity.country].filter(Boolean);
   const address = addressParts.length > 0 ? addressParts.join(", ") : void 0;
@@ -20190,13 +21888,13 @@ var countryGuidePdfService = {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
     const country = await db.query.countriesConfig.findFirst({
-      where: eq35(countriesConfig.countryCode, countryCode)
+      where: eq36(countriesConfig.countryCode, countryCode)
     });
     if (!country) return null;
     const chapters = await db.query.countryGuideChapters.findMany({
-      where: and29(
-        eq35(countryGuideChapters.countryCode, countryCode),
-        eq35(countryGuideChapters.status, "published")
+      where: and30(
+        eq36(countryGuideChapters.countryCode, countryCode),
+        eq36(countryGuideChapters.status, "published")
       ),
       orderBy: [asc2(countryGuideChapters.sortOrder)]
     });
@@ -20359,7 +22057,7 @@ var quotationService = {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
     const existing = await db.query.quotations.findFirst({
-      where: eq36(quotations.id, input.id)
+      where: eq37(quotations.id, input.id)
     });
     if (!existing) throw new Error("Quotation not found");
     if (existing.status !== "draft") throw new Error("Only draft quotations can be edited");
@@ -20431,7 +22129,7 @@ var quotationService = {
       snapshotData: calculatedItems,
       validUntil: input.validUntil,
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq36(quotations.id, input.id));
+    }).where(eq37(quotations.id, input.id));
     await quotationService.generatePdf(input.id, input.includeCountryGuide);
     return { id: input.id };
   },
@@ -20439,14 +22137,14 @@ var quotationService = {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
     const quotation = await db.query.quotations.findFirst({
-      where: eq36(quotations.id, quotationId)
+      where: eq37(quotations.id, quotationId)
     });
     if (!quotation) throw new Error("Quotation not found");
     let customerName = "Valued Customer";
     let customerAddress = "";
     if (quotation.customerId) {
       const customer = await db.query.customers.findFirst({
-        where: eq36(customers.id, quotation.customerId)
+        where: eq37(customers.id, quotation.customerId)
       });
       if (customer) {
         customerName = customer.companyName;
@@ -20454,7 +22152,7 @@ var quotationService = {
       }
     } else if (quotation.leadId) {
       const lead = await db.query.salesLeads.findFirst({
-        where: eq36(salesLeads.id, quotation.leadId)
+        where: eq37(salesLeads.id, quotation.leadId)
       });
       if (lead) {
         customerName = lead.companyName;
@@ -20466,14 +22164,14 @@ var quotationService = {
     let branding = {
       shortName: "GEA",
       fullName: "Global Employment Advisors",
-      contactEmail: "sales@geahr.com"
+      contactEmail: "support@bestgea.com"
     };
     let defaultBilling = await db.query.billingEntities.findFirst({
-      where: eq36(billingEntities.isDefault, true)
+      where: eq37(billingEntities.isDefault, true)
     });
     if (!defaultBilling) {
       defaultBilling = await db.query.billingEntities.findFirst({
-        where: eq36(billingEntities.isActive, true)
+        where: eq37(billingEntities.isActive, true)
       }) ?? void 0;
     }
     if (defaultBilling) {
@@ -20509,7 +22207,7 @@ var quotationService = {
     let createdByEmail;
     if (quotation.createdBy) {
       const creator = await db.query.users.findFirst({
-        where: eq36(users.id, quotation.createdBy)
+        where: eq37(users.id, quotation.createdBy)
       });
       if (creator) {
         createdByName = creator.name ?? void 0;
@@ -20546,7 +22244,7 @@ var quotationService = {
     });
     const fileName = `Quotation-${quotation.quotationNumber}.pdf`;
     const { key, url } = await storagePut(`quotations/${fileName}`, finalPdfBuffer, "application/pdf");
-    await db.update(quotations).set({ pdfKey: key, pdfUrl: url }).where(eq36(quotations.id, quotationId));
+    await db.update(quotations).set({ pdfKey: key, pdfUrl: url }).where(eq37(quotations.id, quotationId));
     return { key, url, buffer: finalPdfBuffer };
   }
 };
@@ -20554,7 +22252,7 @@ var quotationService = {
 // server/routers/quotationRouter.ts
 init_db2();
 init_schema();
-import { eq as eq37 } from "drizzle-orm";
+import { eq as eq38 } from "drizzle-orm";
 import { TRPCError as TRPCError23 } from "@trpc/server";
 var quotationRouter = router({
   create: crmProcedure.input(
@@ -20622,21 +22320,21 @@ var quotationRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const whereConditions = [];
-    if (input.customerId) whereConditions.push(eq37(quotations.customerId, input.customerId));
-    if (input.leadId) whereConditions.push(eq37(quotations.leadId, input.leadId));
+    if (input.customerId) whereConditions.push(eq38(quotations.customerId, input.customerId));
+    if (input.leadId) whereConditions.push(eq38(quotations.leadId, input.leadId));
     if (input.search) {
     }
     const items = await db.query.quotations.findMany({
-      where: (quotations2, { eq: eq67, or: or10, and: and53, like: like13 }) => {
+      where: (quotations2, { eq: eq72, or: or11, and: and58, like: like13 }) => {
         const conditions = [];
-        if (input.customerId) conditions.push(eq67(quotations2.customerId, input.customerId));
-        if (input.leadId) conditions.push(eq67(quotations2.leadId, input.leadId));
+        if (input.customerId) conditions.push(eq72(quotations2.customerId, input.customerId));
+        if (input.leadId) conditions.push(eq72(quotations2.leadId, input.leadId));
         if (input.search) {
           conditions.push(like13(quotations2.quotationNumber, `%${input.search}%`));
         }
-        return and53(...conditions);
+        return and58(...conditions);
       },
-      orderBy: (quotations2, { desc: desc27 }) => [desc27(quotations2.createdAt)],
+      orderBy: (quotations2, { desc: desc32 }) => [desc32(quotations2.createdAt)],
       limit: input.limit,
       offset: input.offset,
       with: {
@@ -20652,7 +22350,7 @@ var quotationRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const quotation = await db.query.quotations.findFirst({
-      where: eq37(quotations.id, input)
+      where: eq38(quotations.id, input)
     });
     return quotation;
   }),
@@ -20662,14 +22360,14 @@ var quotationRouter = router({
   })).mutation(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    await db.update(quotations).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq37(quotations.id, input.id));
+    await db.update(quotations).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq38(quotations.id, input.id));
     return { success: true };
   }),
   downloadPdf: crmProcedure.input(z27.number()).mutation(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const quotation = await db.query.quotations.findFirst({
-      where: eq37(quotations.id, input)
+      where: eq38(quotations.id, input)
     });
     if (!quotation) throw new TRPCError23({ code: "NOT_FOUND", message: "Quotation not found" });
     if (quotation.pdfKey) {
@@ -20701,7 +22399,7 @@ var quotationRouter = router({
 init_db2();
 init_schema();
 import { z as z28 } from "zod";
-import { eq as eq38, and as and30, asc as asc3, sql as sql17 } from "drizzle-orm";
+import { eq as eq39, and as and31, asc as asc3, sql as sql18 } from "drizzle-orm";
 import { TRPCError as TRPCError24 } from "@trpc/server";
 var countryGuideRouter = router({
   /** AI-generate content for a chapter */
@@ -20713,9 +22411,9 @@ var countryGuideRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     return await db.select().from(countryGuideChapters).where(
-      and30(
-        eq38(countryGuideChapters.countryCode, input.countryCode),
-        eq38(countryGuideChapters.status, "published")
+      and31(
+        eq39(countryGuideChapters.countryCode, input.countryCode),
+        eq39(countryGuideChapters.status, "published")
       )
     ).orderBy(asc3(countryGuideChapters.sortOrder));
   }),
@@ -20723,14 +22421,14 @@ var countryGuideRouter = router({
   listAllChapters: protectedProcedure.input(z28.object({ countryCode: z28.string() })).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    return await db.select().from(countryGuideChapters).where(eq38(countryGuideChapters.countryCode, input.countryCode)).orderBy(asc3(countryGuideChapters.sortOrder));
+    return await db.select().from(countryGuideChapters).where(eq39(countryGuideChapters.countryCode, input.countryCode)).orderBy(asc3(countryGuideChapters.sortOrder));
   }),
   /** Get a single chapter by ID */
   getChapter: protectedProcedure.input(z28.number()).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const chapter = await db.query.countryGuideChapters.findFirst({
-      where: eq38(countryGuideChapters.id, input)
+      where: eq39(countryGuideChapters.id, input)
     });
     return chapter;
   }),
@@ -20756,7 +22454,7 @@ var countryGuideRouter = router({
       await db.update(countryGuideChapters).set({
         ...input,
         updatedAt: /* @__PURE__ */ new Date()
-      }).where(eq38(countryGuideChapters.id, input.id));
+      }).where(eq39(countryGuideChapters.id, input.id));
       return { id: input.id };
     } else {
       const [res] = await db.insert(countryGuideChapters).values(input).returning({ id: countryGuideChapters.id });
@@ -20767,7 +22465,7 @@ var countryGuideRouter = router({
   deleteChapter: protectedProcedure.input(z28.object({ id: z28.number() })).mutation(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    await db.delete(countryGuideChapters).where(eq38(countryGuideChapters.id, input.id));
+    await db.delete(countryGuideChapters).where(eq39(countryGuideChapters.id, input.id));
     return { success: true };
   }),
   /** Update chapter status (publish / archive / draft) */
@@ -20779,7 +22477,7 @@ var countryGuideRouter = router({
   ).mutation(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    await db.update(countryGuideChapters).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq38(countryGuideChapters.id, input.id));
+    await db.update(countryGuideChapters).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq39(countryGuideChapters.id, input.id));
     return { success: true };
   }),
   /** Bulk update status for all chapters of a country */
@@ -20791,7 +22489,7 @@ var countryGuideRouter = router({
   ).mutation(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    const result = await db.update(countryGuideChapters).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq38(countryGuideChapters.countryCode, input.countryCode));
+    const result = await db.update(countryGuideChapters).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq39(countryGuideChapters.countryCode, input.countryCode));
     return { success: true };
   }),
   /** List countries that have published guides (for admin browse view) */
@@ -20800,8 +22498,8 @@ var countryGuideRouter = router({
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const countriesWithGuides = await db.select({
       countryCode: countryGuideChapters.countryCode,
-      chapterCount: sql17`count(*)`.as("chapterCount")
-    }).from(countryGuideChapters).where(eq38(countryGuideChapters.status, "published")).groupBy(countryGuideChapters.countryCode);
+      chapterCount: sql18`count(*)`.as("chapterCount")
+    }).from(countryGuideChapters).where(eq39(countryGuideChapters.status, "published")).groupBy(countryGuideChapters.countryCode);
     const allCountries = await db.select({
       countryCode: countriesConfig.countryCode,
       countryName: countriesConfig.countryName,
@@ -20811,7 +22509,7 @@ var countryGuideRouter = router({
       statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
       noticePeriodDays: countriesConfig.noticePeriodDays,
       probationPeriodDays: countriesConfig.probationPeriodDays
-    }).from(countriesConfig).where(eq38(countriesConfig.isActive, true));
+    }).from(countriesConfig).where(eq39(countriesConfig.isActive, true));
     const guideMap = new Map(countriesWithGuides.map((c) => [c.countryCode, c.chapterCount]));
     return allCountries.filter((c) => guideMap.has(c.countryCode)).map((c) => ({
       ...c,
@@ -20824,10 +22522,10 @@ var countryGuideRouter = router({
     if (!db) throw new TRPCError24({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     const stats = await db.select({
       countryCode: countryGuideChapters.countryCode,
-      totalChapters: sql17`count(*)`.as("totalChapters"),
-      publishedChapters: sql17`sum(case when ${countryGuideChapters.status} = 'published' then 1 else 0 end)`.as("publishedChapters"),
-      draftChapters: sql17`sum(case when ${countryGuideChapters.status} = 'draft' then 1 else 0 end)`.as("draftChapters"),
-      lastUpdated: sql17`max(${countryGuideChapters.updatedAt})`.as("lastUpdated")
+      totalChapters: sql18`count(*)`.as("totalChapters"),
+      publishedChapters: sql18`sum(case when ${countryGuideChapters.status} = 'published' then 1 else 0 end)`.as("publishedChapters"),
+      draftChapters: sql18`sum(case when ${countryGuideChapters.status} = 'draft' then 1 else 0 end)`.as("draftChapters"),
+      lastUpdated: sql18`max(${countryGuideChapters.updatedAt})`.as("lastUpdated")
     }).from(countryGuideChapters).groupBy(countryGuideChapters.countryCode);
     return stats;
   }),
@@ -20857,9 +22555,9 @@ var countryGuideRouter = router({
     for (const chapter of input.chapters) {
       if (input.overwrite) {
         await db.delete(countryGuideChapters).where(
-          and30(
-            eq38(countryGuideChapters.countryCode, chapter.countryCode),
-            eq38(countryGuideChapters.chapterKey, chapter.chapterKey)
+          and31(
+            eq39(countryGuideChapters.countryCode, chapter.countryCode),
+            eq39(countryGuideChapters.chapterKey, chapter.chapterKey)
           )
         );
       }
@@ -20874,7 +22572,7 @@ var countryGuideRouter = router({
 init_db2();
 init_schema();
 import { z as z29 } from "zod";
-import { eq as eq39, and as and31 } from "drizzle-orm";
+import { eq as eq40, and as and32 } from "drizzle-orm";
 import { TRPCError as TRPCError25 } from "@trpc/server";
 var salaryBenchmarkRouter = router({
   getBenchmark: protectedProcedure.input(z29.object({
@@ -20885,17 +22583,17 @@ var salaryBenchmarkRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     return await db.query.salaryBenchmarks.findFirst({
-      where: and31(
-        eq39(salaryBenchmarks.countryCode, input.countryCode),
-        eq39(salaryBenchmarks.jobCategory, input.jobCategory),
-        eq39(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
+      where: and32(
+        eq40(salaryBenchmarks.countryCode, input.countryCode),
+        eq40(salaryBenchmarks.jobCategory, input.jobCategory),
+        eq40(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
       )
     });
   }),
   listJobFunctions: protectedProcedure.input(z29.object({ countryCode: z29.string() })).query(async ({ input }) => {
     const db = getDb();
     if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
-    const rows = await db.selectDistinct({ category: salaryBenchmarks.jobCategory }).from(salaryBenchmarks).where(eq39(salaryBenchmarks.countryCode, input.countryCode));
+    const rows = await db.selectDistinct({ category: salaryBenchmarks.jobCategory }).from(salaryBenchmarks).where(eq40(salaryBenchmarks.countryCode, input.countryCode));
     return rows.map((r) => r.category);
   }),
   upsertBenchmark: protectedProcedure.input(z29.object({
@@ -20914,7 +22612,7 @@ var salaryBenchmarkRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError25({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     if (input.id) {
-      await db.update(salaryBenchmarks).set({ ...input, updatedAt: /* @__PURE__ */ new Date() }).where(eq39(salaryBenchmarks.id, input.id));
+      await db.update(salaryBenchmarks).set({ ...input, updatedAt: /* @__PURE__ */ new Date() }).where(eq40(salaryBenchmarks.id, input.id));
       return { id: input.id };
     } else {
       const [res] = await db.insert(salaryBenchmarks).values(input).returning({ id: salaryBenchmarks.id });
@@ -20928,12 +22626,12 @@ import { TRPCError as TRPCError26 } from "@trpc/server";
 import { z as z30 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq40 } from "drizzle-orm";
+import { eq as eq41 } from "drizzle-orm";
 var contractorsRouter = router({
   getApprovers: userProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
-    return await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq40(users.isActive, true));
+    return await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq41(users.isActive, true));
   }),
   list: userProcedure.input(
     z30.object({
@@ -21045,6 +22743,14 @@ var contractorsRouter = router({
     if (input.data.bankDetails) {
       updateData.bankDetails = JSON.parse(input.data.bankDetails);
     }
+    if (input.data.status === "terminated") {
+      const existing = await getContractorById(input.id);
+      const effectiveEndDate = input.data.endDate || existing?.endDate;
+      if (!effectiveEndDate) {
+        const today = /* @__PURE__ */ new Date();
+        updateData.endDate = today.toISOString().split("T")[0];
+      }
+    }
     await updateContractor(input.id, updateData);
     await logAuditAction({
       userId: ctx.user.id,
@@ -21056,16 +22762,57 @@ var contractorsRouter = router({
     });
     return { success: true };
   }),
-  terminate: customerManagerProcedure.input(z30.object({ id: z30.number() })).mutation(async ({ input, ctx }) => {
-    await updateContractor(input.id, { status: "terminated", endDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0] });
+  terminate: customerManagerProcedure.input(z30.object({
+    id: z30.number(),
+    endDate: z30.string().optional(),
+    reason: z30.string().optional()
+  })).mutation(async ({ input, ctx }) => {
+    const endDate = input.endDate || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    await updateContractor(input.id, { status: "terminated", endDate });
     await logAuditAction({
       userId: ctx.user.id,
       userName: ctx.user.name || null,
       action: "terminate",
       entityType: "contractor",
-      entityId: input.id
+      entityId: input.id,
+      changes: JSON.stringify({ endDate, reason: input.reason || null })
     });
     return { success: true };
+  }),
+  // ── Worker Portal Invite ──
+  workerPortalStatus: userProcedure.input(z30.object({ contractorId: z30.number() })).query(async ({ input }) => {
+    const db = await getDb();
+    if (!db) return { hasAccount: false, workerUserId: null, email: null, passwordSet: false };
+    const [wu] = await db.select().from(workerUsers).where(eq41(workerUsers.contractorId, input.contractorId)).limit(1);
+    if (!wu) return { hasAccount: false, workerUserId: null, email: null, passwordSet: false };
+    return {
+      hasAccount: true,
+      workerUserId: wu.id,
+      email: wu.email,
+      passwordSet: !!wu.passwordHash && wu.passwordHash.length > 0
+    };
+  }),
+  inviteToWorkerPortal: customerManagerProcedure.input(z30.object({
+    contractorId: z30.number(),
+    email: z30.string().email().optional()
+  })).mutation(async ({ input, ctx }) => {
+    const result = await provisionWorkerUser({
+      contractorId: input.contractorId,
+      email: input.email
+    });
+    await logAuditAction({
+      userId: ctx.user.id,
+      userName: ctx.user.name || null,
+      action: result.alreadyExists ? "resend_worker_invite" : "invite_to_worker_portal",
+      entityType: "contractor",
+      entityId: input.contractorId,
+      changes: JSON.stringify({ workerUserId: result.workerUserId, email: result.email })
+    });
+    if (result.alreadyExists) {
+      await resendWorkerInvite(result.workerUserId);
+      return { success: true, alreadyExists: true, email: result.email };
+    }
+    return { success: true, alreadyExists: false, email: result.email };
   }),
   // ── Milestones Sub-Router ──
   milestones: router({
@@ -21236,7 +22983,7 @@ var contractorsRouter = router({
         status: "approved",
         approvedBy: ctx.user.id,
         approvedAt: /* @__PURE__ */ new Date()
-      }).where(eq40(contractorInvoices.id, input.id));
+      }).where(eq41(contractorInvoices.id, input.id));
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -21252,7 +22999,7 @@ var contractorsRouter = router({
       await db.update(contractorInvoices).set({
         status: "rejected",
         rejectedReason: input.reason
-      }).where(eq40(contractorInvoices.id, input.id));
+      }).where(eq41(contractorInvoices.id, input.id));
       await logAuditAction({
         userId: ctx.user.id,
         userName: ctx.user.name || null,
@@ -21271,7 +23018,7 @@ import { z as z31 } from "zod";
 import { TRPCError as TRPCError27 } from "@trpc/server";
 init_db2();
 init_schema();
-import { eq as eq41, desc as desc18 } from "drizzle-orm";
+import { eq as eq42, desc as desc18 } from "drizzle-orm";
 var walletRouter = router({
   get: userProcedure.input(z31.object({
     customerId: z31.number(),
@@ -21293,7 +23040,7 @@ var walletRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError27({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     return await db.query.walletTransactions.findMany({
-      where: eq41(walletTransactions.walletId, input.walletId),
+      where: eq42(walletTransactions.walletId, input.walletId),
       orderBy: [desc18(walletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
@@ -21307,7 +23054,7 @@ var walletRouter = router({
     const db = getDb();
     if (!db) throw new TRPCError27({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     return await db.query.frozenWalletTransactions.findMany({
-      where: eq41(frozenWalletTransactions.walletId, input.walletId),
+      where: eq42(frozenWalletTransactions.walletId, input.walletId),
       orderBy: [desc18(frozenWalletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
@@ -21549,7 +23296,7 @@ var portalFinanceProcedure = t2.procedure.use(
 // server/portal/routers/portalAuthRouter.ts
 import { z as z32 } from "zod";
 import { TRPCError as TRPCError29 } from "@trpc/server";
-import { eq as eq42 } from "drizzle-orm";
+import { eq as eq43 } from "drizzle-orm";
 init_portalAuth();
 init_db2();
 init_schema();
@@ -21590,7 +23337,7 @@ var portalAuthRouter = portalRouter({
     assertPortalLoginRateLimit(input.email.toLowerCase().trim());
     const db = await getDb();
     if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select().from(customerContacts).where(eq42(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
+    const contacts = await db.select().from(customerContacts).where(eq43(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
     if (contacts.length === 0) {
       throw new TRPCError29({ code: "UNAUTHORIZED", message: "Invalid email or password" });
     }
@@ -21605,7 +23352,7 @@ var portalAuthRouter = portalRouter({
     if (!passwordValid) {
       throw new TRPCError29({ code: "UNAUTHORIZED", message: "Invalid email or password" });
     }
-    const customerRows = await db.select({ companyName: customers.companyName, status: customers.status }).from(customers).where(eq42(customers.id, contact.customerId)).limit(1);
+    const customerRows = await db.select({ companyName: customers.companyName, status: customers.status }).from(customers).where(eq43(customers.id, contact.customerId)).limit(1);
     if (customerRows.length === 0 || customerRows[0].status !== "active") {
       throw new TRPCError29({ code: "FORBIDDEN", message: "Company account is not active" });
     }
@@ -21618,7 +23365,7 @@ var portalAuthRouter = portalRouter({
     };
     const token = await signPortalToken(payload);
     setPortalCookie(ctx.res, token);
-    await db.update(customerContacts).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq42(customerContacts.id, contact.id));
+    await db.update(customerContacts).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq43(customerContacts.id, contact.id));
     return {
       success: true,
       user: {
@@ -21644,7 +23391,7 @@ var portalAuthRouter = portalRouter({
       inviteExpiresAt: customerContacts.inviteExpiresAt,
       isPortalActive: customerContacts.isPortalActive,
       customerId: customerContacts.customerId
-    }).from(customerContacts).where(eq42(customerContacts.inviteToken, input.token)).limit(1);
+    }).from(customerContacts).where(eq43(customerContacts.inviteToken, input.token)).limit(1);
     if (contacts.length === 0) {
       return { valid: false, reason: "Invalid invite link" };
     }
@@ -21655,7 +23402,7 @@ var portalAuthRouter = portalRouter({
     if (contact.inviteExpiresAt && contact.inviteExpiresAt < /* @__PURE__ */ new Date()) {
       return { valid: false, reason: "Invite link has expired" };
     }
-    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq42(customers.id, contact.customerId)).limit(1);
+    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq43(customers.id, contact.customerId)).limit(1);
     return {
       valid: true,
       email: contact.email,
@@ -21678,7 +23425,7 @@ var portalAuthRouter = portalRouter({
     }
     const db = await getDb();
     if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select().from(customerContacts).where(eq42(customerContacts.inviteToken, input.token)).limit(1);
+    const contacts = await db.select().from(customerContacts).where(eq43(customerContacts.inviteToken, input.token)).limit(1);
     if (contacts.length === 0) {
       throw new TRPCError29({ code: "BAD_REQUEST", message: "Invalid invite link" });
     }
@@ -21698,8 +23445,8 @@ var portalAuthRouter = portalRouter({
       // Clear invite token after use
       inviteExpiresAt: null,
       lastLoginAt: /* @__PURE__ */ new Date()
-    }).where(eq42(customerContacts.id, contact.id));
-    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq42(customers.id, contact.customerId)).limit(1);
+    }).where(eq43(customerContacts.id, contact.id));
+    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq43(customers.id, contact.customerId)).limit(1);
     const payload = {
       sub: String(contact.id),
       customerId: contact.customerId,
@@ -21752,7 +23499,7 @@ var portalAuthRouter = portalRouter({
       email: customerContacts.email,
       isPortalActive: customerContacts.isPortalActive,
       hasPortalAccess: customerContacts.hasPortalAccess
-    }).from(customerContacts).where(eq42(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
+    }).from(customerContacts).where(eq43(customerContacts.email, input.email.toLowerCase().trim())).limit(1);
     if (contacts.length === 0 || !contacts[0].isPortalActive || !contacts[0].hasPortalAccess) {
       return {
         success: true,
@@ -21760,17 +23507,26 @@ var portalAuthRouter = portalRouter({
       };
     }
     const contact = contacts[0];
-    const resetToken = generateResetToken();
-    const resetExpiresAt = getResetExpiryDate();
-    await db.update(customerContacts).set({ resetToken, resetExpiresAt }).where(eq42(customerContacts.id, contact.id));
+    const resetToken = generateResetToken2();
+    const resetExpiresAt = getResetExpiryDate2();
+    await db.update(customerContacts).set({ resetToken, resetExpiresAt }).where(eq43(customerContacts.id, contact.id));
     const origin = input.origin;
     const isPortalDomain = origin.includes("app.geahr.com");
     const resetUrl = isPortalDomain ? `${origin}/reset-password?token=${resetToken}` : `${origin}/portal/reset-password?token=${resetToken}`;
+    try {
+      const contactDetails = await db.select({ contactName: customerContacts.contactName }).from(customerContacts).where(eq43(customerContacts.id, contact.id)).limit(1);
+      const contactName = contactDetails[0]?.contactName || "User";
+      await sendPortalPasswordResetEmail({
+        to: contact.email,
+        contactName,
+        resetUrl
+      });
+    } catch (err) {
+      console.error("[PortalAuth] Failed to send password reset email:", err);
+    }
     return {
       success: true,
-      message: "If an account exists with this email, a reset link has been generated.",
-      // DEV ONLY: return the reset link for testing. Remove in production.
-      resetUrl
+      message: "If an account exists with this email, a password reset link has been sent."
     };
   }),
   /**
@@ -21784,7 +23540,7 @@ var portalAuthRouter = portalRouter({
       email: customerContacts.email,
       contactName: customerContacts.contactName,
       resetExpiresAt: customerContacts.resetExpiresAt
-    }).from(customerContacts).where(eq42(customerContacts.resetToken, input.token)).limit(1);
+    }).from(customerContacts).where(eq43(customerContacts.resetToken, input.token)).limit(1);
     if (contacts.length === 0) {
       return { valid: false, reason: "Invalid reset link" };
     }
@@ -21813,7 +23569,7 @@ var portalAuthRouter = portalRouter({
     }
     const db = await getDb();
     if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select().from(customerContacts).where(eq42(customerContacts.resetToken, input.token)).limit(1);
+    const contacts = await db.select().from(customerContacts).where(eq43(customerContacts.resetToken, input.token)).limit(1);
     if (contacts.length === 0) {
       throw new TRPCError29({ code: "BAD_REQUEST", message: "Invalid reset link" });
     }
@@ -21826,8 +23582,8 @@ var portalAuthRouter = portalRouter({
       passwordHash,
       resetToken: null,
       resetExpiresAt: null
-    }).where(eq42(customerContacts.id, contact.id));
-    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq42(customers.id, contact.customerId)).limit(1);
+    }).where(eq43(customerContacts.id, contact.id));
+    const customerRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq43(customers.id, contact.customerId)).limit(1);
     const payload = {
       sub: String(contact.id),
       customerId: contact.customerId,
@@ -21864,7 +23620,7 @@ var portalAuthRouter = portalRouter({
     }
     const db = await getDb();
     if (!db) throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-    const contacts = await db.select({ passwordHash: customerContacts.passwordHash }).from(customerContacts).where(eq42(customerContacts.id, ctx.portalUser.contactId)).limit(1);
+    const contacts = await db.select({ passwordHash: customerContacts.passwordHash }).from(customerContacts).where(eq43(customerContacts.id, ctx.portalUser.contactId)).limit(1);
     if (contacts.length === 0 || !contacts[0].passwordHash) {
       throw new TRPCError29({ code: "INTERNAL_SERVER_ERROR", message: "Account error" });
     }
@@ -21873,13 +23629,13 @@ var portalAuthRouter = portalRouter({
       throw new TRPCError29({ code: "BAD_REQUEST", message: "Current password is incorrect" });
     }
     const newHash = await hashPassword2(input.newPassword);
-    await db.update(customerContacts).set({ passwordHash: newHash }).where(eq42(customerContacts.id, ctx.portalUser.contactId));
+    await db.update(customerContacts).set({ passwordHash: newHash }).where(eq43(customerContacts.id, ctx.portalUser.contactId));
     return { success: true };
   })
 });
 
 // server/portal/routers/portalDashboardRouter.ts
-import { sql as sql18, eq as eq43, and as and34, count as count9, inArray as inArray12 } from "drizzle-orm";
+import { sql as sql19, eq as eq44, and as and35, count as count9, inArray as inArray12 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalDashboardRouter = portalRouter({
@@ -21890,26 +23646,26 @@ var portalDashboardRouter = portalRouter({
     const db = await getDb();
     if (!db) return null;
     const cid = ctx.portalUser.customerId;
-    const [empCount] = await db.select({ count: count9() }).from(employees).where(and34(eq43(employees.customerId, cid), eq43(employees.status, "active")));
-    const [contractorCount] = await db.select({ count: count9() }).from(contractors).where(and34(eq43(contractors.customerId, cid), eq43(contractors.status, "active")));
-    const activeCountries = await db.select({ countryCode: employees.country }).from(employees).where(and34(eq43(employees.customerId, cid), eq43(employees.status, "active"))).groupBy(employees.country);
+    const [empCount] = await db.select({ count: count9() }).from(employees).where(and35(eq44(employees.customerId, cid), eq44(employees.status, "active")));
+    const [contractorCount] = await db.select({ count: count9() }).from(contractors).where(and35(eq44(contractors.customerId, cid), eq44(contractors.status, "active")));
+    const activeCountries = await db.select({ countryCode: employees.country }).from(employees).where(and35(eq44(employees.customerId, cid), eq44(employees.status, "active"))).groupBy(employees.country);
     const [onboardingCount] = await db.select({ count: count9() }).from(employees).where(
-      and34(
-        eq43(employees.customerId, cid),
+      and35(
+        eq44(employees.customerId, cid),
         inArray12(employees.status, ["pending_review", "documents_incomplete", "onboarding"])
       )
     );
-    const [adjCount] = await db.select({ count: count9() }).from(adjustments).where(and34(eq43(adjustments.customerId, cid), eq43(adjustments.status, "submitted")));
-    const [leaveCount] = await db.select({ count: count9() }).from(leaveRecords).innerJoin(employees, eq43(leaveRecords.employeeId, employees.id)).where(and34(eq43(employees.customerId, cid), eq43(leaveRecords.status, "submitted")));
-    const [overdueCount] = await db.select({ count: count9() }).from(invoices).where(and34(eq43(invoices.customerId, cid), eq43(invoices.status, "overdue")));
-    const [unpaidCount] = await db.select({ count: count9() }).from(invoices).where(and34(eq43(invoices.customerId, cid), eq43(invoices.status, "sent")));
-    const employeeCountries = await db.select({ countryCode: employees.country }).from(employees).where(and34(
-      eq43(employees.customerId, cid),
-      sql18`${employees.status} != 'terminated'`
+    const [adjCount] = await db.select({ count: count9() }).from(adjustments).where(and35(eq44(adjustments.customerId, cid), eq44(adjustments.status, "submitted")));
+    const [leaveCount] = await db.select({ count: count9() }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(and35(eq44(employees.customerId, cid), eq44(leaveRecords.status, "submitted")));
+    const [overdueCount] = await db.select({ count: count9() }).from(invoices).where(and35(eq44(invoices.customerId, cid), eq44(invoices.status, "overdue")));
+    const [unpaidCount] = await db.select({ count: count9() }).from(invoices).where(and35(eq44(invoices.customerId, cid), eq44(invoices.status, "sent")));
+    const employeeCountries = await db.select({ countryCode: employees.country }).from(employees).where(and35(
+      eq44(employees.customerId, cid),
+      inArray12(employees.status, ["active", "onboarding", "on_leave", "offboarding"])
     )).groupBy(employees.country);
-    const policyCountries = await db.select({ countryCode: customerLeavePolicies.countryCode }).from(customerLeavePolicies).where(eq43(customerLeavePolicies.customerId, cid)).groupBy(customerLeavePolicies.countryCode);
+    const policyCountries = await db.select({ countryCode: customerLeavePolicies.countryCode }).from(customerLeavePolicies).where(eq44(customerLeavePolicies.customerId, cid)).groupBy(customerLeavePolicies.countryCode);
     const policyCountrySet = new Set(policyCountries.map((p) => p.countryCode));
-    const unconfiguredCountries = employeeCountries.filter((c) => !policyCountrySet.has(c.countryCode));
+    const unconfiguredCountries = employeeCountries.filter((c) => c.countryCode && !policyCountrySet.has(c.countryCode));
     return {
       activeEmployees: (empCount?.count ?? 0) + (contractorCount?.count ?? 0),
       activeEorEmployees: empCount?.count ?? 0,
@@ -21934,7 +23690,7 @@ var portalDashboardRouter = portalRouter({
       countryCode: employees.country,
       countryName: countriesConfig.countryName,
       count: count9()
-    }).from(employees).leftJoin(countriesConfig, eq43(employees.country, countriesConfig.countryCode)).where(and34(eq43(employees.customerId, cid), eq43(employees.status, "active"))).groupBy(employees.country, countriesConfig.countryName);
+    }).from(employees).leftJoin(countriesConfig, eq44(employees.country, countriesConfig.countryCode)).where(and35(eq44(employees.customerId, cid), eq44(employees.status, "active"))).groupBy(employees.country, countriesConfig.countryName);
     return result.map((r) => ({
       countryCode: r.countryCode,
       countryName: r.countryName || r.countryCode,
@@ -21950,25 +23706,25 @@ var portalDashboardRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const recentEmployees = await db.select({
       id: employees.id,
-      type: sql18`'employee'`,
-      title: sql18`(${employees.firstName} || ' ' || ${employees.lastName})`,
+      type: sql19`'employee'`,
+      title: sql19`(${employees.firstName} || ' ' || ${employees.lastName})`,
       status: employees.status,
       date: employees.updatedAt
-    }).from(employees).where(eq43(employees.customerId, cid)).orderBy(sql18`${employees.updatedAt} DESC`).limit(10);
+    }).from(employees).where(eq44(employees.customerId, cid)).orderBy(sql19`${employees.updatedAt} DESC`).limit(10);
     const recentAdj = await db.select({
       id: adjustments.id,
-      type: sql18`'adjustment'`,
+      type: sql19`'adjustment'`,
       title: adjustments.adjustmentType,
       status: adjustments.status,
       date: adjustments.updatedAt
-    }).from(adjustments).where(eq43(adjustments.customerId, cid)).orderBy(sql18`${adjustments.updatedAt} DESC`).limit(10);
+    }).from(adjustments).where(eq44(adjustments.customerId, cid)).orderBy(sql19`${adjustments.updatedAt} DESC`).limit(10);
     const recentLeave = await db.select({
       id: leaveRecords.id,
-      type: sql18`'leave'`,
-      title: sql18`('Leave #' || ${leaveRecords.id})`,
+      type: sql19`'leave'`,
+      title: sql19`('Leave #' || ${leaveRecords.id})`,
       status: leaveRecords.status,
       date: leaveRecords.updatedAt
-    }).from(leaveRecords).innerJoin(employees, eq43(leaveRecords.employeeId, employees.id)).where(eq43(employees.customerId, cid)).orderBy(sql18`${leaveRecords.updatedAt} DESC`).limit(10);
+    }).from(leaveRecords).innerJoin(employees, eq44(leaveRecords.employeeId, employees.id)).where(eq44(employees.customerId, cid)).orderBy(sql19`${leaveRecords.updatedAt} DESC`).limit(10);
     const all = [...recentEmployees, ...recentAdj, ...recentLeave].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 20);
     return all;
   }),
@@ -21982,15 +23738,15 @@ var portalDashboardRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const result = await db.select({
       month: payrollRuns.payrollMonth,
-      totalGross: sql18`COALESCE(SUM(${payrollItems.gross}), 0)`,
-      totalNet: sql18`COALESCE(SUM(${payrollItems.net}), 0)`,
-      totalEmployerCost: sql18`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`,
+      totalGross: sql19`COALESCE(SUM(${payrollItems.gross}), 0)`,
+      totalNet: sql19`COALESCE(SUM(${payrollItems.net}), 0)`,
+      totalEmployerCost: sql19`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`,
       currency: payrollRuns.currency
-    }).from(payrollItems).innerJoin(payrollRuns, eq43(payrollItems.payrollRunId, payrollRuns.id)).innerJoin(employees, eq43(payrollItems.employeeId, employees.id)).where(
-      and34(
-        eq43(employees.customerId, cid),
-        sql18`${payrollRuns.status} IN ('approved', 'locked', 'paid')`,
-        sql18`${payrollRuns.payrollMonth} >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)`
+    }).from(payrollItems).innerJoin(payrollRuns, eq44(payrollItems.payrollRunId, payrollRuns.id)).innerJoin(employees, eq44(payrollItems.employeeId, employees.id)).where(
+      and35(
+        eq44(employees.customerId, cid),
+        sql19`${payrollRuns.status} IN ('approved', 'locked', 'paid')`,
+        sql19`${payrollRuns.payrollMonth} >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)`
       )
     ).groupBy(payrollRuns.payrollMonth, payrollRuns.currency).orderBy(payrollRuns.payrollMonth);
     return result.map((r) => ({
@@ -22011,7 +23767,7 @@ var portalDashboardRouter = portalRouter({
     const result = await db.select({
       status: employees.status,
       count: count9()
-    }).from(employees).where(eq43(employees.customerId, cid)).groupBy(employees.status);
+    }).from(employees).where(eq44(employees.customerId, cid)).groupBy(employees.status);
     return result.map((r) => ({
       status: r.status,
       count: r.count
@@ -22022,8 +23778,8 @@ var portalDashboardRouter = portalRouter({
 // server/portal/routers/portalEmployeesRouter.ts
 import { z as z33 } from "zod";
 import { TRPCError as TRPCError30 } from "@trpc/server";
-import { sql as sql19, eq as eq44, and as and35, count as count10 } from "drizzle-orm";
-import crypto4 from "crypto";
+import { sql as sql20, eq as eq45, and as and36, count as count10 } from "drizzle-orm";
+import crypto5 from "crypto";
 init_db2();
 init_schema();
 init_aor_schema();
@@ -22079,24 +23835,24 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const conditions = [eq44(employees.customerId, cid)];
+    const conditions = [eq45(employees.customerId, cid)];
     if (input.status) {
-      conditions.push(eq44(employees.status, input.status));
+      conditions.push(eq45(employees.status, input.status));
     }
     if (input.country) {
-      conditions.push(eq44(employees.country, input.country));
+      conditions.push(eq45(employees.country, input.country));
     }
     if (input.serviceType) {
-      conditions.push(eq44(employees.serviceType, input.serviceType));
+      conditions.push(eq45(employees.serviceType, input.serviceType));
     }
     if (input.search) {
       conditions.push(
-        sql19`(${employees.firstName} LIKE ${`%${input.search}%`} OR ${employees.lastName} LIKE ${`%${input.search}%`} OR ${employees.email} LIKE ${`%${input.search}%`})`
+        sql20`(${employees.firstName} LIKE ${`%${input.search}%`} OR ${employees.lastName} LIKE ${`%${input.search}%`} OR ${employees.email} LIKE ${`%${input.search}%`})`
       );
     }
-    const where = and35(...conditions);
+    const where = and36(...conditions);
     const [totalResult] = await db.select({ count: count10() }).from(employees).where(where);
-    const items = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(where).orderBy(sql19`${employees.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    const items = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(where).orderBy(sql20`${employees.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return {
       items,
       total: totalResult?.count ?? 0
@@ -22109,7 +23865,7 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(and35(eq44(employees.id, input.id), eq44(employees.customerId, cid)));
+    const [emp] = await db.select(PORTAL_EMPLOYEE_FIELDS).from(employees).where(and36(eq45(employees.id, input.id), eq45(employees.customerId, cid)));
     if (!emp) {
       throw new TRPCError30({ code: "NOT_FOUND", message: "Employee not found" });
     }
@@ -22121,7 +23877,7 @@ var portalEmployeesRouter = portalRouter({
       effectiveDate: employeeContracts.effectiveDate,
       expiryDate: employeeContracts.expiryDate,
       status: employeeContracts.status
-    }).from(employeeContracts).where(eq44(employeeContracts.employeeId, input.id));
+    }).from(employeeContracts).where(eq45(employeeContracts.employeeId, input.id));
     const documents = await db.select({
       id: employeeDocuments.id,
       documentType: employeeDocuments.documentType,
@@ -22129,7 +23885,7 @@ var portalEmployeesRouter = portalRouter({
       fileUrl: employeeDocuments.fileUrl,
       mimeType: employeeDocuments.mimeType,
       uploadedAt: employeeDocuments.uploadedAt
-    }).from(employeeDocuments).where(eq44(employeeDocuments.employeeId, input.id));
+    }).from(employeeDocuments).where(eq45(employeeDocuments.employeeId, input.id));
     const balances = await db.select({
       id: leaveBalances.id,
       leaveTypeId: leaveBalances.leaveTypeId,
@@ -22138,7 +23894,7 @@ var portalEmployeesRouter = portalRouter({
       totalEntitlement: leaveBalances.totalEntitlement,
       used: leaveBalances.used,
       remaining: leaveBalances.remaining
-    }).from(leaveBalances).leftJoin(leaveTypes, eq44(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq44(leaveBalances.employeeId, input.id));
+    }).from(leaveBalances).leftJoin(leaveTypes, eq45(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq45(leaveBalances.employeeId, input.id));
     return {
       ...emp,
       contracts,
@@ -22183,9 +23939,9 @@ var portalEmployeesRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const normalizedEmail = input.email.toLowerCase().trim();
     const [existingEmployee] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(
-      and35(
-        eq44(employees.customerId, cid),
-        eq44(employees.email, normalizedEmail)
+      and36(
+        eq45(employees.customerId, cid),
+        eq45(employees.email, normalizedEmail)
       )
     );
     if (existingEmployee && existingEmployee.status !== "terminated") {
@@ -22239,7 +23995,7 @@ var portalEmployeesRouter = portalRouter({
     } catch (e) {
       console.error("Failed to auto-initialize leave policy:", e);
     }
-    const [customer] = await db.select({ companyName: customers.companyName }).from(customers).where(eq44(customers.id, cid));
+    const [customer] = await db.select({ companyName: customers.companyName }).from(customers).where(eq45(customers.id, cid));
     notificationService.send({
       type: "new_employee_request",
       data: {
@@ -22258,7 +24014,7 @@ var portalEmployeesRouter = portalRouter({
   uploadDocument: portalHrProcedure.input(
     z33.object({
       employeeId: z33.number(),
-      documentType: z33.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "other"]),
+      documentType: z33.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "payslip", "reimbursement_receipt", "other"]),
       documentName: z33.string().min(1),
       fileBase64: z33.string(),
       fileName: z33.string(),
@@ -22269,7 +24025,7 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and35(eq44(employees.id, input.employeeId), eq44(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id }).from(employees).where(and36(eq45(employees.id, input.employeeId), eq45(employees.customerId, cid)));
     if (!emp) {
       throw new TRPCError30({ code: "NOT_FOUND", message: "Employee not found" });
     }
@@ -22298,7 +24054,7 @@ var portalEmployeesRouter = portalRouter({
       countryCode: countriesConfig.countryCode,
       countryName: countriesConfig.countryName,
       currency: countriesConfig.localCurrency
-    }).from(countriesConfig).where(eq44(countriesConfig.isActive, true)).orderBy(countriesConfig.countryName);
+    }).from(countriesConfig).where(eq45(countriesConfig.isActive, true)).orderBy(countriesConfig.countryName);
     return countries;
   }),
   /**
@@ -22313,7 +24069,7 @@ var portalEmployeesRouter = portalRouter({
       annualEntitlement: leaveTypes.annualEntitlement,
       isPaid: leaveTypes.isPaid,
       requiresApproval: leaveTypes.requiresApproval
-    }).from(leaveTypes).where(eq44(leaveTypes.countryCode, input.countryCode));
+    }).from(leaveTypes).where(eq45(leaveTypes.countryCode, input.countryCode));
     return types;
   }),
   /**
@@ -22344,10 +24100,10 @@ var portalEmployeesRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const normalizedEmail = input.employeeEmail.toLowerCase().trim();
     const [existingPendingInvite] = await db.select({ id: onboardingInvites.id }).from(onboardingInvites).where(
-      and35(
-        eq44(onboardingInvites.customerId, cid),
-        eq44(onboardingInvites.employeeEmail, normalizedEmail),
-        eq44(onboardingInvites.status, "pending")
+      and36(
+        eq45(onboardingInvites.customerId, cid),
+        eq45(onboardingInvites.employeeEmail, normalizedEmail),
+        eq45(onboardingInvites.status, "pending")
       )
     );
     if (existingPendingInvite) {
@@ -22355,9 +24111,9 @@ var portalEmployeesRouter = portalRouter({
     }
     if (input.serviceType === "aor") {
       const [existingContractor] = await db.select({ id: contractors.id, status: contractors.status }).from(contractors).where(
-        and35(
-          eq44(contractors.customerId, cid),
-          eq44(contractors.email, normalizedEmail)
+        and36(
+          eq45(contractors.customerId, cid),
+          eq45(contractors.email, normalizedEmail)
         )
       );
       if (existingContractor && existingContractor.status !== "terminated") {
@@ -22365,16 +24121,16 @@ var portalEmployeesRouter = portalRouter({
       }
     } else {
       const [existingEmployee] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(
-        and35(
-          eq44(employees.customerId, cid),
-          eq44(employees.email, normalizedEmail)
+        and36(
+          eq45(employees.customerId, cid),
+          eq45(employees.email, normalizedEmail)
         )
       );
       if (existingEmployee && existingEmployee.status !== "terminated") {
         throw new TRPCError30({ code: "CONFLICT", message: "An active employee with this email already exists." });
       }
     }
-    const token = crypto4.randomBytes(32).toString("hex");
+    const token = crypto5.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1e3);
     await db.insert(onboardingInvites).values({
       customerId: cid,
@@ -22398,6 +24154,20 @@ var portalEmployeesRouter = portalRouter({
       rateAmount: input.rateAmount || null,
       contractorCurrency: input.contractorCurrency || null
     });
+    try {
+      const custRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq45(customers.id, cid)).limit(1);
+      const companyName = custRows[0]?.companyName || "Your Company";
+      const portalOrigin = process.env.PORTAL_APP_URL || "https://app.geahr.com";
+      const inviteUrl = `${portalOrigin}/self-onboarding?token=${token}`;
+      await sendOnboardingInviteEmail({
+        to: input.employeeEmail,
+        employeeName: input.employeeName,
+        companyName,
+        inviteUrl
+      });
+    } catch (err) {
+      console.error("[PortalEmployees] Failed to send onboarding invite email:", err);
+    }
     return { success: true, token };
   }),
   /**
@@ -22419,7 +24189,7 @@ var portalEmployeesRouter = portalRouter({
       expiresAt: onboardingInvites.expiresAt,
       completedAt: onboardingInvites.completedAt,
       createdAt: onboardingInvites.createdAt
-    }).from(onboardingInvites).where(eq44(onboardingInvites.customerId, cid)).orderBy(sql19`${onboardingInvites.createdAt} DESC`);
+    }).from(onboardingInvites).where(eq45(onboardingInvites.customerId, cid)).orderBy(sql20`${onboardingInvites.createdAt} DESC`);
     return invites;
   }),
   /**
@@ -22430,18 +24200,32 @@ var portalEmployeesRouter = portalRouter({
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     const [invite] = await db.select().from(onboardingInvites).where(
-      and35(
-        eq44(onboardingInvites.id, input.id),
-        eq44(onboardingInvites.customerId, cid),
-        eq44(onboardingInvites.status, "pending")
+      and36(
+        eq45(onboardingInvites.id, input.id),
+        eq45(onboardingInvites.customerId, cid),
+        eq45(onboardingInvites.status, "pending")
       )
     );
     if (!invite) {
       throw new TRPCError30({ code: "NOT_FOUND", message: "Invite not found or not pending" });
     }
-    const newToken = crypto4.randomBytes(32).toString("hex");
+    const newToken = crypto5.randomBytes(32).toString("hex");
     const newExpiresAt = new Date(Date.now() + 72 * 60 * 60 * 1e3);
-    await db.update(onboardingInvites).set({ token: newToken, expiresAt: newExpiresAt }).where(eq44(onboardingInvites.id, input.id));
+    await db.update(onboardingInvites).set({ token: newToken, expiresAt: newExpiresAt }).where(eq45(onboardingInvites.id, input.id));
+    try {
+      const custRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq45(customers.id, cid)).limit(1);
+      const companyName = custRows[0]?.companyName || "Your Company";
+      const portalOrigin = process.env.PORTAL_APP_URL || "https://app.geahr.com";
+      const inviteUrl = `${portalOrigin}/self-onboarding?token=${newToken}`;
+      await sendOnboardingInviteEmail({
+        to: invite.employeeEmail,
+        employeeName: invite.employeeName,
+        companyName,
+        inviteUrl
+      });
+    } catch (err) {
+      console.error("[PortalEmployees] Failed to resend onboarding invite email:", err);
+    }
     return { success: true, token: newToken };
   }),
   /**
@@ -22452,10 +24236,10 @@ var portalEmployeesRouter = portalRouter({
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     await db.update(onboardingInvites).set({ status: "cancelled" }).where(
-      and35(
-        eq44(onboardingInvites.id, input.id),
-        eq44(onboardingInvites.customerId, cid),
-        eq44(onboardingInvites.status, "pending")
+      and36(
+        eq45(onboardingInvites.id, input.id),
+        eq45(onboardingInvites.customerId, cid),
+        eq45(onboardingInvites.status, "pending")
       )
     );
     return { success: true };
@@ -22485,7 +24269,7 @@ var portalEmployeesRouter = portalRouter({
       paymentFrequency: onboardingInvites.paymentFrequency,
       rateAmount: onboardingInvites.rateAmount,
       contractorCurrency: onboardingInvites.contractorCurrency
-    }).from(onboardingInvites).where(eq44(onboardingInvites.token, input.token));
+    }).from(onboardingInvites).where(eq45(onboardingInvites.token, input.token));
     if (!invite) {
       return { valid: false, reason: "Invalid invite link" };
     }
@@ -22493,7 +24277,7 @@ var portalEmployeesRouter = portalRouter({
       return { valid: false, reason: invite.status === "completed" ? "This form has already been submitted" : "This invite has been cancelled or expired" };
     }
     if (new Date(invite.expiresAt) < /* @__PURE__ */ new Date()) {
-      await db.update(onboardingInvites).set({ status: "expired" }).where(eq44(onboardingInvites.id, invite.id));
+      await db.update(onboardingInvites).set({ status: "expired" }).where(eq45(onboardingInvites.id, invite.id));
       return { valid: false, reason: "This invite link has expired" };
     }
     return {
@@ -22544,23 +24328,23 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const [invite] = await db.select().from(onboardingInvites).where(
-      and35(
-        eq44(onboardingInvites.token, input.token),
-        eq44(onboardingInvites.status, "pending")
+      and36(
+        eq45(onboardingInvites.token, input.token),
+        eq45(onboardingInvites.status, "pending")
       )
     );
     if (!invite) {
       throw new TRPCError30({ code: "NOT_FOUND", message: "Invalid or expired invite" });
     }
     if (new Date(invite.expiresAt) < /* @__PURE__ */ new Date()) {
-      await db.update(onboardingInvites).set({ status: "expired" }).where(eq44(onboardingInvites.id, invite.id));
+      await db.update(onboardingInvites).set({ status: "expired" }).where(eq45(onboardingInvites.id, invite.id));
       throw new TRPCError30({ code: "BAD_REQUEST", message: "This invite has expired" });
     }
     const normalizedEmail = input.email.toLowerCase().trim();
     const [existingEmployee] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(
-      and35(
-        eq44(employees.customerId, invite.customerId),
-        eq44(employees.email, normalizedEmail)
+      and36(
+        eq45(employees.customerId, invite.customerId),
+        eq45(employees.email, normalizedEmail)
       )
     );
     if (existingEmployee && existingEmployee.status !== "terminated") {
@@ -22612,7 +24396,17 @@ var portalEmployeesRouter = portalRouter({
         status: "completed",
         contractorId,
         completedAt: /* @__PURE__ */ new Date()
-      }).where(eq44(onboardingInvites.id, invite.id));
+      }).where(eq45(onboardingInvites.id, invite.id));
+      notificationService.send({
+        type: "employee_onboarding_completed",
+        customerId: invite.customerId,
+        data: {
+          employeeName: `${input.firstName} ${input.lastName}`,
+          position: jobTitle,
+          country,
+          startDate
+        }
+      }).catch((err) => console.error("Failed to send onboarding completed notification:", err));
       return { success: true, contractorId };
     } else {
       const result = await createEmployee({
@@ -22653,7 +24447,17 @@ var portalEmployeesRouter = portalRouter({
         status: "completed",
         employeeId,
         completedAt: /* @__PURE__ */ new Date()
-      }).where(eq44(onboardingInvites.id, invite.id));
+      }).where(eq45(onboardingInvites.id, invite.id));
+      notificationService.send({
+        type: "employee_onboarding_completed",
+        customerId: invite.customerId,
+        data: {
+          employeeName: `${input.firstName} ${input.lastName}`,
+          position: jobTitle,
+          country,
+          startDate
+        }
+      }).catch((err) => console.error("Failed to send onboarding completed notification:", err));
       return { success: true, employeeId };
     }
   }),
@@ -22664,7 +24468,7 @@ var portalEmployeesRouter = portalRouter({
     z33.object({
       token: z33.string(),
       employeeId: z33.number(),
-      documentType: z33.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "other"]),
+      documentType: z33.enum(["resume", "passport", "national_id", "work_permit", "visa", "contract", "education", "payslip", "reimbursement_receipt", "other"]),
       documentName: z33.string().min(1),
       fileBase64: z33.string(),
       fileName: z33.string(),
@@ -22675,9 +24479,9 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const [invite] = await db.select().from(onboardingInvites).where(
-      and35(
-        eq44(onboardingInvites.token, input.token),
-        eq44(onboardingInvites.employeeId, input.employeeId)
+      and36(
+        eq45(onboardingInvites.token, input.token),
+        eq45(onboardingInvites.employeeId, input.employeeId)
       )
     );
     if (!invite) {
@@ -22706,7 +24510,7 @@ var portalEmployeesRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(and35(eq44(employees.id, input.id), eq44(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id, status: employees.status }).from(employees).where(and36(eq45(employees.id, input.id), eq45(employees.customerId, cid)));
     if (!emp) {
       throw new TRPCError30({ code: "NOT_FOUND", message: "Employee not found" });
     }
@@ -22716,18 +24520,67 @@ var portalEmployeesRouter = portalRouter({
         message: "Only employees in pending review status can be deleted"
       });
     }
-    await db.delete(employeeDocuments).where(eq44(employeeDocuments.employeeId, input.id));
-    await db.delete(employeeContracts).where(eq44(employeeContracts.employeeId, input.id));
-    await db.delete(leaveBalances).where(eq44(leaveBalances.employeeId, input.id));
-    await db.delete(employees).where(eq44(employees.id, input.id));
+    await db.delete(employeeDocuments).where(eq45(employeeDocuments.employeeId, input.id));
+    await db.delete(employeeContracts).where(eq45(employeeContracts.employeeId, input.id));
+    await db.delete(leaveBalances).where(eq45(leaveBalances.employeeId, input.id));
+    await db.delete(employees).where(eq45(employees.id, input.id));
     return { success: true };
+  }),
+  /**
+   * Request termination for an active employee.
+   * Portal clients can request termination; admin receives notification to process.
+   * Only available for employees in 'active' status.
+   */
+  requestTermination: portalHrProcedure.input(
+    z33.object({
+      employeeId: z33.number(),
+      endDate: z33.string().min(1, "End date is required"),
+      reason: z33.string().optional()
+    })
+  ).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError30({ code: "INTERNAL_SERVER_ERROR" });
+    const cid = ctx.portalUser.customerId;
+    const [emp] = await db.select({
+      id: employees.id,
+      status: employees.status,
+      firstName: employees.firstName,
+      lastName: employees.lastName,
+      employeeCode: employees.employeeCode,
+      country: employees.country
+    }).from(employees).where(and36(eq45(employees.id, input.employeeId), eq45(employees.customerId, cid)));
+    if (!emp) {
+      throw new TRPCError30({ code: "NOT_FOUND", message: "Employee not found" });
+    }
+    if (emp.status !== "active") {
+      throw new TRPCError30({
+        code: "BAD_REQUEST",
+        message: "Only active employees can be submitted for termination request"
+      });
+    }
+    const [customer] = await db.select({ companyName: customers.companyName }).from(customers).where(eq45(customers.id, cid));
+    notificationService.send({
+      type: "employee_termination_request",
+      customerId: cid,
+      data: {
+        employeeId: emp.id,
+        employeeName: `${emp.firstName} ${emp.lastName}`,
+        employeeCode: emp.employeeCode,
+        country: emp.country,
+        requestedEndDate: input.endDate,
+        reason: input.reason || "No reason provided",
+        requestedBy: ctx.portalUser.contactName || ctx.portalUser.email,
+        customerName: customer?.companyName || "Unknown"
+      }
+    }).catch((err) => console.error("Failed to send termination request notification:", err));
+    return { success: true, message: "Termination request submitted. Admin will review and process." };
   })
 });
 
 // server/portal/routers/portalAdjustmentsRouter.ts
 import { z as z34 } from "zod";
 import { TRPCError as TRPCError31 } from "@trpc/server";
-import { sql as sql20, eq as eq45, and as and36 } from "drizzle-orm";
+import { sql as sql21, eq as eq46, and as and37 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalAdjustmentsRouter = portalRouter({
@@ -22748,12 +24601,12 @@ var portalAdjustmentsRouter = portalRouter({
     const cid = ctx.portalUser.customerId;
     const allItems = [];
     if (input.workerType === "all" || input.workerType === "employee") {
-      const eorConditions = [eq45(adjustments.customerId, cid)];
+      const eorConditions = [eq46(adjustments.customerId, cid)];
       if (input.status) {
-        eorConditions.push(eq45(adjustments.status, input.status));
+        eorConditions.push(eq46(adjustments.status, input.status));
       }
       if (input.effectiveMonth) {
-        eorConditions.push(eq45(adjustments.effectiveMonth, input.effectiveMonth));
+        eorConditions.push(eq46(adjustments.effectiveMonth, input.effectiveMonth));
       }
       const eorItems = await db.select({
         id: adjustments.id,
@@ -22775,7 +24628,7 @@ var portalAdjustmentsRouter = portalRouter({
         updatedAt: adjustments.updatedAt,
         workerFirstName: employees.firstName,
         workerLastName: employees.lastName
-      }).from(adjustments).innerJoin(employees, eq45(adjustments.employeeId, employees.id)).where(and36(...eorConditions)).orderBy(sql20`${adjustments.updatedAt} DESC`);
+      }).from(adjustments).innerJoin(employees, eq46(adjustments.employeeId, employees.id)).where(and37(...eorConditions)).orderBy(sql21`${adjustments.updatedAt} DESC`);
       for (const item of eorItems) {
         allItems.push({
           ...item,
@@ -22788,12 +24641,12 @@ var portalAdjustmentsRouter = portalRouter({
       }
     }
     if (input.workerType === "all" || input.workerType === "contractor") {
-      const aorConditions = [eq45(contractorAdjustments.customerId, cid)];
+      const aorConditions = [eq46(contractorAdjustments.customerId, cid)];
       if (input.status) {
-        aorConditions.push(eq45(contractorAdjustments.status, input.status));
+        aorConditions.push(eq46(contractorAdjustments.status, input.status));
       }
       if (input.effectiveMonth) {
-        aorConditions.push(eq45(contractorAdjustments.effectiveMonth, input.effectiveMonth));
+        aorConditions.push(eq46(contractorAdjustments.effectiveMonth, input.effectiveMonth));
       }
       const aorItems = await db.select({
         id: contractorAdjustments.id,
@@ -22814,7 +24667,7 @@ var portalAdjustmentsRouter = portalRouter({
         updatedAt: contractorAdjustments.updatedAt,
         workerFirstName: contractors.firstName,
         workerLastName: contractors.lastName
-      }).from(contractorAdjustments).innerJoin(contractors, eq45(contractorAdjustments.contractorId, contractors.id)).where(and36(...aorConditions)).orderBy(sql20`${contractorAdjustments.updatedAt} DESC`);
+      }).from(contractorAdjustments).innerJoin(contractors, eq46(contractorAdjustments.contractorId, contractors.id)).where(and37(...aorConditions)).orderBy(sql21`${contractorAdjustments.updatedAt} DESC`);
       for (const item of aorItems) {
         allItems.push({
           ...item,
@@ -22863,15 +24716,15 @@ var portalAdjustmentsRouter = portalRouter({
     }
     const normalizedMonth = `${parts[0]}-${parts[1].padStart(2, "0")}-01`;
     if (input.workerType === "employee") {
-      const [emp] = await db.select({ id: employees.id, country: employees.country, salaryCurrency: employees.salaryCurrency }).from(employees).where(and36(eq45(employees.id, input.workerId), eq45(employees.customerId, cid)));
+      const [emp] = await db.select({ id: employees.id, country: employees.country, salaryCurrency: employees.salaryCurrency }).from(employees).where(and37(eq46(employees.id, input.workerId), eq46(employees.customerId, cid)));
       if (!emp) {
         throw new TRPCError31({ code: "NOT_FOUND", message: "Employee not found" });
       }
-      const [existingPayroll] = await db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns).innerJoin(payrollItems, eq45(payrollRuns.id, payrollItems.payrollRunId)).where(
-        and36(
-          eq45(payrollRuns.countryCode, emp.country),
-          eq45(payrollRuns.payrollMonth, normalizedMonth),
-          eq45(payrollItems.employeeId, input.workerId)
+      const [existingPayroll] = await db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns).innerJoin(payrollItems, eq46(payrollRuns.id, payrollItems.payrollRunId)).where(
+        and37(
+          eq46(payrollRuns.countryCode, emp.country),
+          eq46(payrollRuns.payrollMonth, normalizedMonth),
+          eq46(payrollItems.employeeId, input.workerId)
         )
       ).limit(1);
       if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
@@ -22896,7 +24749,7 @@ var portalAdjustmentsRouter = portalRouter({
         status: "submitted"
       });
     } else {
-      const [con] = await db.select({ id: contractors.id, currency: contractors.currency }).from(contractors).where(and36(eq45(contractors.id, input.workerId), eq45(contractors.customerId, cid)));
+      const [con] = await db.select({ id: contractors.id, currency: contractors.currency }).from(contractors).where(and37(eq46(contractors.id, input.workerId), eq46(contractors.customerId, cid)));
       if (!con) {
         throw new TRPCError31({ code: "NOT_FOUND", message: "Contractor not found" });
       }
@@ -22942,7 +24795,7 @@ var portalAdjustmentsRouter = portalRouter({
     if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     if (input.workerType === "contractor") {
-      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and36(eq45(contractorAdjustments.id, input.id), eq45(contractorAdjustments.customerId, cid)));
+      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and37(eq46(contractorAdjustments.id, input.id), eq46(contractorAdjustments.customerId, cid)));
       if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
       if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be edited" });
       const updates = {};
@@ -22951,10 +24804,10 @@ var portalAdjustmentsRouter = portalRouter({
       if (input.receiptFileUrl !== void 0) updates.attachmentUrl = input.receiptFileUrl;
       if (input.receiptFileKey !== void 0) updates.attachmentFileKey = input.receiptFileKey;
       if (Object.keys(updates).length > 0) {
-        await db.update(contractorAdjustments).set(updates).where(eq45(contractorAdjustments.id, input.id));
+        await db.update(contractorAdjustments).set(updates).where(eq46(contractorAdjustments.id, input.id));
       }
     } else {
-      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and36(eq45(adjustments.id, input.id), eq45(adjustments.customerId, cid)));
+      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and37(eq46(adjustments.id, input.id), eq46(adjustments.customerId, cid)));
       if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
       if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be edited" });
       const updates = {};
@@ -22963,7 +24816,7 @@ var portalAdjustmentsRouter = portalRouter({
       if (input.receiptFileUrl !== void 0) updates.receiptFileUrl = input.receiptFileUrl;
       if (input.receiptFileKey !== void 0) updates.receiptFileKey = input.receiptFileKey;
       if (Object.keys(updates).length > 0) {
-        await db.update(adjustments).set(updates).where(eq45(adjustments.id, input.id));
+        await db.update(adjustments).set(updates).where(eq46(adjustments.id, input.id));
       }
     }
     return { success: true };
@@ -22979,15 +24832,15 @@ var portalAdjustmentsRouter = portalRouter({
     if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     if (input.workerType === "contractor") {
-      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and36(eq45(contractorAdjustments.id, input.id), eq45(contractorAdjustments.customerId, cid)));
+      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and37(eq46(contractorAdjustments.id, input.id), eq46(contractorAdjustments.customerId, cid)));
       if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
       if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be deleted" });
-      await db.delete(contractorAdjustments).where(eq45(contractorAdjustments.id, input.id));
+      await db.delete(contractorAdjustments).where(eq46(contractorAdjustments.id, input.id));
     } else {
-      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and36(eq45(adjustments.id, input.id), eq45(adjustments.customerId, cid)));
+      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and37(eq46(adjustments.id, input.id), eq46(adjustments.customerId, cid)));
       if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
       if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Adjustment is locked and cannot be deleted" });
-      await db.delete(adjustments).where(eq45(adjustments.id, input.id));
+      await db.delete(adjustments).where(eq46(adjustments.id, input.id));
     }
     return { success: true };
   }),
@@ -23002,23 +24855,23 @@ var portalAdjustmentsRouter = portalRouter({
     if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     if (input.workerType === "contractor") {
-      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and36(eq45(contractorAdjustments.id, input.id), eq45(contractorAdjustments.customerId, cid)));
+      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and37(eq46(contractorAdjustments.id, input.id), eq46(contractorAdjustments.customerId, cid)));
       if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
       if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be approved" });
       await db.update(contractorAdjustments).set({
         status: "client_approved",
         clientApprovedBy: ctx.portalUser.contactId,
         clientApprovedAt: /* @__PURE__ */ new Date()
-      }).where(eq45(contractorAdjustments.id, input.id));
+      }).where(eq46(contractorAdjustments.id, input.id));
     } else {
-      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and36(eq45(adjustments.id, input.id), eq45(adjustments.customerId, cid)));
+      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and37(eq46(adjustments.id, input.id), eq46(adjustments.customerId, cid)));
       if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
       if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be approved" });
       await db.update(adjustments).set({
         status: "client_approved",
         clientApprovedBy: ctx.portalUser.contactId,
         clientApprovedAt: /* @__PURE__ */ new Date()
-      }).where(eq45(adjustments.id, input.id));
+      }).where(eq46(adjustments.id, input.id));
     }
     return { success: true };
   }),
@@ -23034,7 +24887,7 @@ var portalAdjustmentsRouter = portalRouter({
     if (!db) throw new TRPCError31({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     if (input.workerType === "contractor") {
-      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and36(eq45(contractorAdjustments.id, input.id), eq45(contractorAdjustments.customerId, cid)));
+      const [adj] = await db.select({ id: contractorAdjustments.id, status: contractorAdjustments.status }).from(contractorAdjustments).where(and37(eq46(contractorAdjustments.id, input.id), eq46(contractorAdjustments.customerId, cid)));
       if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
       if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be rejected" });
       await db.update(contractorAdjustments).set({
@@ -23042,9 +24895,9 @@ var portalAdjustmentsRouter = portalRouter({
         clientApprovedBy: ctx.portalUser.contactId,
         clientApprovedAt: /* @__PURE__ */ new Date(),
         clientRejectionReason: input.reason || null
-      }).where(eq45(contractorAdjustments.id, input.id));
+      }).where(eq46(contractorAdjustments.id, input.id));
     } else {
-      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and36(eq45(adjustments.id, input.id), eq45(adjustments.customerId, cid)));
+      const [adj] = await db.select({ id: adjustments.id, status: adjustments.status }).from(adjustments).where(and37(eq46(adjustments.id, input.id), eq46(adjustments.customerId, cid)));
       if (!adj) throw new TRPCError31({ code: "NOT_FOUND", message: "Adjustment not found" });
       if (adj.status !== "submitted") throw new TRPCError31({ code: "FORBIDDEN", message: "Only submitted adjustments can be rejected" });
       await db.update(adjustments).set({
@@ -23052,7 +24905,7 @@ var portalAdjustmentsRouter = portalRouter({
         clientApprovedBy: ctx.portalUser.contactId,
         clientApprovedAt: /* @__PURE__ */ new Date(),
         clientRejectionReason: input.reason || null
-      }).where(eq45(adjustments.id, input.id));
+      }).where(eq46(adjustments.id, input.id));
     }
     return { success: true };
   }),
@@ -23080,7 +24933,7 @@ var portalAdjustmentsRouter = portalRouter({
 // server/portal/routers/portalLeaveRouter.ts
 import { z as z35 } from "zod";
 import { TRPCError as TRPCError32 } from "@trpc/server";
-import { sql as sql21, eq as eq46, and as and37, count as count12 } from "drizzle-orm";
+import { sql as sql22, eq as eq47, and as and38, count as count12 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalLeaveRouter = portalRouter({
@@ -23098,15 +24951,15 @@ var portalLeaveRouter = portalRouter({
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const conditions = [eq46(employees.customerId, cid)];
+    const conditions = [eq47(employees.customerId, cid)];
     if (input.status) {
-      conditions.push(eq46(leaveRecords.status, input.status));
+      conditions.push(eq47(leaveRecords.status, input.status));
     }
     if (input.employeeId) {
-      conditions.push(eq46(leaveRecords.employeeId, input.employeeId));
+      conditions.push(eq47(leaveRecords.employeeId, input.employeeId));
     }
-    const where = and37(...conditions);
-    const [totalResult] = await db.select({ count: count12() }).from(leaveRecords).innerJoin(employees, eq46(leaveRecords.employeeId, employees.id)).where(where);
+    const where = and38(...conditions);
+    const [totalResult] = await db.select({ count: count12() }).from(leaveRecords).innerJoin(employees, eq47(leaveRecords.employeeId, employees.id)).where(where);
     const items = await db.select({
       id: leaveRecords.id,
       employeeId: leaveRecords.employeeId,
@@ -23128,7 +24981,7 @@ var portalLeaveRouter = portalRouter({
       employeeLastName: employees.lastName,
       // Leave type info
       leaveTypeName: leaveTypes.leaveTypeName
-    }).from(leaveRecords).innerJoin(employees, eq46(leaveRecords.employeeId, employees.id)).leftJoin(leaveTypes, eq46(leaveRecords.leaveTypeId, leaveTypes.id)).where(where).orderBy(sql21`${leaveRecords.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(leaveRecords).innerJoin(employees, eq47(leaveRecords.employeeId, employees.id)).leftJoin(leaveTypes, eq47(leaveRecords.leaveTypeId, leaveTypes.id)).where(where).orderBy(sql22`${leaveRecords.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return { items, total: totalResult?.count ?? 0 };
   }),
   /**
@@ -23138,7 +24991,7 @@ var portalLeaveRouter = portalRouter({
     const db = await getDb();
     if (!db) return [];
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id }).from(employees).where(and37(eq46(employees.id, input.employeeId), eq46(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id }).from(employees).where(and38(eq47(employees.id, input.employeeId), eq47(employees.customerId, cid)));
     if (!emp) return [];
     const balances = await db.select({
       id: leaveBalances.id,
@@ -23148,7 +25001,7 @@ var portalLeaveRouter = portalRouter({
       used: leaveBalances.used,
       remaining: leaveBalances.remaining,
       leaveTypeName: leaveTypes.leaveTypeName
-    }).from(leaveBalances).leftJoin(leaveTypes, eq46(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq46(leaveBalances.employeeId, input.employeeId));
+    }).from(leaveBalances).leftJoin(leaveTypes, eq47(leaveBalances.leaveTypeId, leaveTypes.id)).where(eq47(leaveBalances.employeeId, input.employeeId));
     return balances;
   }),
   /**
@@ -23166,25 +25019,24 @@ var portalLeaveRouter = portalRouter({
       startDate: z35.string(),
       endDate: z35.string(),
       days: z35.string(),
-      reason: z35.string().optional(),
-      isHalfDay: z35.boolean().default(false)
+      reason: z35.string().optional()
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id, country: employees.country }).from(employees).where(and37(eq46(employees.id, input.employeeId), eq46(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id, country: employees.country }).from(employees).where(and38(eq47(employees.id, input.employeeId), eq47(employees.customerId, cid)));
     if (!emp) {
       throw new TRPCError32({ code: "NOT_FOUND", message: "Employee not found" });
     }
     const endPayrollMonth = getLeavePayrollMonth(input.endDate);
     const endPayrollMonthNormalized = `${endPayrollMonth}-01`;
     await enforceCutoff(endPayrollMonthNormalized, "portal_hr", "create leave record");
-    const [existingPayroll] = await db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns).innerJoin(payrollItems, eq46(payrollRuns.id, payrollItems.payrollRunId)).where(
-      and37(
-        eq46(payrollRuns.countryCode, emp.country),
-        eq46(payrollRuns.payrollMonth, endPayrollMonthNormalized),
-        eq46(payrollItems.employeeId, input.employeeId)
+    const [existingPayroll] = await db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns).innerJoin(payrollItems, eq47(payrollRuns.id, payrollItems.payrollRunId)).where(
+      and38(
+        eq47(payrollRuns.countryCode, emp.country),
+        eq47(payrollRuns.payrollMonth, endPayrollMonthNormalized),
+        eq47(payrollItems.employeeId, input.employeeId)
       )
     ).limit(1);
     if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
@@ -23193,9 +25045,85 @@ var portalLeaveRouter = portalRouter({
         message: `Payroll run for ${endPayrollMonth} is already ${existingPayroll.status}. Leave requests cannot be added.`
       });
     }
-    const actualDays = input.isHalfDay ? (parseFloat(input.days) - 0.5).toFixed(1) : input.days;
-    if (isLeavesCrossMonth(input.startDate, input.endDate)) {
-      const splits = splitLeaveByMonth(input.startDate, input.endDate, parseFloat(actualDays));
+    const totalDays = parseFloat(input.days);
+    const crossMonth = isLeavesCrossMonth(input.startDate, input.endDate);
+    const splits = crossMonth ? splitLeaveByMonth(input.startDate, input.endDate, totalDays) : [{ startDate: input.startDate, endDate: input.endDate, days: totalDays, payrollMonth: getLeavePayrollMonth(input.endDate) }];
+    const [leaveTypeInfo] = await db.select({ isPaid: leaveTypes.isPaid }).from(leaveTypes).where(eq47(leaveTypes.id, input.leaveTypeId)).limit(1);
+    const isPaid = leaveTypeInfo?.isPaid !== false;
+    const year = parseInt(input.endDate.split("-")[0], 10);
+    let paidDays = totalDays;
+    let unpaidDays = 0;
+    let unpaidLeaveTypeId = null;
+    let balanceSplit = false;
+    if (isPaid) {
+      const balanceRows = await db.select({ id: leaveBalances.id, remaining: leaveBalances.remaining, used: leaveBalances.used }).from(leaveBalances).where(and38(
+        eq47(leaveBalances.employeeId, input.employeeId),
+        eq47(leaveBalances.leaveTypeId, input.leaveTypeId),
+        eq47(leaveBalances.year, year)
+      )).limit(1);
+      const balance = balanceRows[0];
+      const remaining = balance ? Number(balance.remaining ?? 0) : 0;
+      if (totalDays > remaining) {
+        paidDays = Math.max(0, remaining);
+        unpaidDays = totalDays - paidDays;
+        const [unpaidType] = await db.select({ id: leaveTypes.id }).from(leaveTypes).where(and38(eq47(leaveTypes.countryCode, emp.country), eq47(leaveTypes.isPaid, false))).limit(1);
+        if (!unpaidType) {
+          throw new TRPCError32({ code: "BAD_REQUEST", message: `Insufficient leave balance (${remaining} days remaining, ${totalDays} requested). No Unpaid Leave type configured for this country.` });
+        }
+        unpaidLeaveTypeId = unpaidType.id;
+        balanceSplit = true;
+      }
+    }
+    const deductBalance = async (leaveTypeId, days, yr) => {
+      const [bal] = await db.select({ id: leaveBalances.id, used: leaveBalances.used, remaining: leaveBalances.remaining }).from(leaveBalances).where(and38(
+        eq47(leaveBalances.employeeId, input.employeeId),
+        eq47(leaveBalances.leaveTypeId, leaveTypeId),
+        eq47(leaveBalances.year, yr)
+      )).limit(1);
+      if (bal) {
+        await db.update(leaveBalances).set({
+          used: Math.max(0, (bal.used ?? 0) + days),
+          remaining: Math.max(0, (bal.remaining ?? 0) - days)
+        }).where(eq47(leaveBalances.id, bal.id));
+      }
+    };
+    if (balanceSplit) {
+      if (paidDays > 0) {
+        const paidRatio = paidDays / totalDays;
+        for (const split of splits) {
+          const splitPaidDays = Math.round(split.days * paidRatio * 10) / 10;
+          if (splitPaidDays <= 0) continue;
+          await db.insert(leaveRecords).values({
+            employeeId: input.employeeId,
+            leaveTypeId: input.leaveTypeId,
+            startDate: split.startDate,
+            endDate: split.endDate,
+            days: String(splitPaidDays),
+            status: "submitted",
+            reason: `${input.reason || ""}${input.reason ? " | " : ""}[Paid portion: ${splitPaidDays} days]`.trim()
+          });
+          const splitYear = parseInt(split.endDate.split("-")[0], 10);
+          await deductBalance(input.leaveTypeId, splitPaidDays, splitYear);
+        }
+      }
+      if (unpaidDays > 0 && unpaidLeaveTypeId) {
+        const unpaidRatio = unpaidDays / totalDays;
+        for (const split of splits) {
+          const splitUnpaidDays = Math.round(split.days * unpaidRatio * 10) / 10;
+          if (splitUnpaidDays <= 0) continue;
+          await db.insert(leaveRecords).values({
+            employeeId: input.employeeId,
+            leaveTypeId: unpaidLeaveTypeId,
+            startDate: split.startDate,
+            endDate: split.endDate,
+            days: String(splitUnpaidDays),
+            status: "submitted",
+            reason: `${input.reason || ""}${input.reason ? " | " : ""}[Unpaid portion: ${splitUnpaidDays} days \u2014 auto-split due to insufficient balance]`.trim()
+          });
+        }
+      }
+      return { success: true, splits: splits.length, balanceSplit: true, paidDays, unpaidDays };
+    } else {
       for (const split of splits) {
         await db.insert(leaveRecords).values({
           employeeId: input.employeeId,
@@ -23206,19 +25134,13 @@ var portalLeaveRouter = portalRouter({
           status: "submitted",
           reason: input.reason || null
         });
+        if (isPaid) {
+          const splitYear = parseInt(split.endDate.split("-")[0], 10);
+          await deductBalance(input.leaveTypeId, split.days, splitYear);
+        }
       }
-      return { success: true, splits: splits.length };
+      return { success: true, splits: crossMonth ? splits.length : void 0 };
     }
-    await db.insert(leaveRecords).values({
-      employeeId: input.employeeId,
-      leaveTypeId: input.leaveTypeId,
-      startDate: input.startDate,
-      endDate: input.endDate,
-      days: actualDays,
-      status: "submitted",
-      reason: input.reason || null
-    });
-    return { success: true };
   }),
   /**
    * Delete leave record — only if status is 'submitted'
@@ -23230,8 +25152,11 @@ var portalLeaveRouter = portalRouter({
     const records = await db.select({
       id: leaveRecords.id,
       status: leaveRecords.status,
-      endDate: leaveRecords.endDate
-    }).from(leaveRecords).innerJoin(employees, eq46(leaveRecords.employeeId, employees.id)).where(and37(eq46(leaveRecords.id, input.id), eq46(employees.customerId, cid)));
+      endDate: leaveRecords.endDate,
+      employeeId: leaveRecords.employeeId,
+      leaveTypeId: leaveRecords.leaveTypeId,
+      days: leaveRecords.days
+    }).from(leaveRecords).innerJoin(employees, eq47(leaveRecords.employeeId, employees.id)).where(and38(eq47(leaveRecords.id, input.id), eq47(employees.customerId, cid)));
     if (records.length === 0) {
       throw new TRPCError32({ code: "NOT_FOUND", message: "Leave record not found" });
     }
@@ -23242,7 +25167,26 @@ var portalLeaveRouter = portalRouter({
       const payrollMonth = getLeavePayrollMonth(records[0].endDate);
       await enforceCutoff(`${payrollMonth}-01`, "portal_hr", "delete leave record");
     }
-    await db.delete(leaveRecords).where(eq46(leaveRecords.id, input.id));
+    const record = records[0];
+    const days = parseFloat(String(record.days ?? "0"));
+    if (days > 0 && record.endDate) {
+      const yr = parseInt(String(record.endDate).split("-")[0], 10);
+      const [ltInfo] = await db.select({ isPaid: leaveTypes.isPaid }).from(leaveTypes).where(eq47(leaveTypes.id, record.leaveTypeId)).limit(1);
+      if (ltInfo?.isPaid !== false) {
+        const [bal] = await db.select({ id: leaveBalances.id, used: leaveBalances.used, remaining: leaveBalances.remaining }).from(leaveBalances).where(and38(
+          eq47(leaveBalances.employeeId, record.employeeId),
+          eq47(leaveBalances.leaveTypeId, record.leaveTypeId),
+          eq47(leaveBalances.year, yr)
+        )).limit(1);
+        if (bal) {
+          await db.update(leaveBalances).set({
+            used: Math.max(0, (bal.used ?? 0) - days),
+            remaining: (bal.remaining ?? 0) + days
+          }).where(eq47(leaveBalances.id, bal.id));
+        }
+      }
+    }
+    await db.delete(leaveRecords).where(eq47(leaveRecords.id, input.id));
     return { success: true };
   }),
   /**
@@ -23252,7 +25196,7 @@ var portalLeaveRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq46(leaveRecords.employeeId, employees.id)).where(and37(eq46(leaveRecords.id, input.id), eq46(employees.customerId, cid)));
+    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq47(leaveRecords.employeeId, employees.id)).where(and38(eq47(leaveRecords.id, input.id), eq47(employees.customerId, cid)));
     if (records.length === 0) {
       throw new TRPCError32({ code: "NOT_FOUND", message: "Leave record not found" });
     }
@@ -23263,7 +25207,7 @@ var portalLeaveRouter = portalRouter({
       status: "client_approved",
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date()
-    }).where(eq46(leaveRecords.id, input.id));
+    }).where(eq47(leaveRecords.id, input.id));
     return { success: true };
   }),
   /**
@@ -23276,7 +25220,7 @@ var portalLeaveRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError32({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq46(leaveRecords.employeeId, employees.id)).where(and37(eq46(leaveRecords.id, input.id), eq46(employees.customerId, cid)));
+    const records = await db.select({ id: leaveRecords.id, status: leaveRecords.status }).from(leaveRecords).innerJoin(employees, eq47(leaveRecords.employeeId, employees.id)).where(and38(eq47(leaveRecords.id, input.id), eq47(employees.customerId, cid)));
     if (records.length === 0) {
       throw new TRPCError32({ code: "NOT_FOUND", message: "Leave record not found" });
     }
@@ -23288,7 +25232,7 @@ var portalLeaveRouter = portalRouter({
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date(),
       clientRejectionReason: input.reason || null
-    }).where(eq46(leaveRecords.id, input.id));
+    }).where(eq47(leaveRecords.id, input.id));
     return { success: true };
   }),
   /**
@@ -23298,7 +25242,7 @@ var portalLeaveRouter = portalRouter({
     const db = await getDb();
     if (!db) return [];
     const cid = ctx.portalUser.customerId;
-    const activeCountries = await db.select({ country: employees.country }).from(employees).where(and37(eq46(employees.customerId, cid), eq46(employees.status, "active"))).groupBy(employees.country);
+    const activeCountries = await db.select({ country: employees.country }).from(employees).where(and38(eq47(employees.customerId, cid), eq47(employees.status, "active"))).groupBy(employees.country);
     if (activeCountries.length === 0) return [];
     const NAME_TO_CODE = {
       // A
@@ -23465,9 +25409,9 @@ var portalLeaveRouter = portalRouter({
     }).filter((c) => c !== null);
     if (countryCodes.length === 0) return [];
     const holidays = await db.select().from(publicHolidays).where(
-      and37(
-        sql21`${publicHolidays.countryCode} IN (${sql21.join(countryCodes.map((c) => sql21`${c}`), sql21`, `)})`,
-        eq46(publicHolidays.year, input.year)
+      and38(
+        sql22`${publicHolidays.countryCode} IN (${sql22.join(countryCodes.map((c) => sql22`${c}`), sql22`, `)})`,
+        eq47(publicHolidays.year, input.year)
       )
     ).orderBy(publicHolidays.holidayDate);
     return holidays;
@@ -23477,7 +25421,7 @@ var portalLeaveRouter = portalRouter({
 // server/portal/routers/portalInvoicesRouter.ts
 import { z as z36 } from "zod";
 import { TRPCError as TRPCError33 } from "@trpc/server";
-import { sql as sql22, eq as eq47, and as and38, count as count13, inArray as inArray14 } from "drizzle-orm";
+import { sql as sql23, eq as eq48, and as and39, count as count13, inArray as inArray14 } from "drizzle-orm";
 init_db2();
 init_schema();
 var PORTAL_INVOICE_FIELDS = {
@@ -23504,8 +25448,8 @@ var PORTAL_INVOICE_FIELDS = {
   createdAt: invoices.createdAt,
   updatedAt: invoices.updatedAt
 };
-var VISIBLE_FILTER = sql22`${invoices.status} NOT IN ('draft', 'pending_review')`;
-var ACTIVE_FILTER = sql22`${invoices.status} NOT IN ('draft', 'pending_review', 'cancelled', 'void')`;
+var VISIBLE_FILTER = sql23`${invoices.status} NOT IN ('draft', 'pending_review')`;
+var ACTIVE_FILTER = sql23`${invoices.status} NOT IN ('draft', 'pending_review', 'cancelled', 'void')`;
 var portalInvoicesRouter = portalRouter({
   /**
    * List invoices — scoped to customerId
@@ -23527,33 +25471,33 @@ var portalInvoicesRouter = portalRouter({
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
     const conditions = [
-      eq47(invoices.customerId, cid),
+      eq48(invoices.customerId, cid),
       VISIBLE_FILTER
     ];
     if (input.excludeCreditNotes) {
-      conditions.push(sql22`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`);
+      conditions.push(sql23`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`);
     }
     if (input.tab === "active") {
-      conditions.push(sql22`${invoices.status} NOT IN ('cancelled', 'void', 'paid')`);
+      conditions.push(sql23`${invoices.status} NOT IN ('cancelled', 'void', 'paid')`);
     } else {
-      conditions.push(sql22`${invoices.status} IN ('paid', 'applied', 'cancelled', 'void')`);
+      conditions.push(sql23`${invoices.status} IN ('paid', 'applied', 'cancelled', 'void')`);
     }
     if (input.status) {
-      conditions.push(eq47(invoices.status, input.status));
+      conditions.push(eq48(invoices.status, input.status));
     }
     if (input.typeCategory === "receivables") {
-      conditions.push(sql22`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`);
+      conditions.push(sql23`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`);
     } else if (input.typeCategory === "credits") {
-      conditions.push(eq47(invoices.invoiceType, "credit_note"));
+      conditions.push(eq48(invoices.invoiceType, "credit_note"));
     } else if (input.typeCategory === "deposits") {
-      conditions.push(sql22`${invoices.invoiceType} IN ('deposit', 'deposit_refund')`);
+      conditions.push(sql23`${invoices.invoiceType} IN ('deposit', 'deposit_refund')`);
     }
     if (input.invoiceMonth) {
-      conditions.push(eq47(invoices.invoiceMonth, input.invoiceMonth));
+      conditions.push(eq48(invoices.invoiceMonth, input.invoiceMonth));
     }
-    const where = and38(...conditions);
+    const where = and39(...conditions);
     const [totalResult] = await db.select({ count: count13() }).from(invoices).where(where);
-    const items = await db.select(PORTAL_INVOICE_FIELDS).from(invoices).where(where).orderBy(sql22`${invoices.createdAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    const items = await db.select(PORTAL_INVOICE_FIELDS).from(invoices).where(where).orderBy(sql23`${invoices.createdAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     const itemIds = items.map((inv) => inv.id);
     let relatedInvoicesMap = {};
     if (itemIds.length > 0) {
@@ -23565,8 +25509,8 @@ var portalInvoicesRouter = portalRouter({
         status: invoices.status,
         relatedInvoiceId: invoices.relatedInvoiceId
       }).from(invoices).where(
-        and38(
-          eq47(invoices.customerId, cid),
+        and39(
+          eq48(invoices.customerId, cid),
           VISIBLE_FILTER,
           inArray14(invoices.relatedInvoiceId, itemIds)
         )
@@ -23643,9 +25587,9 @@ var portalInvoicesRouter = portalRouter({
     if (!db) throw new TRPCError33({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
     const [invoice] = await db.select(PORTAL_INVOICE_FIELDS).from(invoices).where(
-      and38(
-        eq47(invoices.id, input.id),
-        eq47(invoices.customerId, cid),
+      and39(
+        eq48(invoices.id, input.id),
+        eq48(invoices.customerId, cid),
         VISIBLE_FILTER
       )
     );
@@ -23665,7 +25609,7 @@ var portalInvoicesRouter = portalRouter({
       localAmount: invoiceItems.localAmount,
       exchangeRate: invoiceItems.exchangeRate
       // exchangeRateWithMarkup is NOT included — admin-only field
-    }).from(invoiceItems).where(eq47(invoiceItems.invoiceId, input.id));
+    }).from(invoiceItems).where(eq48(invoiceItems.invoiceId, input.id));
     const childDocuments = await db.select({
       id: invoices.id,
       invoiceNumber: invoices.invoiceNumber,
@@ -23674,9 +25618,9 @@ var portalInvoicesRouter = portalRouter({
       status: invoices.status,
       createdAt: invoices.createdAt
     }).from(invoices).where(
-      and38(
-        eq47(invoices.relatedInvoiceId, input.id),
-        eq47(invoices.customerId, cid),
+      and39(
+        eq48(invoices.relatedInvoiceId, input.id),
+        eq48(invoices.customerId, cid),
         VISIBLE_FILTER
       )
     );
@@ -23689,9 +25633,9 @@ var portalInvoicesRouter = portalRouter({
         total: invoices.total,
         status: invoices.status
       }).from(invoices).where(
-        and38(
-          eq47(invoices.id, invoice.relatedInvoiceId),
-          eq47(invoices.customerId, cid)
+        and39(
+          eq48(invoices.id, invoice.relatedInvoiceId),
+          eq48(invoices.customerId, cid)
         )
       );
       parentDocument = parent || null;
@@ -23748,45 +25692,45 @@ var portalInvoicesRouter = portalRouter({
     const db = await getDb();
     if (!db) return { totalInvoiced: 0, totalPaid: 0, totalCreditNotes: 0, totalDeposits: 0, outstandingBalance: 0 };
     const cid = ctx.portalUser.customerId;
-    const [invoiced] = await db.select({ total: sql22`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and38(
-        eq47(invoices.customerId, cid),
-        sql22`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`,
+    const [invoiced] = await db.select({ total: sql23`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and39(
+        eq48(invoices.customerId, cid),
+        sql23`${invoices.invoiceType} IN ('monthly_eor', 'monthly_visa_eor', 'monthly_aor', 'visa_service', 'manual')`,
         ACTIVE_FILTER
       )
     );
-    const [paid] = await db.select({ total: sql22`COALESCE(SUM(${invoices.paidAmount}), 0)` }).from(invoices).where(
-      and38(
-        eq47(invoices.customerId, cid),
-        eq47(invoices.status, "paid")
+    const [paid] = await db.select({ total: sql23`COALESCE(SUM(${invoices.paidAmount}), 0)` }).from(invoices).where(
+      and39(
+        eq48(invoices.customerId, cid),
+        eq48(invoices.status, "paid")
       )
     );
-    const [credits] = await db.select({ total: sql22`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
-      and38(
-        eq47(invoices.customerId, cid),
-        eq47(invoices.invoiceType, "credit_note"),
+    const [credits] = await db.select({ total: sql23`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+      and39(
+        eq48(invoices.customerId, cid),
+        eq48(invoices.invoiceType, "credit_note"),
         ACTIVE_FILTER
       )
     );
-    const [depositsGross] = await db.select({ total: sql22`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
-      and38(
-        eq47(invoices.customerId, cid),
-        eq47(invoices.invoiceType, "deposit"),
+    const [depositsGross] = await db.select({ total: sql23`COALESCE(SUM(${invoices.total}), 0)` }).from(invoices).where(
+      and39(
+        eq48(invoices.customerId, cid),
+        eq48(invoices.invoiceType, "deposit"),
         ACTIVE_FILTER
       )
     );
-    const [depositCreditNotes] = await db.select({ total: sql22`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
-      and38(
-        eq47(invoices.customerId, cid),
-        eq47(invoices.invoiceType, "credit_note"),
+    const [depositCreditNotes] = await db.select({ total: sql23`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+      and39(
+        eq48(invoices.customerId, cid),
+        eq48(invoices.invoiceType, "credit_note"),
         ACTIVE_FILTER,
-        sql22`${invoices.relatedInvoiceId} IN (SELECT id FROM invoices WHERE customerId = ${cid} AND invoiceType = 'deposit')`
+        sql23`${invoices.relatedInvoiceId} IN (SELECT id FROM invoices WHERE customerId = ${cid} AND invoiceType = 'deposit')`
       )
     );
-    const [depositRefunds] = await db.select({ total: sql22`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
-      and38(
-        eq47(invoices.customerId, cid),
-        eq47(invoices.invoiceType, "deposit_refund"),
+    const [depositRefunds] = await db.select({ total: sql23`COALESCE(SUM(ABS(${invoices.total})), 0)` }).from(invoices).where(
+      and39(
+        eq48(invoices.customerId, cid),
+        eq48(invoices.invoiceType, "deposit_refund"),
         ACTIVE_FILTER
       )
     );
@@ -23794,11 +25738,11 @@ var portalInvoicesRouter = portalRouter({
       0,
       Number(depositsGross?.total || 0) - Number(depositCreditNotes?.total || 0) - Number(depositRefunds?.total || 0)
     );
-    const [outstanding] = await db.select({ total: sql22`COALESCE(SUM(COALESCE(${invoices.amountDue}, ${invoices.total})), 0)` }).from(invoices).where(
-      and38(
-        eq47(invoices.customerId, cid),
-        sql22`${invoices.status} IN ('sent', 'overdue')`,
-        sql22`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`
+    const [outstanding] = await db.select({ total: sql23`COALESCE(SUM(COALESCE(${invoices.amountDue}, ${invoices.total})), 0)` }).from(invoices).where(
+      and39(
+        eq48(invoices.customerId, cid),
+        sql23`${invoices.status} IN ('sent', 'overdue')`,
+        sql23`${invoices.invoiceType} NOT IN ('credit_note', 'deposit_refund')`
       )
     );
     const totalCreditIssued = Number(credits?.total || 0);
@@ -23816,7 +25760,7 @@ var portalInvoicesRouter = portalRouter({
 // server/portal/routers/portalSettingsRouter.ts
 import { z as z37 } from "zod";
 import { TRPCError as TRPCError34 } from "@trpc/server";
-import { eq as eq48, and as and39 } from "drizzle-orm";
+import { eq as eq49, and as and40 } from "drizzle-orm";
 init_db2();
 init_schema();
 init_portalAuth();
@@ -23880,7 +25824,7 @@ var portalSettingsRouter = portalRouter({
       settlementCurrency: customers.settlementCurrency,
       language: customers.language
       // Exclude: internalNotes, pricing info, markup data, depositMultiplier
-    }).from(customers).where(eq48(customers.id, cid));
+    }).from(customers).where(eq49(customers.id, cid));
     return company || null;
   }),
   /**
@@ -23922,7 +25866,7 @@ var portalSettingsRouter = portalRouter({
     if (Object.keys(updateData).length === 0) {
       return { success: true };
     }
-    await db.update(customers).set(updateData).where(eq48(customers.id, cid));
+    await db.update(customers).set(updateData).where(eq49(customers.id, cid));
     return { success: true };
   }),
   /**
@@ -23942,7 +25886,7 @@ var portalSettingsRouter = portalRouter({
       leaveTypeName: leaveTypes.leaveTypeName,
       countryName: countriesConfig.countryName,
       statutoryMinimum: leaveTypes.annualEntitlement
-    }).from(customerLeavePolicies).leftJoin(leaveTypes, eq48(customerLeavePolicies.leaveTypeId, leaveTypes.id)).leftJoin(countriesConfig, eq48(customerLeavePolicies.countryCode, countriesConfig.countryCode)).where(eq48(customerLeavePolicies.customerId, cid));
+    }).from(customerLeavePolicies).leftJoin(leaveTypes, eq49(customerLeavePolicies.leaveTypeId, leaveTypes.id)).leftJoin(countriesConfig, eq49(customerLeavePolicies.countryCode, countriesConfig.countryCode)).where(eq49(customerLeavePolicies.customerId, cid));
     return policies;
   }),
   /**
@@ -23959,11 +25903,11 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [policy] = await db.select({ id: customerLeavePolicies.id, leaveTypeId: customerLeavePolicies.leaveTypeId }).from(customerLeavePolicies).where(and39(eq48(customerLeavePolicies.id, input.id), eq48(customerLeavePolicies.customerId, cid)));
+    const [policy] = await db.select({ id: customerLeavePolicies.id, leaveTypeId: customerLeavePolicies.leaveTypeId }).from(customerLeavePolicies).where(and40(eq49(customerLeavePolicies.id, input.id), eq49(customerLeavePolicies.customerId, cid)));
     if (!policy) {
       throw new TRPCError34({ code: "NOT_FOUND", message: "Leave policy not found" });
     }
-    const [leaveType] = await db.select({ annualEntitlement: leaveTypes.annualEntitlement }).from(leaveTypes).where(eq48(leaveTypes.id, policy.leaveTypeId));
+    const [leaveType] = await db.select({ annualEntitlement: leaveTypes.annualEntitlement }).from(leaveTypes).where(eq49(leaveTypes.id, policy.leaveTypeId));
     if (leaveType && leaveType.annualEntitlement && input.annualEntitlement < leaveType.annualEntitlement) {
       throw new TRPCError34({
         code: "BAD_REQUEST",
@@ -23974,7 +25918,7 @@ var portalSettingsRouter = portalRouter({
       annualEntitlement: input.annualEntitlement,
       expiryRule: input.expiryRule,
       carryOverDays: input.carryOverDays
-    }).where(eq48(customerLeavePolicies.id, input.id));
+    }).where(eq49(customerLeavePolicies.id, input.id));
     return { success: true };
   }),
   // ============================================================================
@@ -23999,7 +25943,7 @@ var portalSettingsRouter = portalRouter({
       lastLoginAt: customerContacts.lastLoginAt,
       isPrimary: customerContacts.isPrimary
       // passwordHash is NOT included
-    }).from(customerContacts).where(eq48(customerContacts.customerId, cid)).orderBy(customerContacts.contactName);
+    }).from(customerContacts).where(eq49(customerContacts.customerId, cid)).orderBy(customerContacts.contactName);
     return users3;
   }),
   /**
@@ -24018,7 +25962,7 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const existing = await db.select({ id: customerContacts.id }).from(customerContacts).where(eq48(customerContacts.email, input.email.toLowerCase().trim()));
+    const existing = await db.select({ id: customerContacts.id }).from(customerContacts).where(eq49(customerContacts.email, input.email.toLowerCase().trim()));
     if (existing.length > 0) {
       throw new TRPCError34({ code: "CONFLICT", message: "A user with this email already exists" });
     }
@@ -24038,6 +25982,21 @@ var portalSettingsRouter = portalRouter({
       inviteToken,
       inviteExpiresAt
     });
+    try {
+      const custRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq49(customers.id, cid)).limit(1);
+      const companyName = custRows[0]?.companyName || "Your Company";
+      const portalOrigin = process.env.PORTAL_APP_URL || "https://app.geahr.com";
+      const inviteUrl = `${portalOrigin}/register?token=${inviteToken}`;
+      await sendPortalInviteEmail({
+        to: input.email.toLowerCase().trim(),
+        contactName: input.contactName,
+        companyName,
+        portalRole: input.portalRole,
+        inviteUrl
+      });
+    } catch (err) {
+      console.error("[PortalSettings] Failed to send invite email:", err);
+    }
     return {
       success: true,
       inviteToken,
@@ -24059,11 +26018,11 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and39(eq48(customerContacts.id, input.contactId), eq48(customerContacts.customerId, cid)));
+    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and40(eq49(customerContacts.id, input.contactId), eq49(customerContacts.customerId, cid)));
     if (!contact) {
       throw new TRPCError34({ code: "NOT_FOUND", message: "User not found" });
     }
-    await db.update(customerContacts).set({ portalRole: input.portalRole }).where(eq48(customerContacts.id, input.contactId));
+    await db.update(customerContacts).set({ portalRole: input.portalRole }).where(eq49(customerContacts.id, input.contactId));
     return { success: true };
   }),
   /**
@@ -24076,11 +26035,11 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and39(eq48(customerContacts.id, input.contactId), eq48(customerContacts.customerId, cid)));
+    const [contact] = await db.select({ id: customerContacts.id }).from(customerContacts).where(and40(eq49(customerContacts.id, input.contactId), eq49(customerContacts.customerId, cid)));
     if (!contact) {
       throw new TRPCError34({ code: "NOT_FOUND", message: "User not found" });
     }
-    await db.update(customerContacts).set({ hasPortalAccess: false, isPortalActive: false }).where(eq48(customerContacts.id, input.contactId));
+    await db.update(customerContacts).set({ hasPortalAccess: false, isPortalActive: false }).where(eq49(customerContacts.id, input.contactId));
     return { success: true };
   }),
   /**
@@ -24090,7 +26049,7 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [contact] = await db.select({ id: customerContacts.id, isPortalActive: customerContacts.isPortalActive }).from(customerContacts).where(and39(eq48(customerContacts.id, input.contactId), eq48(customerContacts.customerId, cid)));
+    const [contact] = await db.select({ id: customerContacts.id, isPortalActive: customerContacts.isPortalActive }).from(customerContacts).where(and40(eq49(customerContacts.id, input.contactId), eq49(customerContacts.customerId, cid)));
     if (!contact) {
       throw new TRPCError34({ code: "NOT_FOUND", message: "User not found" });
     }
@@ -24099,7 +26058,25 @@ var portalSettingsRouter = portalRouter({
     }
     const inviteToken = generateInviteToken2();
     const inviteExpiresAt = getInviteExpiryDate2();
-    await db.update(customerContacts).set({ inviteToken, inviteExpiresAt }).where(eq48(customerContacts.id, input.contactId));
+    await db.update(customerContacts).set({ inviteToken, inviteExpiresAt }).where(eq49(customerContacts.id, input.contactId));
+    try {
+      const contactDetails = await db.select({ contactName: customerContacts.contactName, email: customerContacts.email }).from(customerContacts).where(eq49(customerContacts.id, input.contactId)).limit(1);
+      const contactName = contactDetails[0]?.contactName || "User";
+      const contactEmail = contactDetails[0]?.email || "";
+      const custRows = await db.select({ companyName: customers.companyName }).from(customers).where(eq49(customers.id, cid)).limit(1);
+      const companyName = custRows[0]?.companyName || "Your Company";
+      const portalOrigin = process.env.PORTAL_APP_URL || "https://app.geahr.com";
+      const inviteUrl = `${portalOrigin}/register?token=${inviteToken}`;
+      await sendPortalInviteEmail({
+        to: contactEmail,
+        contactName,
+        companyName,
+        portalRole: "viewer",
+        inviteUrl
+      });
+    } catch (err) {
+      console.error("[PortalSettings] Failed to resend invite email:", err);
+    }
     return {
       success: true,
       inviteToken,
@@ -24113,9 +26090,9 @@ var portalSettingsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError34({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const existing = await db.select({ id: customerLeavePolicies.id }).from(customerLeavePolicies).where(and39(
-      eq48(customerLeavePolicies.customerId, cid),
-      eq48(customerLeavePolicies.countryCode, input.countryCode)
+    const existing = await db.select({ id: customerLeavePolicies.id }).from(customerLeavePolicies).where(and40(
+      eq49(customerLeavePolicies.customerId, cid),
+      eq49(customerLeavePolicies.countryCode, input.countryCode)
     ));
     if (existing.length > 0) {
       throw new TRPCError34({
@@ -24123,7 +26100,7 @@ var portalSettingsRouter = portalRouter({
         message: "Leave policies already exist for this country. Please edit them instead."
       });
     }
-    const statutoryTypes = await db.select().from(leaveTypes).where(eq48(leaveTypes.countryCode, input.countryCode));
+    const statutoryTypes = await db.select().from(leaveTypes).where(eq49(leaveTypes.countryCode, input.countryCode));
     if (statutoryTypes.length === 0) {
       throw new TRPCError34({
         code: "NOT_FOUND",
@@ -24152,7 +26129,7 @@ var portalSettingsRouter = portalRouter({
     const countries = await db.select({
       country: employees.country,
       countryName: countriesConfig.countryName
-    }).from(employees).leftJoin(countriesConfig, eq48(employees.country, countriesConfig.countryCode)).where(eq48(employees.customerId, cid)).groupBy(employees.country, countriesConfig.countryName);
+    }).from(employees).leftJoin(countriesConfig, eq49(employees.country, countriesConfig.countryCode)).where(eq49(employees.customerId, cid)).groupBy(employees.country, countriesConfig.countryName);
     return countries;
   })
 });
@@ -24160,7 +26137,7 @@ var portalSettingsRouter = portalRouter({
 // server/portal/routers/portalPayrollRouter.ts
 import { z as z38 } from "zod";
 import { TRPCError as TRPCError35 } from "@trpc/server";
-import { sql as sql24, eq as eq49, and as and40, count as count15, inArray as inArray15 } from "drizzle-orm";
+import { sql as sql25, eq as eq50, and as and41, count as count15, inArray as inArray15 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalPayrollRouter = portalRouter({
@@ -24178,19 +26155,19 @@ var portalPayrollRouter = portalRouter({
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const subquery = db.select({ payrollRunId: payrollItems.payrollRunId }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(eq49(employees.customerId, cid)).groupBy(payrollItems.payrollRunId);
+    const subquery = db.select({ payrollRunId: payrollItems.payrollRunId }).from(payrollItems).innerJoin(employees, eq50(payrollItems.employeeId, employees.id)).where(eq50(employees.customerId, cid)).groupBy(payrollItems.payrollRunId);
     const runIds = (await subquery).map((r) => r.payrollRunId);
     if (runIds.length === 0) return { items: [], total: 0 };
     const conditions = [
       inArray15(payrollRuns.id, runIds),
-      eq49(payrollRuns.status, "approved")
+      eq50(payrollRuns.status, "approved")
     ];
     if (input.year) {
       conditions.push(
-        sql24`substr(${payrollRuns.payrollMonth}, 1, 4) = ${String(input.year)}`
+        sql25`substr(${payrollRuns.payrollMonth}, 1, 4) = ${String(input.year)}`
       );
     }
-    const where = and40(...conditions);
+    const where = and41(...conditions);
     const [totalResult] = await db.select({ count: count15() }).from(payrollRuns).where(where);
     const runs = await db.select({
       id: payrollRuns.id,
@@ -24203,24 +26180,24 @@ var portalPayrollRouter = portalRouter({
       totalNet: payrollRuns.totalNet,
       approvedAt: payrollRuns.approvedAt,
       notes: payrollRuns.notes
-    }).from(payrollRuns).where(where).orderBy(sql24`${payrollRuns.payrollMonth} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(payrollRuns).where(where).orderBy(sql25`${payrollRuns.payrollMonth} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     const enrichedRuns = await Promise.all(
       runs.map(async (run) => {
-        const [empCount] = await db.select({ count: count15() }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(
-          and40(
-            eq49(payrollItems.payrollRunId, run.id),
-            eq49(employees.customerId, cid)
+        const [empCount] = await db.select({ count: count15() }).from(payrollItems).innerJoin(employees, eq50(payrollItems.employeeId, employees.id)).where(
+          and41(
+            eq50(payrollItems.payrollRunId, run.id),
+            eq50(employees.customerId, cid)
           )
         );
         const [customerTotals] = await db.select({
-          totalGross: sql24`COALESCE(SUM(${payrollItems.gross}), 0)`,
-          totalNet: sql24`COALESCE(SUM(${payrollItems.net}), 0)`,
-          totalDeductions: sql24`COALESCE(SUM(${payrollItems.deductions} + ${payrollItems.taxDeduction} + ${payrollItems.socialSecurityDeduction} + ${payrollItems.unpaidLeaveDeduction}), 0)`,
-          totalEmployerCost: sql24`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`
-        }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(
-          and40(
-            eq49(payrollItems.payrollRunId, run.id),
-            eq49(employees.customerId, cid)
+          totalGross: sql25`COALESCE(SUM(${payrollItems.gross}), 0)`,
+          totalNet: sql25`COALESCE(SUM(${payrollItems.net}), 0)`,
+          totalDeductions: sql25`COALESCE(SUM(${payrollItems.deductions} + ${payrollItems.taxDeduction} + ${payrollItems.socialSecurityDeduction} + ${payrollItems.unpaidLeaveDeduction}), 0)`,
+          totalEmployerCost: sql25`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`
+        }).from(payrollItems).innerJoin(employees, eq50(payrollItems.employeeId, employees.id)).where(
+          and41(
+            eq50(payrollItems.payrollRunId, run.id),
+            eq50(employees.customerId, cid)
           )
         );
         return {
@@ -24255,9 +26232,9 @@ var portalPayrollRouter = portalRouter({
       approvedAt: payrollRuns.approvedAt,
       notes: payrollRuns.notes
     }).from(payrollRuns).where(
-      and40(
-        eq49(payrollRuns.id, input.id),
-        eq49(payrollRuns.status, "approved")
+      and41(
+        eq50(payrollRuns.id, input.id),
+        eq50(payrollRuns.status, "approved")
       )
     );
     if (!run) {
@@ -24266,7 +26243,7 @@ var portalPayrollRouter = portalRouter({
     const items = await db.select({
       id: payrollItems.id,
       employeeId: payrollItems.employeeId,
-      employeeName: sql24`(${employees.firstName} || ' ' || ${employees.lastName})`,
+      employeeName: sql25`(${employees.firstName} || ' ' || ${employees.lastName})`,
       employeeCode: employees.employeeCode,
       jobTitle: employees.jobTitle,
       baseSalary: payrollItems.baseSalary,
@@ -24284,10 +26261,10 @@ var portalPayrollRouter = portalRouter({
       totalEmploymentCost: payrollItems.totalEmploymentCost,
       currency: payrollItems.currency,
       notes: payrollItems.notes
-    }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(
-      and40(
-        eq49(payrollItems.payrollRunId, input.id),
-        eq49(employees.customerId, cid)
+    }).from(payrollItems).innerJoin(employees, eq50(payrollItems.employeeId, employees.id)).where(
+      and41(
+        eq50(payrollItems.payrollRunId, input.id),
+        eq50(employees.customerId, cid)
       )
     );
     if (items.length === 0) {
@@ -24305,7 +26282,7 @@ var portalPayrollRouter = portalRouter({
     const db = await getDb();
     if (!db) return [];
     const cid = ctx.portalUser.customerId;
-    const subquery = db.select({ payrollRunId: payrollItems.payrollRunId }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(eq49(employees.customerId, cid)).groupBy(payrollItems.payrollRunId);
+    const subquery = db.select({ payrollRunId: payrollItems.payrollRunId }).from(payrollItems).innerJoin(employees, eq50(payrollItems.employeeId, employees.id)).where(eq50(employees.customerId, cid)).groupBy(payrollItems.payrollRunId);
     const runIds = (await subquery).map((r) => r.payrollRunId);
     if (runIds.length === 0) return [];
     const runs = await db.select({
@@ -24315,16 +26292,16 @@ var portalPayrollRouter = portalRouter({
       currency: payrollRuns.currency,
       status: payrollRuns.status
     }).from(payrollRuns).where(
-      and40(
+      and41(
         inArray15(payrollRuns.id, runIds),
-        eq49(payrollRuns.status, "approved"),
-        sql24`substr(${payrollRuns.payrollMonth}, 1, 4) = ${String(input.year)}`
+        eq50(payrollRuns.status, "approved"),
+        sql25`substr(${payrollRuns.payrollMonth}, 1, 4) = ${String(input.year)}`
       )
-    ).orderBy(sql24`${payrollRuns.payrollMonth} DESC`);
+    ).orderBy(sql25`${payrollRuns.payrollMonth} DESC`);
     if (runs.length === 0) return [];
     const allItems = await db.select({
       payrollRunId: payrollItems.payrollRunId,
-      employeeName: sql24`(${employees.firstName} || ' ' || ${employees.lastName})`,
+      employeeName: sql25`(${employees.firstName} || ' ' || ${employees.lastName})`,
       employeeCode: employees.employeeCode,
       jobTitle: employees.jobTitle,
       baseSalary: payrollItems.baseSalary,
@@ -24341,10 +26318,10 @@ var portalPayrollRouter = portalRouter({
       employerSocialContribution: payrollItems.employerSocialContribution,
       totalEmploymentCost: payrollItems.totalEmploymentCost,
       currency: payrollItems.currency
-    }).from(payrollItems).innerJoin(employees, eq49(payrollItems.employeeId, employees.id)).where(
-      and40(
+    }).from(payrollItems).innerJoin(employees, eq50(payrollItems.employeeId, employees.id)).where(
+      and41(
         inArray15(payrollItems.payrollRunId, runs.map((r) => r.id)),
-        eq49(employees.customerId, cid)
+        eq50(employees.customerId, cid)
       )
     );
     const runMap = new Map(runs.map((r) => [r.id, r]));
@@ -24363,7 +26340,7 @@ var portalPayrollRouter = portalRouter({
 // server/portal/routers/portalReimbursementsRouter.ts
 import { z as z39 } from "zod";
 import { TRPCError as TRPCError36 } from "@trpc/server";
-import { sql as sql25, eq as eq50, and as and41, count as count16 } from "drizzle-orm";
+import { sql as sql26, eq as eq51, and as and42, count as count16 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalReimbursementsRouter = portalRouter({
@@ -24382,17 +26359,17 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) return { items: [], total: 0 };
     const cid = ctx.portalUser.customerId;
-    const conditions = [eq50(reimbursements.customerId, cid)];
+    const conditions = [eq51(reimbursements.customerId, cid)];
     if (input.status) {
-      conditions.push(eq50(reimbursements.status, input.status));
+      conditions.push(eq51(reimbursements.status, input.status));
     }
     if (input.effectiveMonth) {
-      conditions.push(eq50(reimbursements.effectiveMonth, input.effectiveMonth));
+      conditions.push(eq51(reimbursements.effectiveMonth, input.effectiveMonth));
     }
     if (input.employeeId) {
-      conditions.push(eq50(reimbursements.employeeId, input.employeeId));
+      conditions.push(eq51(reimbursements.employeeId, input.employeeId));
     }
-    const where = and41(...conditions);
+    const where = and42(...conditions);
     const [totalResult] = await db.select({ count: count16() }).from(reimbursements).where(where);
     const items = await db.select({
       id: reimbursements.id,
@@ -24415,7 +26392,7 @@ var portalReimbursementsRouter = portalRouter({
       // Join employee name
       employeeFirstName: employees.firstName,
       employeeLastName: employees.lastName
-    }).from(reimbursements).innerJoin(employees, eq50(reimbursements.employeeId, employees.id)).where(where).orderBy(sql25`${reimbursements.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
+    }).from(reimbursements).innerJoin(employees, eq51(reimbursements.employeeId, employees.id)).where(where).orderBy(sql26`${reimbursements.updatedAt} DESC`).limit(input.pageSize).offset((input.page - 1) * input.pageSize);
     return {
       items,
       total: totalResult?.count ?? 0
@@ -24449,7 +26426,7 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [emp] = await db.select({ id: employees.id, country: employees.country, salaryCurrency: employees.salaryCurrency }).from(employees).where(and41(eq50(employees.id, input.employeeId), eq50(employees.customerId, cid)));
+    const [emp] = await db.select({ id: employees.id, country: employees.country, salaryCurrency: employees.salaryCurrency }).from(employees).where(and42(eq51(employees.id, input.employeeId), eq51(employees.customerId, cid)));
     if (!emp) {
       throw new TRPCError36({ code: "NOT_FOUND", message: "Employee not found" });
     }
@@ -24461,11 +26438,11 @@ var portalReimbursementsRouter = portalRouter({
       throw new TRPCError36({ code: "BAD_REQUEST", message: "Invalid effective month format" });
     }
     const normalizedMonth = `${parts[0]}-${parts[1].padStart(2, "0")}-01`;
-    const [existingPayroll] = await db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns).innerJoin(payrollItems, eq50(payrollRuns.id, payrollItems.payrollRunId)).where(
-      and41(
-        eq50(payrollRuns.countryCode, emp.country),
-        eq50(payrollRuns.payrollMonth, normalizedMonth),
-        eq50(payrollItems.employeeId, input.employeeId)
+    const [existingPayroll] = await db.select({ id: payrollRuns.id, status: payrollRuns.status }).from(payrollRuns).innerJoin(payrollItems, eq51(payrollRuns.id, payrollItems.payrollRunId)).where(
+      and42(
+        eq51(payrollRuns.countryCode, emp.country),
+        eq51(payrollRuns.payrollMonth, normalizedMonth),
+        eq51(payrollItems.employeeId, input.employeeId)
       )
     ).limit(1);
     if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
@@ -24506,7 +26483,7 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and41(eq50(reimbursements.id, input.id), eq50(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and42(eq51(reimbursements.id, input.id), eq51(reimbursements.customerId, cid)));
     if (!reimb) {
       throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
@@ -24519,7 +26496,7 @@ var portalReimbursementsRouter = portalRouter({
     if (input.receiptFileUrl !== void 0) updates.receiptFileUrl = input.receiptFileUrl;
     if (input.receiptFileKey !== void 0) updates.receiptFileKey = input.receiptFileKey;
     if (Object.keys(updates).length > 0) {
-      await db.update(reimbursements).set(updates).where(eq50(reimbursements.id, input.id));
+      await db.update(reimbursements).set(updates).where(eq51(reimbursements.id, input.id));
     }
     return { success: true };
   }),
@@ -24530,14 +26507,14 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and41(eq50(reimbursements.id, input.id), eq50(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and42(eq51(reimbursements.id, input.id), eq51(reimbursements.customerId, cid)));
     if (!reimb) {
       throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
     if (reimb.status !== "submitted") {
       throw new TRPCError36({ code: "FORBIDDEN", message: "Reimbursement cannot be deleted after approval" });
     }
-    await db.delete(reimbursements).where(eq50(reimbursements.id, input.id));
+    await db.delete(reimbursements).where(eq51(reimbursements.id, input.id));
     return { success: true };
   }),
   /**
@@ -24547,7 +26524,7 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and41(eq50(reimbursements.id, input.id), eq50(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and42(eq51(reimbursements.id, input.id), eq51(reimbursements.customerId, cid)));
     if (!reimb) {
       throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
@@ -24558,7 +26535,7 @@ var portalReimbursementsRouter = portalRouter({
       status: "client_approved",
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date()
-    }).where(eq50(reimbursements.id, input.id));
+    }).where(eq51(reimbursements.id, input.id));
     return { success: true };
   }),
   /**
@@ -24571,7 +26548,7 @@ var portalReimbursementsRouter = portalRouter({
     const db = await getDb();
     if (!db) throw new TRPCError36({ code: "INTERNAL_SERVER_ERROR" });
     const cid = ctx.portalUser.customerId;
-    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and41(eq50(reimbursements.id, input.id), eq50(reimbursements.customerId, cid)));
+    const [reimb] = await db.select({ id: reimbursements.id, status: reimbursements.status }).from(reimbursements).where(and42(eq51(reimbursements.id, input.id), eq51(reimbursements.customerId, cid)));
     if (!reimb) {
       throw new TRPCError36({ code: "NOT_FOUND", message: "Reimbursement not found" });
     }
@@ -24583,7 +26560,7 @@ var portalReimbursementsRouter = portalRouter({
       clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date(),
       clientRejectionReason: input.reason || null
-    }).where(eq50(reimbursements.id, input.id));
+    }).where(eq51(reimbursements.id, input.id));
     return { success: true };
   }),
   /**
@@ -24609,7 +26586,7 @@ var portalReimbursementsRouter = portalRouter({
 
 // server/portal/routers/portalKnowledgeBaseRouter.ts
 import { z as z40 } from "zod";
-import { and as and42, desc as desc20, eq as eq51, inArray as inArray16, isNull as isNull5, or as or8 } from "drizzle-orm";
+import { and as and43, desc as desc20, eq as eq52, inArray as inArray16, isNull as isNull5, or as or9 } from "drizzle-orm";
 import { TRPCError as TRPCError37 } from "@trpc/server";
 init_db2();
 init_schema();
@@ -24628,11 +26605,11 @@ var portalKnowledgeBaseRouter = portalRouter({
     const customerId = ctx.portalUser.customerId;
     const topics = input?.topics?.length ? input.topics : [...topicEnum];
     const items = await db.select().from(knowledgeItems).where(
-      and42(
+      and43(
         inArray16(knowledgeItems.topic, topics),
-        eq51(knowledgeItems.language, input?.locale ?? "en"),
-        eq51(knowledgeItems.status, "published"),
-        or8(eq51(knowledgeItems.customerId, customerId), isNull5(knowledgeItems.customerId))
+        eq52(knowledgeItems.language, input?.locale ?? "en"),
+        eq52(knowledgeItems.status, "published"),
+        or9(eq52(knowledgeItems.customerId, customerId), isNull5(knowledgeItems.customerId))
       )
     ).orderBy(desc20(knowledgeItems.publishedAt), desc20(knowledgeItems.createdAt)).limit(500);
     const topicCounts = topics.reduce((acc, topic) => {
@@ -24719,7 +26696,7 @@ var portalKnowledgeBaseRouter = portalRouter({
 import { z as z41 } from "zod";
 init_db2();
 init_schema();
-import { eq as eq52, and as and43, asc as asc4, sql as sql26 } from "drizzle-orm";
+import { eq as eq53, and as and44, asc as asc4, sql as sql27 } from "drizzle-orm";
 var portalToolkitRouter = portalRouter({
   // Countries list for dropdowns (with extra fields for At-a-Glance cards)
   listCountries: protectedPortalProcedure.query(async () => {
@@ -24734,7 +26711,7 @@ var portalToolkitRouter = portalRouter({
       statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
       noticePeriodDays: countriesConfig.noticePeriodDays,
       probationPeriodDays: countriesConfig.probationPeriodDays
-    }).from(countriesConfig).where(eq52(countriesConfig.isActive, true));
+    }).from(countriesConfig).where(eq53(countriesConfig.isActive, true));
   }),
   // Cost Calculation
   calculateCost: protectedPortalProcedure.input(
@@ -24756,9 +26733,9 @@ var portalToolkitRouter = portalRouter({
     const db = getDb();
     if (!db) throw new Error("DB error");
     return await db.select().from(countryGuideChapters).where(
-      and43(
-        eq52(countryGuideChapters.countryCode, input.countryCode),
-        eq52(countryGuideChapters.status, "published")
+      and44(
+        eq53(countryGuideChapters.countryCode, input.countryCode),
+        eq53(countryGuideChapters.status, "published")
       )
     ).orderBy(asc4(countryGuideChapters.sortOrder));
   }),
@@ -24768,8 +26745,8 @@ var portalToolkitRouter = portalRouter({
     if (!db) throw new Error("DB error");
     const countriesWithGuides = await db.select({
       countryCode: countryGuideChapters.countryCode,
-      chapterCount: sql26`count(*)`.as("chapterCount")
-    }).from(countryGuideChapters).where(eq52(countryGuideChapters.status, "published")).groupBy(countryGuideChapters.countryCode);
+      chapterCount: sql27`count(*)`.as("chapterCount")
+    }).from(countryGuideChapters).where(eq53(countryGuideChapters.status, "published")).groupBy(countryGuideChapters.countryCode);
     const allCountries = await db.select({
       countryCode: countriesConfig.countryCode,
       countryName: countriesConfig.countryName,
@@ -24779,7 +26756,7 @@ var portalToolkitRouter = portalRouter({
       statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
       noticePeriodDays: countriesConfig.noticePeriodDays,
       probationPeriodDays: countriesConfig.probationPeriodDays
-    }).from(countriesConfig).where(eq52(countriesConfig.isActive, true));
+    }).from(countriesConfig).where(eq53(countriesConfig.isActive, true));
     const guideMap = new Map(countriesWithGuides.map((c) => [c.countryCode, c.chapterCount]));
     return allCountries.filter((c) => guideMap.has(c.countryCode)).map((c) => ({
       ...c,
@@ -24797,10 +26774,10 @@ var portalToolkitRouter = portalRouter({
     const db = getDb();
     if (!db) throw new Error("DB error");
     return await db.query.salaryBenchmarks.findFirst({
-      where: and43(
-        eq52(salaryBenchmarks.countryCode, input.countryCode),
-        eq52(salaryBenchmarks.jobCategory, input.jobCategory),
-        eq52(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
+      where: and44(
+        eq53(salaryBenchmarks.countryCode, input.countryCode),
+        eq53(salaryBenchmarks.jobCategory, input.jobCategory),
+        eq53(salaryBenchmarks.seniorityLevel, input.seniorityLevel)
       )
     });
   })
@@ -24811,7 +26788,7 @@ import { z as z42 } from "zod";
 init_db2();
 init_schema();
 init_financeService();
-import { eq as eq53, desc as desc21, sql as sql27 } from "drizzle-orm";
+import { eq as eq54, desc as desc21, sql as sql28 } from "drizzle-orm";
 import { TRPCError as TRPCError38 } from "@trpc/server";
 var portalWalletRouter = portalRouter({
   get: protectedPortalProcedure.input(z42.object({
@@ -24876,7 +26853,7 @@ var portalWalletRouter = portalRouter({
       if (newStatus === "paid") {
         updateData.paidDate = /* @__PURE__ */ new Date();
       }
-      await tx.update(invoices).set(updateData).where(eq53(invoices.id, invoice.id));
+      await tx.update(invoices).set(updateData).where(eq54(invoices.id, invoice.id));
     });
     return {
       success: true,
@@ -24894,7 +26871,7 @@ var portalWalletRouter = portalRouter({
     if (!db) throw new TRPCError38({ code: "INTERNAL_SERVER_ERROR", message: "Database not initialized" });
     const wallet = await walletService.getWallet(ctx.portalUser.customerId, input.currency);
     const txs = await db.query.walletTransactions.findMany({
-      where: eq53(walletTransactions.walletId, wallet.id),
+      where: eq54(walletTransactions.walletId, wallet.id),
       orderBy: [desc21(walletTransactions.createdAt)],
       limit: input.limit,
       offset: input.offset
@@ -24902,7 +26879,7 @@ var portalWalletRouter = portalRouter({
     const invoiceRefIds = txs.filter((tx) => tx.referenceType === "invoice" && tx.referenceId).map((tx) => tx.referenceId);
     let invoiceNumberMap = {};
     if (invoiceRefIds.length > 0) {
-      const invRows = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber }).from(invoices).where(sql27`${invoices.id} IN (${sql27.join(invoiceRefIds.map((id) => sql27`${id}`), sql27`, `)})`);
+      const invRows = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber }).from(invoices).where(sql28`${invoices.id} IN (${sql28.join(invoiceRefIds.map((id) => sql28`${id}`), sql28`, `)})`);
       for (const row of invRows) {
         invoiceNumberMap[row.id] = row.invoiceNumber;
       }
@@ -24918,7 +26895,7 @@ var portalWalletRouter = portalRouter({
 // server/portal/routers/portalContractorsRouter.ts
 import { z as z43 } from "zod";
 import { TRPCError as TRPCError39 } from "@trpc/server";
-import { eq as eq54, and as and45, like as like12, count as count17, desc as desc22, or as or9 } from "drizzle-orm";
+import { eq as eq55, and as and46, like as like12, count as count17, desc as desc22, or as or10 } from "drizzle-orm";
 init_db2();
 init_schema();
 var PORTAL_CONTRACTOR_LIST_FIELDS = {
@@ -24951,13 +26928,13 @@ var portalContractorsRouter = portalRouter({
     const db = getDb();
     if (!db) return { items: [], total: 0 };
     const customerId = ctx.portalUser.customerId;
-    const conditions = [eq54(contractors.customerId, customerId)];
+    const conditions = [eq55(contractors.customerId, customerId)];
     if (input.status) {
-      conditions.push(eq54(contractors.status, input.status));
+      conditions.push(eq55(contractors.status, input.status));
     }
     if (input.search) {
       conditions.push(
-        or9(
+        or10(
           like12(contractors.firstName, `%${input.search}%`),
           like12(contractors.lastName, `%${input.search}%`),
           like12(contractors.email, `%${input.search}%`),
@@ -24965,7 +26942,7 @@ var portalContractorsRouter = portalRouter({
         )
       );
     }
-    const where = and45(...conditions);
+    const where = and46(...conditions);
     const offset = (input.page - 1) * input.pageSize;
     const [items, totalResult] = await Promise.all([
       db.select(PORTAL_CONTRACTOR_LIST_FIELDS).from(contractors).where(where).limit(input.pageSize).offset(offset).orderBy(desc22(contractors.createdAt)),
@@ -25008,7 +26985,7 @@ var portalContractorsRouter = portalRouter({
       notes: contractors.notes,
       createdAt: contractors.createdAt,
       updatedAt: contractors.updatedAt
-    }).from(contractors).where(and45(eq54(contractors.id, input.id), eq54(contractors.customerId, customerId))).limit(1);
+    }).from(contractors).where(and46(eq55(contractors.id, input.id), eq55(contractors.customerId, customerId))).limit(1);
     if (result.length === 0) {
       throw new TRPCError39({ code: "NOT_FOUND", message: "Contractor not found" });
     }
@@ -25079,7 +27056,7 @@ var portalContractorsRouter = portalRouter({
     const db = getDb();
     if (!db) throw new TRPCError39({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
     const customerId = ctx.portalUser.customerId;
-    const [existing] = await db.select({ id: contractors.id, status: contractors.status }).from(contractors).where(and45(eq54(contractors.id, input.id), eq54(contractors.customerId, customerId))).limit(1);
+    const [existing] = await db.select({ id: contractors.id, status: contractors.status }).from(contractors).where(and46(eq55(contractors.id, input.id), eq55(contractors.customerId, customerId))).limit(1);
     if (!existing) {
       throw new TRPCError39({ code: "NOT_FOUND", message: "Contractor not found" });
     }
@@ -25089,17 +27066,66 @@ var portalContractorsRouter = portalRouter({
         message: "Only pending_review contractors can be deleted"
       });
     }
-    await db.delete(contractorMilestones).where(eq54(contractorMilestones.contractorId, input.id));
-    await db.delete(contractorAdjustments).where(eq54(contractorAdjustments.contractorId, input.id));
-    await db.delete(contractors).where(eq54(contractors.id, input.id));
+    await db.delete(contractorMilestones).where(eq55(contractorMilestones.contractorId, input.id));
+    await db.delete(contractorAdjustments).where(eq55(contractorAdjustments.contractorId, input.id));
+    await db.delete(contractors).where(eq55(contractors.id, input.id));
     return { success: true };
+  }),
+  /**
+   * Request termination for an active contractor.
+   * Portal clients can request termination; admin receives notification to process.
+   * Only available for contractors in 'active' status.
+   */
+  requestTermination: protectedPortalProcedure.input(
+    z43.object({
+      contractorId: z43.number(),
+      endDate: z43.string().min(1, "End date is required"),
+      reason: z43.string().optional()
+    })
+  ).mutation(async ({ input, ctx }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError39({ code: "INTERNAL_SERVER_ERROR" });
+    const cid = ctx.portalUser.customerId;
+    const [ctr] = await db.select({
+      id: contractors.id,
+      status: contractors.status,
+      firstName: contractors.firstName,
+      lastName: contractors.lastName,
+      contractorCode: contractors.contractorCode,
+      country: contractors.country
+    }).from(contractors).where(and46(eq55(contractors.id, input.contractorId), eq55(contractors.customerId, cid))).limit(1);
+    if (!ctr) {
+      throw new TRPCError39({ code: "NOT_FOUND", message: "Contractor not found" });
+    }
+    if (ctr.status !== "active") {
+      throw new TRPCError39({
+        code: "BAD_REQUEST",
+        message: "Only active contractors can be submitted for termination request"
+      });
+    }
+    const [customer] = await db.select({ companyName: customers.companyName }).from(customers).where(eq55(customers.id, cid));
+    notificationService.send({
+      type: "contractor_termination_request",
+      customerId: cid,
+      data: {
+        contractorId: ctr.id,
+        contractorName: `${ctr.firstName} ${ctr.lastName}`,
+        contractorCode: ctr.contractorCode,
+        country: ctr.country,
+        requestedEndDate: input.endDate,
+        reason: input.reason || "No reason provided",
+        requestedBy: ctx.portalUser.contactName || ctx.portalUser.email,
+        customerName: customer?.companyName || "Unknown"
+      }
+    }).catch((err) => console.error("Failed to send contractor termination request notification:", err));
+    return { success: true, message: "Termination request submitted. Admin will review and process." };
   })
 });
 
 // server/portal/routers/portalMilestonesRouter.ts
 import { z as z44 } from "zod";
 import { TRPCError as TRPCError40 } from "@trpc/server";
-import { eq as eq55, and as and46, desc as desc23, inArray as inArray17 } from "drizzle-orm";
+import { eq as eq56, and as and47, desc as desc23, inArray as inArray17 } from "drizzle-orm";
 init_db2();
 init_schema();
 var portalMilestonesRouter = portalRouter({
@@ -25115,7 +27141,7 @@ var portalMilestonesRouter = portalRouter({
     const db = getDb();
     if (!db) return [];
     const customerId = ctx.portalUser.customerId;
-    const customerContractors = await db.select({ id: contractors.id }).from(contractors).where(eq55(contractors.customerId, customerId));
+    const customerContractors = await db.select({ id: contractors.id }).from(contractors).where(eq56(contractors.customerId, customerId));
     const contractorIds = customerContractors.map((c) => c.id);
     if (contractorIds.length === 0) return [];
     const conditions = [inArray17(contractorMilestones.contractorId, contractorIds)];
@@ -25123,10 +27149,10 @@ var portalMilestonesRouter = portalRouter({
       if (!contractorIds.includes(input.contractorId)) {
         throw new TRPCError40({ code: "FORBIDDEN", message: "Contractor not found" });
       }
-      conditions.push(eq55(contractorMilestones.contractorId, input.contractorId));
+      conditions.push(eq56(contractorMilestones.contractorId, input.contractorId));
     }
     if (input.status) {
-      conditions.push(eq55(contractorMilestones.status, input.status));
+      conditions.push(eq56(contractorMilestones.status, input.status));
     }
     const milestones = await db.select({
       id: contractorMilestones.id,
@@ -25140,10 +27166,10 @@ var portalMilestonesRouter = portalRouter({
       completedAt: contractorMilestones.completedAt,
       clientApprovedAt: contractorMilestones.clientApprovedAt,
       createdAt: contractorMilestones.createdAt
-    }).from(contractorMilestones).where(and46(...conditions)).orderBy(desc23(contractorMilestones.createdAt));
+    }).from(contractorMilestones).where(and47(...conditions)).orderBy(desc23(contractorMilestones.createdAt));
     const contractorMap = /* @__PURE__ */ new Map();
     if (milestones.length > 0) {
-      const uniqueIds = [...new Set(milestones.map((m) => m.contractorId))];
+      const uniqueIds = Array.from(new Set(milestones.map((m) => m.contractorId)));
       const contractorDetails = await db.select({ id: contractors.id, firstName: contractors.firstName, lastName: contractors.lastName }).from(contractors).where(inArray17(contractors.id, uniqueIds));
       contractorDetails.forEach((c) => contractorMap.set(c.id, c));
     }
@@ -25168,7 +27194,7 @@ var portalMilestonesRouter = portalRouter({
     const db = getDb();
     if (!db) throw new TRPCError40({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
     const customerId = ctx.portalUser.customerId;
-    const [con] = await db.select({ id: contractors.id, currency: contractors.currency, customerId: contractors.customerId }).from(contractors).where(and46(eq55(contractors.id, input.contractorId), eq55(contractors.customerId, customerId))).limit(1);
+    const [con] = await db.select({ id: contractors.id, currency: contractors.currency, customerId: contractors.customerId }).from(contractors).where(and47(eq56(contractors.id, input.contractorId), eq56(contractors.customerId, customerId))).limit(1);
     if (!con) {
       throw new TRPCError40({ code: "FORBIDDEN", message: "Contractor not found" });
     }
@@ -25196,11 +27222,11 @@ var portalMilestonesRouter = portalRouter({
       id: contractorMilestones.id,
       contractorId: contractorMilestones.contractorId,
       status: contractorMilestones.status
-    }).from(contractorMilestones).where(eq55(contractorMilestones.id, input.id)).limit(1);
+    }).from(contractorMilestones).where(eq56(contractorMilestones.id, input.id)).limit(1);
     if (milestone.length === 0) {
       throw new TRPCError40({ code: "NOT_FOUND", message: "Milestone not found" });
     }
-    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and46(eq55(contractors.id, milestone[0].contractorId), eq55(contractors.customerId, customerId))).limit(1);
+    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and47(eq56(contractors.id, milestone[0].contractorId), eq56(contractors.customerId, customerId))).limit(1);
     if (contractor.length === 0) {
       throw new TRPCError40({ code: "FORBIDDEN", message: "Access denied" });
     }
@@ -25209,9 +27235,9 @@ var portalMilestonesRouter = portalRouter({
     }
     await db.update(contractorMilestones).set({
       status: "client_approved",
-      clientApprovedBy: ctx.portalUser.id,
+      clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date()
-    }).where(eq55(contractorMilestones.id, input.id));
+    }).where(eq56(contractorMilestones.id, input.id));
     return { success: true };
   }),
   /**
@@ -25225,11 +27251,11 @@ var portalMilestonesRouter = portalRouter({
       id: contractorMilestones.id,
       contractorId: contractorMilestones.contractorId,
       status: contractorMilestones.status
-    }).from(contractorMilestones).where(eq55(contractorMilestones.id, input.id)).limit(1);
+    }).from(contractorMilestones).where(eq56(contractorMilestones.id, input.id)).limit(1);
     if (milestone.length === 0) {
       throw new TRPCError40({ code: "NOT_FOUND", message: "Milestone not found" });
     }
-    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and46(eq55(contractors.id, milestone[0].contractorId), eq55(contractors.customerId, customerId))).limit(1);
+    const contractor = await db.select({ id: contractors.id }).from(contractors).where(and47(eq56(contractors.id, milestone[0].contractorId), eq56(contractors.customerId, customerId))).limit(1);
     if (contractor.length === 0) {
       throw new TRPCError40({ code: "FORBIDDEN", message: "Access denied" });
     }
@@ -25238,9 +27264,9 @@ var portalMilestonesRouter = portalRouter({
     }
     await db.update(contractorMilestones).set({
       status: "client_rejected",
-      clientApprovedBy: ctx.portalUser.id,
+      clientApprovedBy: ctx.portalUser.contactId,
       clientApprovedAt: /* @__PURE__ */ new Date()
-    }).where(eq55(contractorMilestones.id, input.id));
+    }).where(eq56(contractorMilestones.id, input.id));
     return { success: true };
   })
 });
@@ -25273,7 +27299,8 @@ init_connection();
 init_schema();
 import bcrypt3 from "bcryptjs";
 import * as jose3 from "jose";
-import { eq as eq56, and as and47 } from "drizzle-orm";
+import { eq as eq57, and as and48 } from "drizzle-orm";
+import crypto6 from "crypto";
 var WORKER_COOKIE_NAME = "gea_worker_auth";
 var WORKER_JWT_EXPIRY = "7d";
 var JWT_ISSUER3 = "gea-worker";
@@ -25308,13 +27335,17 @@ async function hashPassword3(password) {
 async function verifyPassword3(password, hash) {
   return bcrypt3.compare(password, hash);
 }
+function generateResetToken4() {
+  return crypto6.randomBytes(32).toString("hex");
+}
+function getResetExpiryDate4() {
+  return new Date(Date.now() + 1 * 60 * 60 * 1e3);
+}
 function setWorkerCookie(res, token) {
   res.cookie(WORKER_COOKIE_NAME, token, {
     httpOnly: true,
     secure: true,
-    // Should be true in production, maybe false for local dev if needed
     sameSite: "lax",
-    // Lax is usually better for top-level navigation, 'none' for cross-site
     path: "/",
     maxAge: 7 * 24 * 60 * 60 * 1e3
     // 7 days
@@ -25341,24 +27372,84 @@ function getWorkerTokenFromRequest(req) {
   );
   return cookies[WORKER_COOKIE_NAME] || null;
 }
+function resolveWorkerType(user) {
+  if (user.contractorId && user.employeeId) {
+    return "contractor";
+  }
+  if (user.contractorId) return "contractor";
+  if (user.employeeId) return "employee";
+  return "contractor";
+}
+function hasDualIdentity(user) {
+  return !!(user.contractorId && user.employeeId);
+}
 async function authenticateWorkerRequest(req) {
   const token = getWorkerTokenFromRequest(req);
   if (!token) return null;
   const payload = await verifyWorkerToken(token);
   if (!payload) return null;
-  const db = await getDb();
+  const db = getDb();
   if (!db) return null;
   const [user] = await db.select({
     id: workerUsers.id,
     email: workerUsers.email,
     contractorId: workerUsers.contractorId,
+    employeeId: workerUsers.employeeId,
     isActive: workerUsers.isActive
-  }).from(workerUsers).where(and47(eq56(workerUsers.id, parseInt(payload.sub)), eq56(workerUsers.isActive, true)));
+  }).from(workerUsers).where(and48(eq57(workerUsers.id, parseInt(payload.sub)), eq57(workerUsers.isActive, true)));
   if (!user) return null;
+  const isDual = hasDualIdentity(user);
+  const activeRole = payload.activeRole || resolveWorkerType(user);
+  let customerId = null;
+  let workerName = null;
+  let country = null;
+  let currency = null;
+  let paymentFrequency = null;
+  if (activeRole === "contractor" && user.contractorId) {
+    const [contractor] = await db.select({
+      customerId: contractors.customerId,
+      firstName: contractors.firstName,
+      lastName: contractors.lastName,
+      country: contractors.country,
+      currency: contractors.currency,
+      paymentFrequency: contractors.paymentFrequency
+    }).from(contractors).where(eq57(contractors.id, user.contractorId));
+    if (contractor) {
+      customerId = contractor.customerId;
+      workerName = `${contractor.firstName} ${contractor.lastName}`;
+      country = contractor.country;
+      currency = contractor.currency;
+      paymentFrequency = contractor.paymentFrequency;
+    }
+  } else if (activeRole === "employee" && user.employeeId) {
+    const [employee] = await db.select({
+      customerId: employees.customerId,
+      firstName: employees.firstName,
+      lastName: employees.lastName,
+      country: employees.country,
+      salaryCurrency: employees.salaryCurrency
+    }).from(employees).where(eq57(employees.id, user.employeeId));
+    if (employee) {
+      customerId = employee.customerId;
+      workerName = `${employee.firstName} ${employee.lastName}`;
+      country = employee.country;
+      currency = employee.salaryCurrency;
+    }
+  }
   return {
     id: user.id,
     email: user.email,
-    contractorId: user.contractorId
+    contractorId: user.contractorId,
+    employeeId: user.employeeId,
+    hasDualIdentity: isDual,
+    activeRole,
+    workerType: activeRole,
+    // Legacy alias
+    customerId,
+    workerName,
+    country,
+    currency,
+    paymentFrequency
   };
 }
 
@@ -25397,16 +27488,59 @@ var requireWorkerUser = t3.middleware(async ({ ctx, next }) => {
   });
 });
 var protectedWorkerProcedure = t3.procedure.use(requireWorkerUser);
+var requireContractor = t3.middleware(async ({ ctx, next }) => {
+  if (!ctx.workerUser) {
+    throw new TRPCError41({
+      code: "UNAUTHORIZED",
+      message: "You must be logged in to access this resource"
+    });
+  }
+  if (ctx.workerUser.activeRole !== "contractor" || !ctx.workerUser.contractorId) {
+    throw new TRPCError41({
+      code: "FORBIDDEN",
+      message: "This feature is only available for contractors"
+    });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      workerUser: ctx.workerUser
+    }
+  });
+});
+var contractorOnlyProcedure = t3.procedure.use(requireContractor);
+var requireEmployee = t3.middleware(async ({ ctx, next }) => {
+  if (!ctx.workerUser) {
+    throw new TRPCError41({
+      code: "UNAUTHORIZED",
+      message: "You must be logged in to access this resource"
+    });
+  }
+  if (ctx.workerUser.activeRole !== "employee" || !ctx.workerUser.employeeId) {
+    throw new TRPCError41({
+      code: "FORBIDDEN",
+      message: "This feature is only available for employees"
+    });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      workerUser: ctx.workerUser
+    }
+  });
+});
+var employeeOnlyProcedure = t3.procedure.use(requireEmployee);
 
 // server/worker/routers/workerAuthRouter.ts
 import { z as z45 } from "zod";
 import { TRPCError as TRPCError42 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq57 } from "drizzle-orm";
+import { eq as eq58 } from "drizzle-orm";
 var workerAuthRouter = workerRouter({
   /**
-   * Login with email and password
+   * Login with email and password.
+   * Returns hasDualIdentity flag so frontend knows whether to show role selection.
    */
   login: workerPublicProcedure.input(
     z45.object({
@@ -25414,9 +27548,9 @@ var workerAuthRouter = workerRouter({
       password: z45.string().min(8)
     })
   ).mutation(async ({ input, ctx }) => {
-    const db = await getDb();
+    const db = getDb();
     if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR" });
-    const [user] = await db.select().from(workerUsers).where(eq57(workerUsers.email, input.email.toLowerCase().trim()));
+    const [user] = await db.select().from(workerUsers).where(eq58(workerUsers.email, input.email.toLowerCase().trim()));
     if (!user) {
       throw new TRPCError42({
         code: "UNAUTHORIZED",
@@ -25442,21 +27576,90 @@ var workerAuthRouter = workerRouter({
         message: "Invalid email or password"
       });
     }
+    const isDual = hasDualIdentity(user);
+    const defaultRole = resolveWorkerType(user);
+    const availableRoles = [];
+    if (user.contractorId) {
+      let label = "Contractor";
+      try {
+        const [c] = await db.select({ firstName: contractors.firstName, lastName: contractors.lastName }).from(contractors).where(eq58(contractors.id, user.contractorId));
+        if (c) label = `Contractor - ${c.firstName} ${c.lastName}`;
+      } catch {
+      }
+      availableRoles.push({ role: "contractor", label });
+    }
+    if (user.employeeId) {
+      let label = "Employee";
+      try {
+        const [e] = await db.select({ firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(eq58(employees.id, user.employeeId));
+        if (e) label = `Employee - ${e.firstName} ${e.lastName}`;
+      } catch {
+      }
+      availableRoles.push({ role: "employee", label });
+    }
+    const activeRole = isDual ? defaultRole : defaultRole;
     const token = await signWorkerToken({
       sub: user.id.toString(),
       email: user.email,
       contractorId: user.contractorId,
+      employeeId: user.employeeId,
+      activeRole,
+      workerType: activeRole,
       iss: "gea-worker"
     });
     setWorkerCookie(ctx.res, token);
-    await db.update(workerUsers).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq57(workerUsers.id, user.id));
+    await db.update(workerUsers).set({ lastLoginAt: /* @__PURE__ */ new Date() }).where(eq58(workerUsers.id, user.id));
     return {
       success: true,
       user: {
         id: user.id,
         email: user.email,
-        contractorId: user.contractorId
-      }
+        contractorId: user.contractorId,
+        employeeId: user.employeeId,
+        activeRole,
+        workerType: activeRole
+      },
+      /** If true, frontend MUST show role selection page before proceeding */
+      hasDualIdentity: isDual,
+      /** Available roles for the selection page */
+      availableRoles
+    };
+  }),
+  /**
+   * Switch active role (for dual-identity users).
+   * Re-signs the JWT with the new activeRole and sets a new cookie.
+   */
+  switchRole: protectedWorkerProcedure.input(
+    z45.object({
+      role: z45.enum(["contractor", "employee"])
+    })
+  ).mutation(async ({ input, ctx }) => {
+    const user = ctx.workerUser;
+    if (input.role === "contractor" && !user.contractorId) {
+      throw new TRPCError42({
+        code: "BAD_REQUEST",
+        message: "You do not have a contractor identity"
+      });
+    }
+    if (input.role === "employee" && !user.employeeId) {
+      throw new TRPCError42({
+        code: "BAD_REQUEST",
+        message: "You do not have an employee identity"
+      });
+    }
+    const token = await signWorkerToken({
+      sub: user.id.toString(),
+      email: user.email,
+      contractorId: user.contractorId,
+      employeeId: user.employeeId,
+      activeRole: input.role,
+      workerType: input.role,
+      iss: "gea-worker"
+    });
+    setWorkerCookie(ctx.res, token);
+    return {
+      success: true,
+      activeRole: input.role
     };
   }),
   /**
@@ -25467,10 +27670,36 @@ var workerAuthRouter = workerRouter({
     return { success: true };
   }),
   /**
-   * Get current user
+   * Get current user — returns full context including activeRole, dual identity info, and profile
    */
-  me: protectedWorkerProcedure.query(({ ctx }) => {
-    return ctx.workerUser;
+  me: protectedWorkerProcedure.query(async ({ ctx }) => {
+    const user = ctx.workerUser;
+    const db = getDb();
+    const availableRoles = [];
+    if (db) {
+      if (user.contractorId) {
+        let label = "Contractor";
+        try {
+          const [c] = await db.select({ firstName: contractors.firstName, lastName: contractors.lastName }).from(contractors).where(eq58(contractors.id, user.contractorId));
+          if (c) label = `Contractor - ${c.firstName} ${c.lastName}`;
+        } catch {
+        }
+        availableRoles.push({ role: "contractor", label });
+      }
+      if (user.employeeId) {
+        let label = "Employee";
+        try {
+          const [e] = await db.select({ firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(eq58(employees.id, user.employeeId));
+          if (e) label = `Employee - ${e.firstName} ${e.lastName}`;
+        } catch {
+        }
+        availableRoles.push({ role: "employee", label });
+      }
+    }
+    return {
+      ...user,
+      availableRoles
+    };
   }),
   /**
    * Register with invite token
@@ -25481,9 +27710,9 @@ var workerAuthRouter = workerRouter({
       password: z45.string().min(8)
     })
   ).mutation(async ({ input, ctx }) => {
-    const db = await getDb();
+    const db = getDb();
     if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR" });
-    const [user] = await db.select().from(workerUsers).where(eq57(workerUsers.inviteToken, input.token));
+    const [user] = await db.select().from(workerUsers).where(eq58(workerUsers.inviteToken, input.token));
     if (!user) {
       throw new TRPCError42({
         code: "NOT_FOUND",
@@ -25504,14 +27733,163 @@ var workerAuthRouter = workerRouter({
       isEmailVerified: true,
       isActive: true,
       lastLoginAt: /* @__PURE__ */ new Date()
-    }).where(eq57(workerUsers.id, user.id));
+    }).where(eq58(workerUsers.id, user.id));
+    const activeRole = resolveWorkerType(user);
+    const isDual = hasDualIdentity(user);
     const token = await signWorkerToken({
       sub: user.id.toString(),
       email: user.email,
       contractorId: user.contractorId,
+      employeeId: user.employeeId,
+      activeRole,
+      workerType: activeRole,
       iss: "gea-worker"
     });
     setWorkerCookie(ctx.res, token);
+    return { success: true, hasDualIdentity: isDual };
+  }),
+  /**
+   * Forgot password — generates a reset token and sends email
+   */
+  forgotPassword: workerPublicProcedure.input(
+    z45.object({
+      email: z45.string().email(),
+      origin: z45.string().url()
+    })
+  ).mutation(async ({ input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const [user] = await db.select({
+      id: workerUsers.id,
+      email: workerUsers.email,
+      isActive: workerUsers.isActive,
+      contractorId: workerUsers.contractorId,
+      employeeId: workerUsers.employeeId
+    }).from(workerUsers).where(eq58(workerUsers.email, input.email.toLowerCase().trim()));
+    if (!user || !user.isActive) {
+      return {
+        success: true,
+        message: "If an account exists with this email, a reset link has been sent."
+      };
+    }
+    const resetToken = generateResetToken4();
+    const resetExpiresAt = getResetExpiryDate4();
+    await db.update(workerUsers).set({ resetToken, resetExpiresAt }).where(eq58(workerUsers.id, user.id));
+    const origin = input.origin;
+    const resetUrl = `${origin}/reset-password?token=${resetToken}`;
+    let workerName = user.email;
+    try {
+      if (user.contractorId) {
+        const [contractor] = await db.select({ firstName: contractors.firstName, lastName: contractors.lastName }).from(contractors).where(eq58(contractors.id, user.contractorId));
+        if (contractor) {
+          workerName = `${contractor.firstName || ""} ${contractor.lastName || ""}`.trim() || user.email;
+        }
+      } else if (user.employeeId) {
+        const [employee] = await db.select({ firstName: employees.firstName, lastName: employees.lastName }).from(employees).where(eq58(employees.id, user.employeeId));
+        if (employee) {
+          workerName = `${employee.firstName || ""} ${employee.lastName || ""}`.trim() || user.email;
+        }
+      }
+    } catch {
+    }
+    try {
+      await sendWorkerPasswordResetEmail({
+        to: user.email,
+        workerName,
+        resetUrl
+      });
+    } catch (err) {
+      console.error("[WorkerAuth] Failed to send password reset email:", err);
+    }
+    return {
+      success: true,
+      message: "If an account exists with this email, a reset link has been sent."
+    };
+  }),
+  /**
+   * Verify reset token
+   */
+  verifyResetToken: workerPublicProcedure.input(z45.object({ token: z45.string() })).query(async ({ input }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR" });
+    const [user] = await db.select({
+      id: workerUsers.id,
+      email: workerUsers.email,
+      resetExpiresAt: workerUsers.resetExpiresAt
+    }).from(workerUsers).where(eq58(workerUsers.resetToken, input.token));
+    if (!user) {
+      return { valid: false, reason: "Invalid reset link" };
+    }
+    if (user.resetExpiresAt && new Date(user.resetExpiresAt) < /* @__PURE__ */ new Date()) {
+      return { valid: false, reason: "Reset link has expired" };
+    }
+    return {
+      valid: true,
+      email: user.email
+    };
+  }),
+  /**
+   * Reset password using token
+   */
+  resetPassword: workerPublicProcedure.input(
+    z45.object({
+      token: z45.string(),
+      password: z45.string().min(8, "Password must be at least 8 characters"),
+      confirmPassword: z45.string()
+    })
+  ).mutation(async ({ input, ctx }) => {
+    if (input.password !== input.confirmPassword) {
+      throw new TRPCError42({ code: "BAD_REQUEST", message: "Passwords do not match" });
+    }
+    const db = getDb();
+    if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const [user] = await db.select().from(workerUsers).where(eq58(workerUsers.resetToken, input.token));
+    if (!user) {
+      throw new TRPCError42({ code: "BAD_REQUEST", message: "Invalid reset link" });
+    }
+    if (user.resetExpiresAt && new Date(user.resetExpiresAt) < /* @__PURE__ */ new Date()) {
+      throw new TRPCError42({ code: "BAD_REQUEST", message: "Reset link has expired" });
+    }
+    const passwordHash = await hashPassword3(input.password);
+    await db.update(workerUsers).set({
+      passwordHash,
+      resetToken: null,
+      resetExpiresAt: null
+    }).where(eq58(workerUsers.id, user.id));
+    const activeRole = resolveWorkerType(user);
+    const token = await signWorkerToken({
+      sub: user.id.toString(),
+      email: user.email,
+      contractorId: user.contractorId,
+      employeeId: user.employeeId,
+      activeRole,
+      workerType: activeRole,
+      iss: "gea-worker"
+    });
+    setWorkerCookie(ctx.res, token);
+    return { success: true };
+  }),
+  /**
+   * Change password (authenticated)
+   */
+  changePassword: protectedWorkerProcedure.input(
+    z45.object({
+      currentPassword: z45.string(),
+      newPassword: z45.string().min(8, "Password must be at least 8 characters")
+    })
+  ).mutation(async ({ input, ctx }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    const [user] = await db.select({ passwordHash: workerUsers.passwordHash }).from(workerUsers).where(eq58(workerUsers.id, ctx.workerUser.id));
+    if (!user || !user.passwordHash) {
+      throw new TRPCError42({ code: "INTERNAL_SERVER_ERROR", message: "Account error" });
+    }
+    const valid = await verifyPassword3(input.currentPassword, user.passwordHash);
+    if (!valid) {
+      throw new TRPCError42({ code: "BAD_REQUEST", message: "Current password is incorrect" });
+    }
+    const newHash = await hashPassword3(input.newPassword);
+    await db.update(workerUsers).set({ passwordHash: newHash }).where(eq58(workerUsers.id, ctx.workerUser.id));
     return { success: true };
   })
 });
@@ -25521,54 +27899,108 @@ import { z as z46 } from "zod";
 import { TRPCError as TRPCError43 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq58 } from "drizzle-orm";
+import { eq as eq59 } from "drizzle-orm";
 var workerProfileRouter = workerRouter({
   /**
-   * Get my profile
+   * Get my profile — returns different data based on workerType
    */
   me: protectedWorkerProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError43({ code: "INTERNAL_SERVER_ERROR" });
-    if (!ctx.workerUser.contractorId) {
-      throw new TRPCError43({
-        code: "BAD_REQUEST",
-        message: "No contractor profile linked to this user"
-      });
+    const { workerUser } = ctx;
+    if (workerUser.workerType === "contractor" && workerUser.contractorId) {
+      const [contractor] = await db.select({
+        id: contractors.id,
+        contractorCode: contractors.contractorCode,
+        firstName: contractors.firstName,
+        lastName: contractors.lastName,
+        email: contractors.email,
+        phone: contractors.phone,
+        dateOfBirth: contractors.dateOfBirth,
+        nationality: contractors.nationality,
+        address: contractors.address,
+        city: contractors.city,
+        state: contractors.state,
+        country: contractors.country,
+        postalCode: contractors.postalCode,
+        jobTitle: contractors.jobTitle,
+        department: contractors.department,
+        startDate: contractors.startDate,
+        endDate: contractors.endDate,
+        status: contractors.status,
+        currency: contractors.currency,
+        paymentFrequency: contractors.paymentFrequency,
+        rateType: contractors.rateType,
+        rateAmount: contractors.rateAmount,
+        bankDetails: contractors.bankDetails
+      }).from(contractors).where(eq59(contractors.id, workerUser.contractorId));
+      if (!contractor) {
+        throw new TRPCError43({ code: "NOT_FOUND", message: "Contractor profile not found" });
+      }
+      return { workerType: "contractor", profile: contractor };
+    } else if (workerUser.workerType === "employee" && workerUser.employeeId) {
+      const [employee] = await db.select({
+        id: employees.id,
+        employeeCode: employees.employeeCode,
+        firstName: employees.firstName,
+        lastName: employees.lastName,
+        email: employees.email,
+        phone: employees.phone,
+        dateOfBirth: employees.dateOfBirth,
+        nationality: employees.nationality,
+        address: employees.address,
+        city: employees.city,
+        state: employees.state,
+        country: employees.country,
+        postalCode: employees.postalCode,
+        jobTitle: employees.jobTitle,
+        department: employees.department,
+        startDate: employees.startDate,
+        endDate: employees.endDate,
+        status: employees.status,
+        salaryCurrency: employees.salaryCurrency,
+        bankDetails: employees.bankDetails
+      }).from(employees).where(eq59(employees.id, workerUser.employeeId));
+      if (!employee) {
+        throw new TRPCError43({ code: "NOT_FOUND", message: "Employee profile not found" });
+      }
+      return { workerType: "employee", profile: employee };
     }
-    const [contractor] = await db.select().from(contractors).where(eq58(contractors.id, ctx.workerUser.contractorId));
-    if (!contractor) {
-      throw new TRPCError43({
-        code: "NOT_FOUND",
-        message: "Contractor profile not found"
-      });
-    }
-    return contractor;
+    throw new TRPCError43({ code: "INTERNAL_SERVER_ERROR", message: "Invalid worker profile" });
   }),
   /**
-   * Update my profile (limited fields)
+   * Update my profile (limited fields only — contact info, address, bank details)
    */
   update: protectedWorkerProcedure.input(
     z46.object({
-      firstName: z46.string().min(1).optional(),
-      lastName: z46.string().min(1).optional(),
       phone: z46.string().optional(),
       address: z46.string().optional(),
       city: z46.string().optional(),
       state: z46.string().optional(),
       postalCode: z46.string().optional(),
       bankDetails: z46.any().optional()
-      // TODO: Validate JSON structure
     })
   ).mutation(async ({ input, ctx }) => {
     const db = await getDb();
     if (!db) throw new TRPCError43({ code: "INTERNAL_SERVER_ERROR" });
-    if (!ctx.workerUser.contractorId) {
-      throw new TRPCError43({
-        code: "BAD_REQUEST",
-        message: "No contractor profile linked to this user"
-      });
+    const { workerUser } = ctx;
+    const updateData = {};
+    if (input.phone !== void 0) updateData.phone = input.phone;
+    if (input.address !== void 0) updateData.address = input.address;
+    if (input.city !== void 0) updateData.city = input.city;
+    if (input.state !== void 0) updateData.state = input.state;
+    if (input.postalCode !== void 0) updateData.postalCode = input.postalCode;
+    if (input.bankDetails !== void 0) updateData.bankDetails = input.bankDetails;
+    if (Object.keys(updateData).length === 0) {
+      return { success: true };
     }
-    await db.update(contractors).set(input).where(eq58(contractors.id, ctx.workerUser.contractorId));
+    if (workerUser.workerType === "contractor" && workerUser.contractorId) {
+      await db.update(contractors).set(updateData).where(eq59(contractors.id, workerUser.contractorId));
+    } else if (workerUser.workerType === "employee" && workerUser.employeeId) {
+      await db.update(employees).set(updateData).where(eq59(employees.id, workerUser.employeeId));
+    } else {
+      throw new TRPCError43({ code: "INTERNAL_SERVER_ERROR", message: "Invalid worker profile" });
+    }
     return { success: true };
   })
 });
@@ -25578,7 +28010,7 @@ import { z as z47 } from "zod";
 import { TRPCError as TRPCError44 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq59 } from "drizzle-orm";
+import { eq as eq60 } from "drizzle-orm";
 var workerOnboardingRouter = workerRouter({
   /**
    * Validate invite token and get basic info
@@ -25590,7 +28022,7 @@ var workerOnboardingRouter = workerRouter({
       email: workerUsers.email,
       inviteExpiresAt: workerUsers.inviteExpiresAt,
       isActive: workerUsers.isActive
-    }).from(workerUsers).where(eq59(workerUsers.inviteToken, input.token));
+    }).from(workerUsers).where(eq60(workerUsers.inviteToken, input.token));
     if (!user) {
       throw new TRPCError44({
         code: "NOT_FOUND",
@@ -25621,37 +28053,62 @@ import { z as z48 } from "zod";
 import { TRPCError as TRPCError45 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq60, desc as desc24 } from "drizzle-orm";
+import { eq as eq61, desc as desc24, and as and49, count as count18 } from "drizzle-orm";
 var workerInvoicesRouter = workerRouter({
   /**
-   * List my invoices
+   * List my invoices with pagination and optional status filter
    */
-  list: protectedWorkerProcedure.input(
+  list: contractorOnlyProcedure.input(
     z48.object({
       page: z48.number().min(1).default(1),
       pageSize: z48.number().min(1).max(100).default(20),
-      status: z48.string().optional()
+      status: z48.enum(["draft", "pending_approval", "approved", "paid", "rejected"]).optional()
     })
   ).query(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) return { items: [], total: 0 };
-    if (!ctx.workerUser.contractorId) {
-      throw new TRPCError45({
-        code: "BAD_REQUEST",
-        message: "No contractor profile linked to this user"
-      });
-    }
+    if (!db) throw new TRPCError45({ code: "INTERNAL_SERVER_ERROR" });
+    const contractorId = ctx.workerUser.contractorId;
     const offset = (input.page - 1) * input.pageSize;
-    const conditions = [eq60(contractorInvoices.contractorId, ctx.workerUser.contractorId)];
-    if (input.status) {
-      conditions.push(eq60(contractorInvoices.status, input.status));
-    }
-    const items = await db.select().from(contractorInvoices).where(eq60(contractorInvoices.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc24(contractorInvoices.createdAt));
+    const baseCondition = eq61(contractorInvoices.contractorId, contractorId);
+    const whereCondition = input.status ? and49(baseCondition, eq61(contractorInvoices.status, input.status)) : baseCondition;
+    const [totalResult] = await db.select({ count: count18() }).from(contractorInvoices).where(whereCondition);
+    const items = await db.select({
+      id: contractorInvoices.id,
+      invoiceNumber: contractorInvoices.invoiceNumber,
+      invoiceDate: contractorInvoices.invoiceDate,
+      dueDate: contractorInvoices.dueDate,
+      periodStart: contractorInvoices.periodStart,
+      periodEnd: contractorInvoices.periodEnd,
+      currency: contractorInvoices.currency,
+      totalAmount: contractorInvoices.totalAmount,
+      status: contractorInvoices.status,
+      createdAt: contractorInvoices.createdAt
+    }).from(contractorInvoices).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc24(contractorInvoices.createdAt));
     return {
       items,
-      total: 0
-      // TODO: Implement count query
+      total: totalResult?.count ?? 0,
+      page: input.page,
+      pageSize: input.pageSize
     };
+  }),
+  /**
+   * Get invoice detail with line items
+   */
+  getById: contractorOnlyProcedure.input(z48.object({ id: z48.number() })).query(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError45({ code: "INTERNAL_SERVER_ERROR" });
+    const contractorId = ctx.workerUser.contractorId;
+    const [invoice] = await db.select().from(contractorInvoices).where(
+      and49(
+        eq61(contractorInvoices.id, input.id),
+        eq61(contractorInvoices.contractorId, contractorId)
+      )
+    );
+    if (!invoice) {
+      throw new TRPCError45({ code: "NOT_FOUND", message: "Invoice not found" });
+    }
+    const items = await db.select().from(contractorInvoiceItems).where(eq61(contractorInvoiceItems.invoiceId, invoice.id));
+    return { ...invoice, items };
   })
 });
 
@@ -25660,67 +28117,218 @@ import { z as z49 } from "zod";
 import { TRPCError as TRPCError46 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq61, desc as desc25 } from "drizzle-orm";
+import { eq as eq62, desc as desc25, and as and50, count as count19 } from "drizzle-orm";
 var workerMilestonesRouter = workerRouter({
   /**
-   * List my milestones
+   * List my milestones with pagination and optional status filter
    */
-  list: protectedWorkerProcedure.input(
+  list: contractorOnlyProcedure.input(
     z49.object({
       page: z49.number().min(1).default(1),
       pageSize: z49.number().min(1).max(100).default(20),
-      status: z49.string().optional()
+      status: z49.enum([
+        "pending",
+        "submitted",
+        "client_approved",
+        "client_rejected",
+        "admin_approved",
+        "admin_rejected",
+        "locked"
+      ]).optional()
     })
   ).query(async ({ input, ctx }) => {
     const db = await getDb();
-    if (!db) return { items: [], total: 0 };
-    if (!ctx.workerUser.contractorId) {
-      throw new TRPCError46({
-        code: "BAD_REQUEST",
-        message: "No contractor profile linked to this user"
-      });
-    }
+    if (!db) throw new TRPCError46({ code: "INTERNAL_SERVER_ERROR" });
+    const contractorId = ctx.workerUser.contractorId;
     const offset = (input.page - 1) * input.pageSize;
-    const items = await db.select().from(contractorMilestones).where(eq61(contractorMilestones.contractorId, ctx.workerUser.contractorId)).limit(input.pageSize).offset(offset).orderBy(desc25(contractorMilestones.createdAt));
+    const baseCondition = eq62(contractorMilestones.contractorId, contractorId);
+    const whereCondition = input.status ? and50(baseCondition, eq62(contractorMilestones.status, input.status)) : baseCondition;
+    const [totalResult] = await db.select({ count: count19() }).from(contractorMilestones).where(whereCondition);
+    const items = await db.select({
+      id: contractorMilestones.id,
+      title: contractorMilestones.title,
+      description: contractorMilestones.description,
+      amount: contractorMilestones.amount,
+      currency: contractorMilestones.currency,
+      status: contractorMilestones.status,
+      dueDate: contractorMilestones.dueDate,
+      effectiveMonth: contractorMilestones.effectiveMonth,
+      deliverableFileUrl: contractorMilestones.deliverableFileUrl,
+      deliverableFileName: contractorMilestones.deliverableFileName,
+      submissionNote: contractorMilestones.submissionNote,
+      completedAt: contractorMilestones.completedAt,
+      clientRejectionReason: contractorMilestones.clientRejectionReason,
+      adminRejectionReason: contractorMilestones.adminRejectionReason,
+      createdAt: contractorMilestones.createdAt
+    }).from(contractorMilestones).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc25(contractorMilestones.createdAt));
     return {
       items,
-      total: 0
-      // TODO: Implement count query
+      total: totalResult?.count ?? 0,
+      page: input.page,
+      pageSize: input.pageSize
     };
+  }),
+  /**
+   * Get milestone detail
+   */
+  getById: contractorOnlyProcedure.input(z49.object({ id: z49.number() })).query(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError46({ code: "INTERNAL_SERVER_ERROR" });
+    const contractorId = ctx.workerUser.contractorId;
+    const [milestone] = await db.select().from(contractorMilestones).where(
+      and50(
+        eq62(contractorMilestones.id, input.id),
+        eq62(contractorMilestones.contractorId, contractorId)
+      )
+    );
+    if (!milestone) {
+      throw new TRPCError46({ code: "NOT_FOUND", message: "Milestone not found" });
+    }
+    return milestone;
+  }),
+  /**
+   * Submit a milestone with deliverable file.
+   * Only allowed when status is "pending" or "client_rejected" (resubmission).
+   */
+  submit: contractorOnlyProcedure.input(
+    z49.object({
+      id: z49.number(),
+      deliverableFileUrl: z49.string().url(),
+      deliverableFileKey: z49.string(),
+      deliverableFileName: z49.string(),
+      submissionNote: z49.string().optional()
+    })
+  ).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError46({ code: "INTERNAL_SERVER_ERROR" });
+    const contractorId = ctx.workerUser.contractorId;
+    const [milestone] = await db.select().from(contractorMilestones).where(
+      and50(
+        eq62(contractorMilestones.id, input.id),
+        eq62(contractorMilestones.contractorId, contractorId)
+      )
+    );
+    if (!milestone) {
+      throw new TRPCError46({ code: "NOT_FOUND", message: "Milestone not found" });
+    }
+    if (!["pending", "client_rejected"].includes(milestone.status)) {
+      throw new TRPCError46({
+        code: "BAD_REQUEST",
+        message: `Cannot submit milestone in "${milestone.status}" status. Only "pending" or "client_rejected" milestones can be submitted.`
+      });
+    }
+    const now = /* @__PURE__ */ new Date();
+    const effectiveMonth = milestone.effectiveMonth || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    await db.update(contractorMilestones).set({
+      status: "submitted",
+      deliverableFileUrl: input.deliverableFileUrl,
+      deliverableFileKey: input.deliverableFileKey,
+      deliverableFileName: input.deliverableFileName,
+      submissionNote: input.submissionNote || null,
+      submittedBy: ctx.workerUser.id,
+      completedAt: /* @__PURE__ */ new Date(),
+      effectiveMonth
+    }).where(eq62(contractorMilestones.id, input.id));
+    return { success: true };
   })
 });
 
 // server/worker/routers/workerDashboardRouter.ts
 init_connection();
 init_schema();
-import { eq as eq62, count as count18, and as and49 } from "drizzle-orm";
+import { TRPCError as TRPCError47 } from "@trpc/server";
+import { eq as eq63, and as and51, sql as sql30, desc as desc26, count as count20, inArray as inArray19 } from "drizzle-orm";
 var workerDashboardRouter = workerRouter({
   /**
-   * Get dashboard stats
+   * Get dashboard summary — returns different data based on workerType
    */
-  stats: protectedWorkerProcedure.query(async ({ ctx }) => {
+  getSummary: protectedWorkerProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) return { pendingInvoices: 0, pendingMilestones: 0, totalPaid: 0 };
-    if (!ctx.workerUser.contractorId) {
-      return { pendingInvoices: 0, pendingMilestones: 0, totalPaid: 0 };
+    if (!db) throw new TRPCError47({ code: "INTERNAL_SERVER_ERROR" });
+    const { workerUser } = ctx;
+    if (workerUser.workerType === "contractor" && workerUser.contractorId) {
+      const [pendingMilestones] = await db.select({ count: count20() }).from(contractorMilestones).where(
+        and51(
+          eq63(contractorMilestones.contractorId, workerUser.contractorId),
+          inArray19(contractorMilestones.status, ["pending", "submitted"])
+        )
+      );
+      const [pendingInvoices] = await db.select({ count: count20() }).from(contractorInvoices).where(
+        and51(
+          eq63(contractorInvoices.contractorId, workerUser.contractorId),
+          eq63(contractorInvoices.status, "pending_approval")
+        )
+      );
+      const [totalPaid] = await db.select({ total: sql30`COALESCE(SUM(CAST(${contractorInvoices.totalAmount} AS REAL)), 0)` }).from(contractorInvoices).where(
+        and51(
+          eq63(contractorInvoices.contractorId, workerUser.contractorId),
+          eq63(contractorInvoices.status, "paid")
+        )
+      );
+      const recentInvoices = await db.select({
+        id: contractorInvoices.id,
+        invoiceNumber: contractorInvoices.invoiceNumber,
+        totalAmount: contractorInvoices.totalAmount,
+        currency: contractorInvoices.currency,
+        status: contractorInvoices.status,
+        invoiceDate: contractorInvoices.invoiceDate
+      }).from(contractorInvoices).where(eq63(contractorInvoices.contractorId, workerUser.contractorId)).orderBy(desc26(contractorInvoices.createdAt)).limit(5);
+      return {
+        workerType: "contractor",
+        pendingMilestones: pendingMilestones?.count ?? 0,
+        pendingInvoices: pendingInvoices?.count ?? 0,
+        totalPaid: totalPaid?.total ?? "0",
+        recentInvoices
+      };
+    } else if (workerUser.workerType === "employee" && workerUser.employeeId) {
+      const [pendingLeave] = await db.select({ count: count20() }).from(leaveRecords).where(
+        and51(
+          eq63(leaveRecords.employeeId, workerUser.employeeId),
+          eq63(leaveRecords.status, "submitted")
+        )
+      );
+      const [pendingReimbursements] = await db.select({ count: count20() }).from(reimbursements).where(
+        and51(
+          eq63(reimbursements.employeeId, workerUser.employeeId),
+          eq63(reimbursements.status, "submitted")
+        )
+      );
+      const latestPayslip = await db.select({
+        id: employeePayslips.id,
+        payPeriod: employeePayslips.payPeriod,
+        payDate: employeePayslips.payDate,
+        netAmount: employeePayslips.netAmount,
+        grossAmount: employeePayslips.grossAmount,
+        currency: employeePayslips.currency
+      }).from(employeePayslips).where(
+        and51(
+          eq63(employeePayslips.employeeId, workerUser.employeeId),
+          eq63(employeePayslips.isPublished, true)
+        )
+      ).orderBy(desc26(employeePayslips.payPeriod)).limit(1);
+      return {
+        workerType: "employee",
+        pendingLeave: pendingLeave?.count ?? 0,
+        pendingReimbursements: pendingReimbursements?.count ?? 0,
+        latestPayslip: latestPayslip[0] ?? null
+      };
     }
-    const [pendingInvoices] = await db.select({ count: count18() }).from(contractorInvoices).where(and49(eq62(contractorInvoices.contractorId, ctx.workerUser.contractorId), eq62(contractorInvoices.status, "pending_approval")));
-    const [pendingMilestones] = await db.select({ count: count18() }).from(contractorMilestones).where(and49(eq62(contractorMilestones.contractorId, ctx.workerUser.contractorId), eq62(contractorMilestones.status, "pending")));
     return {
-      pendingInvoices: pendingInvoices?.count || 0,
-      pendingMilestones: pendingMilestones?.count || 0,
-      totalPaid: 0
-      // TODO: Calculate sum of paid invoices
+      workerType: workerUser.workerType,
+      pendingMilestones: 0,
+      pendingInvoices: 0,
+      totalPaid: "0",
+      recentInvoices: []
     };
   })
 });
 
 // server/worker/routers/workerNotificationsRouter.ts
 import { z as z50 } from "zod";
-import { TRPCError as TRPCError47 } from "@trpc/server";
+import { TRPCError as TRPCError48 } from "@trpc/server";
 init_connection();
 init_schema();
-import { eq as eq63, and as and50, desc as desc26 } from "drizzle-orm";
+import { eq as eq64, and as and52, desc as desc27 } from "drizzle-orm";
 var workerNotificationsRouter = workerRouter({
   /**
    * Get unread notifications
@@ -25729,24 +28337,24 @@ var workerNotificationsRouter = workerRouter({
     const db = await getDb();
     if (!db) return [];
     return await db.select().from(notifications).where(
-      and50(
-        eq63(notifications.targetPortal, "worker"),
-        eq63(notifications.targetUserId, ctx.workerUser.id),
-        eq63(notifications.isRead, false)
+      and52(
+        eq64(notifications.targetPortal, "worker"),
+        eq64(notifications.targetUserId, ctx.workerUser.id),
+        eq64(notifications.isRead, false)
       )
-    ).orderBy(desc26(notifications.createdAt)).limit(input.limit);
+    ).orderBy(desc27(notifications.createdAt)).limit(input.limit);
   }),
   /**
    * Mark as read
    */
   markAsRead: protectedWorkerProcedure.input(z50.object({ id: z50.number() })).mutation(async ({ ctx, input }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError47({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError48({ code: "INTERNAL_SERVER_ERROR" });
     await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(
-      and50(
-        eq63(notifications.id, input.id),
-        eq63(notifications.targetPortal, "worker"),
-        eq63(notifications.targetUserId, ctx.workerUser.id)
+      and52(
+        eq64(notifications.id, input.id),
+        eq64(notifications.targetPortal, "worker"),
+        eq64(notifications.targetUserId, ctx.workerUser.id)
       )
     );
     return { success: true };
@@ -25756,27 +28364,678 @@ var workerNotificationsRouter = workerRouter({
    */
   markAllAsRead: protectedWorkerProcedure.mutation(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError47({ code: "INTERNAL_SERVER_ERROR" });
+    if (!db) throw new TRPCError48({ code: "INTERNAL_SERVER_ERROR" });
     await db.update(notifications).set({ isRead: true, readAt: /* @__PURE__ */ new Date() }).where(
-      and50(
-        eq63(notifications.targetPortal, "worker"),
-        eq63(notifications.targetUserId, ctx.workerUser.id),
-        eq63(notifications.isRead, false)
+      and52(
+        eq64(notifications.targetPortal, "worker"),
+        eq64(notifications.targetUserId, ctx.workerUser.id),
+        eq64(notifications.isRead, false)
       )
     );
     return { success: true };
   })
 });
 
+// server/worker/routers/workerLeaveRouter.ts
+import { z as z51 } from "zod";
+import { TRPCError as TRPCError49 } from "@trpc/server";
+init_connection();
+init_schema();
+import { eq as eq65, and as and53, desc as desc28, count as count21 } from "drizzle-orm";
+var workerLeaveRouter = workerRouter({
+  /**
+   * Get leave balances for current year
+   */
+  getBalances: employeeOnlyProcedure.query(async ({ ctx }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError49({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+    const balances = await db.select({
+      id: leaveBalances.id,
+      leaveTypeId: leaveBalances.leaveTypeId,
+      year: leaveBalances.year,
+      totalEntitlement: leaveBalances.totalEntitlement,
+      used: leaveBalances.used,
+      remaining: leaveBalances.remaining,
+      leaveTypeName: leaveTypes.leaveTypeName,
+      isPaid: leaveTypes.isPaid
+    }).from(leaveBalances).innerJoin(leaveTypes, eq65(leaveBalances.leaveTypeId, leaveTypes.id)).where(
+      and53(
+        eq65(leaveBalances.employeeId, employeeId),
+        eq65(leaveBalances.year, currentYear)
+      )
+    );
+    return balances;
+  }),
+  /**
+   * Get available leave types for the employee's country
+   */
+  getLeaveTypes: employeeOnlyProcedure.query(async ({ ctx }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError49({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    const [emp] = await db.select({ country: employees.country }).from(employees).where(eq65(employees.id, employeeId));
+    if (!emp) {
+      throw new TRPCError49({ code: "NOT_FOUND", message: "Employee not found" });
+    }
+    const types = await db.select({
+      id: leaveTypes.id,
+      leaveTypeName: leaveTypes.leaveTypeName,
+      isPaid: leaveTypes.isPaid,
+      countryCode: leaveTypes.countryCode
+    }).from(leaveTypes).where(eq65(leaveTypes.countryCode, emp.country));
+    return types;
+  }),
+  /**
+   * Check leave balance before submission.
+   * Returns balance info and whether an auto-split to unpaid leave will be needed.
+   * Frontend should call this before submit to show a confirmation dialog if needed.
+   */
+  checkBalance: employeeOnlyProcedure.input(
+    z51.object({
+      leaveTypeId: z51.number(),
+      days: z51.string()
+    })
+  ).query(async ({ input, ctx }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError49({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    const requestedDays = parseFloat(input.days);
+    const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+    const [leaveType] = await db.select({ isPaid: leaveTypes.isPaid, leaveTypeName: leaveTypes.leaveTypeName }).from(leaveTypes).where(eq65(leaveTypes.id, input.leaveTypeId));
+    if (!leaveType) {
+      throw new TRPCError49({ code: "NOT_FOUND", message: "Leave type not found" });
+    }
+    if (!leaveType.isPaid) {
+      return {
+        sufficient: true,
+        isPaid: false,
+        leaveTypeName: leaveType.leaveTypeName,
+        requestedDays,
+        remaining: null,
+        paidDays: 0,
+        unpaidDays: requestedDays,
+        needsAutoSplit: false,
+        hasUnpaidLeaveType: true
+      };
+    }
+    const [balance] = await db.select({
+      remaining: leaveBalances.remaining,
+      used: leaveBalances.used,
+      totalEntitlement: leaveBalances.totalEntitlement
+    }).from(leaveBalances).where(
+      and53(
+        eq65(leaveBalances.employeeId, employeeId),
+        eq65(leaveBalances.leaveTypeId, input.leaveTypeId),
+        eq65(leaveBalances.year, currentYear)
+      )
+    );
+    const remaining = balance ? Number(balance.remaining ?? 0) : 0;
+    if (requestedDays <= remaining) {
+      return {
+        sufficient: true,
+        isPaid: true,
+        leaveTypeName: leaveType.leaveTypeName,
+        requestedDays,
+        remaining,
+        paidDays: requestedDays,
+        unpaidDays: 0,
+        needsAutoSplit: false,
+        hasUnpaidLeaveType: true
+      };
+    }
+    const [emp] = await db.select({ country: employees.country }).from(employees).where(eq65(employees.id, employeeId));
+    let hasUnpaidLeaveType = false;
+    if (emp) {
+      const [unpaidType] = await db.select({ id: leaveTypes.id }).from(leaveTypes).where(and53(eq65(leaveTypes.countryCode, emp.country), eq65(leaveTypes.isPaid, false))).limit(1);
+      hasUnpaidLeaveType = !!unpaidType;
+    }
+    const paidDays = Math.max(0, remaining);
+    const unpaidDays = requestedDays - paidDays;
+    return {
+      sufficient: false,
+      isPaid: true,
+      leaveTypeName: leaveType.leaveTypeName,
+      requestedDays,
+      remaining,
+      paidDays,
+      unpaidDays,
+      needsAutoSplit: hasUnpaidLeaveType,
+      hasUnpaidLeaveType
+    };
+  }),
+  /**
+   * List leave records with pagination
+   */
+  list: employeeOnlyProcedure.input(
+    z51.object({
+      page: z51.number().min(1).default(1),
+      pageSize: z51.number().min(1).max(100).default(20),
+      status: z51.enum([
+        "submitted",
+        "client_approved",
+        "client_rejected",
+        "admin_approved",
+        "admin_rejected",
+        "locked"
+      ]).optional()
+    })
+  ).query(async ({ input, ctx }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError49({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    const offset = (input.page - 1) * input.pageSize;
+    const baseCondition = eq65(leaveRecords.employeeId, employeeId);
+    const whereCondition = input.status ? and53(baseCondition, eq65(leaveRecords.status, input.status)) : baseCondition;
+    const [totalResult] = await db.select({ count: count21() }).from(leaveRecords).where(whereCondition);
+    const items = await db.select({
+      id: leaveRecords.id,
+      leaveTypeId: leaveRecords.leaveTypeId,
+      startDate: leaveRecords.startDate,
+      endDate: leaveRecords.endDate,
+      days: leaveRecords.days,
+      reason: leaveRecords.reason,
+      status: leaveRecords.status,
+      clientRejectionReason: leaveRecords.clientRejectionReason,
+      adminRejectionReason: leaveRecords.adminRejectionReason,
+      createdAt: leaveRecords.createdAt,
+      leaveTypeName: leaveTypes.leaveTypeName,
+      isPaid: leaveTypes.isPaid
+    }).from(leaveRecords).innerJoin(leaveTypes, eq65(leaveRecords.leaveTypeId, leaveTypes.id)).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc28(leaveRecords.createdAt));
+    return {
+      items,
+      total: totalResult?.count ?? 0,
+      page: input.page,
+      pageSize: input.pageSize
+    };
+  }),
+  /**
+   * Submit a leave request.
+   * Supports auto-split to unpaid leave when balance is insufficient.
+   *
+   * If `confirmAutoSplit` is true, the request will proceed even with insufficient balance,
+   * splitting into paid + unpaid portions (matching Client Portal logic).
+   */
+  submit: employeeOnlyProcedure.input(
+    z51.object({
+      leaveTypeId: z51.number(),
+      startDate: z51.string(),
+      // YYYY-MM-DD
+      endDate: z51.string(),
+      // YYYY-MM-DD
+      days: z51.string(),
+      // Support half days, e.g. "1", "0.5", "3"
+      reason: z51.string().optional(),
+      /** If true, proceed with auto-split to unpaid leave when balance is insufficient */
+      confirmAutoSplit: z51.boolean().default(false)
+    })
+  ).mutation(async ({ input, ctx }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError49({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    const [emp] = await db.select({ country: employees.country }).from(employees).where(eq65(employees.id, employeeId));
+    if (!emp) {
+      throw new TRPCError49({ code: "NOT_FOUND", message: "Employee not found" });
+    }
+    const [leaveType] = await db.select({
+      id: leaveTypes.id,
+      isPaid: leaveTypes.isPaid,
+      leaveTypeName: leaveTypes.leaveTypeName
+    }).from(leaveTypes).where(eq65(leaveTypes.id, input.leaveTypeId));
+    if (!leaveType) {
+      throw new TRPCError49({ code: "NOT_FOUND", message: "Leave type not found" });
+    }
+    const totalDays = parseFloat(input.days);
+    const isPaid = leaveType.isPaid !== false;
+    const crossMonth = isLeavesCrossMonth(input.startDate, input.endDate);
+    const splits = crossMonth ? splitLeaveByMonth(input.startDate, input.endDate, totalDays) : [{ startDate: input.startDate, endDate: input.endDate, days: totalDays, payrollMonth: getLeavePayrollMonth(input.endDate) }];
+    const year = parseInt(input.endDate.split("-")[0], 10);
+    let paidDays = totalDays;
+    let unpaidDays = 0;
+    let unpaidLeaveTypeId = null;
+    let balanceSplit = false;
+    if (isPaid) {
+      const [balance] = await db.select({
+        remaining: leaveBalances.remaining,
+        used: leaveBalances.used
+      }).from(leaveBalances).where(
+        and53(
+          eq65(leaveBalances.employeeId, employeeId),
+          eq65(leaveBalances.leaveTypeId, input.leaveTypeId),
+          eq65(leaveBalances.year, year)
+        )
+      );
+      const remaining = balance ? Number(balance.remaining ?? 0) : 0;
+      if (totalDays > remaining) {
+        if (!input.confirmAutoSplit) {
+          throw new TRPCError49({
+            code: "BAD_REQUEST",
+            message: JSON.stringify({
+              type: "INSUFFICIENT_BALANCE",
+              remaining,
+              requested: totalDays,
+              paidDays: Math.max(0, remaining),
+              unpaidDays: totalDays - Math.max(0, remaining)
+            })
+          });
+        }
+        paidDays = Math.max(0, remaining);
+        unpaidDays = totalDays - paidDays;
+        const [unpaidType] = await db.select({ id: leaveTypes.id }).from(leaveTypes).where(and53(eq65(leaveTypes.countryCode, emp.country), eq65(leaveTypes.isPaid, false))).limit(1);
+        if (!unpaidType) {
+          throw new TRPCError49({
+            code: "BAD_REQUEST",
+            message: `Insufficient leave balance (${remaining} days remaining, ${totalDays} requested). No Unpaid Leave type configured for this country.`
+          });
+        }
+        unpaidLeaveTypeId = unpaidType.id;
+        balanceSplit = true;
+      }
+    }
+    const deductBalance = async (leaveTypeId, days, yr) => {
+      const [bal] = await db.select({ id: leaveBalances.id, used: leaveBalances.used, remaining: leaveBalances.remaining }).from(leaveBalances).where(
+        and53(
+          eq65(leaveBalances.employeeId, employeeId),
+          eq65(leaveBalances.leaveTypeId, leaveTypeId),
+          eq65(leaveBalances.year, yr)
+        )
+      ).limit(1);
+      if (bal) {
+        await db.update(leaveBalances).set({
+          used: Math.max(0, (bal.used ?? 0) + days),
+          remaining: Math.max(0, (bal.remaining ?? 0) - days)
+        }).where(eq65(leaveBalances.id, bal.id));
+      }
+    };
+    if (balanceSplit) {
+      if (paidDays > 0) {
+        const paidRatio = paidDays / totalDays;
+        for (const split of splits) {
+          const splitPaidDays = Math.round(split.days * paidRatio * 10) / 10;
+          if (splitPaidDays <= 0) continue;
+          await db.insert(leaveRecords).values({
+            employeeId,
+            leaveTypeId: input.leaveTypeId,
+            startDate: split.startDate,
+            endDate: split.endDate,
+            days: String(splitPaidDays),
+            status: "submitted",
+            reason: `${input.reason || ""}${input.reason ? " | " : ""}[Paid portion: ${splitPaidDays} days]`.trim(),
+            submittedBy: ctx.workerUser.id
+          });
+          const splitYear = parseInt(split.endDate.split("-")[0], 10);
+          await deductBalance(input.leaveTypeId, splitPaidDays, splitYear);
+        }
+      }
+      if (unpaidDays > 0 && unpaidLeaveTypeId) {
+        const unpaidRatio = unpaidDays / totalDays;
+        for (const split of splits) {
+          const splitUnpaidDays = Math.round(split.days * unpaidRatio * 10) / 10;
+          if (splitUnpaidDays <= 0) continue;
+          await db.insert(leaveRecords).values({
+            employeeId,
+            leaveTypeId: unpaidLeaveTypeId,
+            startDate: split.startDate,
+            endDate: split.endDate,
+            days: String(splitUnpaidDays),
+            status: "submitted",
+            reason: `${input.reason || ""}${input.reason ? " | " : ""}[Unpaid portion: ${splitUnpaidDays} days \u2014 auto-split due to insufficient balance]`.trim(),
+            submittedBy: ctx.workerUser.id
+          });
+        }
+      }
+      return { success: true, balanceSplit: true, paidDays, unpaidDays };
+    } else {
+      for (const split of splits) {
+        await db.insert(leaveRecords).values({
+          employeeId,
+          leaveTypeId: input.leaveTypeId,
+          startDate: split.startDate,
+          endDate: split.endDate,
+          days: String(split.days),
+          status: "submitted",
+          reason: input.reason || null,
+          submittedBy: ctx.workerUser.id
+        });
+        if (isPaid) {
+          const splitYear = parseInt(split.endDate.split("-")[0], 10);
+          await deductBalance(input.leaveTypeId, split.days, splitYear);
+        }
+      }
+      return { success: true, balanceSplit: false, paidDays: totalDays, unpaidDays: 0 };
+    }
+  }),
+  /**
+   * Cancel a leave request.
+   * Only allowed when status is "submitted" (before any approval).
+   */
+  cancel: employeeOnlyProcedure.input(z51.object({ id: z51.number() })).mutation(async ({ input, ctx }) => {
+    const db = getDb();
+    if (!db) throw new TRPCError49({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    const [record] = await db.select().from(leaveRecords).where(
+      and53(
+        eq65(leaveRecords.id, input.id),
+        eq65(leaveRecords.employeeId, employeeId)
+      )
+    );
+    if (!record) {
+      throw new TRPCError49({ code: "NOT_FOUND", message: "Leave record not found" });
+    }
+    if (record.status !== "submitted") {
+      throw new TRPCError49({
+        code: "BAD_REQUEST",
+        message: "Can only cancel leave requests that are still pending review"
+      });
+    }
+    const [leaveType] = await db.select({ isPaid: leaveTypes.isPaid }).from(leaveTypes).where(eq65(leaveTypes.id, record.leaveTypeId));
+    if (leaveType?.isPaid) {
+      const days = parseFloat(record.days || "0");
+      const year = parseInt((record.endDate || "").split("-")[0], 10) || (/* @__PURE__ */ new Date()).getFullYear();
+      const [bal] = await db.select({ id: leaveBalances.id, used: leaveBalances.used, remaining: leaveBalances.remaining }).from(leaveBalances).where(
+        and53(
+          eq65(leaveBalances.employeeId, employeeId),
+          eq65(leaveBalances.leaveTypeId, record.leaveTypeId),
+          eq65(leaveBalances.year, year)
+        )
+      ).limit(1);
+      if (bal) {
+        await db.update(leaveBalances).set({
+          used: Math.max(0, (bal.used ?? 0) - days),
+          remaining: (bal.remaining ?? 0) + days
+        }).where(eq65(leaveBalances.id, bal.id));
+      }
+    }
+    await db.delete(leaveRecords).where(eq65(leaveRecords.id, input.id));
+    return { success: true };
+  })
+});
+
+// server/worker/routers/workerReimbursementsRouter.ts
+import { z as z52 } from "zod";
+import { TRPCError as TRPCError50 } from "@trpc/server";
+init_connection();
+init_schema();
+import { eq as eq66, and as and54, desc as desc29, count as count22 } from "drizzle-orm";
+var workerReimbursementsRouter = workerRouter({
+  /**
+   * List my reimbursements with pagination and optional status filter
+   */
+  list: employeeOnlyProcedure.input(
+    z52.object({
+      page: z52.number().min(1).default(1),
+      pageSize: z52.number().min(1).max(100).default(20),
+      status: z52.enum([
+        "submitted",
+        "client_approved",
+        "client_rejected",
+        "admin_approved",
+        "admin_rejected",
+        "locked"
+      ]).optional()
+    })
+  ).query(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError50({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    const offset = (input.page - 1) * input.pageSize;
+    const baseCondition = eq66(reimbursements.employeeId, employeeId);
+    const whereCondition = input.status ? and54(baseCondition, eq66(reimbursements.status, input.status)) : baseCondition;
+    const [totalResult] = await db.select({ count: count22() }).from(reimbursements).where(whereCondition);
+    const items = await db.select({
+      id: reimbursements.id,
+      category: reimbursements.category,
+      description: reimbursements.description,
+      amount: reimbursements.amount,
+      currency: reimbursements.currency,
+      receiptFileUrl: reimbursements.receiptFileUrl,
+      status: reimbursements.status,
+      effectiveMonth: reimbursements.effectiveMonth,
+      clientRejectionReason: reimbursements.clientRejectionReason,
+      adminRejectionReason: reimbursements.adminRejectionReason,
+      createdAt: reimbursements.createdAt
+    }).from(reimbursements).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc29(reimbursements.createdAt));
+    return {
+      items,
+      total: totalResult?.count ?? 0,
+      page: input.page,
+      pageSize: input.pageSize
+    };
+  }),
+  /**
+   * Submit a reimbursement request.
+   * Employee provides category, amount, description, and optionally a receipt file.
+   */
+  submit: employeeOnlyProcedure.input(
+    z52.object({
+      category: z52.enum([
+        "travel",
+        "equipment",
+        "meals",
+        "transportation",
+        "medical",
+        "education",
+        "office_supplies",
+        "communication",
+        "other"
+      ]),
+      description: z52.string().optional(),
+      amount: z52.string(),
+      // Decimal as string
+      currency: z52.string().length(3).default("USD"),
+      receiptFileUrl: z52.string().url().optional(),
+      receiptFileKey: z52.string().optional(),
+      effectiveMonth: z52.string()
+      // YYYY-MM-01
+    })
+  ).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError50({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    const customerId = ctx.workerUser.customerId;
+    if (!customerId) {
+      throw new TRPCError50({ code: "BAD_REQUEST", message: "Employee profile is incomplete" });
+    }
+    await db.insert(reimbursements).values({
+      employeeId,
+      customerId,
+      category: input.category,
+      description: input.description || null,
+      amount: input.amount,
+      currency: input.currency,
+      receiptFileUrl: input.receiptFileUrl || null,
+      receiptFileKey: input.receiptFileKey || null,
+      status: "submitted",
+      submittedBy: ctx.workerUser.id,
+      effectiveMonth: input.effectiveMonth
+    });
+    return { success: true };
+  }),
+  /**
+   * Cancel a reimbursement request.
+   * Only allowed when status is "submitted" (before any approval).
+   */
+  cancel: employeeOnlyProcedure.input(z52.object({ id: z52.number() })).mutation(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError50({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    const [record] = await db.select().from(reimbursements).where(
+      and54(
+        eq66(reimbursements.id, input.id),
+        eq66(reimbursements.employeeId, employeeId)
+      )
+    );
+    if (!record) {
+      throw new TRPCError50({ code: "NOT_FOUND", message: "Reimbursement not found" });
+    }
+    if (record.status !== "submitted") {
+      throw new TRPCError50({
+        code: "BAD_REQUEST",
+        message: "Can only cancel reimbursements that are still pending review"
+      });
+    }
+    await db.delete(reimbursements).where(eq66(reimbursements.id, input.id));
+    return { success: true };
+  })
+});
+
+// server/worker/routers/workerPayslipsRouter.ts
+import { z as z53 } from "zod";
+import { TRPCError as TRPCError51 } from "@trpc/server";
+init_connection();
+init_schema();
+import { eq as eq67, and as and55, desc as desc30, count as count23 } from "drizzle-orm";
+var workerPayslipsRouter = workerRouter({
+  /**
+   * List my payslips (only published ones) with pagination
+   */
+  list: employeeOnlyProcedure.input(
+    z53.object({
+      page: z53.number().min(1).default(1),
+      pageSize: z53.number().min(1).max(100).default(20)
+    })
+  ).query(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError51({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    const offset = (input.page - 1) * input.pageSize;
+    const whereCondition = and55(
+      eq67(employeePayslips.employeeId, employeeId),
+      eq67(employeePayslips.isPublished, true)
+    );
+    const [totalResult] = await db.select({ count: count23() }).from(employeePayslips).where(whereCondition);
+    const items = await db.select({
+      id: employeePayslips.id,
+      payPeriod: employeePayslips.payPeriod,
+      payDate: employeePayslips.payDate,
+      fileName: employeePayslips.fileName,
+      fileUrl: employeePayslips.fileUrl,
+      currency: employeePayslips.currency,
+      grossAmount: employeePayslips.grossAmount,
+      netAmount: employeePayslips.netAmount,
+      publishedAt: employeePayslips.publishedAt
+    }).from(employeePayslips).where(whereCondition).limit(input.pageSize).offset(offset).orderBy(desc30(employeePayslips.payPeriod));
+    return {
+      items,
+      total: totalResult?.count ?? 0,
+      page: input.page,
+      pageSize: input.pageSize
+    };
+  }),
+  /**
+   * Get a single payslip detail (for download)
+   */
+  getById: employeeOnlyProcedure.input(z53.object({ id: z53.number() })).query(async ({ input, ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError51({ code: "INTERNAL_SERVER_ERROR" });
+    const employeeId = ctx.workerUser.employeeId;
+    const [payslip] = await db.select().from(employeePayslips).where(
+      and55(
+        eq67(employeePayslips.id, input.id),
+        eq67(employeePayslips.employeeId, employeeId),
+        eq67(employeePayslips.isPublished, true)
+      )
+    );
+    if (!payslip) {
+      throw new TRPCError51({ code: "NOT_FOUND", message: "Payslip not found" });
+    }
+    return payslip;
+  })
+});
+
+// server/worker/routers/workerDocumentsRouter.ts
+import { TRPCError as TRPCError52 } from "@trpc/server";
+init_connection();
+init_schema();
+import { eq as eq68, desc as desc31 } from "drizzle-orm";
+var workerDocumentsRouter = workerRouter({
+  /**
+   * List my documents — returns different data based on workerType
+   */
+  listDocuments: protectedWorkerProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError52({ code: "INTERNAL_SERVER_ERROR" });
+    const { workerUser } = ctx;
+    if (workerUser.workerType === "employee" && workerUser.employeeId) {
+      const docs = await db.select({
+        id: employeeDocuments.id,
+        documentType: employeeDocuments.documentType,
+        documentName: employeeDocuments.documentName,
+        fileUrl: employeeDocuments.fileUrl,
+        mimeType: employeeDocuments.mimeType,
+        fileSize: employeeDocuments.fileSize,
+        notes: employeeDocuments.notes,
+        uploadedAt: employeeDocuments.uploadedAt
+      }).from(employeeDocuments).where(eq68(employeeDocuments.employeeId, workerUser.employeeId)).orderBy(desc31(employeeDocuments.uploadedAt));
+      return { workerType: "employee", documents: docs };
+    } else if (workerUser.workerType === "contractor" && workerUser.contractorId) {
+      const docs = await db.select({
+        id: contractorDocuments.id,
+        documentType: contractorDocuments.documentType,
+        documentName: contractorDocuments.documentName,
+        fileUrl: contractorDocuments.fileUrl,
+        mimeType: contractorDocuments.mimeType,
+        fileSize: contractorDocuments.fileSize,
+        notes: contractorDocuments.notes,
+        uploadedAt: contractorDocuments.uploadedAt
+      }).from(contractorDocuments).where(eq68(contractorDocuments.contractorId, workerUser.contractorId)).orderBy(desc31(contractorDocuments.uploadedAt));
+      return { workerType: "contractor", documents: docs };
+    }
+    return { workerType: workerUser.workerType, documents: [] };
+  }),
+  /**
+   * List my contracts — returns different data based on workerType
+   */
+  listContracts: protectedWorkerProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError52({ code: "INTERNAL_SERVER_ERROR" });
+    const { workerUser } = ctx;
+    if (workerUser.workerType === "employee" && workerUser.employeeId) {
+      const contracts = await db.select({
+        id: employeeContracts.id,
+        contractType: employeeContracts.contractType,
+        fileUrl: employeeContracts.fileUrl,
+        signedDate: employeeContracts.signedDate,
+        effectiveDate: employeeContracts.effectiveDate,
+        expiryDate: employeeContracts.expiryDate,
+        status: employeeContracts.status,
+        createdAt: employeeContracts.createdAt
+      }).from(employeeContracts).where(eq68(employeeContracts.employeeId, workerUser.employeeId)).orderBy(desc31(employeeContracts.createdAt));
+      return { workerType: "employee", contracts };
+    } else if (workerUser.workerType === "contractor" && workerUser.contractorId) {
+      const contracts = await db.select({
+        id: contractorContracts.id,
+        contractType: contractorContracts.contractType,
+        fileUrl: contractorContracts.fileUrl,
+        signedDate: contractorContracts.signedDate,
+        effectiveDate: contractorContracts.effectiveDate,
+        expiryDate: contractorContracts.expiryDate,
+        status: contractorContracts.status,
+        createdAt: contractorContracts.createdAt
+      }).from(contractorContracts).where(eq68(contractorContracts.contractorId, workerUser.contractorId)).orderBy(desc31(contractorContracts.createdAt));
+      return { workerType: "contractor", contracts };
+    }
+    return { workerType: workerUser.workerType, contracts: [] };
+  })
+});
+
 // server/worker/workerRouter.ts
 var appWorkerRouter = workerRouter({
+  // Shared (all workers)
   auth: workerAuthRouter,
   profile: workerProfileRouter,
   onboarding: workerOnboardingRouter,
+  dashboard: workerDashboardRouter,
+  notifications: workerNotificationsRouter,
+  documents: workerDocumentsRouter,
+  // Contractor only
   invoices: workerInvoicesRouter,
   milestones: workerMilestonesRouter,
-  dashboard: workerDashboardRouter,
-  notifications: workerNotificationsRouter
+  // Employee only
+  leave: workerLeaveRouter,
+  reimbursements: workerReimbursementsRouter,
+  payslips: workerPayslipsRouter
 });
 
 // server/_core/serve-static.ts
@@ -25800,7 +29059,7 @@ function serveStatic(app) {
 init_portalAuth();
 init_db2();
 init_schema();
-import { eq as eq64, and as and51 } from "drizzle-orm";
+import { eq as eq69, and as and56 } from "drizzle-orm";
 async function createApp(options = {}) {
   const app = express2();
   const server = createServer(app);
@@ -25828,7 +29087,7 @@ async function createApp(options = {}) {
       strictTransportSecurity: false
     })
   );
-  const apiLimiter = rateLimit2({
+  const apiLimiter = rateLimit3({
     windowMs: 15 * 60 * 1e3,
     // 15 minutes
     max: 300,
@@ -25837,7 +29096,7 @@ async function createApp(options = {}) {
     legacyHeaders: false,
     message: { error: "Too many requests, please try again later." }
   });
-  const authLimiter = rateLimit2({
+  const authLimiter = rateLimit3({
     windowMs: 60 * 60 * 1e3,
     // 1 hour
     max: 20,
@@ -25849,6 +29108,7 @@ async function createApp(options = {}) {
   app.use("/api", apiLimiter);
   app.use("/api/auth/login", authLimiter);
   registerAuthRoutes(app);
+  registerAdminForgotPasswordRoutes(app);
   app.get("/api/invoices/:id/pdf/preview", async (req, res) => {
     try {
       const user = await authenticateAdminRequest(req);
@@ -25884,7 +29144,7 @@ async function createApp(options = {}) {
         return;
       }
       const db = getDb();
-      const inv = db ? await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq64(invoices.id, invoiceId)).then((r) => r[0]) : null;
+      const inv = db ? await db.select({ invoiceNumber: invoices.invoiceNumber }).from(invoices).where(eq69(invoices.id, invoiceId)).then((r) => r[0]) : null;
       const pdfBuffer = await generateInvoicePdf({ invoiceId });
       const filename = inv?.invoiceNumber ? `${inv.invoiceNumber}.pdf` : `invoice-${invoiceId}.pdf`;
       res.setHeader("Content-Type", "application/pdf");
@@ -25913,7 +29173,7 @@ async function createApp(options = {}) {
         res.status(500).json({ error: "Database unavailable" });
         return;
       }
-      const [invoice] = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber }).from(invoices).where(and51(eq64(invoices.id, invoiceId), eq64(invoices.customerId, portalUser.customerId)));
+      const [invoice] = await db.select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber }).from(invoices).where(and56(eq69(invoices.id, invoiceId), eq69(invoices.customerId, portalUser.customerId)));
       if (!invoice) {
         res.status(404).json({ error: "Invoice not found" });
         return;
@@ -26046,8 +29306,8 @@ async function createApp(options = {}) {
 // server/seedAdmin.ts
 init_db2();
 init_schema();
-import { eq as eq65 } from "drizzle-orm";
-import crypto5 from "crypto";
+import { eq as eq70 } from "drizzle-orm";
+import crypto7 from "crypto";
 function resolveBootstrapPassword() {
   const fromEnv = process.env.ADMIN_BOOTSTRAP_PASSWORD?.trim();
   if (fromEnv && fromEnv.length >= 10) return fromEnv;
@@ -26073,14 +29333,14 @@ async function seedDefaultAdmin() {
       console.warn("[Seed] ADMIN_BOOTSTRAP_EMAIL not set, skipping admin seed");
       return;
     }
-    const existing = await db.select({ id: users.id }).from(users).where(eq65(users.email, adminEmail)).limit(1);
+    const existing = await db.select({ id: users.id }).from(users).where(eq70(users.email, adminEmail)).limit(1);
     if (existing.length > 0) {
       console.log("[Seed] Default admin already exists, skipping");
       return;
     }
     const bootstrapPassword = resolveBootstrapPassword();
     const passwordHash = await hashPassword(bootstrapPassword);
-    const openId = `admin_${crypto5.randomBytes(16).toString("hex")}`;
+    const openId = `admin_${crypto7.randomBytes(16).toString("hex")}`;
     await db.insert(users).values({
       openId,
       name: adminName || "Admin",
@@ -26104,7 +29364,7 @@ async function seedDefaultAdmin() {
 init_db2();
 init_schema();
 import "dotenv/config";
-import { eq as eq66, and as and52 } from "drizzle-orm";
+import { eq as eq71, and as and57 } from "drizzle-orm";
 
 // server/seed/data/socialInsuranceRules.ts
 var socialInsuranceRules = [
@@ -40733,7 +43993,7 @@ async function seedSystemData(db) {
   console.log("[Seed] Checking system data (Countries, Leave Types, Holidays)...");
   const countries = await readJsonFile("data-exports/baseline/countries_config.json");
   if (countries) {
-    let count19 = 0;
+    let count24 = 0;
     for (const country of countries) {
       const { id, ...data } = country;
       const formatted = parseDates(data, ["createdAt", "updatedAt"]);
@@ -40748,15 +44008,15 @@ async function seedSystemData(db) {
           updatedAt: /* @__PURE__ */ new Date()
         }
       });
-      count19++;
+      count24++;
     }
-    console.log(`[Seed] Processed ${count19} countries`);
+    console.log(`[Seed] Processed ${count24} countries`);
     const validCodes = new Set(countries.map((c) => c.countryCode || c.code));
     const allDbCountries = await db.select({ countryCode: countriesConfig.countryCode }).from(countriesConfig);
     const orphanCodes = allDbCountries.map((r) => r.countryCode).filter((code) => !validCodes.has(code));
     if (orphanCodes.length > 0) {
       for (const code of orphanCodes) {
-        await db.delete(countriesConfig).where(eq66(countriesConfig.countryCode, code));
+        await db.delete(countriesConfig).where(eq71(countriesConfig.countryCode, code));
         console.log(`[Seed] Removed orphan/test country: ${code}`);
       }
       console.log(`[Seed] Cleaned up ${orphanCodes.length} orphan/test countries`);
@@ -40764,62 +44024,62 @@ async function seedSystemData(db) {
   }
   const ltData = await readJsonFile("data-exports/baseline/leave_types.json");
   if (ltData) {
-    let count19 = 0;
+    let count24 = 0;
     for (const lt3 of ltData) {
       const { id, ...data } = lt3;
       const formatted = parseDates(data, ["createdAt", "updatedAt"]);
       const existing = await db.query.leaveTypes.findFirst({
-        where: and52(
-          eq66(leaveTypes.countryCode, formatted.countryCode),
-          eq66(leaveTypes.leaveTypeName, formatted.leaveTypeName)
+        where: and57(
+          eq71(leaveTypes.countryCode, formatted.countryCode),
+          eq71(leaveTypes.leaveTypeName, formatted.leaveTypeName)
         )
       });
       if (!existing) {
         await db.insert(leaveTypes).values(formatted);
-        count19++;
+        count24++;
       }
     }
-    console.log(`[Seed] Added ${count19} new leave types`);
+    console.log(`[Seed] Added ${count24} new leave types`);
   }
   const holidays = await readJsonFile("data-exports/baseline/public_holidays.json");
   if (holidays) {
-    let count19 = 0;
+    let count24 = 0;
     for (const h of holidays) {
       const { id, ...data } = h;
       const formatted = parseDates(data, ["createdAt", "updatedAt"]);
       const existing = await db.query.publicHolidays.findFirst({
-        where: and52(
-          eq66(publicHolidays.countryCode, formatted.countryCode),
-          eq66(publicHolidays.year, formatted.year),
-          eq66(publicHolidays.holidayDate, formatted.holidayDate),
-          eq66(publicHolidays.holidayName, formatted.holidayName)
+        where: and57(
+          eq71(publicHolidays.countryCode, formatted.countryCode),
+          eq71(publicHolidays.year, formatted.year),
+          eq71(publicHolidays.holidayDate, formatted.holidayDate),
+          eq71(publicHolidays.holidayName, formatted.holidayName)
         )
       });
       if (!existing) {
         await db.insert(publicHolidays).values(formatted);
-        count19++;
+        count24++;
       }
     }
-    console.log(`[Seed] Added ${count19} new holidays`);
+    console.log(`[Seed] Added ${count24} new holidays`);
   }
 }
 async function seedSocialInsuranceData(db) {
   console.log("[Seed] Checking social insurance rules...");
-  let count19 = 0;
+  let count24 = 0;
   for (const rule of socialInsuranceRules) {
     const existing = await db.select().from(countrySocialInsuranceItems).where(
-      and52(
-        eq66(countrySocialInsuranceItems.countryCode, rule.countryCode),
-        eq66(countrySocialInsuranceItems.itemKey, rule.itemKey),
-        eq66(countrySocialInsuranceItems.effectiveYear, rule.effectiveYear)
+      and57(
+        eq71(countrySocialInsuranceItems.countryCode, rule.countryCode),
+        eq71(countrySocialInsuranceItems.itemKey, rule.itemKey),
+        eq71(countrySocialInsuranceItems.effectiveYear, rule.effectiveYear)
       )
     ).limit(1);
     if (existing.length === 0) {
       await db.insert(countrySocialInsuranceItems).values(rule);
-      count19++;
+      count24++;
     }
   }
-  console.log(`[Seed] Added ${count19} new social insurance rules (total defined: ${socialInsuranceRules.length})`);
+  console.log(`[Seed] Added ${count24} new social insurance rules (total defined: ${socialInsuranceRules.length})`);
 }
 async function seedAIProviderConfigs(db) {
   console.log("[Seed] Checking AI provider configurations...");
@@ -40876,9 +44136,9 @@ async function seedCountryGuides(db) {
     }
     try {
       const existing = await db.query.countryGuideChapters.findFirst({
-        where: and52(
-          eq66(countryGuideChapters.countryCode, ch.countryCode),
-          eq66(countryGuideChapters.chapterKey, ch.chapterKey)
+        where: and57(
+          eq71(countryGuideChapters.countryCode, ch.countryCode),
+          eq71(countryGuideChapters.chapterKey, ch.chapterKey)
         )
       });
       if (existing) {
@@ -40895,7 +44155,7 @@ async function seedCountryGuides(db) {
             version: ch.version || "2026-Q1",
             status: ch.status || "published",
             updatedAt: /* @__PURE__ */ new Date()
-          }).where(eq66(countryGuideChapters.id, existing.id));
+          }).where(eq71(countryGuideChapters.id, existing.id));
           updated++;
         } else {
           skipped++;
@@ -40937,7 +44197,7 @@ async function seedBusinessMigrationData(db) {
   for (let i = 0; i < data.customers.length; i++) {
     const c = data.customers[i];
     const index4 = i + 1;
-    const existing = await db.select({ id: customers.id }).from(customers).where(eq66(customers.clientCode, c.clientCode)).limit(1);
+    const existing = await db.select({ id: customers.id }).from(customers).where(eq71(customers.clientCode, c.clientCode)).limit(1);
     let customerId;
     if (existing.length > 0) {
       customerId = existing[0].id;
@@ -40966,7 +44226,7 @@ async function seedBusinessMigrationData(db) {
     const index4 = i + 1;
     const dbCustomerId = customerMap.get(e.customerIndex);
     if (!dbCustomerId) continue;
-    const existing = await db.select({ id: employees.id }).from(employees).where(eq66(employees.employeeCode, e.employeeCode)).limit(1);
+    const existing = await db.select({ id: employees.id }).from(employees).where(eq71(employees.employeeCode, e.employeeCode)).limit(1);
     let employeeId;
     if (existing.length > 0) {
       employeeId = existing[0].id;
@@ -41009,7 +44269,7 @@ async function seedBusinessMigrationData(db) {
     const dbCustomerId = customerMap.get(inv.customerIndex);
     const dbEmployeeId = employeeMap.get(inv.employeeIndex);
     if (!dbCustomerId || !dbEmployeeId) continue;
-    const existing = await db.select({ id: invoices.id }).from(invoices).where(eq66(invoices.invoiceNumber, inv.invoiceNumber)).limit(1);
+    const existing = await db.select({ id: invoices.id }).from(invoices).where(eq71(invoices.invoiceNumber, inv.invoiceNumber)).limit(1);
     if (existing.length > 0) continue;
     let dbType = "deposit";
     if (inv.invoiceType === "deposit_refund") dbType = "deposit_refund";
@@ -41216,8 +44476,8 @@ async function runAutoMigrations() {
       );
       if (!columnExists) {
         const defaultClause = migration.defaultValue != null ? ` DEFAULT ${migration.defaultValue}` : "";
-        const sql28 = `ALTER TABLE "${migration.table}" ADD COLUMN "${migration.column}" ${migration.type}${defaultClause}`;
-        await client.execute(sql28);
+        const sql31 = `ALTER TABLE "${migration.table}" ADD COLUMN "${migration.column}" ${migration.type}${defaultClause}`;
+        await client.execute(sql31);
         console.log(`[AutoMigrate] Added column: ${migration.table}.${migration.column}`);
         columnsAdded++;
       }

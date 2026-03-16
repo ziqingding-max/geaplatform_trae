@@ -3,6 +3,12 @@
  *
  * Handles login, registration, password reset, and forgot password for workers.
  * Supports both Contractor (AOR) and Employee (EOR) worker types.
+ * Supports dual-identity: a single user can be both a Contractor and an Employee.
+ *
+ * Dual-identity flow:
+ * 1. login returns hasDualIdentity + availableRoles
+ * 2. If dual, frontend shows role selection page
+ * 3. User calls switchRole -> new JWT with activeRole
  */
 
 import { z } from "zod";
@@ -21,6 +27,7 @@ import {
   generateResetToken,
   getResetExpiryDate,
   resolveWorkerType,
+  hasDualIdentity,
 } from "../workerAuth";
 import { getDb } from "../../services/db/connection";
 import { workerUsers, contractors, employees } from "../../../drizzle/schema";
@@ -29,7 +36,8 @@ import { sendWorkerPasswordResetEmail } from "../../services/authEmailService";
 
 export const workerAuthRouter = workerRouter({
   /**
-   * Login with email and password
+   * Login with email and password.
+   * Returns hasDualIdentity flag so frontend knows whether to show role selection.
    */
   login: workerPublicProcedure
     .input(
@@ -39,7 +47,7 @@ export const workerAuthRouter = workerRouter({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const db = await getDb();
+      const db = getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
       const [user] = await db
@@ -76,15 +84,40 @@ export const workerAuthRouter = workerRouter({
         });
       }
 
-      const workerType = resolveWorkerType(user);
+      const isDual = hasDualIdentity(user);
+      const defaultRole = resolveWorkerType(user);
 
-      // Generate token with full identity info
+      // Build available roles list
+      const availableRoles: Array<{ role: "contractor" | "employee"; label: string }> = [];
+      if (user.contractorId) {
+        // Look up contractor name for display
+        let label = "Contractor";
+        try {
+          const [c] = await db.select({ firstName: contractors.firstName, lastName: contractors.lastName })
+            .from(contractors).where(eq(contractors.id, user.contractorId));
+          if (c) label = `Contractor - ${c.firstName} ${c.lastName}`;
+        } catch {}
+        availableRoles.push({ role: "contractor", label });
+      }
+      if (user.employeeId) {
+        let label = "Employee";
+        try {
+          const [e] = await db.select({ firstName: employees.firstName, lastName: employees.lastName })
+            .from(employees).where(eq(employees.id, user.employeeId));
+          if (e) label = `Employee - ${e.firstName} ${e.lastName}`;
+        } catch {}
+        availableRoles.push({ role: "employee", label });
+      }
+
+      // Sign JWT with default role (will be overridden by switchRole if dual)
+      const activeRole = isDual ? defaultRole : defaultRole;
       const token = await signWorkerToken({
         sub: user.id.toString(),
         email: user.email,
         contractorId: user.contractorId,
         employeeId: user.employeeId,
-        workerType,
+        activeRole,
+        workerType: activeRole,
         iss: "gea-worker",
       });
 
@@ -103,8 +136,59 @@ export const workerAuthRouter = workerRouter({
           email: user.email,
           contractorId: user.contractorId,
           employeeId: user.employeeId,
-          workerType,
+          activeRole,
+          workerType: activeRole,
         },
+        /** If true, frontend MUST show role selection page before proceeding */
+        hasDualIdentity: isDual,
+        /** Available roles for the selection page */
+        availableRoles,
+      };
+    }),
+
+  /**
+   * Switch active role (for dual-identity users).
+   * Re-signs the JWT with the new activeRole and sets a new cookie.
+   */
+  switchRole: protectedWorkerProcedure
+    .input(
+      z.object({
+        role: z.enum(["contractor", "employee"]),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const user = ctx.workerUser;
+
+      // Validate the user actually has the requested identity
+      if (input.role === "contractor" && !user.contractorId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "You do not have a contractor identity",
+        });
+      }
+      if (input.role === "employee" && !user.employeeId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "You do not have an employee identity",
+        });
+      }
+
+      // Re-sign JWT with new activeRole
+      const token = await signWorkerToken({
+        sub: user.id.toString(),
+        email: user.email,
+        contractorId: user.contractorId,
+        employeeId: user.employeeId,
+        activeRole: input.role,
+        workerType: input.role,
+        iss: "gea-worker",
+      });
+
+      setWorkerCookie(ctx.res, token);
+
+      return {
+        success: true,
+        activeRole: input.role,
       };
     }),
 
@@ -117,10 +201,39 @@ export const workerAuthRouter = workerRouter({
   }),
 
   /**
-   * Get current user — returns full context including workerType and profile info
+   * Get current user — returns full context including activeRole, dual identity info, and profile
    */
-  me: protectedWorkerProcedure.query(({ ctx }) => {
-    return ctx.workerUser;
+  me: protectedWorkerProcedure.query(async ({ ctx }) => {
+    const user = ctx.workerUser;
+    const db = getDb();
+
+    // Build available roles for the UI switch button
+    const availableRoles: Array<{ role: "contractor" | "employee"; label: string }> = [];
+    if (db) {
+      if (user.contractorId) {
+        let label = "Contractor";
+        try {
+          const [c] = await db.select({ firstName: contractors.firstName, lastName: contractors.lastName })
+            .from(contractors).where(eq(contractors.id, user.contractorId));
+          if (c) label = `Contractor - ${c.firstName} ${c.lastName}`;
+        } catch {}
+        availableRoles.push({ role: "contractor", label });
+      }
+      if (user.employeeId) {
+        let label = "Employee";
+        try {
+          const [e] = await db.select({ firstName: employees.firstName, lastName: employees.lastName })
+            .from(employees).where(eq(employees.id, user.employeeId));
+          if (e) label = `Employee - ${e.firstName} ${e.lastName}`;
+        } catch {}
+        availableRoles.push({ role: "employee", label });
+      }
+    }
+
+    return {
+      ...user,
+      availableRoles,
+    };
   }),
 
   /**
@@ -134,7 +247,7 @@ export const workerAuthRouter = workerRouter({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const db = await getDb();
+      const db = getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
       const [user] = await db
@@ -172,7 +285,8 @@ export const workerAuthRouter = workerRouter({
         })
         .where(eq(workerUsers.id, user.id));
 
-      const workerType = resolveWorkerType(user);
+      const activeRole = resolveWorkerType(user);
+      const isDual = hasDualIdentity(user);
 
       // Generate token for auto-login
       const token = await signWorkerToken({
@@ -180,13 +294,14 @@ export const workerAuthRouter = workerRouter({
         email: user.email,
         contractorId: user.contractorId,
         employeeId: user.employeeId,
-        workerType,
+        activeRole,
+        workerType: activeRole,
         iss: "gea-worker",
       });
 
       setWorkerCookie(ctx.res, token);
 
-      return { success: true };
+      return { success: true, hasDualIdentity: isDual };
     }),
 
   /**
@@ -200,7 +315,7 @@ export const workerAuthRouter = workerRouter({
       })
     )
     .mutation(async ({ input }) => {
-      const db = await getDb();
+      const db = getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
       const [user] = await db
@@ -279,7 +394,7 @@ export const workerAuthRouter = workerRouter({
   verifyResetToken: workerPublicProcedure
     .input(z.object({ token: z.string() }))
     .query(async ({ input }) => {
-      const db = await getDb();
+      const db = getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
       const [user] = await db
@@ -321,7 +436,7 @@ export const workerAuthRouter = workerRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Passwords do not match" });
       }
 
-      const db = await getDb();
+      const db = getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
       const [user] = await db
@@ -348,7 +463,7 @@ export const workerAuthRouter = workerRouter({
         })
         .where(eq(workerUsers.id, user.id));
 
-      const workerType = resolveWorkerType(user);
+      const activeRole = resolveWorkerType(user);
 
       // Auto-login after password reset
       const token = await signWorkerToken({
@@ -356,7 +471,8 @@ export const workerAuthRouter = workerRouter({
         email: user.email,
         contractorId: user.contractorId,
         employeeId: user.employeeId,
-        workerType,
+        activeRole,
+        workerType: activeRole,
         iss: "gea-worker",
       });
 
@@ -376,7 +492,7 @@ export const workerAuthRouter = workerRouter({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const db = await getDb();
+      const db = getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
       const [user] = await db

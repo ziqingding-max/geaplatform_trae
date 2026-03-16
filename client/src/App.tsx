@@ -66,6 +66,7 @@ const WorkerLeave = lazy(() => import("./pages/worker/WorkerLeave"));
 const WorkerReimbursements = lazy(() => import("./pages/worker/WorkerReimbursements"));
 const WorkerPayslips = lazy(() => import("./pages/worker/WorkerPayslips"));
 const WorkerDocuments = lazy(() => import("./pages/worker/WorkerDocuments"));
+const WorkerRoleSelect = lazy(() => import("./pages/worker/WorkerRoleSelect"));
 
 const PortalLogin = lazy(() => import("./pages/portal/PortalLogin"));
 const PortalRegister = lazy(() => import("./pages/portal/PortalRegister"));
@@ -142,6 +143,7 @@ function WorkerRouter() {
             <Route path={`${basePath}/invite/:token`} component={WorkerRegister} />
             <Route path={`${basePath}/forgot-password`} component={WorkerForgotPassword} />
             <Route path={`${basePath}/reset-password`} component={WorkerResetPassword} />
+            <Route path={`${basePath}/select-role`} component={WorkerRoleSelect} />
             <Route path={`${basePath}/onboarding`} component={WorkerOnboarding} />
             <Route path={`${basePath}/dashboard`} component={WorkerDashboard} />
             <Route path={`${basePath}/milestones`} component={WorkerMilestones} />

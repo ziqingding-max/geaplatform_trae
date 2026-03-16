@@ -17,8 +17,13 @@ export default function WorkerLogin() {
   const [error, setError] = useState("");
 
   const loginMutation = workerTrpc.auth.login.useMutation({
-    onSuccess: () => {
-      setLocation(workerPath("/dashboard"));
+    onSuccess: (data) => {
+      if (data.hasDualIdentity) {
+        // Dual identity — redirect to role selection page
+        setLocation(workerPath("/select-role"));
+      } else {
+        setLocation(workerPath("/dashboard"));
+      }
     },
     onError: (err) => {
       setError(err.message || "Login failed");
