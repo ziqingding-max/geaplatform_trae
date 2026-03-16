@@ -1297,7 +1297,17 @@ function EmployeeDetail({ id }: { id: number }) {
               <p className="text-sm text-muted-foreground">Leave balances for {new Date().getFullYear()}. Entitlements are defined by Customer Leave Policy. Used days are auto-calculated from approved leave records.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {leaveBalances && leaveBalances.length > 0 ? leaveBalances.map((lb: any) => (
+              {leaveBalances && leaveBalances.length > 0 ? leaveBalances
+                .filter((lb: any) => {
+                  // Filter out gender-mismatched balances where used === 0
+                  const applicable = lb.applicableGender || "all";
+                  if (applicable === "all") return true;
+                  const empGender = employee?.gender;
+                  if (!empGender || empGender === "other" || empGender === "prefer_not_to_say") return true;
+                  if (applicable === empGender) return true;
+                  return (lb.used ?? 0) > 0; // Keep if used > 0 (historical data)
+                })
+                .map((lb: any) => (
                 <Card key={lb.id}>
                   <CardContent className="p-4">
                     <div className="flex justify-between items-start mb-3">

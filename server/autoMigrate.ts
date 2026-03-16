@@ -147,6 +147,13 @@ const REQUIRED_COLUMNS: ColumnMigration[] = [
     column: "payrollRunId",
     type: "INTEGER",
   },
+  // ── leave_types (gender-based filtering) ──
+  {
+    table: "leave_types",
+    column: "applicableGender",
+    type: "TEXT NOT NULL",
+    defaultValue: "'all'",
+  },
 ];
 
 /**
@@ -167,6 +174,10 @@ const BACKFILL_QUERIES: string[] = [
   `UPDATE "contractor_milestones" SET "customerId" = (
     SELECT "customerId" FROM "contractors" WHERE "contractors"."id" = "contractor_milestones"."contractorId"
   ) WHERE "customerId" = 0`,
+
+  // Backfill leave_types.applicableGender based on leave type name keywords
+  `UPDATE "leave_types" SET "applicableGender" = 'female' WHERE LOWER("leaveTypeName") LIKE '%maternity%'`,
+  `UPDATE "leave_types" SET "applicableGender" = 'male' WHERE LOWER("leaveTypeName") LIKE '%paternity%'`,
 ];
 
 export async function runAutoMigrations(): Promise<void> {

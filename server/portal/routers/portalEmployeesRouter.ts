@@ -174,12 +174,13 @@ export const portalEmployeesRouter = portalRouter({
         .from(employeeDocuments)
         .where(eq(employeeDocuments.employeeId, input.id));
 
-      // Get leave balances with leave type names
+      // Get leave balances with leave type names and gender applicability
       const balances = await db
         .select({
           id: leaveBalances.id,
           leaveTypeId: leaveBalances.leaveTypeId,
           leaveTypeName: leaveTypes.leaveTypeName,
+          applicableGender: leaveTypes.applicableGender,
           year: leaveBalances.year,
           totalEntitlement: leaveBalances.totalEntitlement,
           used: leaveBalances.used,
@@ -404,6 +405,7 @@ export const portalEmployeesRouter = portalRouter({
           annualEntitlement: leaveTypes.annualEntitlement,
           isPaid: leaveTypes.isPaid,
           requiresApproval: leaveTypes.requiresApproval,
+          applicableGender: leaveTypes.applicableGender,
         })
         .from(leaveTypes)
         .where(eq(leaveTypes.countryCode, input.countryCode));

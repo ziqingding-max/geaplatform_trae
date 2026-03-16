@@ -187,6 +187,7 @@ export const countriesRouter = router({
           annualEntitlement: z.number().default(0),
           isPaid: z.boolean().default(true),
           requiresApproval: z.boolean().default(true),
+          applicableGender: z.enum(["male", "female", "all"]).default("all"),
           description: z.string().optional(),
         })
       )
@@ -212,6 +213,7 @@ export const countriesRouter = router({
             annualEntitlement: z.number().optional(),
             isPaid: z.boolean().optional(),
             requiresApproval: z.boolean().optional(),
+            applicableGender: z.enum(["male", "female", "all"]).optional(),
             description: z.string().optional(),
           }),
         })

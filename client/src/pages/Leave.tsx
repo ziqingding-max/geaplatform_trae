@@ -199,7 +199,19 @@ export default function Leave() {
     const bal = createFormBalancesData.find((b: any) => b.leaveTypeId === leaveTypeId);
     return bal ? { remaining: Number(bal.remaining ?? 0), totalEntitlement: Number(bal.totalEntitlement ?? 0) } : null;
   };
-  const adminSelectedLeaveType = leaveTypesData?.find((lt: any) => lt.id === formData.leaveTypeId);
+  // Filter leave types by employee gender
+  const filteredLeaveTypes = useMemo(() => {
+    if (!leaveTypesData || !selectedEmployee) return leaveTypesData;
+    const empGender = selectedEmployee.gender;
+    return leaveTypesData.filter((lt: any) => {
+      const applicable = lt.applicableGender || "all";
+      if (applicable === "all") return true;
+      if (!empGender || empGender === "other" || empGender === "prefer_not_to_say") return true;
+      return applicable === empGender;
+    });
+  }, [leaveTypesData, selectedEmployee]);
+
+  const adminSelectedLeaveType = filteredLeaveTypes?.find((lt: any) => lt.id === formData.leaveTypeId);
   const adminRequestedDays = parseFloat(formData.days || "0");
   const adminSelectedBalance = formData.leaveTypeId ? getCreateFormBalance(formData.leaveTypeId) : null;
   const adminIsInsufficientBalance = adminSelectedLeaveType?.isPaid !== false && adminSelectedBalance !== null && adminRequestedDays > 0 && adminRequestedDays > adminSelectedBalance.remaining;
@@ -214,6 +226,18 @@ export default function Leave() {
     { countryCode: editingEmployee?.country || "" },
     { enabled: !!editingEmployee?.country }
   );
+
+  // Filter edit form leave types by employee gender
+  const filteredEditLeaveTypes = useMemo(() => {
+    if (!editLeaveTypesData || !editingEmployee) return editLeaveTypesData;
+    const empGender = editingEmployee.gender;
+    return editLeaveTypesData.filter((lt: any) => {
+      const applicable = lt.applicableGender || "all";
+      if (applicable === "all") return true;
+      if (!empGender || empGender === "other" || empGender === "prefer_not_to_say") return true;
+      return applicable === empGender;
+    });
+  }, [editLeaveTypesData, editingEmployee]);
 
   // Employee name lookup
   const employeeMap = useMemo(() => {
@@ -419,7 +443,7 @@ export default function Leave() {
                             <SelectValue placeholder={selectedEmployee ? t("leave.form.placeholder.selectLeaveType") : t("leave.form.placeholder.selectEmployeeFirst")} />
                             </SelectTrigger>
                             <SelectContent>
-                            {leaveTypesData?.map((lt: any) => {
+                            {filteredLeaveTypes?.map((lt: any) => {
                                 const bal = getCreateFormBalance(lt.id);
                                 const balLabel = lt.isPaid === false
                                   ? t("leave.type.unpaid")
@@ -432,7 +456,7 @@ export default function Leave() {
                                 </SelectItem>
                                 );
                             })}
-                            {(!leaveTypesData || leaveTypesData.length === 0) && selectedEmployee && (
+                            {(!filteredLeaveTypes || filteredLeaveTypes.length === 0) && selectedEmployee && (
                                 <SelectItem value="__none" disabled>{t("leave.form.noLeaveTypes", { country: selectedEmployee.country })}</SelectItem>
                             )}
                             </SelectContent>
@@ -813,7 +837,7 @@ export default function Leave() {
                 >
                   <SelectTrigger><SelectValue placeholder={t("leave.form.placeholder.selectLeaveType")} /></SelectTrigger>
                   <SelectContent>
-                    {editLeaveTypesData?.map((lt: any) => (
+                    {filteredEditLeaveTypes?.map((lt: any) => (
                       <SelectItem key={lt.id} value={String(lt.id)}>
                         {lt.leaveTypeName} {lt.isPaid ? "" : `(${t("leave.type.unpaid")})`} {lt.annualEntitlement ? `— ${lt.annualEntitlement} ${t("leave.type.daysPerYear")}` : ""}
                       </SelectItem>

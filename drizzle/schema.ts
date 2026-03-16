@@ -119,6 +119,7 @@ export const leaveTypes = sqliteTable(
     annualEntitlement: integer("annualEntitlement").default(0), // Days per year
     isPaid: integer("isPaid", { mode: "boolean" }).default(true).notNull(),
     requiresApproval: integer("requiresApproval", { mode: "boolean" }).default(true).notNull(),
+    applicableGender: text("applicableGender", { enum: ["male", "female", "all"] }).default("all").notNull(), // Which gender this leave type applies to
     description: text("description"),
     createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
     updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
