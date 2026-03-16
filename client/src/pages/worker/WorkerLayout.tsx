@@ -156,8 +156,13 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
     <div className="min-h-screen bg-muted/20">
       {/* ===== Desktop Sidebar (hidden on mobile) ===== */}
       <aside className="hidden md:flex w-64 bg-background border-r flex-col fixed h-full z-30">
-        <div className="p-6 border-b h-16 flex items-center">
-          <h1 className="font-bold text-xl">GEA Worker</h1>
+        <div className="px-4 border-b h-16 flex items-center gap-2">
+          <img
+            src="/brand/gea-logo-icon-green.png"
+            alt="GEA"
+            className="w-8 h-8 flex-shrink-0 object-contain"
+          />
+          <span className="font-bold text-lg">Worker Portal</span>
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
@@ -210,7 +215,14 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
 
       {/* ===== Mobile Header (hidden on desktop) ===== */}
       <header className="md:hidden fixed top-0 left-0 right-0 h-14 bg-background border-b flex items-center justify-between px-4 z-30">
-        <h1 className="font-bold text-lg">GEA Worker</h1>
+        <div className="flex items-center gap-2">
+          <img
+            src="/brand/gea-logo-icon-green.png"
+            alt="GEA"
+            className="w-7 h-7 flex-shrink-0 object-contain"
+          />
+          <span className="font-bold text-lg">Worker Portal</span>
+        </div>
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

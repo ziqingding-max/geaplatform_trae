@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { workerTrpc } from "@/lib/workerTrpc";
 import WorkerLayout from "./WorkerLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, CalendarDays, Plus, X, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,6 +24,22 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+
+// ── Business days calculation (weekdays only, matching Client Portal & Admin) ──
+function calcBusinessDays(start: string, end: string): number {
+  if (!start || !end) return 0;
+  const s = new Date(start);
+  const e = new Date(end);
+  if (e < s) return 0;
+  let count = 0;
+  const cur = new Date(s);
+  while (cur <= e) {
+    const day = cur.getDay();
+    if (day !== 0 && day !== 6) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
 
 const statusStyles: Record<string, string> = {
   submitted: "bg-yellow-100 text-yellow-700",
@@ -50,6 +66,7 @@ export default function WorkerLeave() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [days, setDays] = useState("");
+  const [isHalfDay, setIsHalfDay] = useState(false);
   const [reason, setReason] = useState("");
 
   // Insufficient balance dialog state
@@ -114,7 +131,36 @@ export default function WorkerLeave() {
     setStartDate("");
     setEndDate("");
     setDays("");
+    setIsHalfDay(false);
     setReason("");
+  };
+
+  // Auto-calculate days when dates change (matching Client Portal & Admin)
+  const recalcDays = (start: string, end: string, halfDay: boolean) => {
+    if (start && end) {
+      let d = calcBusinessDays(start, end);
+      if (halfDay && d >= 1) d = d - 0.5;
+      if (d > 0) {
+        setDays(String(Math.max(d, 0.5)));
+      } else {
+        setDays("");
+      }
+    }
+  };
+
+  const handleStartDateChange = (value: string) => {
+    setStartDate(value);
+    recalcDays(value, endDate, isHalfDay);
+  };
+
+  const handleEndDateChange = (value: string) => {
+    setEndDate(value);
+    recalcDays(startDate, value, isHalfDay);
+  };
+
+  const handleHalfDayToggle = (checked: boolean) => {
+    setIsHalfDay(checked);
+    recalcDays(startDate, endDate, checked);
   };
 
   const handleSubmit = (confirmAutoSplit: boolean = false) => {
@@ -135,6 +181,20 @@ export default function WorkerLeave() {
   const handleConfirmAutoSplit = () => {
     handleSubmit(true);
   };
+
+  // Insufficient balance warning (inline, before submit)
+  const selectedBalance = leaveTypeId
+    ? balances?.find((b: any) => b.leaveTypeId === parseInt(leaveTypeId))
+    : null;
+  const selectedLeaveType = leaveTypeId
+    ? leaveTypes?.find((lt: any) => lt.id === parseInt(leaveTypeId))
+    : null;
+  const requestedDays = parseFloat(days || "0");
+  const isInsufficientBalance =
+    selectedLeaveType?.isPaid !== false &&
+    selectedBalance &&
+    requestedDays > 0 &&
+    requestedDays > Number(selectedBalance.remaining ?? 0);
 
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
 
@@ -269,11 +329,11 @@ export default function WorkerLeave() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label>Start Date *</Label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <Input type="date" value={startDate} onChange={(e) => handleStartDateChange(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label>End Date *</Label>
-                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                  <Input type="date" value={endDate} onChange={(e) => handleEndDateChange(e.target.value)} min={startDate || undefined} />
                 </div>
               </div>
               <div className="space-y-2">
@@ -282,11 +342,36 @@ export default function WorkerLeave() {
                   type="number"
                   step="0.5"
                   min="0.5"
-                  placeholder="e.g. 1, 0.5, 3"
+                  placeholder="Auto-calculated"
                   value={days}
                   onChange={(e) => setDays(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">Use 0.5 for half-day leave</p>
+                <p className="text-xs text-muted-foreground">Auto-calculated as business days (weekdays). Adjust manually if needed.</p>
+              </div>
+              {/* Insufficient balance warning (inline) */}
+              {isInsufficientBalance && selectedBalance && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-sm font-medium text-amber-800">
+                    Insufficient leave balance
+                  </p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    You are requesting {requestedDays} day(s) but only {selectedBalance.remaining} day(s) remaining.
+                    The excess {(requestedDays - Number(selectedBalance.remaining)).toFixed(1)} day(s) will be automatically converted to Unpaid Leave.
+                  </p>
+                </div>
+              )}
+              {/* Half-day leave option (matching Client Portal & Admin) */}
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="isHalfDay"
+                  checked={isHalfDay}
+                  onChange={(e) => handleHalfDayToggle(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <Label htmlFor="isHalfDay" className="text-sm font-normal cursor-pointer">
+                  Half-day leave (deduct 0.5 day)
+                </Label>
               </div>
               <div className="space-y-2">
                 <Label>Reason (optional)</Label>

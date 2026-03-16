@@ -103,7 +103,7 @@ export default function WorkerRegister() {
             className="h-16 object-contain mb-4"
           />
           <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-            Join GEA Worker Portal
+            Join Worker Portal
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Set up your account to get started

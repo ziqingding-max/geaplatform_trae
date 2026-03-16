@@ -47,7 +47,7 @@ export default function WorkerLogin() {
             className="h-16 object-contain mb-4"
           />
           <h1 className="text-2xl font-bold tracking-tight" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-            GEA Worker Portal
+            Worker Portal
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Access your profile, invoices, and milestones

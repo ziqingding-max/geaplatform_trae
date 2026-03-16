@@ -28804,8 +28804,28 @@ var workerReimbursementsRouter = workerRouter({
     };
   }),
   /**
+   * Upload receipt file (base64 encoded).
+   * Returns the URL and file key for use in the submit mutation.
+   */
+  uploadReceipt: employeeOnlyProcedure.input(
+    z52.object({
+      fileBase64: z52.string(),
+      fileName: z52.string(),
+      mimeType: z52.string().default("application/pdf")
+    })
+  ).mutation(async ({ input }) => {
+    const fileBuffer = Buffer.from(input.fileBase64, "base64");
+    if (fileBuffer.length > 20 * 1024 * 1024) {
+      throw new TRPCError50({ code: "BAD_REQUEST", message: "File size must be under 20MB" });
+    }
+    const randomSuffix = Math.random().toString(36).substring(2, 10);
+    const fileKey = `reimbursement-receipts/${Date.now()}-${randomSuffix}-${input.fileName}`;
+    const { url } = await storagePut(fileKey, fileBuffer, input.mimeType);
+    return { url, fileKey };
+  }),
+  /**
    * Submit a reimbursement request.
-   * Employee provides category, amount, description, and optionally a receipt file.
+   * Employee provides category, amount, description, and a receipt file (required).
    */
   submit: employeeOnlyProcedure.input(
     z52.object({
@@ -28824,7 +28844,8 @@ var workerReimbursementsRouter = workerRouter({
       amount: z52.string(),
       // Decimal as string
       currency: z52.string().length(3).default("USD"),
-      receiptFileUrl: z52.string().url().optional(),
+      receiptFileUrl: z52.string(),
+      // Now required
       receiptFileKey: z52.string().optional(),
       effectiveMonth: z52.string()
       // YYYY-MM-01
@@ -28844,7 +28865,7 @@ var workerReimbursementsRouter = workerRouter({
       description: input.description || null,
       amount: input.amount,
       currency: input.currency,
-      receiptFileUrl: input.receiptFileUrl || null,
+      receiptFileUrl: input.receiptFileUrl,
       receiptFileKey: input.receiptFileKey || null,
       status: "submitted",
       submittedBy: ctx.workerUser.id,
