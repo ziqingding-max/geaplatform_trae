@@ -582,8 +582,8 @@ export async function seedMigration() {
   await seedCountryGuides(db);
 
   // Seed business migration data (customers, employees, contacts)
-  // This is idempotent (upsert logic) — safe to run on every startup in all environments
-  await seedBusinessMigrationData(db);
+  // Data already imported to production — no longer needed on startup
+  // await seedBusinessMigrationData(db);
 
   console.log('[Seed] All seed operations completed.');
 }
