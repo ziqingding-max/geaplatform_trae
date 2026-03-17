@@ -442,6 +442,23 @@ export const invoicesRouter = router({
 
       await updateInvoice(input.id, updateData);
 
+      // If exchangeRateWithMarkup changed, sync to all foreign-currency line items and recalculate totals
+      if (input.data.exchangeRateWithMarkup !== undefined) {
+        const currentInvoice = await getInvoiceById(input.id);
+        const allItems = await listInvoiceItemsByInvoice(input.id);
+        const settlementCurrency = currentInvoice?.currency || 'USD';
+
+        for (const item of allItems) {
+          if (item.localCurrency && item.localCurrency !== settlementCurrency) {
+            await updateInvoiceItem(item.id, {
+              exchangeRateWithMarkup: input.data.exchangeRateWithMarkup,
+            });
+          }
+        }
+
+        await recalculateInvoiceTotals(input.id);
+      }
+
       // If billingEntityId changed, regenerate invoice number
       if (input.data.billingEntityId !== undefined) {
         const invoice = await getInvoiceById(input.id);
