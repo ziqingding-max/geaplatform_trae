@@ -14,6 +14,7 @@ import puppeteer from "puppeteer-core";
 import { marked } from "marked";
 import { existsSync } from "fs";
 import { execSync } from "child_process";
+import { PDFDocument } from "pdf-lib";
 
 const CHROMIUM_ARGS = [
   "--no-sandbox",
@@ -89,6 +90,11 @@ const BASE_CSS = `
     position: relative;
     page-break-after: always;
     background: white;
+  }
+  .page.content-page {
+    /* Content pages use Puppeteer native header/footer, so reduce top/bottom padding */
+    padding-top: 4mm;
+    padding-bottom: 6mm;
   }
   .page:last-child { page-break-after: avoid; min-height: auto; }
 
@@ -577,6 +583,8 @@ async function fetchLogoAsBase64(url: string): Promise<string | null> {
 }
 
 // ─── Helper: render HTML to PDF buffer ───────────────────────────────────────────────
+
+/** Render a single HTML document to PDF (no native header/footer). Used for cover pages. */
 async function htmlToPdf(html: string): Promise<Buffer> {
   const browser = await launchBrowser();
   try {
@@ -591,6 +599,43 @@ async function htmlToPdf(html: string): Promise<Buffer> {
   } finally {
     await browser.close();
   }
+}
+
+interface HtmlToPdfWithHeaderOptions {
+  headerTemplate: string;
+  footerTemplate: string;
+}
+
+/** Render HTML to PDF with Puppeteer native header/footer on every page. Used for content pages. */
+async function htmlToPdfWithHeader(html: string, options: HtmlToPdfWithHeaderOptions): Promise<Buffer> {
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "18mm", right: "0", bottom: "16mm", left: "0" },
+      displayHeaderFooter: true,
+      headerTemplate: options.headerTemplate,
+      footerTemplate: options.footerTemplate,
+    });
+    return Buffer.from(pdf);
+  } finally {
+    await browser.close();
+  }
+}
+
+/** Merge multiple PDF buffers into a single PDF using pdf-lib */
+async function mergePdfs(pdfBuffers: Buffer[]): Promise<Buffer> {
+  const merged = await PDFDocument.create();
+  for (const buf of pdfBuffers) {
+    const doc = await PDFDocument.load(buf);
+    const pages = await merged.copyPages(doc, doc.getPageIndices());
+    pages.forEach((p) => merged.addPage(p));
+  }
+  const bytes = await merged.save();
+  return Buffer.from(bytes);
 }
 
 // ─── Branding Info (from Billing Entity) ────────────────────────────────────
@@ -680,18 +725,34 @@ function coverPage(title: string, subtitle: string, date: string, branding: Bran
 
 function contentPage(headerTitle: string, pageNum: number, totalPages: number, body: string, branding: BrandingInfo = DEFAULT_BRANDING): string {
   return `
-  <div class="page">
-    <div class="page-header">
-      ${logoHtml(branding, "header")}
-      <span class="page-header-title">${headerTitle}</span>
-    </div>
+  <div class="page content-page">
     ${body}
-    <div class="page-footer">
+  </div>`;
+}
+
+/** Build Puppeteer-native header/footer templates that appear on every printed page */
+function buildPdfHeaderFooter(headerTitle: string, branding: BrandingInfo): { headerTemplate: string; footerTemplate: string } {
+  // Puppeteer headerTemplate/footerTemplate run in an isolated context.
+  // All styles must be inline. Images must be base64.
+  const logoSrc = branding.logoBase64 || branding.logoUrl;
+  const logoEl = logoSrc
+    ? `<img src="${logoSrc}" style="height:7mm;max-width:50mm;object-fit:contain;" />`
+    : `<span style="font-size:11pt;font-weight:700;color:${BRAND.primary};">${branding.shortName}</span>`;
+
+  const headerTemplate = `
+    <div style="width:100%;padding:4mm 16mm 2mm 16mm;display:flex;justify-content:space-between;align-items:center;border-bottom:0.5pt solid ${BRAND.border};font-family:'Inter',sans-serif;font-size:9pt;">
+      ${logoEl}
+      <span style="font-size:9pt;color:${BRAND.muted};">${headerTitle}</span>
+    </div>`;
+
+  const footerTemplate = `
+    <div style="width:100%;padding:2mm 16mm 4mm 16mm;display:flex;justify-content:space-between;align-items:center;border-top:0.5pt solid ${BRAND.border};font-family:'Inter',sans-serif;font-size:7.5pt;color:${BRAND.muted};">
       <span>Confidential &amp; Proprietary</span>
       <span>${branding.fullName}</span>
-      <span>Page ${pageNum}</span>
-    </div>
-  </div>`;
+      <span>Page <span class="pageNumber"></span></span>
+    </div>`;
+
+  return { headerTemplate, footerTemplate };
 }
 
 // ─── Country Guide PDF ────────────────────────────────────────────────────────
@@ -721,34 +782,40 @@ export async function generateCountryGuidePdf(
   const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const headerTitle = `Country Guide: ${country.countryName}`;
 
-  let pages = "";
-
-  // 1. Cover — with metadata
+  // ── 1. Cover page (rendered separately, no header/footer) ──
   const guideMeta: CoverMeta[] = [
     { label: "Country", value: country.countryName },
     { label: "Chapters", value: `${chapters.length}` },
   ];
-  pages += coverPage("Country Guide", country.countryName, date, branding, guideMeta);
+  const coverHtml = `<!DOCTYPE html>
+<html lang="${locale}">
+<head><meta charset="UTF-8"><style>${BASE_CSS}</style></head>
+<body>${coverPage("Country Guide", country.countryName, date, branding, guideMeta)}</body>
+</html>`;
+  const coverPdf = await htmlToPdf(coverHtml);
 
-  // 2. Table of Contents
+  // ── 2. Content pages (rendered with Puppeteer native header/footer) ──
+  let contentPages = "";
+
+  // Table of Contents
   let tocRows = chapters.map((ch, i) => `
     <div class="toc-item">
       <span class="toc-num">${i + 1}.</span>
       <span class="toc-title">${locale === "zh" && ch.titleZh ? ch.titleZh : ch.titleEn}</span>
     </div>`).join("");
 
-  pages += contentPage(headerTitle, 2, chapters.length + 2, `
+  contentPages += contentPage(headerTitle, 2, chapters.length + 2, `
     <h2>Table of Contents</h2>
     <div style="margin-top: 4mm;">${tocRows}</div>
   `, branding);
 
-  // 3. Chapter pages
+  // Chapter pages
   chapters.forEach((ch, i) => {
     const title = locale === "zh" && ch.titleZh ? ch.titleZh : ch.titleEn;
     const content = locale === "zh" && ch.contentZh ? ch.contentZh : ch.contentEn;
     const htmlContent = mdToHtml(content);
 
-    pages += contentPage(headerTitle, i + 3, chapters.length + 2, `
+    contentPages += contentPage(headerTitle, i + 3, chapters.length + 2, `
       <div class="chapter-heading">
         <div class="chapter-number">${i + 1}</div>
         <div class="chapter-title">${title}</div>
@@ -757,18 +824,17 @@ export async function generateCountryGuidePdf(
     `, branding);
   });
 
-  const html = `<!DOCTYPE html>
+  const contentHtml = `<!DOCTYPE html>
 <html lang="${locale}">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${headerTitle}</title>
-  <style>${BASE_CSS}</style>
-</head>
-<body>${pages}</body>
+<head><meta charset="UTF-8"><style>${BASE_CSS}</style></head>
+<body>${contentPages}</body>
 </html>`;
 
-  return htmlToPdf(html);
+  const { headerTemplate, footerTemplate } = buildPdfHeaderFooter(headerTitle, branding);
+  const contentPdf = await htmlToPdfWithHeader(contentHtml, { headerTemplate, footerTemplate });
+
+  // ── 3. Merge cover + content ──
+  return mergePdfs([coverPdf, contentPdf]);
 }
 
 // ─── Quotation PDF ────────────────────────────────────────────────────────────
@@ -826,9 +892,7 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
     ? new Date(data.validUntil).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "N/A";
 
-  let pages = "";
-
-  // 1. Cover — with metadata
+  // ── 1. Cover page (rendered separately, no header/footer) ──
   const coverMeta: CoverMeta[] = [
     { label: "Prepared For", value: data.customerName },
     { label: "Reference", value: data.quotationNumber },
@@ -836,7 +900,15 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
   if (data.createdByName) {
     coverMeta.push({ label: "Your Contact", value: data.createdByName });
   }
-  pages += coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date, branding, coverMeta);
+  const coverHtml = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><style>${BASE_CSS}</style></head>
+<body>${coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date, branding, coverMeta)}</body>
+</html>`;
+  const coverPdf = await htmlToPdf(coverHtml);
+
+  // ── 2. Content pages (rendered with Puppeteer native header/footer) ──
+  let pages = "";
 
   // 2. Company Introduction — uses billing entity name dynamically
   const companyIntroHtml = data.companyIntro
@@ -1035,7 +1107,7 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
     </div>
   `, branding);
 
-  const html = `<!DOCTYPE html>
+  const contentHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1045,5 +1117,9 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
 <body>${pages}</body>
 </html>`;
 
-  return htmlToPdf(html);
+  const { headerTemplate, footerTemplate } = buildPdfHeaderFooter(headerTitle, branding);
+  const contentPdf = await htmlToPdfWithHeader(contentHtml, { headerTemplate, footerTemplate });
+
+  // ── 3. Merge cover + content ──
+  return mergePdfs([coverPdf, contentPdf]);
 }
