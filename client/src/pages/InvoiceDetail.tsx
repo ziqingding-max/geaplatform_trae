@@ -24,6 +24,7 @@ import {
   RefreshCw, ExternalLink, Link2, Wallet, Landmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CURRENCIES as CURRENCY_LIST } from "@/components/CurrencySelect";
 import { formatCurrency, formatDate, formatAmount, formatMonth } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { useState, useEffect, useMemo } from "react";
@@ -93,7 +94,7 @@ const itemTypeLabels: Record<string, string> = {
 
 const ITEM_TYPE_OPTIONS = Object.entries(itemTypeLabels).map(([value, label]) => ({ value, label }));
 
-const CURRENCIES = ["USD", "EUR", "GBP", "SGD", "HKD", "CNY", "THB", "VND", "IDR", "MYR", "PHP", "JPY", "KRW", "AUD", "NZD", "CAD", "CHF", "INR", "AED", "SAR"];
+const CURRENCIES = CURRENCY_LIST.map(c => c.code);
 
 /* ========== Helper ========== */
 
