@@ -313,6 +313,9 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
     limit: 200,
   });
 
+  // Separate unfiltered query for pipeline summary cards — always fetches ALL leads
+  const { data: allLeadsData } = trpc.sales.list.useQuery({ limit: 200 });
+
   const { data: usersData } = trpc.sales.assignableUsers.useQuery();
 
   // Filter active leads client-side when "active" filter is selected
@@ -371,8 +374,8 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
     });
   }
 
-  // Pipeline summary counts
-  const allLeads = data?.data || [];
+  // Pipeline summary counts — always use the unfiltered query so cards show correct totals
+  const allLeads = allLeadsData?.data || [];
   const pipelineCounts: Record<string, number> = {};
   for (const s of PIPELINE_STATUSES) {
     pipelineCounts[s] = allLeads.filter((l: any) => l.status === s).length;
