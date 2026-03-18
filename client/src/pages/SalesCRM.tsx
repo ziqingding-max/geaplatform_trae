@@ -669,6 +669,14 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
     onError: (err) => toast.error(err.message),
   });
 
+  const deleteDocMutation = trpc.sales.documents.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Document deleted");
+      refetchDocuments();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   if (isLoading) {
     return (
       <Layout breadcrumb={["GEA", t("sales.title"), "..."]}>
@@ -916,6 +924,19 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                                                 </a>
                                             </Button>
                                         )}
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="text-red-500 hover:text-red-700"
+                                          disabled={deleteDocMutation.isPending}
+                                          onClick={() => {
+                                            if (confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
+                                              deleteDocMutation.mutate({ id: doc.id });
+                                            }
+                                          }}
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </Button>
                                     </div>
                                 </div>
                             ))}

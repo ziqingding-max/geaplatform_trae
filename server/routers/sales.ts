@@ -20,7 +20,7 @@ import {
   createLeadChangeLog,
   listLeadChangeLogs,
 } from "../db";
-import { storagePut, storageGet, storageDownload } from "../storage";
+import { storagePut, storageGet, storageDownload, storageDelete } from "../storage";
 import { quotations, salesDocuments, customerContracts, leadChangeLogs } from "../../drizzle/schema";
 import { desc, eq, and, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -780,6 +780,21 @@ export const salesRouter = router({
       .mutation(async ({ input, ctx }) => {
         const db = getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+        // Fetch the document first to get the S3 file key
+        const doc = await db.query.salesDocuments.findFirst({
+          where: eq(salesDocuments.id, input.id),
+        });
+        if (!doc) throw new TRPCError({ code: "NOT_FOUND", message: "Document not found" });
+
+        // Delete from S3/OSS if file key exists
+        if (doc.fileKey) {
+          try {
+            await storageDelete(doc.fileKey);
+          } catch (e) {
+            console.warn("[Sales] Failed to delete S3 file, proceeding with DB deletion:", e);
+          }
+        }
 
         await db.delete(salesDocuments).where(eq(salesDocuments.id, input.id));
 

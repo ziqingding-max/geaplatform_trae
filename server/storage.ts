@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ENV } from "./_core/env";
 
@@ -144,4 +144,28 @@ export async function storageDownload(key: string): Promise<{ content: Buffer; c
         console.error("[Storage] Download failed:", error);
         throw new Error(`Storage download failed: ${error}`);
     }
+}
+
+/**
+ * Delete a file from Alibaba Cloud OSS
+ */
+export async function storageDelete(key: string): Promise<void> {
+  if (!ENV.ossAccessKeyId || !ENV.ossAccessKeySecret || !BUCKET_NAME) {
+    console.warn("[Storage] OSS credentials not configured. Skipping delete.");
+    return;
+  }
+
+  const normalizedKey = key.replace(/^\/+/, "");
+
+  const command = new DeleteObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: normalizedKey,
+  });
+
+  try {
+    await s3Client.send(command);
+  } catch (error) {
+    console.error("[Storage] Delete failed:", error);
+    throw new Error(`Storage delete failed: ${error}`);
+  }
 }
