@@ -1,9 +1,9 @@
 import { getDb } from "../db";
-import { quotations, customers, salesLeads, billingEntities, users } from "../../drizzle/schema";
+import { quotations, customers, salesLeads, billingEntities, users, salesDocuments } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { calculationService } from "./calculationService";
 import { getExchangeRate } from "./exchangeRateService";
-import { storagePut, storageGet } from "../storage";
+import { storagePut, storageGet, storageDelete } from "../storage";
 import { generateQuotationPdf, BrandingInfo } from "./htmlPdfService";
 import { countryGuidePdfService } from "./countryGuidePdfService";
 import { mergePdfs } from "./contentMergeService";
@@ -264,6 +264,39 @@ export const quotationService = {
     }
 
     return { id: input.id };
+  },
+
+  deleteQuotation: async (quotationId: number) => {
+    const db = getDb();
+    if (!db) throw new Error("Database connection failed");
+
+    // 1. Verify quotation exists and is in draft status
+    const quotation = await db.query.quotations.findFirst({
+      where: eq(quotations.id, quotationId),
+    });
+    if (!quotation) throw new Error("Quotation not found");
+    if (quotation.status !== "draft") {
+      throw new Error("Only draft quotations can be deleted");
+    }
+
+    // 2. Unlink associated salesDocuments (set quotationId to null)
+    await db.update(salesDocuments)
+      .set({ quotationId: null })
+      .where(eq(salesDocuments.quotationId, quotationId));
+
+    // 3. Clean up PDF from OSS storage (non-blocking: delete succeeds even if OSS cleanup fails)
+    if (quotation.pdfKey) {
+      try {
+        await storageDelete(quotation.pdfKey);
+      } catch (err) {
+        console.warn(`[Quotation] Failed to delete PDF from storage for quotation #${quotationId}:`, err);
+      }
+    }
+
+    // 4. Hard delete the quotation record
+    await db.delete(quotations).where(eq(quotations.id, quotationId));
+
+    return { success: true };
   },
 
   generatePdf: async (quotationId: number, includeCountryGuide = false) => {

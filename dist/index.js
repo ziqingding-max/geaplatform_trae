@@ -22274,6 +22274,27 @@ var quotationService = {
     }
     return { id: input.id };
   },
+  deleteQuotation: async (quotationId) => {
+    const db = getDb();
+    if (!db) throw new Error("Database connection failed");
+    const quotation = await db.query.quotations.findFirst({
+      where: eq37(quotations.id, quotationId)
+    });
+    if (!quotation) throw new Error("Quotation not found");
+    if (quotation.status !== "draft") {
+      throw new Error("Only draft quotations can be deleted");
+    }
+    await db.update(salesDocuments).set({ quotationId: null }).where(eq37(salesDocuments.quotationId, quotationId));
+    if (quotation.pdfKey) {
+      try {
+        await storageDelete(quotation.pdfKey);
+      } catch (err) {
+        console.warn(`[Quotation] Failed to delete PDF from storage for quotation #${quotationId}:`, err);
+      }
+    }
+    await db.delete(quotations).where(eq37(quotations.id, quotationId));
+    return { success: true };
+  },
   generatePdf: async (quotationId, includeCountryGuide = false) => {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
@@ -22503,6 +22524,19 @@ var quotationRouter = router({
     if (!db) throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: "Database connection failed" });
     await db.update(quotations).set({ status: input.status, updatedAt: /* @__PURE__ */ new Date() }).where(eq38(quotations.id, input.id));
     return { success: true };
+  }),
+  delete: crmProcedure.input(z27.number()).mutation(async ({ input }) => {
+    try {
+      return await quotationService.deleteQuotation(input);
+    } catch (err) {
+      if (err.message === "Quotation not found") {
+        throw new TRPCError23({ code: "NOT_FOUND", message: err.message });
+      }
+      if (err.message === "Only draft quotations can be deleted") {
+        throw new TRPCError23({ code: "FORBIDDEN", message: err.message });
+      }
+      throw new TRPCError23({ code: "INTERNAL_SERVER_ERROR", message: err.message || "Failed to delete quotation" });
+    }
   }),
   downloadPdf: crmProcedure.input(z27.number()).mutation(async ({ input }) => {
     const db = getDb();

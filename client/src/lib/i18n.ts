@@ -1590,8 +1590,10 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "quotations.status.declined": "Declined",
     "quotations.toast.created": "Quotation created successfully",
     "quotations.toast.updated": "Quotation updated",
-    "quotations.toast.deleted": "Quotation deleted",
+    "quotations.toast.deleted": "Quotation deleted successfully",
+    "quotations.toast.delete_error": "Failed to delete quotation",
     "quotations.toast.sent": "Quotation sent",
+    "quotations.deleteConfirm": "Are you sure you want to delete this quotation? This action cannot be undone.",
     "quotations.confirm.delete": "Are you sure you want to delete this quotation?",
     
     // Employees (People)
@@ -3646,8 +3648,10 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "quotations.status.declined": "已谢绝",
     "quotations.toast.created": "报价单创建成功",
     "quotations.toast.updated": "报价单已更新",
-    "quotations.toast.deleted": "报价单已删除",
+    "quotations.toast.deleted": "报价单已成功删除",
+    "quotations.toast.delete_error": "删除报价单失败",
     "quotations.toast.sent": "报价单已发送",
+    "quotations.deleteConfirm": "确定要删除此报价单吗？此操作不可撤销。",
     "quotations.confirm.delete": "确定要删除此报价单吗？",
     
     // Employees (People)
@@ -5148,6 +5152,7 @@ const adminTranslations = {
     "quotations.table.status": "Status",
     "quotations.table.actions": "Actions",
     "quotations.actions.download": "Download PDF",
+    "quotations.actions.delete": "Delete",
     "quotations.actions.view": "View Details",
     "quotations.create.select_customer_error": "Please select a Customer or Sales Lead",
     "quotations.create.fill_details_error": "Please fill in all item details (Country, Salary > 0)",
@@ -7004,6 +7009,7 @@ const adminTranslations = {
     "quotations.table.status": "状态",
     "quotations.table.actions": "操作",
     "quotations.actions.download": "下载 PDF",
+    "quotations.actions.delete": "删除",
     "quotations.actions.view": "查看详情",
     "quotations.create.select_customer_error": "请选择客户或销售线索",
     "quotations.create.fill_details_error": "请填写所有项目详情（国家，薪资 > 0）",
