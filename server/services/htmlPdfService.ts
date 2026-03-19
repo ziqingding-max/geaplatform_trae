@@ -1136,3 +1136,398 @@ export async function generateQuotationPdf(data: QuotationData): Promise<Buffer>
   // ── 3. Merge cover + content ──
   return mergePdfs([coverPdf, contentPdf]);
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// V2: Three-Part Quotation PDF Generator
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export interface V2ServiceFeeItem {
+  countries: string[];
+  serviceType: string;
+  serviceFee: number;
+  oneTimeFee?: number;
+  headcount: number;
+}
+
+export interface V2CostEstimationItem {
+  countryCode: string;
+  regionCode?: string;
+  salary: number;
+  currency: string;
+  headcount: number;
+  employerCost: number;
+  totalEmploymentCost: number;
+  exchangeRate: number;
+  usdEmploymentCost: number;
+  monthlyCostPerPerson: number;
+  monthlyTotal: number;
+  calcDetails?: Array<{
+    itemNameEn: string;
+    employerContribution: string;
+    employerRate: string;
+    category: string;
+  }>;
+}
+
+export interface QuotationDataV2 {
+  quotationNumber: string;
+  customerName: string;
+  customerAddress?: string;
+  companyIntro?: string;
+  serviceFees: V2ServiceFeeItem[];
+  costEstimations: V2CostEstimationItem[];
+  totalMonthly: string;
+  currency: string;
+  validUntil?: string;
+  notes?: string;
+  branding?: BrandingInfo;
+  billingEntity?: {
+    entityName: string;
+    legalName: string;
+    address?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    country: string;
+  };
+  createdByName?: string;
+  createdByEmail?: string;
+}
+
+export async function generateQuotationPdfV2(data: QuotationDataV2): Promise<Buffer> {
+  const branding: BrandingInfo = await resolveBrandingLogo(data.branding ?? DEFAULT_BRANDING);
+  const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const headerTitle = `Quotation #${data.quotationNumber}`;
+  const validUntil = data.validUntil
+    ? new Date(data.validUntil).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+    : "N/A";
+
+  // ── 1. Cover page ──
+  const coverMeta: CoverMeta[] = [
+    { label: "Prepared For", value: data.customerName },
+    { label: "Reference", value: data.quotationNumber },
+  ];
+  if (data.createdByName) {
+    coverMeta.push({ label: "Your Contact", value: data.createdByName });
+  }
+  const coverHtml = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><style>${BASE_CSS}</style></head>
+<body>${coverPage("Quotation Proposal", `Ref: ${data.quotationNumber}`, date, branding, coverMeta)}</body>
+</html>`;
+  const coverPdf = await htmlToPdf(coverHtml);
+
+  // ── 2. Content pages ──
+  let pages = "";
+
+  // 2a. Company Introduction + Client Info
+  const companyIntroHtml = data.companyIntro
+    ? `<p>${data.companyIntro}</p>`
+    : `
+    <h3>About CGL Group</h3>
+    <p>CGL Group's core business is international executive search (CGL), with a focus on serving innovative startups and traditional enterprises undergoing transformation in China's growing economy. We provide strategic talent advisory, talent mapping, and help enterprises recruit core executive teams based on our deep understanding of industry talent markets. We also design competitive compensation packages and deliver CEO and executive leadership coaching and onboarding support.</p>
+
+    <h3>About GEA (Global Employment Advisors)</h3>
+    <p>As CGL's overseas business sub-brand, GEA helps Chinese enterprises navigate emerging markets across the full lifecycle — from Access to Implementation, from Development to Reorganization — providing comprehensive, end-to-end human resources services and solutions.</p>
+    <p>We design differentiated solutions tailored not only to different industries — such as new energy, smart manufacturing, food &amp; beverage, healthcare, consumer electronics, and embodied AI — but also to clients within the same industry who have distinct strategic priorities for their overseas expansion.</p>
+    <p>From lightweight market entry targeting a single destination to regional hub models with unified settlement centers, we deliver customized solutions that best fit the flexible and diversified needs of Chinese enterprises going global.</p>
+  `;
+
+  pages += contentPage(headerTitle, 2, 0, `
+    <h2>About GEA (Global Employment Advisors)</h2>
+    <div class="section-card">
+      ${companyIntroHtml}
+    </div>
+
+    <h2>Prepared For</h2>
+    <div class="info-grid">
+      <div class="info-item">
+        <label>Company</label>
+        <span>${data.customerName}</span>
+      </div>
+      ${data.customerAddress ? `<div class="info-item"><label>Address</label><span>${data.customerAddress}</span></div>` : ""}
+      <div class="info-item">
+        <label>Quotation Reference</label>
+        <span>${data.quotationNumber}</span>
+      </div>
+      <div class="info-item">
+        <label>Date Issued</label>
+        <span>${date}</span>
+      </div>
+      <div class="info-item">
+        <label>Valid Until</label>
+        <span>${validUntil}</span>
+      </div>
+      <div class="info-item">
+        <label>Currency</label>
+        <span>${data.currency}</span>
+      </div>
+    </div>
+
+    ${data.billingEntity ? `
+    <h2>Issued By</h2>
+    <div class="info-grid">
+      <div class="info-item">
+        <label>Legal Entity</label>
+        <span>${data.billingEntity.legalName}</span>
+      </div>
+      ${data.createdByName ? `<div class="info-item"><label>Contact Person</label><span>${data.createdByName}</span></div>` : ""}
+      ${data.createdByEmail ? `<div class="info-item"><label>Email</label><span>${data.createdByEmail}</span></div>` : ""}
+    </div>` : ""}
+  `, branding);
+
+  // ── 2b. Part 1: Service Fee Pricing ──
+  if (data.serviceFees.length > 0) {
+    const sfRows = data.serviceFees.map((sf, idx) => {
+      const serviceLabel = sf.serviceType === "eor" ? "EOR"
+        : sf.serviceType === "visa_eor" ? "Visa EOR"
+        : sf.serviceType === "aor" ? "AOR"
+        : sf.serviceType.toUpperCase();
+
+      const countriesStr = sf.countries.join(", ");
+      const monthlyPerCountry = sf.serviceFee * sf.headcount;
+      const monthlyTotal = monthlyPerCountry * sf.countries.length;
+
+      return `
+        <tr>
+          <td>${idx + 1}</td>
+          <td>${countriesStr}</td>
+          <td>${serviceLabel}</td>
+          <td class="right">${sf.headcount}</td>
+          <td class="right">USD ${fmt(sf.serviceFee)}/person/month${sf.oneTimeFee ? `<div style="font-size:7.5pt;color:${BRAND.muted};">+ USD ${fmt(sf.oneTimeFee)} one-time</div>` : ""}</td>
+          <td class="right bold">USD ${fmt(monthlyTotal)}</td>
+        </tr>`;
+    }).join("");
+
+    const totalServiceFees = data.serviceFees.reduce((sum, sf) => {
+      return sum + sf.serviceFee * sf.headcount * sf.countries.length;
+    }, 0);
+
+    pages += contentPage(headerTitle, 3, 0, `
+      <h2>Part 1: Service Fee Pricing</h2>
+      <p style="color:${BRAND.muted};font-size:9pt;margin-bottom:3mm;">Monthly recurring service fees. All amounts in USD.</p>
+
+      <table class="qt-table">
+        <thead>
+          <tr>
+            <th style="width:8mm;">#</th>
+            <th>Countries</th>
+            <th>Service Type</th>
+            <th class="right">Headcount</th>
+            <th class="right">Service Fee</th>
+            <th class="right">Monthly Total</th>
+          </tr>
+        </thead>
+        <tbody>${sfRows}</tbody>
+        <tfoot>
+          <tr>
+            <td colspan="5" style="font-weight:700;font-size:10pt;">Total Monthly Service Fees</td>
+            <td class="right" style="font-size:11pt;color:${BRAND.primary};font-weight:700;">USD ${fmt(totalServiceFees)}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="total-box">
+        <div class="total-inner">
+          <div class="total-label">TOTAL MONTHLY SERVICE FEES</div>
+          <div class="total-amount">USD ${fmt(totalServiceFees)}</div>
+        </div>
+      </div>
+    `, branding);
+  }
+
+  // ── 2c. Part 2: Employer Cost Estimation ──
+  if (data.costEstimations.length > 0) {
+    const ceRows = data.costEstimations.map((ce, idx) => {
+      const localCurrency = ce.currency !== "USD"
+        ? `<div style="font-size:7.5pt;color:${BRAND.muted};">${ce.currency} ${fmt(ce.salary)} × ${ce.headcount}</div>`
+        : "";
+
+      const exchangeNote = ce.currency !== "USD" && ce.exchangeRate !== 1
+        ? `<div style="font-size:7.5pt;color:${BRAND.muted};">Rate: 1 USD = ${ce.exchangeRate.toFixed(4)} ${ce.currency}</div>`
+        : "";
+
+      // Employer cost breakdown sub-table
+      let breakdownHtml = "";
+      if (ce.calcDetails && ce.calcDetails.length > 0) {
+        const breakdownRows = ce.calcDetails.map(d => `
+          <tr>
+            <td>${d.itemNameEn}</td>
+            <td style="text-align:right">${d.employerRate}</td>
+            <td style="text-align:right">${ce.currency} ${fmt(parseFloat(d.employerContribution))}</td>
+          </tr>`).join("");
+
+        breakdownHtml = `
+          <div class="cost-breakdown">
+            <div class="cost-breakdown-title">Employer Contribution Breakdown</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th style="text-align:right">Rate</th>
+                  <th style="text-align:right">Amount (${ce.currency})</th>
+                </tr>
+              </thead>
+              <tbody>${breakdownRows}</tbody>
+            </table>
+            <div class="cost-breakdown-total">Total ER Cost: ${ce.currency} ${fmt(ce.employerCost)}</div>
+          </div>`;
+      }
+
+      return `
+        <tr>
+          <td>${ce.countryCode}</td>
+          <td class="right">${ce.headcount}</td>
+          <td class="right">
+            USD ${fmt(ce.salary / (ce.exchangeRate || 1))}
+            ${localCurrency}
+            ${exchangeNote}
+          </td>
+          <td class="right">
+            USD ${fmt(ce.employerCost / (ce.exchangeRate || 1))}
+            ${ce.calcDetails && ce.calcDetails.length > 0 ? `<div style="font-size:7.5pt;color:${BRAND.primary};">▼ see breakdown below</div>` : ""}
+          </td>
+          <td class="right">USD ${fmt(ce.usdEmploymentCost)}</td>
+          <td class="right bold">USD ${fmt(ce.monthlyTotal)}</td>
+        </tr>
+        ${breakdownHtml ? `<tr><td colspan="6" style="padding:0 3mm 3mm;">${breakdownHtml}</td></tr>` : ""}`;
+    }).join("");
+
+    const totalEmploymentCost = data.costEstimations.reduce((sum, ce) => sum + ce.monthlyTotal, 0);
+
+    pages += contentPage(headerTitle, 4, 0, `
+      <h2>Part 2: Employer Cost Estimation</h2>
+      <p style="color:${BRAND.muted};font-size:9pt;margin-bottom:3mm;">Estimated monthly employment costs including statutory employer contributions. All amounts in USD unless otherwise noted.</p>
+
+      <table class="qt-table">
+        <thead>
+          <tr>
+            <th>Country</th>
+            <th class="right">Headcount</th>
+            <th class="right">Gross Salary</th>
+            <th class="right">Employer Cost</th>
+            <th class="right">Total per Person</th>
+            <th class="right">Monthly Total</th>
+          </tr>
+        </thead>
+        <tbody>${ceRows}</tbody>
+        <tfoot>
+          <tr>
+            <td colspan="5" style="font-weight:700;font-size:10pt;">Total Monthly Employment Cost</td>
+            <td class="right" style="font-size:11pt;color:${BRAND.primary};font-weight:700;">USD ${fmt(totalEmploymentCost)}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div class="total-box">
+        <div class="total-inner">
+          <div class="total-label">TOTAL MONTHLY EMPLOYMENT COST</div>
+          <div class="total-amount">USD ${fmt(totalEmploymentCost)}</div>
+        </div>
+      </div>
+    `, branding);
+  }
+
+  // ── 2d. Combined Total Summary ──
+  const totalServiceFees = data.serviceFees.reduce((sum, sf) => sum + sf.serviceFee * sf.headcount * sf.countries.length, 0);
+  const totalEmploymentCost = data.costEstimations.reduce((sum, ce) => sum + ce.monthlyTotal, 0);
+  const grandTotal = parseFloat(data.totalMonthly);
+
+  pages += contentPage(headerTitle, 5, 0, `
+    <h2>Total Monthly Investment Summary</h2>
+    <table class="qt-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th class="right">Monthly Amount (USD)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Service Fees</td>
+          <td class="right">USD ${fmt(totalServiceFees)}</td>
+        </tr>
+        <tr>
+          <td>Employment Costs (Salary + Employer Contributions)</td>
+          <td class="right">USD ${fmt(totalEmploymentCost)}</td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td style="font-weight:700;font-size:11pt;">Grand Total Monthly</td>
+          <td class="right" style="font-size:12pt;color:${BRAND.primary};font-weight:700;">USD ${fmt(grandTotal)}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="total-box">
+      <div class="total-inner">
+        <div class="total-label">TOTAL MONTHLY INVESTMENT</div>
+        <div class="total-amount">USD ${fmt(grandTotal)}</div>
+      </div>
+    </div>
+  `, branding);
+
+  // ── 2e. Notes + Terms & Conditions ──
+  const contactEmail = data.createdByEmail ?? branding.contactEmail ?? data.billingEntity?.contactEmail ?? "support@bestgea.com";
+  const contactName = data.createdByName ?? branding.shortName + " account manager";
+  const notesHtml = data.notes ? `
+    <div class="notes-box" style="margin-bottom:6mm;">
+      <strong>Notes:</strong><br>${data.notes}
+    </div>` : "";
+
+  pages += contentPage(headerTitle, 6, 0, `
+    ${notesHtml}
+    <h2>Terms &amp; Conditions</h2>
+    <div class="section-card" style="font-size: 8pt; line-height: 1.5;">
+        <h3>1. Agreement &amp; Validity</h3>
+        <p>This Quotation Proposal ("Quotation") is issued by ${branding.fullName} ("Company") to ${data.customerName} ("Client") and is valid until <strong>${validUntil}</strong>. Upon acceptance by the Client, this Quotation shall be incorporated into and form part of the Master Services Agreement ("MSA") executed between the Company and the Client. All terms defined in the MSA shall have the same meaning when used herein. Prices and terms are subject to change after the validity date, and any revised quotation shall supersede this document in its entirety.</p>
+
+        <h3>2. Scope of Services</h3>
+        <p>The Company shall provide comprehensive employment services tailored to the Client's needs, as described below. The specific scope for each engagement shall be detailed in the applicable Schedule to the MSA.</p>
+        <p><strong>2.1. Employer of Record (EOR):</strong> The Company will act as the legal employer for the Client's designated personnel in the respective country. Services include: preparing and maintaining employment contracts and all necessary documentation; facilitating employee onboarding; monthly payroll processing including wages, deductions, and withholdings; administration of statutory benefits programs; tax compliance; and managing termination procedures in accordance with local labor laws. The Client retains full responsibility for the day-to-day management, supervision, work assignments, and performance evaluation of the personnel.</p>
+        <p><strong>2.2. Agent of Record (AOR):</strong> The Company will engage independent contractors on behalf of the Client. Services include: contractor agreement administration, compliance verification, and payment processing. The fees quoted represent the contractor's gross rate plus the Company's management fee; no statutory employer contributions are applicable under this model.</p>
+
+        <h3>3. Fees &amp; Payment</h3>
+        <p><strong>3.1. Service Fees:</strong> The recurring monthly service fees and any one-time fees are as specified in the Pricing Summary of this Quotation. All fees are exclusive of any applicable Value Added Tax (VAT), Goods and Services Tax (GST), or similar sales taxes, which shall be added to the invoice where required by applicable law.</p>
+        <p><strong>3.2. Employment Costs:</strong> The Client shall be responsible for the full employment cost, which includes the employee's gross salary and all mandatory employer contributions (e.g., social security, insurance, pension, housing fund) as required by local law in the country of employment. Current and future provisions of local labor law, collective labor agreements, and tax legislation shall apply.</p>
+        <p><strong>3.3. Invoicing &amp; Payment:</strong> The Company will issue invoices monthly in advance. Unless otherwise agreed in the MSA, invoices are payable within seven (7) days of issuance by bank transfer to the Company's designated account. The Client shall be solely responsible for paying any taxes, levies, or charges imposed by any applicable tax authority in connection with the Services.</p>
+        <p><strong>3.4. Security Deposit:</strong> A security deposit, typically equivalent to two (2) months of total estimated employment costs and service fees, is required upon commencement of services and will be invoiced separately. The deposit shall be refunded upon termination of services, net of any outstanding amounts owed by the Client.</p>
+        <p><strong>3.5. Late Payment:</strong> If the Client fails to pay any invoice within fourteen (14) days after a payment reminder notification from the Company, the Company reserves the right to suspend or terminate the Services immediately in accordance with the MSA.</p>
+
+        <h3>4. Currency &amp; Exchange Rates</h3>
+        <p>This Quotation is presented in USD for comparative purposes. Invoices will be issued in the Client's designated billing currency as agreed in the MSA. Costs incurred in local currencies (e.g., salaries, employer contributions) will be converted using the prevailing exchange rate at the time of payroll processing. The exchange rates shown in this Quotation are indicative only and subject to market fluctuation; final invoiced amounts may vary accordingly.</p>
+
+        <h3>5. Confidentiality</h3>
+        <p>This Quotation and its contents are confidential and proprietary to the Company. It is intended solely for the use of the named Client and may not be disclosed, reproduced, or distributed to any third party without the prior written consent of the Company. Both parties agree to maintain the confidentiality of all proprietary and sensitive information exchanged during the course of the business relationship, using at least the same degree of care as each party applies to its own confidential information. These obligations shall survive the termination of the agreement.</p>
+
+        <h3>6. Limitation of Liability</h3>
+        <p><strong>6.1.</strong> The Company's sole liability to the Client in relation to any and all claims arising under or in connection with the Services (whether in contract, tort, negligence, strict liability, or otherwise) shall be for direct damages only, and shall not exceed, in the aggregate, the total service fees paid by the Client to the Company in the six (6) month period immediately preceding the event giving rise to the claim.</p>
+        <p><strong>6.2.</strong> Neither party shall be liable for any loss of profits, income, revenue, anticipated savings, business, contracts, commercial opportunities, or goodwill, nor for any special, indirect, incidental, punitive, or consequential loss or damage, howsoever arising.</p>
+        <p><strong>6.3.</strong> Neither party shall be liable for any losses arising out of a Force Majeure Event, being an event outside the reasonable control of the affected party, including but not limited to natural disasters, wars, epidemics, government actions, internet failures, or power outages.</p>
+
+        <h3>7. Governing Law &amp; Dispute Resolution</h3>
+        <p>This Quotation and any subsequent agreement shall be governed by and construed in accordance with the laws of Hong Kong SAR. All disputes arising out of or in connection with this Quotation or the MSA shall be resolved in accordance with the dispute resolution mechanism specified in the MSA.</p>
+    </div>
+
+    <div class="notes-box" style="margin-top:6mm;">
+      For questions about this quotation, please contact <strong>${contactName}</strong> at <strong>${contactEmail}</strong>.
+    </div>
+  `, branding);
+
+  const contentHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${headerTitle}</title>
+  <style>${BASE_CSS}</style>
+</head>
+<body>${pages}</body>
+</html>`;
+
+  const { headerTemplate, footerTemplate } = buildPdfHeaderFooter(headerTitle, branding);
+  const contentPdf = await htmlToPdfWithHeader(contentHtml, { headerTemplate, footerTemplate });
+
+  // ── 3. Merge cover + content ──
+  return mergePdfs([coverPdf, contentPdf]);
+}

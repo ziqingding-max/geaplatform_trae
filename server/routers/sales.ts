@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { customerManagerProcedure, userProcedure, crmProcedure } from "../procedures";
+import { customerManagerProcedure, userProcedure, crmProcedure, adminProcedure } from "../procedures";
 import {
   createSalesLead,
   getSalesLeadById,
@@ -21,7 +21,7 @@ import {
   listLeadChangeLogs,
 } from "../db";
 import { storagePut, storageGet, storageDownload, storageDelete } from "../storage";
-import { quotations, salesDocuments, customerContracts, leadChangeLogs } from "../../drizzle/schema";
+import { quotations, salesDocuments, customerContracts, leadChangeLogs, salesActivities, salesLeads } from "../../drizzle/schema";
 import { desc, eq, and, or, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
@@ -200,19 +200,40 @@ export const salesRouter = router({
 
       // CRM Restrictions:
       
-      // 1. Pipeline Order
-      // Must follow: discovery -> leads -> quotation_sent -> msa_sent -> msa_signed
-      const pipelineOrder = ["discovery", "leads", "quotation_sent", "msa_sent", "msa_signed", "closed_won", "closed_lost"];
+      // B2: Pipeline Order — Allow forward (one step), backward (one step), and closed_lost from any active state
+      // msa_signed cannot go backward (already converted customer)
+      // closed_won is terminal
+      // closed_lost can reopen to any active state
+      const pipelineOrder = ["discovery", "leads", "quotation_sent", "msa_sent", "msa_signed"];
       if (input.data.status && input.data.status !== existing.status && input.data.status !== "closed_lost") {
           const currentIndex = pipelineOrder.indexOf(existing.status);
           const nextIndex = pipelineOrder.indexOf(input.data.status);
           
-          if (nextIndex > -1 && currentIndex > -1 && nextIndex > currentIndex + 1) {
-              // Only allow skipping if current status is closed_lost (reopening)
-              if (existing.status !== "closed_lost") {
+          // closed_lost can reopen to any active state (existing behavior)
+          if (existing.status === "closed_lost") {
+              // Allow transition to any pipeline stage — no restriction
+          } else if (currentIndex > -1 && nextIndex > -1) {
+              // Allow forward by 1 step or backward by 1 step
+              const diff = nextIndex - currentIndex;
+              
+              // msa_signed cannot go backward (may have already created customer)
+              if (existing.status === "msa_signed" && diff < 0) {
+                  throw new TRPCError({
+                      code: "BAD_REQUEST",
+                      message: "Cannot move backward from 'MSA Signed'. Customer may have already been created.",
+                  });
+              }
+              
+              if (diff > 1) {
                   throw new TRPCError({
                       code: "BAD_REQUEST",
                       message: `Invalid status transition. You cannot skip stages. Next stage should be '${pipelineOrder[currentIndex + 1]}'.`
+                  });
+              }
+              if (diff < -1) {
+                  throw new TRPCError({
+                      code: "BAD_REQUEST",
+                      message: `Invalid status transition. You can only go back one stage at a time. Previous stage is '${pipelineOrder[currentIndex - 1]}'.`
                   });
               }
           }
@@ -239,30 +260,34 @@ export const salesRouter = router({
           }
       }
 
-      // 3. MSA Signed Requirement
+      // 3. MSA Signed Requirement — enhanced with B4 single-accepted check
       if (input.data.status === "msa_signed" && existing.status !== "msa_signed") {
           const db = getDb();
           if (db) {
-              // Check for accepted quotation
-              const hasAcceptedQuotation = await db.query.quotations.findFirst({
+              // Check for accepted quotation(s)
+              const acceptedQuotations = await db.query.quotations.findMany({
                   where: and(
                       eq(quotations.leadId, input.id),
                       eq(quotations.status, "accepted")
                   )
               });
 
-              if (!hasAcceptedQuotation) {
+              if (acceptedQuotations.length === 0) {
                   throw new TRPCError({
                       code: "PRECONDITION_FAILED",
                       message: "Cannot move to 'MSA Signed': No accepted quotation found."
                   });
               }
 
+              // Defensive check: must have exactly 1 accepted quotation
+              if (acceptedQuotations.length > 1) {
+                  throw new TRPCError({
+                      code: "PRECONDITION_FAILED",
+                      message: `Cannot move to 'MSA Signed': Found ${acceptedQuotations.length} accepted quotations. There must be exactly one.`
+                  });
+              }
+
               // Check for MSA document
-              // Since we don't have a direct 'sales_documents' query helper exposed in db/index yet,
-              // we might need to check fileUrl/fileKey if we add them to salesLeads or use raw query.
-              // For now, let's assume we add a flag or check sales_documents table.
-              // We'll query sales_documents table directly.
               const msaDoc = await db.query.salesDocuments.findFirst({
                   where: and(
                       eq(salesDocuments.leadId, input.id),
@@ -400,54 +425,115 @@ export const salesRouter = router({
         });
       }
 
-      // 3. Sync Pricing from Quotation
+      // 3. Sync Pricing from Quotation — find the accepted quotation (should be exactly 1)
       const db = getDb();
       if (db) {
-        // Find latest quotation (regardless of status, but ideally accepted)
-        const latestQuotation = await db.query.quotations.findFirst({
+        const acceptedQuotation = await db.query.quotations.findFirst({
+          where: and(
+            eq(quotations.leadId, input.leadId),
+            eq(quotations.status, "accepted")
+          ),
+          orderBy: [desc(quotations.createdAt)],
+        });
+
+        // Fallback to latest quotation if no accepted one found (backward compatibility)
+        const latestQuotation = acceptedQuotation || await db.query.quotations.findFirst({
           where: eq(quotations.leadId, input.leadId),
           orderBy: [desc(quotations.createdAt)],
         });
 
         if (latestQuotation && latestQuotation.snapshotData) {
           try {
-            const items = JSON.parse(latestQuotation.snapshotData as string);
-            // Group by country + serviceType to avoid duplicates
-            const pricingMap = new Map<string, any>();
-            
-            for (const item of items) {
-              const key = `${item.countryCode}-${item.serviceType}`;
-              if (!pricingMap.has(key)) {
-                pricingMap.set(key, item);
-              }
-            }
+            // Parse snapshot data — may be string or already parsed object
+            const snapshot = typeof latestQuotation.snapshotData === 'string'
+              ? JSON.parse(latestQuotation.snapshotData)
+              : latestQuotation.snapshotData;
 
-            for (const item of Array.from(pricingMap.values())) {
-              if (item.serviceType === "aor") {
-                // AOR Global Pricing — one price per customer, no country needed
-                await createCustomerPricing({
-                  customerId,
-                  pricingType: "client_aor_fixed",
-                  fixedPrice: String(item.serviceFee),
-                  currency: item.currency || input.settlementCurrency,
-                  effectiveFrom: new Date().toISOString().split("T")[0],
-                  sourceQuotationId: latestQuotation.id,
-                  isActive: true,
-                });
-              } else {
-                // EOR / Visa EOR Pricing
-                await createCustomerPricing({
-                  customerId,
-                  pricingType: "country_specific",
-                  countryCode: item.countryCode,
-                  serviceType: item.serviceType,
-                  fixedPrice: String(item.serviceFee),
-                  visaOneTimeFee: item.oneTimeFee ? String(item.oneTimeFee) : undefined,
-                  currency: item.currency || input.settlementCurrency,
-                  effectiveFrom: new Date().toISOString().split("T")[0],
-                  sourceQuotationId: latestQuotation.id,
-                  isActive: true,
-                });
+            const isV2 = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) && snapshot.version === 2;
+
+            if (isV2) {
+              // ── V2: Three-part quotation ──
+              // Extract service fees and create one pricing record per country per service type
+              const serviceFees = snapshot.serviceFees || [];
+              const pricingMap = new Map<string, any>();
+
+              for (const sf of serviceFees) {
+                for (const countryCode of sf.countries) {
+                  const key = `${countryCode}-${sf.serviceType}`;
+                  if (!pricingMap.has(key)) {
+                    pricingMap.set(key, {
+                      countryCode,
+                      serviceType: sf.serviceType,
+                      serviceFee: sf.serviceFee,
+                      oneTimeFee: sf.oneTimeFee,
+                    });
+                  }
+                }
+              }
+
+              for (const item of Array.from(pricingMap.values())) {
+                if (item.serviceType === "aor") {
+                  await createCustomerPricing({
+                    customerId,
+                    pricingType: "client_aor_fixed",
+                    fixedPrice: String(item.serviceFee),
+                    currency: input.settlementCurrency,
+                    effectiveFrom: new Date().toISOString().split("T")[0],
+                    sourceQuotationId: latestQuotation.id,
+                    isActive: true,
+                  });
+                } else {
+                  await createCustomerPricing({
+                    customerId,
+                    pricingType: "country_specific",
+                    countryCode: item.countryCode,
+                    serviceType: item.serviceType,
+                    fixedPrice: String(item.serviceFee),
+                    visaOneTimeFee: item.oneTimeFee ? String(item.oneTimeFee) : undefined,
+                    currency: input.settlementCurrency,
+                    effectiveFrom: new Date().toISOString().split("T")[0],
+                    sourceQuotationId: latestQuotation.id,
+                    isActive: true,
+                  });
+                }
+              }
+            } else {
+              // ── V1: Legacy flat array format ──
+              const items = Array.isArray(snapshot) ? snapshot : [];
+              const pricingMap = new Map<string, any>();
+              
+              for (const item of items) {
+                const key = `${item.countryCode}-${item.serviceType}`;
+                if (!pricingMap.has(key)) {
+                  pricingMap.set(key, item);
+                }
+              }
+
+              for (const item of Array.from(pricingMap.values())) {
+                if (item.serviceType === "aor") {
+                  await createCustomerPricing({
+                    customerId,
+                    pricingType: "client_aor_fixed",
+                    fixedPrice: String(item.serviceFee),
+                    currency: item.currency || input.settlementCurrency,
+                    effectiveFrom: new Date().toISOString().split("T")[0],
+                    sourceQuotationId: latestQuotation.id,
+                    isActive: true,
+                  });
+                } else {
+                  await createCustomerPricing({
+                    customerId,
+                    pricingType: "country_specific",
+                    countryCode: item.countryCode,
+                    serviceType: item.serviceType,
+                    fixedPrice: String(item.serviceFee),
+                    visaOneTimeFee: item.oneTimeFee ? String(item.oneTimeFee) : undefined,
+                    currency: item.currency || input.settlementCurrency,
+                    effectiveFrom: new Date().toISOString().split("T")[0],
+                    sourceQuotationId: latestQuotation.id,
+                    isActive: true,
+                  });
+                }
               }
             }
           } catch (e) {
@@ -614,12 +700,14 @@ export const salesRouter = router({
     }),
 
   // ── Delete a sales lead ──────────────────────────────────────────────
-  delete: crmProcedure
+  // B3: Only admin can delete leads. Cascade delete quotations, documents, activities, change logs.
+  delete: adminProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const existing = await getSalesLeadById(input.id);
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Sales lead not found" });
 
+      // Cannot delete closed_won leads or leads that have been converted to customer
       if (existing.status === "closed_won" || existing.convertedCustomerId) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -627,6 +715,60 @@ export const salesRouter = router({
         });
       }
 
+      // B3: Cannot delete msa_signed leads (may have customer created)
+      if (existing.status === "msa_signed") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Cannot delete a lead at 'MSA Signed' stage. Please move it to a different status first.",
+        });
+      }
+
+      const db = getDb();
+
+      // B3b: Cascade cleanup
+      if (db) {
+        // 1. Delete all quotations for this lead (including S3 PDF cleanup)
+        const leadQuotations = await db.query.quotations.findMany({
+          where: eq(quotations.leadId, input.id),
+        });
+        for (const q of leadQuotations) {
+          if (q.pdfKey) {
+            try {
+              await storageDelete(q.pdfKey);
+            } catch (e) {
+              console.warn(`[Sales] Failed to delete quotation PDF from S3 (key: ${q.pdfKey}):`, e);
+            }
+          }
+          // Unlink salesDocuments that reference this quotation
+          await db.update(salesDocuments)
+            .set({ quotationId: null })
+            .where(eq(salesDocuments.quotationId, q.id));
+        }
+        await db.delete(quotations).where(eq(quotations.leadId, input.id));
+
+        // 2. Delete all sales documents for this lead (including S3 file cleanup)
+        const leadDocs = await db.query.salesDocuments.findMany({
+          where: eq(salesDocuments.leadId, input.id),
+        });
+        for (const doc of leadDocs) {
+          if (doc.fileKey) {
+            try {
+              await storageDelete(doc.fileKey);
+            } catch (e) {
+              console.warn(`[Sales] Failed to delete document from S3 (key: ${doc.fileKey}):`, e);
+            }
+          }
+        }
+        await db.delete(salesDocuments).where(eq(salesDocuments.leadId, input.id));
+
+        // 3. Delete all activities for this lead
+        await db.delete(salesActivities).where(eq(salesActivities.leadId, input.id));
+
+        // 4. Delete all change logs for this lead
+        await db.delete(leadChangeLogs).where(eq(leadChangeLogs.leadId, input.id));
+      }
+
+      // 5. Finally delete the lead itself
       await deleteSalesLead(input.id);
 
       await logAuditAction({
@@ -635,7 +777,7 @@ export const salesRouter = router({
         action: "delete",
         entityType: "sales_lead",
         entityId: input.id,
-        changes: JSON.stringify({ companyName: existing.companyName }),
+        changes: JSON.stringify({ companyName: existing.companyName, cascadeDeleted: true }),
       });
 
       return { success: true };
