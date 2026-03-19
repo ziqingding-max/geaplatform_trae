@@ -1,6 +1,8 @@
 import Layout from "@/components/Layout";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { isAdmin } from "@shared/roles";
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,8 @@ import { Input } from "@/components/ui/input";
 
 export default function Quotations() {
   const { t } = useI18n();
+  const { user } = useAuth();
+  const userIsAdmin = isAdmin(user?.role);
   const [page, setPage] = useState(1);
   const limit = 20;
   const [search, setSearch] = useState("");
@@ -101,8 +105,24 @@ export default function Quotations() {
 
   const confirmDelete = () => {
       if (deleteConfirm !== null) {
-          deleteMutation.mutate(deleteConfirm);
+          deleteMutation.mutate({ id: deleteConfirm });
       }
+  };
+
+  // Dynamic confirmation message based on target status
+  const getStatusConfirmMessage = (status: string): string => {
+    switch (status) {
+      case "accepted":
+        return t("quotations.status.confirm_accepted") || "Are you sure you want to accept this quotation? This will cause all other pending quotations (Draft/Sent) for this lead to be automatically marked as Expired.";
+      case "expired":
+        return t("quotations.status.confirm_expired") || "Are you sure you want to mark this quotation as expired?";
+      case "rejected":
+        return t("quotations.status.confirm_rejected") || "Are you sure you want to reject this quotation?";
+      case "sent":
+        return t("quotations.status.confirm_sent") || "Are you sure you want to mark this quotation as sent?";
+      default:
+        return t("quotations.status.confirm_change") || "Are you sure you want to change the status of this quotation?";
+    }
   };
 
   return (
@@ -176,7 +196,7 @@ export default function Quotations() {
                       </TableCell>
                       <TableCell>
                         {(() => {
-                          const isTerminal = q.status === "expired" || q.status === "accepted" || q.status === "rejected";
+                          const isTerminal = q.status === "accepted";
                           const statusColorMap: Record<string, string> = {
                             draft: "bg-slate-100 text-slate-700 border-slate-200",
                             sent: "bg-blue-100 text-blue-700 border-blue-200",
@@ -184,15 +204,20 @@ export default function Quotations() {
                             rejected: "bg-red-100 text-red-700 border-red-200",
                             expired: "bg-orange-100 text-orange-700 border-orange-200",
                           };
+                          // B5: Add expired to manual status options
                           const nextActions: { value: string; label: string }[] = [];
                           if (q.status === "draft") {
                             nextActions.push({ value: "sent", label: t("quotations.status.sent") });
-                          }
-                          if (q.status === "sent" || q.status === "draft") {
                             nextActions.push({ value: "accepted", label: t("quotations.status.accepted") });
                             nextActions.push({ value: "rejected", label: t("quotations.status.rejected") });
+                            nextActions.push({ value: "expired", label: t("quotations.status.expired") });
+                          } else if (q.status === "sent") {
+                            nextActions.push({ value: "accepted", label: t("quotations.status.accepted") });
+                            nextActions.push({ value: "rejected", label: t("quotations.status.rejected") });
+                            nextActions.push({ value: "expired", label: t("quotations.status.expired") });
                           }
-                          if (isTerminal || nextActions.length === 0) {
+                          // accepted, rejected, expired are all terminal states
+                          if (isTerminal || q.status === "rejected" || q.status === "expired" || nextActions.length === 0) {
                             return (
                               <Badge variant="outline" className={`text-xs ${statusColorMap[q.status] || ""}`}>
                                 {t(`quotations.status.${q.status}`)}
@@ -230,22 +255,29 @@ export default function Quotations() {
                                 </Button>
                               </Link>
                           )}
-                          <Button variant="ghost" size="icon" onClick={() => downloadMutation.mutate(q.id)} title={t("quotations.actions.download")}>
-                            {downloadMutation.isPending && downloadMutation.variables === q.id ? (
+                          <Button variant="ghost" size="icon" onClick={() => downloadMutation.mutate({ id: q.id })} title={t("quotations.actions.download")}>
+                            {downloadMutation.isPending && (downloadMutation.variables as any)?.id === q.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                                 <Download className="w-4 h-4" />
                             )}
                           </Button>
-                          {q.status === 'draft' && (
+                          {/* B3c: Draft quotations can be deleted by anyone with CRM access; non-draft only by admin */}
+                          {(q.status === 'draft' || userIsAdmin) && (
                               <Button
                                 variant="ghost"
                                 size="icon"
                                 className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                onClick={() => setDeleteConfirm(q.id)}
+                                onClick={() => {
+                                  if (q.status !== 'draft' && !userIsAdmin) {
+                                    toast.error(t("quotations.deleteAdminOnly"));
+                                    return;
+                                  }
+                                  setDeleteConfirm(q.id);
+                                }}
                                 title={t("quotations.actions.delete") || "Delete"}
                               >
-                                {deleteMutation.isPending && deleteMutation.variables === q.id ? (
+                                {deleteMutation.isPending && (deleteMutation.variables as any)?.id === q.id ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
                                 ) : (
                                     <Trash2 className="w-4 h-4" />
@@ -262,18 +294,23 @@ export default function Quotations() {
           </CardContent>
         </Card>
 
-        {/* Status change confirmation dialog */}
+        {/* Status change confirmation dialog — B4: Dynamic warning message */}
         <AlertDialog open={!!statusConfirm} onOpenChange={(open) => !open && setStatusConfirm(null)}>
             <AlertDialogContent>
                 <AlertDialogHeader>
                     <AlertDialogTitle>{t("common.confirm") || "Confirm Action"}</AlertDialogTitle>
                     <AlertDialogDescription>
-                        {t("quotations.status.confirm_change") || "Are you sure you want to change the status of this quotation?"}
+                        {statusConfirm ? getStatusConfirmMessage(statusConfirm.status) : ""}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                    <AlertDialogAction onClick={confirmStatusChange}>{t("common.confirm")}</AlertDialogAction>
+                    <AlertDialogAction
+                      onClick={confirmStatusChange}
+                      className={statusConfirm?.status === "rejected" || statusConfirm?.status === "expired" ? "bg-destructive hover:bg-destructive/90" : ""}
+                    >
+                      {t("common.confirm")}
+                    </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>

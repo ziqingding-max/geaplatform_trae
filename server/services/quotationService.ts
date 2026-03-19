@@ -4,13 +4,14 @@ import { eq } from "drizzle-orm";
 import { calculationService } from "./calculationService";
 import { getExchangeRate } from "./exchangeRateService";
 import { storagePut, storageGet, storageDelete } from "../storage";
-import { generateQuotationPdf, BrandingInfo } from "./htmlPdfService";
+import { generateQuotationPdf, generateQuotationPdfV2, BrandingInfo } from "./htmlPdfService";
 import { countryGuidePdfService } from "./countryGuidePdfService";
 import { mergePdfs } from "./contentMergeService";
 
+// ── V1 Interfaces ──
 interface QuotationItemInput {
   countryCode: string;
-  regionCode?: string; // Added regionCode
+  regionCode?: string;
   headcount: number;
   salary: number;
   currency: string;
@@ -26,7 +27,7 @@ interface CreateQuotationInput {
   validUntil?: string;
   createdBy: number;
   notes?: string;
-  includeCountryGuide?: boolean; // New Flag
+  includeCountryGuide?: boolean;
 }
 
 interface UpdateQuotationInput extends CreateQuotationInput {
@@ -34,105 +35,294 @@ interface UpdateQuotationInput extends CreateQuotationInput {
   updatedBy: number;
 }
 
+// ── V2 Interfaces ──
+interface V2ServiceFeeInput {
+  countries: string[];
+  serviceType: "eor" | "visa_eor" | "aor";
+  serviceFee: number;
+  oneTimeFee?: number;
+}
+
+interface V2CostEstimationInput {
+  countryCode: string;
+  regionCode?: string;
+  salary: number;
+  currency: string;
+  headcount: number;
+}
+
+interface V2CountryGuideInput {
+  countryCode: string;
+}
+
+interface CreateQuotationV2Input {
+  leadId?: number;
+  customerId?: number;
+  serviceFees: V2ServiceFeeInput[];
+  costEstimations: V2CostEstimationInput[];
+  countryGuides: V2CountryGuideInput[];
+  validUntil?: string;
+  notes?: string;
+  createdBy: number;
+}
+
+interface UpdateQuotationV2Input extends CreateQuotationV2Input {
+  id: number;
+  updatedBy: number;
+}
+
+// ── V2 Calculated Result Types ──
+interface V2CalculatedServiceFee {
+  countries: string[];
+  serviceType: string;
+  serviceFee: number;
+  oneTimeFee?: number;
+}
+
+interface V2CalculatedCostEstimation {
+  countryCode: string;
+  regionCode?: string;
+  salary: number;
+  currency: string;
+  headcount: number;
+  employerCost: number;
+  totalEmploymentCost: number;
+  exchangeRate: number;
+  usdEmploymentCost: number;
+  monthlyCostPerPerson: number;
+  monthlyTotal: number;
+  calcDetails: any[];
+}
+
+// ── Shared Helper: Fetch billing entity & branding ──
+async function fetchBrandingInfo(db: any): Promise<{ billingEntity: any; branding: BrandingInfo; }> {
+  let billingEntity: any = undefined;
+  let branding: BrandingInfo = {
+    shortName: "GEA",
+    fullName: "Global Employment Advisors",
+    contactEmail: "support@bestgea.com",
+  };
+
+  let defaultBilling = await db.query.billingEntities.findFirst({
+    where: eq(billingEntities.isDefault, true)
+  });
+  if (!defaultBilling) {
+    defaultBilling = await db.query.billingEntities.findFirst({
+      where: eq(billingEntities.isActive, true)
+    }) ?? undefined;
+  }
+  if (defaultBilling) {
+    const addressParts = [defaultBilling.address, defaultBilling.city, defaultBilling.country].filter(Boolean);
+    const address = addressParts.join(", ") || undefined;
+    billingEntity = {
+      entityName: defaultBilling.entityName,
+      legalName: defaultBilling.legalName,
+      address,
+      contactEmail: defaultBilling.contactEmail ?? undefined,
+      contactPhone: defaultBilling.contactPhone ?? undefined,
+      country: defaultBilling.country,
+    };
+    let resolvedLogoUrl = defaultBilling.logoUrl ?? null;
+    if (defaultBilling.logoFileKey) {
+      try {
+        const { url: signedUrl } = await storageGet(defaultBilling.logoFileKey);
+        resolvedLogoUrl = signedUrl;
+      } catch (err) {
+        console.warn("[QuotationService] Failed to sign logo URL:", err);
+      }
+    }
+    branding = {
+      shortName: defaultBilling.entityName,
+      fullName: defaultBilling.legalName,
+      logoUrl: resolvedLogoUrl,
+      contactEmail: defaultBilling.contactEmail ?? null,
+      address: address ?? null,
+      legalName: defaultBilling.legalName,
+    };
+  }
+  return { billingEntity, branding };
+}
+
+async function fetchCustomerInfo(db: any, quotation: any): Promise<{ customerName: string; customerAddress: string }> {
+  let customerName = "Valued Customer";
+  let customerAddress = "";
+  
+  if (quotation.customerId) {
+    const customer = await db.query.customers.findFirst({
+      where: eq(customers.id, quotation.customerId)
+    });
+    if (customer) {
+      customerName = customer.companyName;
+      customerAddress = [customer.address, customer.city, customer.country].filter(Boolean).join(", ");
+    }
+  } else if (quotation.leadId) {
+    const lead = await db.query.salesLeads.findFirst({
+      where: eq(salesLeads.id, quotation.leadId)
+    });
+    if (lead) {
+      customerName = lead.companyName;
+      customerAddress = lead.country || "";
+    }
+  }
+  return { customerName, customerAddress };
+}
+
+async function fetchCreatorInfo(db: any, createdBy: number | null): Promise<{ createdByName?: string; createdByEmail?: string }> {
+  if (!createdBy) return {};
+  const creator = await db.query.users.findFirst({
+    where: eq(users.id, createdBy)
+  });
+  if (creator) {
+    return {
+      createdByName: creator.name ?? undefined,
+      createdByEmail: creator.email ?? undefined,
+    };
+  }
+  return {};
+}
+
+// ── V2 Calculation Helper ──
+async function calculateCostEstimations(costEstimations: V2CostEstimationInput[]): Promise<V2CalculatedCostEstimation[]> {
+  const year = 2025; // TODO: dynamic year
+  const results: V2CalculatedCostEstimation[] = [];
+
+  for (const est of costEstimations) {
+    const calcResult = await calculationService.calculateSocialInsurance({
+      countryCode: est.countryCode,
+      year,
+      salary: est.salary,
+      regionCode: est.regionCode,
+    });
+
+    const employerCost = parseFloat(calcResult.totalEmployer);
+    const totalEmploymentCost = est.salary + employerCost;
+
+    let exchangeRate = 1;
+    let usdEmploymentCost = totalEmploymentCost;
+
+    if (est.currency !== "USD") {
+      const rateData = await getExchangeRate("USD", est.currency);
+      if (rateData) {
+        exchangeRate = rateData.rate;
+        usdEmploymentCost = totalEmploymentCost / exchangeRate;
+      }
+    }
+
+    const monthlyCostPerPerson = usdEmploymentCost;
+    const monthlyTotal = monthlyCostPerPerson * est.headcount;
+
+    results.push({
+      countryCode: est.countryCode,
+      regionCode: est.regionCode,
+      salary: est.salary,
+      currency: est.currency,
+      headcount: est.headcount,
+      employerCost,
+      totalEmploymentCost,
+      exchangeRate,
+      usdEmploymentCost,
+      monthlyCostPerPerson,
+      monthlyTotal,
+      calcDetails: calcResult.items,
+    });
+  }
+
+  return results;
+}
+
+function calculateV2TotalMonthly(
+  serviceFees: V2ServiceFeeInput[],
+  _calculatedCosts: V2CalculatedCostEstimation[]
+): number {
+  // Total = sum of all service fee unit prices only
+  // Service fee is a unit price (per person per month), no headcount or country count multiplier
+  // Employer cost estimations are independent and NOT included in the service fee total
+  let total = 0;
+
+  for (const sf of serviceFees) {
+    total += sf.serviceFee;
+  }
+
+  return total;
+}
+
 export const quotationService = {
+  // ── V1 Methods (backward compatible) ──
   createQuotation: async (input: CreateQuotationInput) => {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
 
-    // 1. Calculate costs for each item
     const calculatedItems = [];
     let totalMonthly = 0;
-    const quotationCurrency = "USD"; // Standardize on USD for the final quotation total
-
-    // TODO: Dynamic year selection based on validity. For now using 2025 as our seed data is 2025.
-    const year = 2025; 
+    const quotationCurrency = "USD";
+    const year = 2025;
 
     for (const item of input.items) {
-      // 1a. AOR: No social insurance calculation
       if (item.serviceType === "aor") {
-        // For AOR, "salary" is the Contractor Rate.
-        // There are no employer costs (no social insurance).
         const employerCost = 0;
         const totalEmploymentCostLocal = item.salary;
-        
         let exchangeRate = 1;
         let usdEmploymentCost = totalEmploymentCostLocal;
 
-        // Convert to USD if needed
         if (item.currency !== "USD") {
           const rateData = await getExchangeRate("USD", item.currency);
           if (rateData) {
-             exchangeRate = rateData.rate;
-             usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
+            exchangeRate = rateData.rate;
+            usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
           }
         }
 
         const subtotal = (usdEmploymentCost + item.serviceFee) * item.headcount;
-
         calculatedItems.push({
           ...item,
-          employerCost, 
-          totalEmploymentCost: totalEmploymentCostLocal, 
+          employerCost,
+          totalEmploymentCost: totalEmploymentCostLocal,
           exchangeRate,
           usdEmploymentCost,
-          subtotal, 
-          calcDetails: [] // No social insurance breakdown
+          subtotal,
+          calcDetails: []
         });
-
         totalMonthly += subtotal;
-        continue; // Skip to next item
+        continue;
       }
 
-      // 1b. EOR / Visa EOR: Calculate social insurance
       const calcResult = await calculationService.calculateSocialInsurance({
         countryCode: item.countryCode,
         year,
         salary: item.salary,
-        regionCode: item.regionCode, 
+        regionCode: item.regionCode,
       });
 
       const employerCost = parseFloat(calcResult.totalEmployer);
       const totalEmploymentCostLocal = item.salary + employerCost;
-      
-      // Convert Local Employment Cost to USD
-      // item.currency is the Local Currency (e.g., CNY, EUR)
       let exchangeRate = 1;
       let usdEmploymentCost = totalEmploymentCostLocal;
 
       if (item.currency !== "USD") {
         const rateData = await getExchangeRate("USD", item.currency);
         if (rateData) {
-           // rateData.rate is USD -> Local live rate (e.g. 1 USD = 7.2 CNY)
-           // To convert Local -> USD: Amount / Rate
-           // Quotations use live rate (no markup) for client-facing pricing
-           exchangeRate = rateData.rate;
-           usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
+          exchangeRate = rateData.rate;
+          usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
         }
       }
 
-      // Total Item Monthly = USD Employment Cost + USD Service Fee
       const subtotal = (usdEmploymentCost + item.serviceFee) * item.headcount;
-
       calculatedItems.push({
         ...item,
-        employerCost, // Local
-        totalEmploymentCost: totalEmploymentCostLocal, // Local
+        employerCost,
+        totalEmploymentCost: totalEmploymentCostLocal,
         exchangeRate,
         usdEmploymentCost,
-        subtotal, // USD
+        subtotal,
         calcDetails: calcResult.items
       });
-
       totalMonthly += subtotal;
     }
 
-    // 2. Generate Quotation Number
-    // Format: Q-{YYYY}{MM}{DD}-{Random4}
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const quotationNumber = `Q-${dateStr}-${randomSuffix}`;
 
-    // 3. Create Record
     const [result] = await db.insert(quotations).values({
       quotationNumber,
       leadId: input.leadId,
@@ -140,15 +330,14 @@ export const quotationService = {
       countries: JSON.stringify(calculatedItems),
       totalMonthly: totalMonthly.toFixed(2),
       currency: quotationCurrency,
-      snapshotData: calculatedItems, // Full breakdown
-      validUntil: input.validUntil || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(), // Default 15 days
+      snapshotData: calculatedItems,
+      validUntil: input.validUntil || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
       status: "draft",
       createdBy: input.createdBy,
       createdAt: new Date(),
       updatedAt: new Date()
     }).returning({ id: quotations.id });
 
-    // 4. Generate PDF (non-blocking: creation succeeds even if PDF generation fails)
     try {
       await quotationService.generatePdf(result.id, input.includeCountryGuide);
     } catch (pdfErr) {
@@ -162,91 +351,79 @@ export const quotationService = {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
 
-    // Check status
     const existing = await db.query.quotations.findFirst({
-        where: eq(quotations.id, input.id)
+      where: eq(quotations.id, input.id)
     });
     if (!existing) throw new Error("Quotation not found");
     if (existing.status !== "draft") throw new Error("Only draft quotations can be edited");
 
-    // 1. Recalculate
     const calculatedItems = [];
     let totalMonthly = 0;
     const quotationCurrency = "USD";
-    const year = 2025; 
+    const year = 2025;
 
     for (const item of input.items) {
-      // 1a. AOR: No social insurance calculation
       if (item.serviceType === "aor") {
         const employerCost = 0;
         const totalEmploymentCostLocal = item.salary;
-        
         let exchangeRate = 1;
         let usdEmploymentCost = totalEmploymentCostLocal;
 
         if (item.currency !== "USD") {
           const rateData = await getExchangeRate("USD", item.currency);
           if (rateData) {
-             exchangeRate = rateData.rate;
-             usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
+            exchangeRate = rateData.rate;
+            usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
           }
         }
 
         const subtotal = (usdEmploymentCost + item.serviceFee) * item.headcount;
-
         calculatedItems.push({
           ...item,
-          employerCost, 
-          totalEmploymentCost: totalEmploymentCostLocal, 
+          employerCost,
+          totalEmploymentCost: totalEmploymentCostLocal,
           exchangeRate,
           usdEmploymentCost,
-          subtotal, 
-          calcDetails: [] 
+          subtotal,
+          calcDetails: []
         });
-
         totalMonthly += subtotal;
-        continue; 
+        continue;
       }
 
-      // 1b. EOR / Visa EOR: Calculate social insurance
       const calcResult = await calculationService.calculateSocialInsurance({
         countryCode: item.countryCode,
         year,
         salary: item.salary,
-        regionCode: item.regionCode, 
+        regionCode: item.regionCode,
       });
 
       const employerCost = parseFloat(calcResult.totalEmployer);
       const totalEmploymentCostLocal = item.salary + employerCost;
-      
       let exchangeRate = 1;
       let usdEmploymentCost = totalEmploymentCostLocal;
 
       if (item.currency !== "USD") {
         const rateData = await getExchangeRate("USD", item.currency);
         if (rateData) {
-           // Quotations use live rate (no markup) for client-facing pricing
-           exchangeRate = rateData.rate;
-           usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
+          exchangeRate = rateData.rate;
+          usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
         }
       }
 
       const subtotal = (usdEmploymentCost + item.serviceFee) * item.headcount;
-
       calculatedItems.push({
         ...item,
-        employerCost, 
-        totalEmploymentCost: totalEmploymentCostLocal, 
+        employerCost,
+        totalEmploymentCost: totalEmploymentCostLocal,
         exchangeRate,
         usdEmploymentCost,
-        subtotal, 
+        subtotal,
         calcDetails: calcResult.items
       });
-
       totalMonthly += subtotal;
     }
 
-    // 2. Update Record
     await db.update(quotations).set({
       leadId: input.leadId,
       customerId: input.customerId,
@@ -258,7 +435,6 @@ export const quotationService = {
       updatedAt: new Date()
     }).where(eq(quotations.id, input.id));
 
-    // 3. Regenerate PDF (non-blocking: update succeeds even if PDF generation fails)
     try {
       await quotationService.generatePdf(input.id, input.includeCountryGuide);
     } catch (pdfErr) {
@@ -268,25 +444,148 @@ export const quotationService = {
     return { id: input.id };
   },
 
+  // ── V2 Methods (three-part quotation) ──
+  createQuotationV2: async (input: CreateQuotationV2Input) => {
+    const db = getDb();
+    if (!db) throw new Error("Database connection failed");
+
+    // 1. Calculate employer costs for each cost estimation
+    const calculatedCosts = await calculateCostEstimations(input.costEstimations);
+
+    // 2. Calculate total monthly
+    const totalMonthly = calculateV2TotalMonthly(input.serviceFees, calculatedCosts);
+    const quotationCurrency = "USD";
+
+    // 3. Generate quotation number
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const quotationNumber = `Q-${dateStr}-${randomSuffix}`;
+
+    // 4. Build V2 snapshot data
+    const snapshotData = {
+      version: 2,
+      serviceFees: input.serviceFees.map(sf => ({
+        countries: sf.countries,
+        serviceType: sf.serviceType,
+        serviceFee: sf.serviceFee,
+        oneTimeFee: sf.oneTimeFee,
+      })),
+      costEstimations: calculatedCosts,
+      countryGuides: input.countryGuides.map(cg => ({
+        countryCode: cg.countryCode,
+      })),
+      notes: input.notes,
+    };
+
+    // 5. Build countries string (all unique countries from all three parts)
+    const allCountries = new Set<string>();
+    input.serviceFees.forEach(sf => sf.countries.forEach(c => allCountries.add(c)));
+    input.costEstimations.forEach(ce => allCountries.add(ce.countryCode));
+    input.countryGuides.forEach(cg => allCountries.add(cg.countryCode));
+
+    // 6. Create record
+    const [result] = await db.insert(quotations).values({
+      quotationNumber,
+      leadId: input.leadId,
+      customerId: input.customerId,
+      countries: JSON.stringify(Array.from(allCountries)),
+      totalMonthly: totalMonthly.toFixed(2),
+      currency: quotationCurrency,
+      snapshotData,
+      validUntil: input.validUntil || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
+      status: "draft",
+      createdBy: input.createdBy,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning({ id: quotations.id });
+
+    // 7. Generate PDF (non-blocking)
+    try {
+      await quotationService.generatePdf(result.id);
+    } catch (pdfErr) {
+      console.error(`[Quotation V2] PDF generation failed for quotation #${result.id}, will retry on download:`, pdfErr);
+    }
+
+    return result;
+  },
+
+  updateQuotationV2: async (input: UpdateQuotationV2Input) => {
+    const db = getDb();
+    if (!db) throw new Error("Database connection failed");
+
+    const existing = await db.query.quotations.findFirst({
+      where: eq(quotations.id, input.id)
+    });
+    if (!existing) throw new Error("Quotation not found");
+    if (existing.status !== "draft") throw new Error("Only draft quotations can be edited");
+
+    // 1. Calculate employer costs
+    const calculatedCosts = await calculateCostEstimations(input.costEstimations);
+
+    // 2. Calculate total monthly
+    const totalMonthly = calculateV2TotalMonthly(input.serviceFees, calculatedCosts);
+    const quotationCurrency = "USD";
+
+    // 3. Build V2 snapshot data
+    const snapshotData = {
+      version: 2,
+      serviceFees: input.serviceFees.map(sf => ({
+        countries: sf.countries,
+        serviceType: sf.serviceType,
+        serviceFee: sf.serviceFee,
+        oneTimeFee: sf.oneTimeFee,
+      })),
+      costEstimations: calculatedCosts,
+      countryGuides: input.countryGuides.map(cg => ({
+        countryCode: cg.countryCode,
+      })),
+      notes: input.notes,
+    };
+
+    // 4. Build countries string
+    const allCountries = new Set<string>();
+    input.serviceFees.forEach(sf => sf.countries.forEach(c => allCountries.add(c)));
+    input.costEstimations.forEach(ce => allCountries.add(ce.countryCode));
+    input.countryGuides.forEach(cg => allCountries.add(cg.countryCode));
+
+    // 5. Update record
+    await db.update(quotations).set({
+      leadId: input.leadId,
+      customerId: input.customerId,
+      countries: JSON.stringify(Array.from(allCountries)),
+      totalMonthly: totalMonthly.toFixed(2),
+      currency: quotationCurrency,
+      snapshotData,
+      validUntil: input.validUntil,
+      updatedAt: new Date()
+    }).where(eq(quotations.id, input.id));
+
+    // 6. Regenerate PDF (non-blocking)
+    try {
+      await quotationService.generatePdf(input.id);
+    } catch (pdfErr) {
+      console.error(`[Quotation V2] PDF regeneration failed for quotation #${input.id}, will retry on download:`, pdfErr);
+    }
+
+    return { id: input.id };
+  },
+
+  // ── Shared Methods ──
   deleteQuotation: async (quotationId: number) => {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
 
-    // 1. Verify quotation exists and is in draft status
     const quotation = await db.query.quotations.findFirst({
       where: eq(quotations.id, quotationId),
     });
     if (!quotation) throw new Error("Quotation not found");
-    if (quotation.status !== "draft") {
-      throw new Error("Only draft quotations can be deleted");
-    }
 
-    // 2. Unlink associated salesDocuments (set quotationId to null)
+    // Unlink associated salesDocuments
     await db.update(salesDocuments)
       .set({ quotationId: null })
       .where(eq(salesDocuments.quotationId, quotationId));
 
-    // 3. Clean up PDF from OSS storage (non-blocking: delete succeeds even if OSS cleanup fails)
+    // Clean up PDF from storage
     if (quotation.pdfKey) {
       try {
         await storageDelete(quotation.pdfKey);
@@ -295,9 +594,8 @@ export const quotationService = {
       }
     }
 
-    // 4. Hard delete the quotation record
+    // Hard delete
     await db.delete(quotations).where(eq(quotations.id, quotationId));
-
     return { success: true };
   },
 
@@ -310,127 +608,78 @@ export const quotationService = {
     });
     if (!quotation) throw new Error("Quotation not found");
 
-    let customerName = "Valued Customer";
-    let customerAddress = "";
-    
-    if (quotation.customerId) {
-      const customer = await db.query.customers.findFirst({
-        where: eq(customers.id, quotation.customerId)
+    const { customerName, customerAddress } = await fetchCustomerInfo(db, quotation);
+    const { billingEntity, branding } = await fetchBrandingInfo(db);
+    const { createdByName, createdByEmail } = await fetchCreatorInfo(db, quotation.createdBy);
+
+    // Detect V2 vs V1 snapshot
+    const snapshot = typeof quotation.snapshotData === 'string'
+      ? JSON.parse(quotation.snapshotData)
+      : quotation.snapshotData;
+
+    const isV2 = snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) && snapshot.version === 2;
+
+    let quotationBuffer: Buffer;
+    let countryCodesForGuides: string[] = [];
+
+    if (isV2) {
+      // V2: Three-part PDF
+      quotationBuffer = await generateQuotationPdfV2({
+        quotationNumber: quotation.quotationNumber,
+        customerName,
+        customerAddress,
+        serviceFees: snapshot.serviceFees || [],
+        costEstimations: snapshot.costEstimations || [],
+        totalMonthly: quotation.totalMonthly,
+        currency: quotation.currency,
+        validUntil: quotation.validUntil ?? undefined,
+        notes: snapshot.notes,
+        billingEntity,
+        branding,
+        createdByName,
+        createdByEmail,
       });
-      if (customer) {
-        customerName = customer.companyName;
-        customerAddress = [customer.address, customer.city, customer.country].filter(Boolean).join(", ");
-      }
-    } else if (quotation.leadId) {
-      const lead = await db.query.salesLeads.findFirst({
-        where: eq(salesLeads.id, quotation.leadId)
+
+      // Country guides from V2 snapshot
+      countryCodesForGuides = (snapshot.countryGuides || []).map((cg: any) => cg.countryCode);
+    } else {
+      // V1: Legacy format
+      const items = Array.isArray(snapshot) ? snapshot : [];
+      quotationBuffer = await generateQuotationPdf({
+        quotationNumber: quotation.quotationNumber,
+        customerName,
+        customerAddress,
+        items: items as any[],
+        totalMonthly: quotation.totalMonthly,
+        currency: quotation.currency,
+        validUntil: quotation.validUntil ?? undefined,
+        billingEntity,
+        branding,
+        createdByName,
+        createdByEmail,
       });
-      if (lead) {
-        customerName = lead.companyName;
-        customerAddress = lead.country || "";
+
+      // V1: country guides from includeCountryGuide flag
+      if (includeCountryGuide) {
+        countryCodesForGuides = Array.from(new Set(items.map((i: any) => i.countryCode)));
       }
     }
 
-    // Drizzle already parses JSON columns, so we don't need to parse it again if it's an object/array
-    const items = Array.isArray(quotation.snapshotData) 
-      ? quotation.snapshotData 
-      : typeof quotation.snapshotData === 'string' 
-        ? JSON.parse(quotation.snapshotData) 
-        : [];
-    
-    // Step 1: Fetch billing entity info (for branding + "Issued By" section)
-    // Priority: isDefault=true → first active entity → hardcoded GEA defaults
-    let billingEntity: any = undefined;
-    let branding: BrandingInfo = {
-      shortName: "GEA",
-      fullName: "Global Employment Advisors",
-      contactEmail: "support@bestgea.com",
-    };
-
-    let defaultBilling = await db.query.billingEntities.findFirst({
-      where: eq(billingEntities.isDefault, true)
-    });
-    if (!defaultBilling) {
-      // Fall back to first active entity
-      defaultBilling = await db.query.billingEntities.findFirst({
-        where: eq(billingEntities.isActive, true)
-      }) ?? undefined;
-    }
-    if (defaultBilling) {
-      const addressParts = [defaultBilling.address, defaultBilling.city, defaultBilling.country].filter(Boolean);
-      const address = addressParts.join(", ") || undefined;
-      billingEntity = {
-        entityName: defaultBilling.entityName,
-        legalName: defaultBilling.legalName,
-        address,
-        contactEmail: defaultBilling.contactEmail ?? undefined,
-        contactPhone: defaultBilling.contactPhone ?? undefined,
-        country: defaultBilling.country,
-      };
-      // Build BrandingInfo from the same entity
-      // Resolve logo URL: prefer signed S3 URL from logoFileKey, fall back to logoUrl
-      let resolvedLogoUrl = defaultBilling.logoUrl ?? null;
-      if (defaultBilling.logoFileKey) {
-        try {
-          const { url: signedUrl } = await storageGet(defaultBilling.logoFileKey);
-          resolvedLogoUrl = signedUrl;
-        } catch (err) {
-          console.warn("[QuotationService] Failed to sign logo URL:", err);
-        }
-      }
-      branding = {
-        shortName: defaultBilling.entityName,
-        fullName: defaultBilling.legalName,
-        logoUrl: resolvedLogoUrl,
-        contactEmail: defaultBilling.contactEmail ?? null,
-        address: address ?? null,
-        legalName: defaultBilling.legalName,
-      };
-    }
-
-    // Step 1b: Fetch creator info (name & email for "Issued By" and contact sections)
-    let createdByName: string | undefined;
-    let createdByEmail: string | undefined;
-    if (quotation.createdBy) {
-      const creator = await db.query.users.findFirst({
-        where: eq(users.id, quotation.createdBy)
-      });
-      if (creator) {
-        createdByName = creator.name ?? undefined;
-        createdByEmail = creator.email ?? undefined;
-      }
-    }
-
-    // Step 2: Generate the Quotation PDF using HTML engine
-    const quotationBuffer = await generateQuotationPdf({
-      quotationNumber: quotation.quotationNumber,
-      customerName,
-      customerAddress,
-      items: items as any[],
-      totalMonthly: quotation.totalMonthly,
-      currency: quotation.currency,
-      validUntil: quotation.validUntil ?? undefined,
-      billingEntity,
-      branding,
-      createdByName,
-      createdByEmail,
-    });
-
-    // Step 3: Fetch Additional PDFs (Country Guides)
+    // Merge with country guide PDFs
     const pdfsToMerge: Buffer[] = [quotationBuffer];
-    
-    if (includeCountryGuide) {
-        const countries = Array.from(new Set(items.map((i: any) => i.countryCode)));
-        for (const code of countries) {
-          const guideBuffer = await countryGuidePdfService.generatePdf(code as string);
+
+    if (countryCodesForGuides.length > 0) {
+      for (const code of countryCodesForGuides) {
+        try {
+          const guideBuffer = await countryGuidePdfService.generatePdf(code);
           if (guideBuffer) pdfsToMerge.push(guideBuffer);
+        } catch (err) {
+          console.warn(`[Quotation] Failed to generate country guide for ${code}:`, err);
         }
+      }
     }
 
-    // Step 4: Merge
-    // Bug fix: htmlPdfService already adds "Page X" in each page footer;
-    // setting addPageNumbers=true here would create duplicate overlapping page numbers.
-    const finalPdfBuffer = await mergePdfs(pdfsToMerge, { 
+    const finalPdfBuffer = await mergePdfs(pdfsToMerge, {
       addPageNumbers: false,
       metadata: {
         title: `Quotation ${quotation.quotationNumber}`,
@@ -438,7 +687,7 @@ export const quotationService = {
       }
     });
 
-    // Step 5: Upload to S3
+    // Upload to S3
     const fileName = `Quotation-${quotation.quotationNumber}.pdf`;
     const { key, url } = await storagePut(`quotations/${fileName}`, finalPdfBuffer, "application/pdf");
 
@@ -446,7 +695,7 @@ export const quotationService = {
     await db.update(quotations)
       .set({ pdfKey: key, pdfUrl: url })
       .where(eq(quotations.id, quotationId));
-    
+
     return { key, url, buffer: finalPdfBuffer };
   }
 };

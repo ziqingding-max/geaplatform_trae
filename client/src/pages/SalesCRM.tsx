@@ -13,9 +13,11 @@
 import Layout from "@/components/Layout";
 import CountrySelect, { ALL_COUNTRIES } from "@/components/CountrySelect";
 import { DatePicker } from "@/components/DatePicker";
-import { formatDate, formatDateISO, formatDateTime, countryName } from "@/lib/format";
+import { formatDate, formatDateISO, formatDateTime, countryName, formatCurrency } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { isAdmin } from "@shared/roles";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,7 +48,7 @@ import {
   Briefcase, Plus, Search, ArrowLeft, Mail, Phone, Users, ChevronRight,
   Trash2, Pencil, ArrowRightLeft, ExternalLink, MessageSquare, PhoneCall,
   Upload, FileIcon, Calendar, Send, MoreHorizontal, ChevronsUpDown, X,
-  CheckCircle2, Info, FileText, History, ChevronDown, XCircle,
+  CheckCircle2, Info, FileText, History, ChevronDown, XCircle, RotateCcw,
 } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -58,7 +60,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 
 // ── Status configuration ────────────────────────────────────────────────────
 
@@ -305,11 +307,13 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("active");
+  const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading, refetch } = trpc.sales.list.useQuery({
     search: search || undefined,
     status: statusFilter === "active" ? undefined : statusFilter !== "all" ? statusFilter : undefined,
+    assignedTo: ownerFilter !== "all" ? parseInt(ownerFilter) : undefined,
     limit: 200,
   });
 
@@ -531,6 +535,14 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
               {STATUS_LIST.map(s => <SelectItem key={s} value={s}>{t(`sales.status.${s}`)}</SelectItem>)}
             </SelectContent>
           </Select>
+          {/* C1: Pipeline Owner filter */}
+          <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+            <SelectTrigger className="w-48"><SelectValue placeholder={t("sales.filterByOwner")} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("sales.allOwners")}</SelectItem>
+              {usersData?.map((u: any) => <SelectItem key={u.id} value={u.id.toString()}>{u.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Lead Table */}
@@ -607,6 +619,8 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
 
 function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) {
   const { t } = useI18n();
+  const { user } = useAuth();
+  const userIsAdmin = isAdmin(user?.role);
   const [, setLocation] = useLocation();
   const [editOpen, setEditOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
@@ -614,7 +628,7 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [documentOpen, setDocumentOpen] = useState(false);
-  const [statusConfirm, setStatusConfirm] = useState<{ targetStatus: string; isLost: boolean } | null>(null);
+  const [statusConfirm, setStatusConfirm] = useState<{ targetStatus: string; isLost: boolean; isReopen?: boolean; isRevert?: boolean } | null>(null);
   const [lostReasonInput, setLostReasonInput] = useState("");
 
   const { data: lead, isLoading, refetch } = trpc.sales.get.useQuery({ id: leadId });
@@ -622,6 +636,8 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
   const { data: documents, refetch: refetchDocuments } = trpc.sales.documents.list.useQuery({ leadId });
   const { data: changeLogs, refetch: refetchChangeLogs } = trpc.sales.changeLogs.list.useQuery({ leadId });
   const { data: usersData } = trpc.sales.assignableUsers.useQuery();
+  // B1: Fetch quotations for this lead
+  const { data: quotationsData, refetch: refetchQuotations } = trpc.quotations.list.useQuery({ leadId, limit: 50, offset: 0 });
   // Check if customer has employees at onboarding or later stages (for Close Won eligibility)
   const { data: onboardingStatus } = trpc.sales.checkOnboardingStatus.useQuery(
     { leadId },
@@ -752,12 +768,15 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                 <CheckCircle2 className="w-4 h-4 mr-2" />{t("sales.closeWon")}
               </Button>
             )}
-            {!isClosed && (
+            {!isClosedWon && (
               <>
-                <Button variant="outline" onClick={() => setEditOpen(true)}>
-                  <Pencil className="w-4 h-4 mr-2" />{t("common.edit")}
-                </Button>
-                {!hasCustomer && (
+                {!isClosed && (
+                  <Button variant="outline" onClick={() => setEditOpen(true)}>
+                    <Pencil className="w-4 h-4 mr-2" />{t("common.edit")}
+                  </Button>
+                )}
+                {/* B3: Only admin can delete, and not allowed for msa_signed/closed_won */}
+                {userIsAdmin && !isMsaSigned && !hasCustomer && (
                   <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -796,8 +815,26 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
             <CardContent className="pt-6 pb-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm font-medium text-muted-foreground">{t("sales.pipelineProgress")}</p>
-                {!isMsaSigned && (
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2">
+                  {/* B2: Revert to previous stage button */}
+                  {(() => {
+                    const currentIdx = PIPELINE_STATUSES.indexOf(lead.status as any);
+                    if (currentIdx > 0 && !isMsaSigned) {
+                      const prevStatus = PIPELINE_STATUSES[currentIdx - 1];
+                      return (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => setStatusConfirm({ targetStatus: prevStatus, isLost: false, isRevert: true })}
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 mr-1" />{t("sales.revertStage")}
+                        </Button>
+                      );
+                    }
+                    return null;
+                  })()}
+                  {!isMsaSigned && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -806,8 +843,8 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                     >
                       <XCircle className="w-3.5 h-3.5 mr-1" />{t("sales.markAsLost")}
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               <TooltipProvider delayDuration={200}>
                 <div className="flex items-center gap-1">
@@ -883,10 +920,22 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                     <p className="text-sm whitespace-pre-wrap">{lead.notes}</p>
                   </div>
                 )}
-                {isClosedLost && lead.lostReason && (
+                {isClosedLost && (
                   <div className="mt-4 pt-4 border-t">
-                    <p className="text-xs font-medium text-destructive mb-1">{t("sales.lostReason")}</p>
-                    <p className="text-sm whitespace-pre-wrap">{lead.lostReason}</p>
+                    {lead.lostReason && (
+                      <div className="mb-3">
+                        <p className="text-xs font-medium text-destructive mb-1">{t("sales.lostReason")}</p>
+                        <p className="text-sm whitespace-pre-wrap">{lead.lostReason}</p>
+                      </div>
+                    )}
+                    {/* B2: Reopen from Closed Lost */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setStatusConfirm({ targetStatus: "discovery", isLost: false, isReopen: true })}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 mr-1" />{t("sales.reopenLead")}
+                    </Button>
                   </div>
                 )}
               </CardContent>
@@ -946,6 +995,65 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                         </div>
                     )}
                 </CardContent>
+            </Card>
+
+            {/* B1: Quotations Card */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base">{t("sales.quotations")}</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Link href={`/quotations/new?leadId=${leadId}`}>
+                    <Button variant="outline" size="sm">
+                      <Plus className="w-3.5 h-3.5 mr-1" />{t("sales.createQuotation")}
+                    </Button>
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!quotationsData || quotationsData.items.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">{t("sales.noQuotations")}</p>
+                ) : (
+                  <div className="space-y-3">
+                    {quotationsData.items.map((q: any) => {
+                      const statusColorMap: Record<string, string> = {
+                        draft: "bg-slate-100 text-slate-700 border-slate-200",
+                        sent: "bg-blue-100 text-blue-700 border-blue-200",
+                        accepted: "bg-green-100 text-green-700 border-green-200",
+                        rejected: "bg-red-100 text-red-700 border-red-200",
+                        expired: "bg-orange-100 text-orange-700 border-orange-200",
+                      };
+                      return (
+                        <div key={q.id} className="flex items-center justify-between p-3 border rounded bg-muted/30">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-50 text-blue-600 rounded">
+                              <FileText className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium font-mono">{q.quotationNumber}</p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Badge variant="outline" className={`text-[10px] h-4 px-1 ${statusColorMap[q.status] || ""}`}>
+                                  {t(`quotations.status.${q.status}`)}
+                                </Badge>
+                                <span>{formatCurrency(q.currency || "USD", q.totalMonthly)}</span>
+                                <span>{formatDateTime(q.createdAt)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {q.status === 'draft' && (
+                              <Link href={`/quotations/edit/${q.id}`}>
+                                <Button variant="ghost" size="icon" title={t("common.edit")}>
+                                  <Pencil className="w-4 h-4" />
+                                </Button>
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
             </Card>
           </div>
 
@@ -1148,6 +1256,10 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
               <AlertDialogDescription>
                 {statusConfirm?.isLost
                   ? t("sales.confirmLostDesc")
+                  : statusConfirm?.isReopen
+                  ? t("sales.confirmReopenDesc")
+                  : statusConfirm?.isRevert
+                  ? `${t("sales.confirmRevertDesc")} "${statusConfirm ? t(`sales.status.${statusConfirm.targetStatus}`) : ""}"?`
                   : `${t("sales.confirmStatusChangeDesc")} "${statusConfirm ? t(`sales.status.${statusConfirm.targetStatus}`) : ""}"?`
                 }
               </AlertDialogDescription>
