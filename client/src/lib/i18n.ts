@@ -4466,6 +4466,7 @@ const adminTranslations = {
     "audit.entity.country_config": "Country Config",
     "audit.entity.leave_type": "Leave Type",
     "audit.entity.exchange_rate": "Exchange Rate",
+    "audit.entity.exchange_rates": "Exchange Rates",
     "audit.entity.billing_entity": "Billing Entity",
     "audit.entity.employee_document": "Employee Document",
     "audit.entity.employee_contract": "Employee Contract",
@@ -4497,6 +4498,13 @@ const adminTranslations = {
     "audit.action.deactivate": "Deactivate",
     "audit.action.upload_receipt": "Upload",
     "audit.action.payroll_submit_lock": "Submit & Lock",
+    "audit.action.employee_auto_terminated": "Auto Terminate",
+    "audit.action.invoice_auto_overdue": "Auto Overdue",
+    "audit.action.monthly_leave_accrual": "Leave Accrual",
+    "audit.action.contractor_invoices_auto_created": "Auto Invoice",
+    "audit.action.exchange_rate_auto_fetched": "Auto Fetch Rates",
+    "audit.action.cron_job_executed": "Cron Executed",
+    "audit.action.convert_to_customer": "Convert",
 
     // Common
     "common.save": "Save",
@@ -6987,6 +6995,7 @@ const adminTranslations = {
     "audit.entity.country_config": "国家配置",
     "audit.entity.leave_type": "休假类型",
     "audit.entity.exchange_rate": "汇率",
+    "audit.entity.exchange_rates": "汇率",
     "audit.entity.billing_entity": "开票主体",
     "audit.entity.employee_document": "员工文档",
     "audit.entity.employee_contract": "员工合同",
@@ -7018,6 +7027,13 @@ const adminTranslations = {
     "audit.action.deactivate": "停用",
     "audit.action.upload_receipt": "上传",
     "audit.action.payroll_submit_lock": "提交并锁定",
+    "audit.action.employee_auto_terminated": "自动终止",
+    "audit.action.invoice_auto_overdue": "自动逾期",
+    "audit.action.monthly_leave_accrual": "年假累积",
+    "audit.action.contractor_invoices_auto_created": "自动开票",
+    "audit.action.exchange_rate_auto_fetched": "自动拉取汇率",
+    "audit.action.cron_job_executed": "定时任务执行",
+    "audit.action.convert_to_customer": "转为客户",
 
     // Quotations (ZH)
     "quotations.title": "报价单",
