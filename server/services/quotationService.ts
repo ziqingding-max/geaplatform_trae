@@ -41,7 +41,6 @@ interface V2ServiceFeeInput {
   serviceType: "eor" | "visa_eor" | "aor";
   serviceFee: number;
   oneTimeFee?: number;
-  headcount: number;
 }
 
 interface V2CostEstimationInput {
@@ -78,7 +77,6 @@ interface V2CalculatedServiceFee {
   serviceType: string;
   serviceFee: number;
   oneTimeFee?: number;
-  headcount: number;
 }
 
 interface V2CalculatedCostEstimation {
@@ -234,21 +232,15 @@ async function calculateCostEstimations(costEstimations: V2CostEstimationInput[]
 
 function calculateV2TotalMonthly(
   serviceFees: V2ServiceFeeInput[],
-  calculatedCosts: V2CalculatedCostEstimation[]
+  _calculatedCosts: V2CalculatedCostEstimation[]
 ): number {
-  // Total = sum of all service fees (per headcount) + sum of all cost estimations
+  // Total = sum of all service fee unit prices only
+  // Service fee is a unit price (per person per month), no headcount or country count multiplier
+  // Employer cost estimations are independent and NOT included in the service fee total
   let total = 0;
 
   for (const sf of serviceFees) {
-    // Service fee is per person per month, multiplied by headcount and number of countries
-    total += sf.serviceFee * sf.headcount * sf.countries.length;
-    if (sf.oneTimeFee) {
-      // One-time fees are NOT included in monthly total (they are separate)
-    }
-  }
-
-  for (const ce of calculatedCosts) {
-    total += ce.monthlyTotal;
+    total += sf.serviceFee;
   }
 
   return total;
@@ -477,7 +469,6 @@ export const quotationService = {
         serviceType: sf.serviceType,
         serviceFee: sf.serviceFee,
         oneTimeFee: sf.oneTimeFee,
-        headcount: sf.headcount,
       })),
       costEstimations: calculatedCosts,
       countryGuides: input.countryGuides.map(cg => ({
@@ -543,7 +534,6 @@ export const quotationService = {
         serviceType: sf.serviceType,
         serviceFee: sf.serviceFee,
         oneTimeFee: sf.oneTimeFee,
-        headcount: sf.headcount,
       })),
       costEstimations: calculatedCosts,
       countryGuides: input.countryGuides.map(cg => ({

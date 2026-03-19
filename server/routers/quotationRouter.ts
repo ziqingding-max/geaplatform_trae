@@ -26,7 +26,6 @@ const v2ServiceFeeSchema = z.object({
   serviceType: z.enum(["eor", "visa_eor", "aor"]),
   serviceFee: z.number(),
   oneTimeFee: z.number().optional(),
-  headcount: z.number().min(1).default(1),
 });
 
 const v2CostEstimationSchema = z.object({
@@ -34,7 +33,7 @@ const v2CostEstimationSchema = z.object({
   regionCode: z.string().optional(),
   salary: z.number(),
   currency: z.string().default("USD"),
-  headcount: z.number().min(1).default(1),
+  headcount: z.number().min(1).default(1), // headcount for cost estimation is per country
 });
 
 const v2CountryGuideSchema = z.object({

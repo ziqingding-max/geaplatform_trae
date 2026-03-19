@@ -1147,7 +1147,6 @@ export interface V2ServiceFeeItem {
   serviceType: string;
   serviceFee: number;
   oneTimeFee?: number;
-  headcount: number;
 }
 
 export interface V2CostEstimationItem {
@@ -1285,22 +1284,19 @@ export async function generateQuotationPdfV2(data: QuotationDataV2): Promise<Buf
         : sf.serviceType.toUpperCase();
 
       const countriesStr = sf.countries.join(", ");
-      const monthlyPerCountry = sf.serviceFee * sf.headcount;
-      const monthlyTotal = monthlyPerCountry * sf.countries.length;
 
       return `
         <tr>
           <td>${idx + 1}</td>
           <td>${countriesStr}</td>
           <td>${serviceLabel}</td>
-          <td class="right">${sf.headcount}</td>
-          <td class="right">USD ${fmt(sf.serviceFee)}/person/month${sf.oneTimeFee ? `<div style="font-size:7.5pt;color:${BRAND.muted};">+ USD ${fmt(sf.oneTimeFee)} one-time</div>` : ""}</td>
-          <td class="right bold">USD ${fmt(monthlyTotal)}</td>
+          <td class="right">USD ${fmt(sf.serviceFee)}/person/month</td>
+          <td class="right">${sf.oneTimeFee ? `USD ${fmt(sf.oneTimeFee)}` : "-"}</td>
         </tr>`;
     }).join("");
 
     const totalServiceFees = data.serviceFees.reduce((sum, sf) => {
-      return sum + sf.serviceFee * sf.headcount * sf.countries.length;
+      return sum + sf.serviceFee;
     }, 0);
 
     pages += contentPage(headerTitle, 3, 0, `
@@ -1313,15 +1309,14 @@ export async function generateQuotationPdfV2(data: QuotationDataV2): Promise<Buf
             <th style="width:8mm;">#</th>
             <th>Countries</th>
             <th>Service Type</th>
-            <th class="right">Headcount</th>
-            <th class="right">Service Fee</th>
-            <th class="right">Monthly Total</th>
+            <th class="right">Service Fee (per person/month)</th>
+            <th class="right">One-Time Fee</th>
           </tr>
         </thead>
         <tbody>${sfRows}</tbody>
         <tfoot>
           <tr>
-            <td colspan="5" style="font-weight:700;font-size:10pt;">Total Monthly Service Fees</td>
+            <td colspan="4" style="font-weight:700;font-size:10pt;">Total Service Fees (per person/month)</td>
             <td class="right" style="font-size:11pt;color:${BRAND.primary};font-weight:700;">USD ${fmt(totalServiceFees)}</td>
           </tr>
         </tfoot>
@@ -1429,7 +1424,7 @@ export async function generateQuotationPdfV2(data: QuotationDataV2): Promise<Buf
   }
 
   // ── 2d. Combined Total Summary ──
-  const totalServiceFees = data.serviceFees.reduce((sum, sf) => sum + sf.serviceFee * sf.headcount * sf.countries.length, 0);
+  const totalServiceFees = data.serviceFees.reduce((sum, sf) => sum + sf.serviceFee, 0);
   const totalEmploymentCost = data.costEstimations.reduce((sum, ce) => sum + ce.monthlyTotal, 0);
   const grandTotal = parseFloat(data.totalMonthly);
 

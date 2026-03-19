@@ -15,7 +15,7 @@ import { MultiSelect, type Option } from "@/components/ui/multi-select";
 import { formatCurrency } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 
 // ── V2 Interfaces ──
 interface ServiceFeeItem {
@@ -23,7 +23,6 @@ interface ServiceFeeItem {
   serviceType: "eor" | "visa_eor" | "aor";
   serviceFee: number;
   oneTimeFee?: number;
-  headcount: number;
 }
 
 interface CostEstimationItem {
@@ -62,18 +61,26 @@ interface QuotationItemV1 {
 export default function QuotationCreatePage({ params }: { params?: { id?: string } }) {
   const { t } = useI18n();
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const editId = params?.id ? parseInt(params.id) : undefined;
   const isEditMode = !!editId;
 
+  // Read leadId from URL query params (e.g., ?leadId=123 from SalesCRM)
+  const urlLeadId = useMemo(() => {
+    const p = new URLSearchParams(searchString);
+    const lid = p.get("leadId");
+    return lid ? parseInt(lid) : undefined;
+  }, [searchString]);
+
   // ── Basic Info State ──
-  const [leadId, setLeadId] = useState<number | undefined>();
+  const [leadId, setLeadId] = useState<number | undefined>(urlLeadId);
   const [customerId, setCustomerId] = useState<number | undefined>();
   const [validUntil, setValidUntil] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
 
   // ── V2 State ──
   const [serviceFees, setServiceFees] = useState<ServiceFeeItem[]>([
-    { countries: [], serviceType: "eor", serviceFee: 0, headcount: 1 }
+    { countries: [], serviceType: "eor", serviceFee: 0 }
   ]);
   const [costEstimations, setCostEstimations] = useState<CostEstimationItem[]>([]);
   const [countryGuides, setCountryGuides] = useState<CountryGuideItem[]>([]);
@@ -168,7 +175,7 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
 
   // ── V2 Handlers: Service Fees ──
   const addServiceFee = () => {
-    setServiceFees([...serviceFees, { countries: [], serviceType: "eor", serviceFee: 0, headcount: 1 }]);
+    setServiceFees([...serviceFees, { countries: [], serviceType: "eor", serviceFee: 0 }]);
   };
 
   const removeServiceFee = (index: number) => {
@@ -488,7 +495,6 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
           serviceType: sf.serviceType,
           serviceFee: sf.serviceFee,
           oneTimeFee: sf.oneTimeFee,
-          headcount: sf.headcount,
         })),
         costEstimations: costEstimations.filter(ce => ce.countryCode).map(ce => ({
           countryCode: ce.countryCode,
@@ -509,11 +515,11 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
   };
 
   // ── Computed Summaries ──
-  const totalServiceFeesMonthly = serviceFees.reduce((sum, sf) => sum + sf.serviceFee * sf.headcount, 0);
-  const totalOneTimeFees = serviceFees.reduce((sum, sf) => sum + (sf.oneTimeFee || 0) * sf.headcount, 0);
+  // Service fees: only sum unit prices (no headcount, no country count)
+  const totalServiceFeesMonthly = serviceFees.reduce((sum, sf) => sum + sf.serviceFee, 0);
+  const totalOneTimeFees = serviceFees.reduce((sum, sf) => sum + (sf.oneTimeFee || 0), 0);
+  // Employment costs: independent from service fees
   const totalEmploymentCostsUsd = costEstimations.reduce((sum, ce) => sum + (ce.totalEmploymentCostUsd || 0) * ce.headcount, 0);
-  const grandTotalMonthly = totalServiceFeesMonthly + totalEmploymentCostsUsd;
-  const totalHeadcountServiceFees = serviceFees.reduce((sum, sf) => sum + sf.headcount, 0);
   const totalHeadcountCostEstimations = costEstimations.reduce((sum, ce) => sum + ce.headcount, 0);
 
   const v1TotalQuotationValue = v1Items.reduce((sum, item) => sum + (item.totalMonthly || 0), 0);
@@ -817,10 +823,6 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                             <Input type="number" className="pl-14" value={sf.serviceFee} onChange={(e) => updateServiceFee(index, { serviceFee: parseFloat(e.target.value) || 0 })} />
                           </div>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground">{t("quotations.items.headcount")}</Label>
-                          <Input type="number" min={1} value={sf.headcount} onChange={(e) => updateServiceFee(index, { headcount: parseInt(e.target.value) || 1 })} />
-                        </div>
                         {sf.serviceType === "visa_eor" && (
                           <div className="space-y-1.5">
                             <Label className="text-xs text-muted-foreground">{t("quotations.v2.one_time_fee")}</Label>
@@ -832,10 +834,10 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                         )}
                       </div>
 
-                      {/* Subtotal */}
+                      {/* Unit Price Display */}
                       <div className="text-xs text-right text-muted-foreground">
-                        Subtotal: <span className="font-mono font-medium text-foreground">{formatCurrency("USD", sf.serviceFee * sf.headcount)}</span>/month
-                        {sf.oneTimeFee ? <span className="ml-3">+ <span className="font-mono font-medium text-foreground">{formatCurrency("USD", sf.oneTimeFee * sf.headcount)}</span> one-time</span> : null}
+                        {formatCurrency("USD", sf.serviceFee)}/person/month
+                        {sf.oneTimeFee ? <span className="ml-3">+ {formatCurrency("USD", sf.oneTimeFee)} one-time</span> : null}
                       </div>
                     </div>
                   ))}
@@ -1021,12 +1023,8 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                         {t("quotations.v2.part1_title")}
                       </div>
                       <div className="flex justify-between pl-5">
-                        <span className="text-muted-foreground">{t("quotations.create.total_headcount")}</span>
-                        <span className="font-medium">{totalHeadcountServiceFees}</span>
-                      </div>
-                      <div className="flex justify-between pl-5">
                         <span className="text-muted-foreground">{t("quotations.v2.total_service_fees")}</span>
-                        <span className="font-mono font-medium">{formatCurrency("USD", totalServiceFeesMonthly)}/mo</span>
+                        <span className="font-mono font-medium">{formatCurrency("USD", totalServiceFeesMonthly)}/person/mo</span>
                       </div>
                       {totalOneTimeFees > 0 && (
                         <div className="flex justify-between pl-5">
@@ -1068,10 +1066,10 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                       </div>
                     )}
 
-                    {/* Grand Total */}
+                    {/* Grand Total - Service Fees Only */}
                     <div className="flex justify-between items-end pt-3 border-t-2 border-primary/20">
                       <span className="font-medium">{t("quotations.v2.grand_total")}</span>
-                      <span className="text-xl font-bold text-primary">{formatCurrency("USD", grandTotalMonthly)}</span>
+                      <span className="text-xl font-bold text-primary">{formatCurrency("USD", totalServiceFeesMonthly)}/person/mo</span>
                     </div>
                   </div>
 
