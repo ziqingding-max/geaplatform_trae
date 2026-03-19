@@ -80,10 +80,11 @@ export interface ListAuditLogsParams {
   pageSize?: number;
   entityType?: string;
   userId?: number;
+  action?: string;
 }
 
 export async function listAuditLogs(params: ListAuditLogsParams = {}) {
-  const { page = 1, pageSize = 50, entityType, userId } = params;
+  const { page = 1, pageSize = 50, entityType, userId, action: actionFilter } = params;
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
   const offset = (page - 1) * pageSize;
@@ -91,6 +92,7 @@ export async function listAuditLogs(params: ListAuditLogsParams = {}) {
   const conditions = [];
   if (entityType) conditions.push(eq(auditLogs.entityType, entityType));
   if (userId) conditions.push(eq(auditLogs.userId, userId));
+  if (actionFilter) conditions.push(eq(auditLogs.action, actionFilter));
   
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   

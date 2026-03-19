@@ -1234,14 +1234,41 @@ export const CRON_JOB_DEFS: CronJobDef[] = [
   },
   {
     key: "exchange_rate",
-    label: "Exchange Rate Fetch",
-    description: "Fetches latest exchange rates from ExchangeRate-API (primary) with Frankfurter/ECB fallback. Covers 166 currencies.",
+    label: "Exchange Rate Fetch (Morning)",
+    description: "Fetches latest exchange rates from ExchangeRate-API (primary) with Frankfurter/ECB fallback. Covers 166 currencies. Runs early morning to capture previous day's final rates.",
     frequency: "daily",
     defaultDay: 1,
     defaultTime: "00:05",
     defaultEnabled: true,
     runner: async () => {
       const result = await fetchAndStoreExchangeRates();
+      await logAuditAction({
+        userName: "System",
+        action: "exchange_rate_auto_fetched",
+        entityType: "exchange_rates",
+        entityId: 0,
+        changes: { detail: `Auto-fetched exchange rates (morning): ${result.ratesStored} stored for ${result.date}, source: ${result.source}, errors: ${result.errors.length}` },
+      });
+      return { ratesStored: result.ratesStored, date: result.date, errors: result.errors.length };
+    },
+  },
+  {
+    key: "exchange_rate_afternoon",
+    label: "Exchange Rate Fetch (Afternoon)",
+    description: "Second daily fetch to capture today's rates after ExchangeRate-API publishes new data (~UTC 09:30 = Beijing 17:30). Ensures same-day rates are available.",
+    frequency: "daily",
+    defaultDay: 1,
+    defaultTime: "18:00",
+    defaultEnabled: true,
+    runner: async () => {
+      const result = await fetchAndStoreExchangeRates();
+      await logAuditAction({
+        userName: "System",
+        action: "exchange_rate_auto_fetched",
+        entityType: "exchange_rates",
+        entityId: 0,
+        changes: { detail: `Auto-fetched exchange rates (afternoon): ${result.ratesStored} stored for ${result.date}, source: ${result.source}, errors: ${result.errors.length}` },
+      });
       return { ratesStored: result.ratesStored, date: result.date, errors: result.errors.length };
     },
   },
@@ -1313,16 +1340,35 @@ export async function scheduleCronJobs() {
     const cronExpr = buildCronExpression(def.frequency, config.day, config.time);
     const task = cron.schedule(cronExpr, async () => {
       console.log(`[CronJob] Running ${def.label} ...`);
+      const startTime = Date.now();
       try {
         const result = await def.runner();
+        const durationMs = Date.now() - startTime;
         console.log(`[CronJob] ${def.label} completed:`, result);
         // Store last run timestamp
         const { setSystemConfig } = await import("./db");
         await setSystemConfig(`cron_${def.key}_last_run`, new Date().toISOString());
+        // Record execution audit log for every cron run
+        await logAuditAction({
+          userName: "System",
+          action: "cron_job_executed",
+          entityType: "system",
+          entityId: 0,
+          changes: { detail: `Cron job "${def.label}" completed successfully in ${durationMs}ms`, job: def.key, status: "success", result: typeof result === "object" ? JSON.stringify(result) : String(result) },
+        });
       } catch (err) {
+        const durationMs = Date.now() - startTime;
         console.error(`[CronJob] ${def.label} failed:`, err);
         const { setSystemConfig } = await import("./db");
         await setSystemConfig(`cron_${def.key}_last_error`, String(err));
+        // Record failed execution audit log
+        await logAuditAction({
+          userName: "System",
+          action: "cron_job_executed",
+          entityType: "system",
+          entityId: 0,
+          changes: { detail: `Cron job "${def.label}" failed after ${durationMs}ms: ${String(err)}`, job: def.key, status: "failed" },
+        });
       }
     }, { timezone: "Asia/Shanghai" });
 
@@ -1353,9 +1399,19 @@ export async function runJobByKey(key: string): Promise<any> {
   const def = CRON_JOB_DEFS.find(d => d.key === key);
   if (!def) throw new Error(`Unknown cron job key: ${key}`);
   console.log(`[CronJob] Manual trigger: ${def.label}`);
+  const startTime = Date.now();
   const result = await def.runner();
+  const durationMs = Date.now() - startTime;
   // Store last run timestamp
   const { setSystemConfig } = await import("./db");
   await setSystemConfig(`cron_${def.key}_last_run`, new Date().toISOString());
+  // Record manual trigger audit log
+  await logAuditAction({
+    userName: "System",
+    action: "cron_job_executed",
+    entityType: "system",
+    entityId: 0,
+    changes: { detail: `Cron job "${def.label}" manually triggered, completed in ${durationMs}ms`, job: def.key, status: "manual", result: typeof result === "object" ? JSON.stringify(result) : String(result) },
+  });
   return result;
 }

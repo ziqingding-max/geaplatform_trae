@@ -34,6 +34,18 @@ const ACTION_COLORS: Record<string, string> = {
   upload_receipt: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
   payroll_submit_lock: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
   batch_update: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
+  convert_to_customer: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200",
+  // Cron job actions — previously missing
+  employee_auto_terminated: "bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200",
+  employee_auto_added_to_payroll: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
+  payroll_run_auto_created: "bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200",
+  employee_auto_on_leave: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  employee_auto_return_from_leave: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
+  invoice_auto_overdue: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  monthly_leave_accrual: "bg-lime-100 text-lime-800 dark:bg-lime-900 dark:text-lime-200",
+  contractor_invoices_auto_created: "bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200",
+  exchange_rate_auto_fetched: "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200",
+  cron_job_executed: "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-200",
 };
 
 const ACTION_DISPLAY: Record<string, string> = {
@@ -63,6 +75,14 @@ const ACTION_DISPLAY: Record<string, string> = {
   deactivate: "audit.action.deactivate",
   upload_receipt: "audit.action.upload_receipt",
   payroll_submit_lock: "audit.action.payroll_submit_lock",
+  convert_to_customer: "audit.action.convert_to_customer",
+  // Cron job actions — previously missing
+  employee_auto_terminated: "audit.action.employee_auto_terminated",
+  invoice_auto_overdue: "audit.action.invoice_auto_overdue",
+  monthly_leave_accrual: "audit.action.monthly_leave_accrual",
+  contractor_invoices_auto_created: "audit.action.contractor_invoices_auto_created",
+  exchange_rate_auto_fetched: "audit.action.exchange_rate_auto_fetched",
+  cron_job_executed: "audit.action.cron_job_executed",
 };
 
 const ENTITY_TYPES = [
@@ -76,6 +96,7 @@ const ENTITY_TYPES = [
   "country_config",
   "leave_type",
   "exchange_rate",
+  "exchange_rates",
   "billing_entity",
   "employee_document",
   "employee_contract",
@@ -83,7 +104,32 @@ const ENTITY_TYPES = [
   "system",
 ] as const;
 
-const ACTION_FILTERS = ["create", "update", "delete", "approve", "reject", "cancel", "generate", "auto_fill", "auto_lock_monthly"] as const;
+const ACTION_FILTERS = [
+  "create",
+  "update",
+  "delete",
+  "approve",
+  "reject",
+  "cancel",
+  "generate",
+  "auto_fill",
+  "auto_lock_monthly",
+  // Cron job actions — previously missing from filter
+  "employee_auto_activated",
+  "employee_auto_terminated",
+  "employee_auto_on_leave",
+  "employee_auto_return_from_leave",
+  "employee_auto_added_to_payroll",
+  "payroll_run_auto_created",
+  "invoice_auto_overdue",
+  "monthly_leave_accrual",
+  "contractor_invoices_auto_created",
+  "exchange_rate_auto_fetched",
+  "cron_job_executed",
+  "convert_to_customer",
+  "fetch_live",
+  "payroll_submit_lock",
+] as const;
 
 export default function AuditLogs({ embedded }: { embedded?: boolean } = {}) {
   const { t } = useI18n();
@@ -134,7 +180,7 @@ export default function AuditLogs({ embedded }: { embedded?: boolean } = {}) {
             value={filters.action || "all"}
             onValueChange={(v) => setFilters(f => ({ ...f, action: v === "all" ? "" : v, offset: 0 }))}
           >
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-48">
               <SelectValue placeholder={t("audit.filter.action_all")} />
             </SelectTrigger>
             <SelectContent>

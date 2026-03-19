@@ -17,6 +17,7 @@ const ENTITY_LABELS: Record<string, string> = {
   leave_type: "Leave Type",
   exchange_rate: "Exchange Rate",
   exchange_rates: "Exchange Rates",
+  exchange_rate_markup: "Exchange Rate Markup",
   billing_entity: "Billing Entity",
   employee_document: "Employee Document",
   employee_contract: "Employee Contract",
@@ -56,6 +57,13 @@ const ACTION_LABELS: Record<string, string> = {
   payroll_submit_lock: "Submitted and locked",
   fetch_live: "Fetched live rates for",
   convert_to_customer: "Converted to customer",
+  // Cron job actions — previously missing
+  employee_auto_terminated: "Auto-terminated",
+  invoice_auto_overdue: "Auto-marked overdue",
+  monthly_leave_accrual: "Monthly leave accrual",
+  contractor_invoices_auto_created: "Auto-created contractor invoices",
+  exchange_rate_auto_fetched: "Auto-fetched exchange rates",
+  cron_job_executed: "Cron job executed",
 };
 
 /**
@@ -72,6 +80,9 @@ function parseChanges(changes: any): string {
     
     // If it has a description field, use it
     if (parsed.description) return parsed.description;
+    
+    // If it has a detail field (used by cron jobs), use it
+    if (parsed.detail) return parsed.detail;
     
     // If it has name/companyName, show it
     if (parsed.companyName) return `"${parsed.companyName}"`;
@@ -130,7 +141,7 @@ export function formatAuditDescription(log: {
   }
   
   if (log.action === "employee_auto_activated") {
-    return `System auto-activated employee #${log.entityId}${details ? ` (${details})` : ""}`;
+    return `System auto-activated employee #${log.entityId}${details ? ` — ${details}` : ""}`;
   }
   
   if (log.action === "employee_auto_added_to_payroll") {
@@ -163,6 +174,35 @@ export function formatAuditDescription(log: {
   
   if (log.action === "payroll_submit_lock") {
     return `Submitted and locked payroll run #${log.entityId}${details ? ` — ${details}` : ""}`;
+  }
+
+  // Cron job actions — previously missing
+  if (log.action === "employee_auto_terminated") {
+    return `System auto-terminated employee #${log.entityId}${details ? ` — ${details}` : ""}`;
+  }
+
+  if (log.action === "invoice_auto_overdue") {
+    return `System auto-marked invoice #${log.entityId} as overdue${details ? ` — ${details}` : ""}`;
+  }
+
+  if (log.action === "monthly_leave_accrual") {
+    return `System completed monthly leave accrual${details ? ` — ${details}` : ""}`;
+  }
+
+  if (log.action === "contractor_invoices_auto_created") {
+    return `System auto-created contractor invoices${details ? ` — ${details}` : ""}`;
+  }
+
+  if (log.action === "exchange_rate_auto_fetched") {
+    return `System auto-fetched exchange rates${details ? ` — ${details}` : ""}`;
+  }
+
+  if (log.action === "cron_job_executed") {
+    return `${details || "Cron job executed"}`;
+  }
+
+  if (log.action === "convert_to_customer") {
+    return `Converted sales lead to customer${details ? ` — ${details}` : ""}`;
   }
   
   // Standard pattern: "Action EntityType #ID — details"

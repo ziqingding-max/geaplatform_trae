@@ -9,6 +9,7 @@ export const auditLogsRouter = router({
       z.object({
         entityType: z.string().optional(),
         userId: z.number().optional(),
+        action: z.string().optional(),
         limit: z.number().default(100),
         offset: z.number().default(0),
       })
@@ -20,6 +21,7 @@ export const auditLogsRouter = router({
         pageSize: input.limit,
         entityType: input.entityType,
         userId: input.userId,
+        action: input.action,
       });
     }),
 });
