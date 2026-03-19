@@ -86,7 +86,6 @@ const BASE_CSS = `
   }
 
   /* ── Page Layout ── */
-  @page { size: A4; margin: 0; }
   .page {
     width: 210mm;
     min-height: 297mm;
