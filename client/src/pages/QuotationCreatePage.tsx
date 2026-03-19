@@ -522,6 +522,44 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
   const totalEmploymentCostsUsd = costEstimations.reduce((sum, ce) => sum + (ce.totalEmploymentCostUsd || 0) * ce.headcount, 0);
   const totalHeadcountCostEstimations = costEstimations.reduce((sum, ce) => sum + ce.headcount, 0);
 
+  // Country-level matching: match Part 1 (service fees) with Part 2 (cost estimations)
+  const sfByCountryMap = new Map<string, { serviceType: string; serviceFee: number }>();
+  for (const sf of serviceFees) {
+    for (const cc of sf.countries) {
+      sfByCountryMap.set(cc, { serviceType: sf.serviceType, serviceFee: sf.serviceFee });
+    }
+  }
+  const matchedCountrySet = new Set<string>();
+  const matchedSummaryRows: Array<{ countryCode: string; serviceType: string; serviceFee: number; headcount: number; employmentCostPerPerson: number; totalMonthly: number }> = [];
+  const unmatchedCostCountries: string[] = [];
+  const unmatchedSfOnlyCountries: string[] = [];
+  for (const ce of costEstimations) {
+    if (!ce.countryCode || ce.totalEmploymentCostUsd === undefined) continue;
+    const sfMatch = sfByCountryMap.get(ce.countryCode);
+    if (sfMatch) {
+      matchedCountrySet.add(ce.countryCode);
+      const totalMonthly = (sfMatch.serviceFee + ce.totalEmploymentCostUsd) * ce.headcount;
+      matchedSummaryRows.push({
+        countryCode: ce.countryCode,
+        serviceType: sfMatch.serviceType,
+        serviceFee: sfMatch.serviceFee,
+        headcount: ce.headcount,
+        employmentCostPerPerson: ce.totalEmploymentCostUsd,
+        totalMonthly,
+      });
+    } else {
+      unmatchedCostCountries.push(ce.countryCode);
+    }
+  }
+  for (const sf of serviceFees) {
+    for (const cc of sf.countries) {
+      if (!matchedCountrySet.has(cc)) {
+        unmatchedSfOnlyCountries.push(cc);
+      }
+    }
+  }
+  const matchedGrandTotal = matchedSummaryRows.reduce((sum, r) => sum + r.totalMonthly, 0);
+
   const v1TotalQuotationValue = v1Items.reduce((sum, item) => sum + (item.totalMonthly || 0), 0);
 
   // ── Render ──
@@ -1066,10 +1104,41 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                       </div>
                     )}
 
-                    {/* Grand Total - Service Fees Only */}
+                    {/* Country Matching Summary */}
+                    {matchedSummaryRows.length > 0 && (
+                      <div className="space-y-1 pt-2 border-t border-border">
+                        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                          <Globe className="w-3 h-3" />
+                          {t("quotations.v2.matched_summary")}
+                        </div>
+                        {matchedSummaryRows.map((r, idx) => (
+                          <div key={idx} className="flex justify-between pl-5 text-xs">
+                            <span className="text-muted-foreground">{r.countryCode} ({r.headcount}p)</span>
+                            <span className="font-mono font-medium">{formatCurrency("USD", r.totalMonthly)}/mo</span>
+                          </div>
+                        ))}
+                        {unmatchedSfOnlyCountries.length > 0 && (
+                          <div className="pl-5 text-xs text-muted-foreground italic">
+                            {t("quotations.v2.unmatched_sf")}: {unmatchedSfOnlyCountries.join(", ")}
+                          </div>
+                        )}
+                        {unmatchedCostCountries.length > 0 && (
+                          <div className="pl-5 text-xs text-muted-foreground italic">
+                            {t("quotations.v2.unmatched_cost")}: {unmatchedCostCountries.join(", ")}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Grand Total */}
                     <div className="flex justify-between items-end pt-3 border-t-2 border-primary/20">
                       <span className="font-medium">{t("quotations.v2.grand_total")}</span>
-                      <span className="text-xl font-bold text-primary">{formatCurrency("USD", totalServiceFeesMonthly)}/person/mo</span>
+                      <span className="text-xl font-bold text-primary">
+                        {matchedSummaryRows.length > 0
+                          ? `${formatCurrency("USD", matchedGrandTotal)}/mo`
+                          : `${formatCurrency("USD", totalServiceFeesMonthly)}/person/mo`
+                        }
+                      </span>
                     </div>
                   </div>
 

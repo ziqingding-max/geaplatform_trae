@@ -232,18 +232,34 @@ async function calculateCostEstimations(costEstimations: V2CostEstimationInput[]
 
 function calculateV2TotalMonthly(
   serviceFees: V2ServiceFeeInput[],
-  _calculatedCosts: V2CalculatedCostEstimation[]
+  calculatedCosts: V2CalculatedCostEstimation[]
 ): number {
-  // Total = sum of all service fee unit prices only
-  // Service fee is a unit price (per person per month), no headcount or country count multiplier
-  // Employer cost estimations are independent and NOT included in the service fee total
-  let total = 0;
-
+  // Country-level matching: match Part 1 (service fees) with Part 2 (cost estimations)
+  // For matched countries: Total = (serviceFee + usdEmploymentCost) * headcount
+  // Build a map: countryCode -> serviceFee from Part 1
+  const sfByCountry = new Map<string, number>();
   for (const sf of serviceFees) {
-    total += sf.serviceFee;
+    for (const cc of sf.countries) {
+      sfByCountry.set(cc, sf.serviceFee);
+    }
   }
 
-  return total;
+  // Match Part 2 countries with Part 1
+  let matchedTotal = 0;
+  for (const ce of calculatedCosts) {
+    const serviceFee = sfByCountry.get(ce.countryCode);
+    if (serviceFee !== undefined) {
+      matchedTotal += (serviceFee + ce.usdEmploymentCost) * ce.headcount;
+    }
+  }
+
+  // If no countries matched (e.g., only Part 1 or only Part 2 filled),
+  // fall back to sum of service fee unit prices
+  if (matchedTotal === 0 && serviceFees.length > 0) {
+    return serviceFees.reduce((sum, sf) => sum + sf.serviceFee, 0);
+  }
+
+  return matchedTotal;
 }
 
 export const quotationService = {

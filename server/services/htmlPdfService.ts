@@ -1423,44 +1423,150 @@ export async function generateQuotationPdfV2(data: QuotationDataV2): Promise<Buf
     `, branding);
   }
 
-  // ── 2d. Combined Total Summary ──
-  const totalServiceFees = data.serviceFees.reduce((sum, sf) => sum + sf.serviceFee, 0);
-  const totalEmploymentCost = data.costEstimations.reduce((sum, ce) => sum + ce.monthlyTotal, 0);
-  const grandTotal = parseFloat(data.totalMonthly);
+  // ── 2d. Combined Total Summary (Country-Level Matching) ──
+  // Build a map: countryCode -> { serviceType, serviceFee } from Part 1
+  const sfByCountry = new Map<string, { serviceType: string; serviceFee: number }>();
+  const matchedCountries = new Set<string>();
+  for (const sf of data.serviceFees) {
+    for (const cc of sf.countries) {
+      sfByCountry.set(cc, { serviceType: sf.serviceType, serviceFee: sf.serviceFee });
+    }
+  }
+
+  // Matched rows: countries that appear in BOTH Part 1 and Part 2
+  const matchedRows: Array<{
+    countryCode: string; serviceType: string; serviceFee: number;
+    headcount: number; usdEmploymentCost: number; totalMonthly: number;
+  }> = [];
+
+  // Unmatched cost estimations: countries in Part 2 but NOT in Part 1
+  const unmatchedCostRows: Array<{
+    countryCode: string; headcount: number; usdEmploymentCost: number; monthlyTotal: number;
+  }> = [];
+
+  for (const ce of data.costEstimations) {
+    const sfMatch = sfByCountry.get(ce.countryCode);
+    if (sfMatch) {
+      matchedCountries.add(ce.countryCode);
+      const totalMonthly = (sfMatch.serviceFee + ce.usdEmploymentCost) * ce.headcount;
+      matchedRows.push({
+        countryCode: ce.countryCode,
+        serviceType: sfMatch.serviceType,
+        serviceFee: sfMatch.serviceFee,
+        headcount: ce.headcount,
+        usdEmploymentCost: ce.usdEmploymentCost,
+        totalMonthly,
+      });
+    } else {
+      unmatchedCostRows.push({
+        countryCode: ce.countryCode,
+        headcount: ce.headcount,
+        usdEmploymentCost: ce.usdEmploymentCost,
+        monthlyTotal: ce.monthlyTotal,
+      });
+    }
+  }
+
+  // Unmatched service fee countries: in Part 1 but NOT in Part 2
+  const unmatchedSfCountries: Array<{ countryCode: string; serviceType: string; serviceFee: number }> = [];
+  for (const sf of data.serviceFees) {
+    for (const cc of sf.countries) {
+      if (!matchedCountries.has(cc)) {
+        unmatchedSfCountries.push({ countryCode: cc, serviceType: sf.serviceType, serviceFee: sf.serviceFee });
+      }
+    }
+  }
+
+  const matchedTotal = matchedRows.reduce((sum, r) => sum + r.totalMonthly, 0);
+
+  // Build matched rows HTML
+  const matchedRowsHtml = matchedRows.map(r => {
+    const serviceLabel = r.serviceType === "eor" ? "EOR"
+      : r.serviceType === "visa_eor" ? "Visa EOR"
+      : r.serviceType === "aor" ? "AOR" : r.serviceType.toUpperCase();
+    return `
+      <tr>
+        <td>${r.countryCode}</td>
+        <td>${serviceLabel}</td>
+        <td class="right">USD ${fmt(r.serviceFee)}</td>
+        <td class="right">${r.headcount}</td>
+        <td class="right">USD ${fmt(r.usdEmploymentCost)}</td>
+        <td class="right bold" style="color:${BRAND.primary};">USD ${fmt(r.totalMonthly)}</td>
+      </tr>`;
+  }).join("");
+
+  // Build unmatched cost estimation rows HTML
+  const unmatchedCostHtml = unmatchedCostRows.length > 0 ? `
+    <tr><td colspan="6" style="padding-top:4mm;font-weight:600;font-size:9pt;color:${BRAND.muted};">Countries with Cost Estimation Only (no matching service fee)</td></tr>
+    ${unmatchedCostRows.map(r => `
+      <tr style="color:${BRAND.muted};">
+        <td>${r.countryCode}</td>
+        <td>—</td>
+        <td class="right">—</td>
+        <td class="right">${r.headcount}</td>
+        <td class="right">USD ${fmt(r.usdEmploymentCost)}</td>
+        <td class="right">USD ${fmt(r.monthlyTotal)}</td>
+      </tr>`).join("")}
+  ` : "";
+
+  // Build unmatched service fee countries HTML
+  const unmatchedSfHtml = unmatchedSfCountries.length > 0 ? `
+    <tr><td colspan="6" style="padding-top:4mm;font-weight:600;font-size:9pt;color:${BRAND.muted};">Countries with Service Fee Only (no cost estimation)</td></tr>
+    ${unmatchedSfCountries.map(r => {
+      const serviceLabel = r.serviceType === "eor" ? "EOR"
+        : r.serviceType === "visa_eor" ? "Visa EOR"
+        : r.serviceType === "aor" ? "AOR" : r.serviceType.toUpperCase();
+      return `
+      <tr style="color:${BRAND.muted};">
+        <td>${r.countryCode}</td>
+        <td>${serviceLabel}</td>
+        <td class="right">USD ${fmt(r.serviceFee)}/person/mo</td>
+        <td class="right">—</td>
+        <td class="right">—</td>
+        <td class="right">—</td>
+      </tr>`;
+    }).join("")}
+  ` : "";
 
   pages += contentPage(headerTitle, 5, 0, `
     <h2>Total Monthly Investment Summary</h2>
+    <p style="color:${BRAND.muted};font-size:9pt;margin-bottom:3mm;">Country-level breakdown matching service fees with employer cost estimations. Total = (Service Fee + Employment Cost per Person) × Headcount.</p>
+
     <table class="qt-table">
       <thead>
         <tr>
-          <th>Category</th>
-          <th class="right">Monthly Amount (USD)</th>
+          <th>Country</th>
+          <th>Service Type</th>
+          <th class="right">Service Fee (/person/mo)</th>
+          <th class="right">Headcount</th>
+          <th class="right">Employment Cost (/person/mo)</th>
+          <th class="right">Total Monthly</th>
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td>Service Fees</td>
-          <td class="right">USD ${fmt(totalServiceFees)}</td>
-        </tr>
-        <tr>
-          <td>Employment Costs (Salary + Employer Contributions)</td>
-          <td class="right">USD ${fmt(totalEmploymentCost)}</td>
-        </tr>
+        ${matchedRowsHtml}
+        ${unmatchedCostHtml}
+        ${unmatchedSfHtml}
       </tbody>
+      ${matchedRows.length > 0 ? `
       <tfoot>
         <tr>
-          <td style="font-weight:700;font-size:11pt;">Grand Total Monthly</td>
-          <td class="right" style="font-size:12pt;color:${BRAND.primary};font-weight:700;">USD ${fmt(grandTotal)}</td>
+          <td colspan="5" style="font-weight:700;font-size:11pt;">Matched Countries Grand Total</td>
+          <td class="right" style="font-size:12pt;color:${BRAND.primary};font-weight:700;">USD ${fmt(matchedTotal)}</td>
         </tr>
-      </tfoot>
+      </tfoot>` : ""}
     </table>
 
+    ${matchedRows.length > 0 ? `
     <div class="total-box">
       <div class="total-inner">
         <div class="total-label">TOTAL MONTHLY INVESTMENT</div>
-        <div class="total-amount">USD ${fmt(grandTotal)}</div>
+        <div class="total-amount">USD ${fmt(matchedTotal)}</div>
       </div>
-    </div>
+    </div>` : `
+    <div style="text-align:center;padding:5mm;color:${BRAND.muted};font-size:9pt;">
+      No countries matched between service fees and cost estimations. Please review the quotation details above.
+    </div>`}
   `, branding);
 
   // ── 2e. Notes + Terms & Conditions ──
