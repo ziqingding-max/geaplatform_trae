@@ -345,7 +345,7 @@ function EmployeeList() {
                     <div className="space-y-2">
                       <Label>{t("employees.create.form.customer")} <span className="text-red-500">*</span></Label>
                       <Select value={formData.customerId ? String(formData.customerId) : ""} onValueChange={(v) => { setFormData({ ...formData, customerId: parseInt(v) }); setErrors({ ...errors, customerId: false }); }}>
-                        <SelectTrigger className={errCls("customerId")}><SelectValue placeholder="Select customer" /></SelectTrigger>
+                        <SelectTrigger className={errCls("customerId")}><SelectValue placeholder={t("employees.create.form.customerPlaceholder")} /></SelectTrigger>
                         <SelectContent>
                           {customers?.data?.map((c) => (
                             <SelectItem key={c.id} value={String(c.id)}>{c.companyName}</SelectItem>
@@ -404,12 +404,12 @@ function EmployeeList() {
                       <Label>{t("employees.create.form.gender")} <span className="text-red-500">*</span></Label>
                       <div className={errors.gender ? "rounded-md ring-1 ring-red-500" : ""}>
                         <Select value={formData.gender} onValueChange={(v) => { setFormData({ ...formData, gender: v as any }); setErrors({ ...errors, gender: false }); }}>
-                          <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder={t("employees.create.form.placeholder.selectGender")} /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="male">Male</SelectItem>
-                            <SelectItem value="female">Female</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
-                            <SelectItem value="prefer_not_to_say">Prefer not to say</SelectItem>
+                            <SelectItem value="male">{t("employees.create.form.gender.male")}</SelectItem>
+                            <SelectItem value="female">{t("employees.create.form.gender.female")}</SelectItem>
+                            <SelectItem value="other">{t("employees.create.form.gender.other")}</SelectItem>
+                            <SelectItem value="prefer_not_to_say">{t("employees.create.form.gender.preferNotToSay")}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -425,42 +425,42 @@ function EmployeeList() {
                       {errors.nationality && <p className="text-xs text-red-500">{t("common.required")}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label>ID Type <span className="text-red-500">*</span></Label>
+                      <Label>{t("employees.create.form.idType")} <span className="text-red-500">*</span></Label>
                       <div className={errors.idType ? "rounded-md ring-1 ring-red-500" : ""}>
                         <Select value={formData.idType} onValueChange={(v) => { setFormData({ ...formData, idType: v }); setErrors({ ...errors, idType: false }); }}>
-                          <SelectTrigger><SelectValue placeholder="Select ID type" /></SelectTrigger>
+                          <SelectTrigger><SelectValue placeholder={t("employees.create.form.placeholder.selectIdType")} /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="national_id">National ID</SelectItem>
-                            <SelectItem value="passport">Passport</SelectItem>
-                            <SelectItem value="driver_license">Driver License</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
+                            <SelectItem value="national_id">{t("employees.create.form.idType.nationalId")}</SelectItem>
+                            <SelectItem value="passport">{t("employees.create.form.idType.passport")}</SelectItem>
+                            <SelectItem value="driver_license">{t("employees.create.form.idType.driverLicense")}</SelectItem>
+                            <SelectItem value="other">{t("employees.create.form.idType.other")}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                       {errors.idType && <p className="text-xs text-red-500">{t("common.required")}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label>ID Number <span className="text-red-500">*</span></Label>
+                      <Label>{t("employees.create.form.idNumber")} <span className="text-red-500">*</span></Label>
                       <Input className={errCls("idNumber")} value={formData.idNumber} onChange={(e) => { setFormData({ ...formData, idNumber: e.target.value }); setErrors({ ...errors, idNumber: false }); }} placeholder="ID number" />
                       {errors.idNumber && <p className="text-xs text-red-500">{t("common.required")}</p>}
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Street Address <span className="text-red-500">*</span></Label>
+                    <Label>{t("employees.create.form.streetAddress")} <span className="text-red-500">*</span></Label>
                     <Textarea className={errCls("address")} value={formData.address} onChange={(e) => { setFormData({ ...formData, address: e.target.value }); setErrors({ ...errors, address: false }); }} placeholder="Full street address" rows={2} />
                     {errors.address && <p className="text-xs text-red-500">{t("common.required")}</p>}
                   </div>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
-                      <Label>City</Label>
+                      <Label>{t("common.city")}</Label>
                       <Input value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} placeholder="City" />
                     </div>
                     <div className="space-y-2">
-                      <Label>State / Province</Label>
+                      <Label>{t("common.stateProvince")}</Label>
                       <Input value={formData.state} onChange={(e) => setFormData({ ...formData, state: e.target.value })} placeholder="State" />
                     </div>
                     <div className="space-y-2">
-                      <Label>Postal Code</Label>
+                      <Label>{t("common.postalCode")}</Label>
                       <Input value={formData.postalCode} onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })} placeholder="Postal code" />
                     </div>
                   </div>
@@ -531,7 +531,7 @@ function EmployeeList() {
                     </div>
                     <div className="space-y-2">
                       <Label>{t("employees.create.form.salaryCurrency")} <span className="text-xs text-muted-foreground font-normal">{t("employees.create.form.currencyAutoFromCountry")}</span></Label>
-                      <Input value={formData.salaryCurrency || (formData.country ? "Loading..." : "Select country first")} disabled className="bg-muted" />
+                      <Input value={formData.salaryCurrency || (formData.country ? t("common.loading") : t("employees.create.form.selectCountryFirst"))} disabled className="bg-muted" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -554,7 +554,7 @@ function EmployeeList() {
                       <p className="text-xs text-muted-foreground">{t("employees.create.form.estimatedEmployerCostMonthlyDescription")}</p>
                       {estimationBreakdown.length > 0 && (
                         <div className="mt-2 p-2 bg-muted/50 rounded text-xs space-y-1">
-                          <p className="font-semibold text-muted-foreground">Employer Cost Breakdown:</p>
+                          <p className="font-semibold text-muted-foreground">{t("employees.create.form.costBreakdown")}</p>
                           {estimationBreakdown.map((item, idx) => (
                             <div key={idx} className="flex justify-between">
                               <span>{item.itemNameEn}:</span>
@@ -591,13 +591,13 @@ function EmployeeList() {
                       <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                       <span>
                         {formData.serviceType === "visa_eor"
-                          ? "Visa EOR service type selected — visa sponsorship required."
-                          : "Visa auto-detected: employee nationality differs from work country. Visa documents can be uploaded after creating the employee."}
+                          ? t("employees.create.form.visaEorHint")
+                          : t("employees.create.form.visaAutoDetectedHint")}
                       </span>
                     </div>
                     <label className="flex items-center gap-2 text-sm cursor-pointer">
                       <input type="checkbox" checked={formData.requiresVisa} onChange={(e) => setFormData({ ...formData, requiresVisa: e.target.checked })} className="rounded" />
-                      This employee requires a work visa
+                      {t("employees.create.form.visaCheckboxLabel")}
                     </label>
                   </fieldset>
                 )}
@@ -1455,10 +1455,10 @@ function EmployeeDetail({ id }: { id: number }) {
               <Card>
                 <CardHeader><CardTitle className="text-base flex items-center gap-2"><Shield className="w-4 h-4" />{t("employees.detail.visa.status.title")}</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
-                  <InfoRow icon={<Shield className="w-3.5 h-3.5" />} label="Requires Visa" value={employee.requiresVisa ? "Yes" : "No"} />
-                  <InfoRow icon={<FileCheck className="w-3.5 h-3.5" />} label="Visa Status" value={visaStatusLabels[employee.visaStatus || ""] || employee.visaStatus} />
-                  <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label="Visa Expiry" value={formatDate(employee.visaExpiryDate)} />
-                  <InfoRow icon={<FileText className="w-3.5 h-3.5" />} label="Visa Notes" value={employee.visaNotes} />
+                  <InfoRow icon={<Shield className="w-3.5 h-3.5" />} label={t("employees.detail.visa.status.labels.requiresVisa")} value={employee.requiresVisa ? t("common.yes") : t("common.no")} />
+                  <InfoRow icon={<FileCheck className="w-3.5 h-3.5" />} label={t("employees.detail.visa.status.labels.visaStatus")} value={visaStatusLabels[employee.visaStatus || ""] || employee.visaStatus} />
+                  <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label={t("employees.detail.visa.status.labels.expiryDate")} value={formatDate(employee.visaExpiryDate)} />
+                  <InfoRow icon={<FileText className="w-3.5 h-3.5" />} label={t("employees.detail.visa.status.labels.notes")} value={employee.visaNotes} />
                   {employee.visaExpiryDate && new Date(employee.visaExpiryDate) < new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) && (
                     <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 mt-3">
                       <AlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -1711,7 +1711,7 @@ function EmployeeDetail({ id }: { id: number }) {
                   <div className="space-y-2">
                     <Label>{t("employees.edit.gender")}</Label>
                     <Select value={editForm.gender || "_none"} onValueChange={(v) => setEditForm({ ...editForm, gender: v === "_none" ? "" : v })}>
-                      <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder={t("employees.create.form.placeholder.selectGender")} /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="_none">{t("common.notSpecified")}</SelectItem>
                         <SelectItem value="male">{t("employees.detail.gender.male")}</SelectItem>
@@ -1729,15 +1729,15 @@ function EmployeeDetail({ id }: { id: number }) {
                   {editVisaCheck && editForm.nationality && editForm.country && (
                     <p className="text-xs text-muted-foreground">
                       {editVisaCheck.requiresVisa
-                        ? "\u26A0 Nationality differs from work country \u2014 visa may be required. Service type will auto-update."
-                        : "Nationality matches work country \u2014 no visa required."}
+                        ? t("employees.edit.visaRequiredHint")
+                        : t("employees.edit.visaNotRequiredHint")}
                     </p>
                   )}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{t("employees.edit.idType")}</Label>
                     <Select value={editForm.idType || "_none"} onValueChange={(v) => setEditForm({ ...editForm, idType: v === "_none" ? "" : v })}>
-                      <SelectTrigger><SelectValue placeholder="Select ID type" /></SelectTrigger>
+                      <SelectTrigger><SelectValue placeholder={t("employees.create.form.placeholder.selectIdType")} /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="_none">{t("common.notSpecified")}</SelectItem>
                         <SelectItem value="passport">{t("employees.detail.idType.passport")}</SelectItem>
@@ -1863,7 +1863,7 @@ function EmployeeDetail({ id }: { id: number }) {
               <div className="flex justify-end gap-3 pt-2">
                 <Button variant="outline" onClick={() => setEditOpen(false)}>{t("common.cancel")}</Button>
                 <Button onClick={() => updateMutation.mutate({ id, data: editForm })} disabled={updateMutation.isPending}>
-                  {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                  {updateMutation.isPending ? t("common.saving") : t("common.saveChanges")}
                 </Button>
               </div>
             </div>

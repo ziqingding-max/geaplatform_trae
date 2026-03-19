@@ -86,7 +86,7 @@ function useNavGroups(user: any) {
 
   return useMemo(() => [
     {
-      label: "Overview",
+      label: t("nav.overview"),
       icon: LayoutDashboard,
       items: [
         { label: t("nav.dashboard"), icon: LayoutDashboard, href: "/" },
@@ -94,7 +94,7 @@ function useNavGroups(user: any) {
       ].filter(() => hasRole(["admin", "finance_manager", "operations_manager"])),
     },
     {
-      label: "Sales",
+      label: t("nav.sales"),
       icon: TrendingUp,
       items: [
         { label: t("nav.crm_pipeline"), icon: Briefcase, href: "/sales-crm" },
@@ -103,7 +103,7 @@ function useNavGroups(user: any) {
       ].filter(() => hasRole(["admin", "sales", "customer_manager"])),
     },
     {
-      label: "Client Management",
+      label: t("nav.client_management"),
       icon: Users,
       items: [
         { label: t("nav.customers"), icon: Building2, href: "/customers" },
@@ -111,26 +111,26 @@ function useNavGroups(user: any) {
       ].filter(() => hasRole(["admin", "customer_manager", "operations_manager"])),
     },
     {
-      label: "Operations",
+      label: t("nav.operations"),
       icon: Layers,
       items: [
         { label: t("nav.payroll"), icon: DollarSign, href: "/payroll" },
-        { label: "Contractor Invoices", icon: FileStack, href: "/admin/contractor-invoices" },
+        { label: t("nav.contractor_invoices"), icon: FileStack, href: "/admin/contractor-invoices" },
         { label: t("nav.adjustments"), icon: ArrowUpDown, href: "/adjustments" },
         { label: t("nav.reimbursements"), icon: Receipt, href: "/reimbursements" },
-        { label: "Leave & Milestones", icon: CalendarDays, href: "/leave" },
+        { label: t("nav.leave"), icon: CalendarDays, href: "/leave" },
       ].filter(() => hasRole(["admin", "operations_manager"])),
     },
     {
-      label: "Finance",
+      label: t("nav.finance"),
       icon: PieChart,
       items: [
         { label: t("nav.invoices"), icon: Receipt, href: "/invoices" },
-        { label: "Release Tasks", icon: CheckCircle, href: "/admin/release-tasks" },
+        { label: t("nav.release_tasks"), icon: CheckCircle, href: "/admin/release-tasks" },
       ].filter(() => hasRole(["admin", "finance_manager"])),
     },
     {
-      label: "Vendor",
+      label: t("nav.vendor"),
       icon: Truck,
       items: [
         { label: t("nav.vendors"), icon: Truck, href: "/vendors" },
@@ -138,7 +138,7 @@ function useNavGroups(user: any) {
       ].filter(() => hasRole(["admin", "finance_manager"])),
     },
     {
-      label: "System",
+      label: t("nav.system"),
       icon: Settings,
       items: [
         { label: t("nav.settings"), icon: Settings, href: "/settings", roles: ["admin"] },
