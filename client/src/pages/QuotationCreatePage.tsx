@@ -22,7 +22,7 @@ interface QuotationItem {
   headcount: number;
   salary: number;
   currency: string; // Local Currency
-  exchangeRate?: number; // USD -> Local (with markup)
+  exchangeRate?: number; // USD -> Local (live rate)
   serviceFee: number; // USD
   oneTimeFee?: number; // USD
   // Computed fields
@@ -144,8 +144,8 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                 let exchangeRate = 1;
                 if (localCurrency !== "USD") {
                    const rateData = await utils.exchangeRates.get.fetch({ from: "USD", to: localCurrency });
-                   if (rateData && rateData.rateWithMarkup) {
-                       exchangeRate = Number(rateData.rateWithMarkup);
+                   if (rateData && rateData.rate) {
+                       exchangeRate = Number(rateData.rate);
                    }
                 }
 
