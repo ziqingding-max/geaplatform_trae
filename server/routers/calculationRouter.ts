@@ -11,7 +11,7 @@ export const calculationRouter = router({
     .input(
       z.object({
         countryCode: z.string(),
-        year: z.number().optional().default(2025),
+        year: z.number().optional().default(new Date().getFullYear()),
         salary: z.number(),
         regionCode: z.string().optional(),
         age: z.number().optional(),
@@ -20,7 +20,7 @@ export const calculationRouter = router({
     .mutation(async ({ input }) => {
       return await calculationService.calculateSocialInsurance({
         ...input,
-        year: input.year || 2025
+        year: input.year || new Date().getFullYear()
       });
     }),
 

@@ -122,12 +122,8 @@ export const employeesRouter = router({
       }
 
       // === Date Validation ===
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Note: Start date is allowed to be in the past (for backdating / historical employee records)
       const startDate = new Date(input.startDate);
-      if (startDate < today) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: "Start date cannot be earlier than today." });
-      }
       if (input.endDate) {
         const endDate = new Date(input.endDate);
         if (endDate <= startDate) {

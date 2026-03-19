@@ -1,6 +1,6 @@
 import { getDb } from "../db";
 import { countrySocialInsuranceItems } from "../../drizzle/schema";
-import { eq, and, or, isNull } from "drizzle-orm";
+import { eq, and, or, isNull, lte, desc, sql } from "drizzle-orm";
 
 interface CalculationInput {
   countryCode: string;
@@ -25,6 +25,7 @@ interface ContributionItem {
 interface CalculationResult {
   countryCode: string;
   year: number;
+  ruleYear: number; // The actual year of the rules used (may differ from requested year due to fallback)
   salary: number;
   items: ContributionItem[];
   totalEmployer: string;
@@ -34,7 +35,9 @@ interface CalculationResult {
 
 export const calculationService = {
   /**
-   * Calculate social insurance contributions for a given salary
+   * Calculate social insurance contributions for a given salary.
+   * If no rules exist for the requested year, automatically falls back
+   * to the most recent available year's rules for the given country.
    */
   calculateSocialInsurance: async (input: CalculationInput): Promise<CalculationResult> => {
     const { countryCode, year, salary, regionCode, age } = input;
@@ -42,42 +45,68 @@ export const calculationService = {
     const db = getDb();
     if (!db) throw new Error("Database connection failed");
 
-    // 1. Fetch rules
-    // If regionCode is provided, fetch items for that region OR national items (null region)
-    // If regionCode is NOT provided, fetch only national items (null region)
-    const whereClause = regionCode
-      ? and(
-          eq(countrySocialInsuranceItems.countryCode, countryCode),
-          eq(countrySocialInsuranceItems.effectiveYear, year),
-          eq(countrySocialInsuranceItems.isActive, true),
-          or(
-            eq(countrySocialInsuranceItems.regionCode, regionCode),
-            isNull(countrySocialInsuranceItems.regionCode)
+    // Helper: build WHERE clause for a specific year
+    const buildWhereClause = (targetYear: number) => {
+      return regionCode
+        ? and(
+            eq(countrySocialInsuranceItems.countryCode, countryCode),
+            eq(countrySocialInsuranceItems.effectiveYear, targetYear),
+            eq(countrySocialInsuranceItems.isActive, true),
+            or(
+              eq(countrySocialInsuranceItems.regionCode, regionCode),
+              isNull(countrySocialInsuranceItems.regionCode)
+            )
           )
-        )
-      : and(
-          eq(countrySocialInsuranceItems.countryCode, countryCode),
-          eq(countrySocialInsuranceItems.effectiveYear, year),
-          eq(countrySocialInsuranceItems.isActive, true),
-          isNull(countrySocialInsuranceItems.regionCode)
-        );
+        : and(
+            eq(countrySocialInsuranceItems.countryCode, countryCode),
+            eq(countrySocialInsuranceItems.effectiveYear, targetYear),
+            eq(countrySocialInsuranceItems.isActive, true),
+            isNull(countrySocialInsuranceItems.regionCode)
+          );
+    };
 
-    const db_rules = await db
+    // 1. Try fetching rules for the requested year
+    let ruleYear = year;
+    let rules = await db
       .select()
       .from(countrySocialInsuranceItems)
-      .where(whereClause)
+      .where(buildWhereClause(year))
       .orderBy(countrySocialInsuranceItems.sortOrder);
-      
-    let rules = db_rules;
 
-    // Fallback logic for countries where ALL rules might be tied to a region, 
+    // 2. Year fallback: if no rules found for requested year, find the most recent available year
+    if (rules.length === 0) {
+      const fallbackResult = await db
+        .select({
+          maxYear: sql<number>`max(${countrySocialInsuranceItems.effectiveYear})`,
+        })
+        .from(countrySocialInsuranceItems)
+        .where(
+          and(
+            eq(countrySocialInsuranceItems.countryCode, countryCode),
+            lte(countrySocialInsuranceItems.effectiveYear, year),
+            eq(countrySocialInsuranceItems.isActive, true)
+          )
+        );
+
+      const fallbackYear = fallbackResult[0]?.maxYear;
+      if (fallbackYear) {
+        ruleYear = fallbackYear;
+        rules = await db
+          .select()
+          .from(countrySocialInsuranceItems)
+          .where(buildWhereClause(fallbackYear))
+          .orderBy(countrySocialInsuranceItems.sortOrder);
+      }
+    }
+
+    // 3. Fallback logic for countries where ALL rules might be tied to a region,
     // but no region was selected (e.g. US, VN, CA).
     // In this case, we pick the first available region's rules as a representative estimate.
     if (rules.length === 0 && !regionCode) {
         const anyRules = await db.query.countrySocialInsuranceItems.findMany({
             where: and(
                 eq(countrySocialInsuranceItems.countryCode, countryCode),
-                eq(countrySocialInsuranceItems.effectiveYear, year),
+                eq(countrySocialInsuranceItems.effectiveYear, ruleYear),
                 eq(countrySocialInsuranceItems.isActive, true)
             ),
             orderBy: [countrySocialInsuranceItems.sortOrder]
@@ -99,20 +128,18 @@ export const calculationService = {
     let totalEmployee = 0;
 
     for (const rule of rules) {
-      // 2. Filter by Age Bracket if applicable
+      // 4. Filter by Age Bracket if applicable
       if (age !== undefined) {
         if (rule.ageBracketMin !== null && age < rule.ageBracketMin) continue;
         if (rule.ageBracketMax !== null && age > rule.ageBracketMax) continue;
       }
 
-      // 3. Filter by Salary Bracket if applicable (e.g. HK MPF min salary)
-      // Note: Usually salary brackets affect RATES, but here we treat them as eligibility for the rule
-      // Or we handle specific logic like HK MPF inside the calculation
+      // 5. Filter by Salary Bracket if applicable (e.g. HK MPF min salary)
       
       const rateEmployer = parseFloat(rule.rateEmployer);
       const rateEmployee = parseFloat(rule.rateEmployee);
 
-      // 4. Calculate Employer Contribution
+      // 6. Calculate Employer Contribution
       let employerBase = salary;
       let employerCapNote = "";
       
@@ -135,7 +162,7 @@ export const calculationService = {
 
       let employerAmount = employerBase * rateEmployer;
 
-      // 5. Calculate Employee Contribution
+      // 7. Calculate Employee Contribution
       let employeeBase = salary;
       let employeeCapNote = "";
 
@@ -154,7 +181,6 @@ export const calculationService = {
             const cap = parseFloat(rule.capBase);
             if (salary > cap) {
             employeeBase = cap;
-            // employeeCapNote = `Capped at ${cap}`; // Redundant to show twice if same
             }
         } else if (rule.capType === "salary_multiple" && rule.capMultiplier && rule.capReferenceBase) {
             const ref = parseFloat(rule.capReferenceBase);
@@ -169,7 +195,6 @@ export const calculationService = {
       let employeeAmount = employeeBase * rateEmployee;
 
       // Rounding (2 decimals)
-      // Use simple rounding: Math.round(num * 100) / 100
       employerAmount = Math.round(employerAmount * 100) / 100;
       employeeAmount = Math.round(employeeAmount * 100) / 100;
 
@@ -189,12 +214,10 @@ export const calculationService = {
       });
     }
 
-    // Sort items by category or other logic if needed? 
-    // They are already sorted by sortOrder from DB.
-
     return {
       countryCode,
       year,
+      ruleYear,
       salary,
       items,
       totalEmployer: totalEmployer.toFixed(2),
