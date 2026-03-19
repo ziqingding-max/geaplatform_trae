@@ -20,6 +20,7 @@ import { authenticatePortalRequest } from "../portal/portalAuth";
 import { getDb } from "../db";
 import { invoices } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
+import { HttpError } from "../../shared/_core/errors";
 
 export async function createApp(options: { skipStatic?: boolean } = {}) {
   const app = express();
@@ -101,7 +102,8 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
       res.send(pdfBuffer);
     } catch (error) {
       console.error("PDF preview error:", error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
+      const status = error instanceof HttpError ? error.statusCode : 500;
+      res.status(status).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
     }
   });
 
@@ -130,7 +132,8 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
       res.send(pdfBuffer);
     } catch (error) {
       console.error("PDF generation error:", error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
+      const status = error instanceof HttpError ? error.statusCode : 500;
+      res.status(status).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
     }
   });
 
@@ -169,7 +172,8 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
       res.send(pdfBuffer);
     } catch (error) {
       console.error("Portal PDF generation error:", error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
+      const status = error instanceof HttpError ? error.statusCode : 500;
+      res.status(status).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
     }
   });
 
@@ -200,7 +204,8 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
       res.send(pdfBuffer);
     } catch (error) {
       console.error("Country guide PDF error:", error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
+      const status = error instanceof HttpError ? error.statusCode : 500;
+      res.status(status).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
     }
   });
 
@@ -230,7 +235,8 @@ export async function createApp(options: { skipStatic?: boolean } = {}) {
       res.send(pdfBuffer);
     } catch (error) {
       console.error("Admin country guide PDF error:", error);
-      res.status(500).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
+      const status = error instanceof HttpError ? error.statusCode : 500;
+      res.status(status).json({ error: error instanceof Error ? error.message : "PDF generation failed" });
     }
   });
 

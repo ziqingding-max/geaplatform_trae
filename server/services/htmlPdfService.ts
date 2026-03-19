@@ -22,8 +22,11 @@ const CHROMIUM_ARGS = [
   "--disable-dev-shm-usage",
   "--disable-gpu",
   "--font-render-hinting=none",
-  "--single-process",
-  "--no-zygote",
+  "--disable-extensions",
+  "--disable-background-networking",
+  "--disable-default-apps",
+  "--disable-translate",
+  "--no-first-run",
 ];
 
 /** Candidate paths tried in order; first existing file wins. */
@@ -555,6 +558,7 @@ async function launchBrowser() {
     executablePath,
     args: CHROMIUM_ARGS,
     headless: true,
+    protocolTimeout: 120_000,
   });
 }
 
