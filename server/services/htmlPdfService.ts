@@ -86,6 +86,7 @@ const BASE_CSS = `
   }
 
   /* ── Page Layout ── */
+  @page { size: A4; margin: 0; }
   .page {
     width: 210mm;
     min-height: 297mm;
@@ -94,8 +95,17 @@ const BASE_CSS = `
     page-break-after: always;
     background: white;
   }
+  .page.cover {
+    /* Cover must fill exactly one A4 page in all Chromium versions */
+    height: 297mm;
+    min-height: 297mm;
+    max-height: 297mm;
+    overflow: hidden;
+  }
   .page.content-page {
-    /* Content pages use Puppeteer native header/footer, so reduce top/bottom padding */
+    /* Content pages use Puppeteer native header/footer which adds its own margins.
+       Remove min-height to prevent overflow into blank pages (Chromium 131 compat). */
+    min-height: auto;
     padding-top: 4mm;
     padding-bottom: 6mm;
   }
