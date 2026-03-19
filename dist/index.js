@@ -21113,7 +21113,6 @@ var BASE_CSS = `
   }
 
   /* \u2500\u2500 Page Layout \u2500\u2500 */
-  @page { size: A4; margin: 0; }
   .page {
     width: 210mm;
     min-height: 297mm;
