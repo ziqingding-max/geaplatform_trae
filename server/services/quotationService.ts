@@ -62,7 +62,7 @@ export const quotationService = {
         if (item.currency !== "USD") {
           const rateData = await getExchangeRate("USD", item.currency);
           if (rateData) {
-             exchangeRate = rateData.rateWithMarkup;
+             exchangeRate = rateData.rate;
              usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
           }
         }
@@ -102,9 +102,10 @@ export const quotationService = {
       if (item.currency !== "USD") {
         const rateData = await getExchangeRate("USD", item.currency);
         if (rateData) {
-           // rateData.rateWithMarkup is USD -> Local (e.g. 1 USD = 7.2 CNY)
+           // rateData.rate is USD -> Local live rate (e.g. 1 USD = 7.2 CNY)
            // To convert Local -> USD: Amount / Rate
-           exchangeRate = rateData.rateWithMarkup;
+           // Quotations use live rate (no markup) for client-facing pricing
+           exchangeRate = rateData.rate;
            usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
         }
       }
@@ -186,7 +187,7 @@ export const quotationService = {
         if (item.currency !== "USD") {
           const rateData = await getExchangeRate("USD", item.currency);
           if (rateData) {
-             exchangeRate = rateData.rateWithMarkup;
+             exchangeRate = rateData.rate;
              usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
           }
         }
@@ -224,7 +225,8 @@ export const quotationService = {
       if (item.currency !== "USD") {
         const rateData = await getExchangeRate("USD", item.currency);
         if (rateData) {
-           exchangeRate = rateData.rateWithMarkup;
+           // Quotations use live rate (no markup) for client-facing pricing
+           exchangeRate = rateData.rate;
            usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
         }
       }

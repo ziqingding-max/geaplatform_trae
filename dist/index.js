@@ -22114,7 +22114,7 @@ var quotationService = {
         if (item.currency !== "USD") {
           const rateData = await getExchangeRate("USD", item.currency);
           if (rateData) {
-            exchangeRate2 = rateData.rateWithMarkup;
+            exchangeRate2 = rateData.rate;
             usdEmploymentCost2 = totalEmploymentCostLocal2 / exchangeRate2;
           }
         }
@@ -22145,7 +22145,7 @@ var quotationService = {
       if (item.currency !== "USD") {
         const rateData = await getExchangeRate("USD", item.currency);
         if (rateData) {
-          exchangeRate = rateData.rateWithMarkup;
+          exchangeRate = rateData.rate;
           usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
         }
       }
@@ -22211,7 +22211,7 @@ var quotationService = {
         if (item.currency !== "USD") {
           const rateData = await getExchangeRate("USD", item.currency);
           if (rateData) {
-            exchangeRate2 = rateData.rateWithMarkup;
+            exchangeRate2 = rateData.rate;
             usdEmploymentCost2 = totalEmploymentCostLocal2 / exchangeRate2;
           }
         }
@@ -22241,7 +22241,7 @@ var quotationService = {
       if (item.currency !== "USD") {
         const rateData = await getExchangeRate("USD", item.currency);
         if (rateData) {
-          exchangeRate = rateData.rateWithMarkup;
+          exchangeRate = rateData.rate;
           usdEmploymentCost = totalEmploymentCostLocal / exchangeRate;
         }
       }
