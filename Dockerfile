@@ -1,5 +1,5 @@
 # Stage 1: Build the application
-FROM node:22-alpine AS builder
+FROM node:22-alpine3.20 AS builder
 
 WORKDIR /app
 
@@ -19,7 +19,8 @@ COPY . .
 RUN pnpm run build
 
 # Stage 2: Production image
-FROM node:22-alpine
+# Pin to Alpine 3.20 for Chromium 131 compatibility in Docker containers.
+FROM node:22-alpine3.20
 
 WORKDIR /app
 
