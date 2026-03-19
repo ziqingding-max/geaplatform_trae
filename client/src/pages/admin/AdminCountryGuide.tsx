@@ -48,6 +48,7 @@ import {
 import Layout from "@/components/Layout";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { toast } from "sonner";
 
 // Chapter icon mapping
 const chapterIcons: Record<string, any> = {
@@ -282,6 +283,7 @@ export default function AdminCountryGuide() {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error("PDF download error:", err);
+      toast.error(locale === "zh" ? "PDF 下载失败，请稍后重试" : "PDF download failed. Please try again later.");
     } finally {
       setIsDownloading(false);
     }

@@ -44,6 +44,7 @@ import PortalLayout from "@/components/PortalLayout";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { portalPath } from "@/lib/portalBasePath";
+import { toast } from "sonner";
 
 // Chapter icon mapping
 const chapterIcons: Record<string, any> = {
@@ -282,6 +283,7 @@ export default function CountryGuide() {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error("PDF download error:", err);
+      toast.error(locale === "zh" ? "PDF 下载失败，请稍后重试" : "PDF download failed. Please try again later.");
     } finally {
       setIsDownloading(false);
     }

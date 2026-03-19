@@ -147,8 +147,12 @@ export const quotationService = {
       updatedAt: new Date()
     }).returning({ id: quotations.id });
 
-    // 4. Generate PDF
-    await quotationService.generatePdf(result.id, input.includeCountryGuide);
+    // 4. Generate PDF (non-blocking: creation succeeds even if PDF generation fails)
+    try {
+      await quotationService.generatePdf(result.id, input.includeCountryGuide);
+    } catch (pdfErr) {
+      console.error(`[Quotation] PDF generation failed for quotation #${result.id}, will retry on download:`, pdfErr);
+    }
 
     return result;
   },
@@ -252,8 +256,12 @@ export const quotationService = {
       updatedAt: new Date()
     }).where(eq(quotations.id, input.id));
 
-    // 3. Regenerate PDF
-    await quotationService.generatePdf(input.id, input.includeCountryGuide);
+    // 3. Regenerate PDF (non-blocking: update succeeds even if PDF generation fails)
+    try {
+      await quotationService.generatePdf(input.id, input.includeCountryGuide);
+    } catch (pdfErr) {
+      console.error(`[Quotation] PDF regeneration failed for quotation #${input.id}, will retry on download:`, pdfErr);
+    }
 
     return { id: input.id };
   },
