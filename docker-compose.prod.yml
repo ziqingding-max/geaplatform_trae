@@ -15,6 +15,8 @@ services:
       dockerfile: Dockerfile.prod
     container_name: gea-saas-app
     restart: always
+    # Chromium headless (PDF generation) requires >64MB shared memory
+    shm_size: '256m'
     ports:
       - "3000:3000"
     environment:
