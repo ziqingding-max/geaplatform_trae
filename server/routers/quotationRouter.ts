@@ -151,6 +151,22 @@ export const quotationRouter = router({
       return { success: true };
     }),
 
+  delete: crmProcedure
+    .input(z.number())
+    .mutation(async ({ input }) => {
+      try {
+        return await quotationService.deleteQuotation(input);
+      } catch (err: any) {
+        if (err.message === "Quotation not found") {
+          throw new TRPCError({ code: "NOT_FOUND", message: err.message });
+        }
+        if (err.message === "Only draft quotations can be deleted") {
+          throw new TRPCError({ code: "FORBIDDEN", message: err.message });
+        }
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: err.message || "Failed to delete quotation" });
+      }
+    }),
+
   downloadPdf: crmProcedure
     .input(z.number())
     .mutation(async ({ input }) => {

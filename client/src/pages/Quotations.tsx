@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Download, Edit, FileText, Loader2, Search, ChevronDown } from "lucide-react";
+import { Plus, Download, Edit, FileText, Loader2, Search, ChevronDown, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -43,6 +43,8 @@ export default function Quotations() {
   
   // State for status change confirmation
   const [statusConfirm, setStatusConfirm] = useState<{ id: number, status: string } | null>(null);
+  // State for delete confirmation
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const { data, isLoading, isError, error, refetch } = trpc.quotations.list.useQuery({
     limit,
@@ -75,6 +77,18 @@ export default function Quotations() {
     onError: (err) => toast.error("Download failed: " + err.message)
   });
 
+  const deleteMutation = trpc.quotations.delete.useMutation({
+    onSuccess: () => {
+        toast.success(t("quotations.toast.deleted") || "Quotation deleted successfully");
+        refetch();
+        setDeleteConfirm(null);
+    },
+    onError: (err) => {
+        toast.error(t("quotations.toast.delete_error") || "Failed to delete quotation");
+        setDeleteConfirm(null);
+    }
+  });
+
   const handleStatusChange = (id: number, status: string) => {
       setStatusConfirm({ id, status });
   };
@@ -82,6 +96,12 @@ export default function Quotations() {
   const confirmStatusChange = () => {
       if (statusConfirm) {
           updateStatusMutation.mutate({ id: statusConfirm.id, status: statusConfirm.status as any });
+      }
+  };
+
+  const confirmDelete = () => {
+      if (deleteConfirm !== null) {
+          deleteMutation.mutate(deleteConfirm);
       }
   };
 
@@ -217,6 +237,21 @@ export default function Quotations() {
                                 <Download className="w-4 h-4" />
                             )}
                           </Button>
+                          {q.status === 'draft' && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                onClick={() => setDeleteConfirm(q.id)}
+                                title={t("quotations.actions.delete") || "Delete"}
+                              >
+                                {deleteMutation.isPending && deleteMutation.variables === q.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                )}
+                              </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -227,6 +262,7 @@ export default function Quotations() {
           </CardContent>
         </Card>
 
+        {/* Status change confirmation dialog */}
         <AlertDialog open={!!statusConfirm} onOpenChange={(open) => !open && setStatusConfirm(null)}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -238,6 +274,30 @@ export default function Quotations() {
                 <AlertDialogFooter>
                     <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
                     <AlertDialogAction onClick={confirmStatusChange}>{t("common.confirm")}</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Delete confirmation dialog */}
+        <AlertDialog open={deleteConfirm !== null} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>{t("common.delete") || "Delete"}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        {t("quotations.deleteConfirm") || "Are you sure you want to delete this quotation? This action cannot be undone."}
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={confirmDelete}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleteMutation.isPending ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : null}
+                      {t("common.delete") || "Delete"}
+                    </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
