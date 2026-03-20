@@ -93,9 +93,10 @@ async function recalculateInvoiceTotals(invoiceId: number) {
     const baseAmountLocal = qty * rate;
     const baseAmountSettlement = baseAmountLocal * conversionRate;
 
-    // Service fees are NOT subject to VAT and are already in settlement currency
+    // Service fees are NOT subject to VAT by default (vatRate=0 from auto-generation),
+    // but if user manually sets vatRate > 0 on a service fee item, respect it and calculate tax.
     const isServiceFee = serviceFeeTypes.includes(item.itemType);
-    const taxAmountSettlement = isServiceFee ? 0 : baseAmountSettlement * (vatRate / 100);
+    const taxAmountSettlement = (isServiceFee && vatRate === 0) ? 0 : baseAmountSettlement * (vatRate / 100);
 
     if (isServiceFee) {
       serviceFeeTotal += baseAmountSettlement;
