@@ -49,7 +49,7 @@ export default function ContractorMilestones() {
   });
   const contractors = contractorsData?.data || [];
 
-  const { data: customersData } = trpc.customers.list.useQuery({ limit: 200 });
+  const { data: customersData } = trpc.customers.list.useQuery({ limit: 1000 });
   const customersList = customersData?.data || [];
 
   // Load all milestones with filters

@@ -88,7 +88,7 @@ export default function Reimbursements() {
     status: statusFilter !== "all" ? statusFilter : undefined,
     category: categoryFilter !== "all" ? categoryFilter : undefined,
     effectiveMonth: monthFilter !== "all" ? monthFilter : undefined,
-    limit: 200,
+    limit: 1000,
     offset: 0,
   });
 

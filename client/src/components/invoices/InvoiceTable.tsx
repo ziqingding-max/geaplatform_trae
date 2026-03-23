@@ -41,7 +41,7 @@ export function InvoiceTable({
   const [, setLocation] = useLocation();
 
   const handleRowClick = (id: number) => {
-    setLocation(`/invoices/${id}?from_page=${activePage}`);
+    setLocation(`/invoices/${id}`);
   };
 
   return (

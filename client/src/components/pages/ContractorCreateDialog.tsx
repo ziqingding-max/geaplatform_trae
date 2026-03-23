@@ -50,7 +50,7 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
   const [formData, setFormData] = useState({ ...initialFormData });
 
   const utils = trpc.useUtils();
-  const { data: customers } = trpc.customers.list.useQuery({ limit: 200 });
+  const { data: customers } = trpc.customers.list.useQuery({ limit: 1000 });
   const { data: approvers } = trpc.contractors.getApprovers.useQuery();
 
   const createMutation = trpc.contractors.create.useMutation({

@@ -442,7 +442,7 @@ function ExchangeRatesSection() {
     toCurrency: "", rate: "", effectiveDate: "", source: "manual",
   });
 
-  const { data: ratesData, refetch } = trpc.exchangeRates.list.useQuery({ limit: 200 });
+  const { data: ratesData, refetch } = trpc.exchangeRates.list.useQuery({ limit: 1000 });
   const { data: markupData, refetch: refetchMarkup } = trpc.exchangeRates.getMarkup.useQuery();
 
   const upsertMut = trpc.exchangeRates.upsert.useMutation({

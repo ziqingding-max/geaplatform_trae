@@ -314,11 +314,11 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
     search: search || undefined,
     status: statusFilter === "active" ? undefined : statusFilter !== "all" ? statusFilter : undefined,
     assignedTo: ownerFilter !== "all" ? parseInt(ownerFilter) : undefined,
-    limit: 200,
+    limit: 1000,
   });
 
   // Separate unfiltered query for pipeline summary cards — always fetches ALL leads
-  const { data: allLeadsData } = trpc.sales.list.useQuery({ limit: 200 });
+  const { data: allLeadsData } = trpc.sales.list.useQuery({ limit: 1000 });
 
   const { data: usersData } = trpc.sales.assignableUsers.useQuery();
 

@@ -1,76 +1,215 @@
 
-import { useState, useMemo, useEffect, useRef } from "react";
-import { useSearch } from "wouter";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useSearch, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
 
+/**
+ * Parse URL search params into filter state.
+ * All filter values are persisted in URL so that navigating back
+ * from invoice detail restores the exact same view.
+ */
+function parseUrlFilters(searchString: string) {
+  const params = new URLSearchParams(searchString);
+  return {
+    status: params.get("status") || "all",
+    type: params.get("type") || "all",
+    month: params.get("month") || "",
+    search: params.get("search") || "",
+    activePage: Math.max(1, parseInt(params.get("page") || "1", 10) || 1),
+    historyPage: Math.max(1, parseInt(params.get("hpage") || "1", 10) || 1),
+    tab: (params.get("tab") as "list" | "history" | "monthly") || "list",
+  };
+}
+
+/**
+ * Build URL search string from filter state.
+ * Only includes non-default values to keep URLs clean.
+ */
+function buildUrlSearch(filters: {
+  status: string;
+  type: string;
+  month: string;
+  search: string;
+  activePage: number;
+  historyPage: number;
+  tab: string;
+}): string {
+  const params = new URLSearchParams();
+  if (filters.status && filters.status !== "all") params.set("status", filters.status);
+  if (filters.type && filters.type !== "all") params.set("type", filters.type);
+  if (filters.month) params.set("month", filters.month);
+  if (filters.search) params.set("search", filters.search);
+  if (filters.activePage > 1) params.set("page", String(filters.activePage));
+  if (filters.historyPage > 1) params.set("hpage", String(filters.historyPage));
+  if (filters.tab && filters.tab !== "list") params.set("tab", filters.tab);
+  const str = params.toString();
+  return str ? `?${str}` : "";
+}
+
 export function useInvoices() {
   const { t } = useI18n();
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [monthFilter, setMonthFilter] = useState<string>("");
-  const [search, setSearch] = useState("");
   const searchString = useSearch();
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  
-  // Initialize page from URL params
-  const getUrlPage = () => {
-    const p = parseInt(new URLSearchParams(searchString).get("page") || "1", 10);
-    return isNaN(p) ? 1 : p;
-  };
-  const [activePage, setActivePage] = useState(getUrlPage);
-  const [historyPage, setHistoryPage] = useState(1);
-  const PAGE_SIZE = 20;
-  const isInitialMount = useRef(true);
+  const [, setLocation] = useLocation();
 
-  // Sync page from URL
+  // Parse all filter state from URL
+  const urlFilters = useMemo(() => parseUrlFilters(searchString), [searchString]);
+
+  const [statusFilter, setStatusFilterState] = useState(urlFilters.status);
+  const [typeFilter, setTypeFilterState] = useState(urlFilters.type);
+  const [monthFilter, setMonthFilterState] = useState(urlFilters.month);
+  const [search, setSearchState] = useState(urlFilters.search);
+  const [activePage, setActivePageState] = useState(urlFilters.activePage);
+  const [historyPage, setHistoryPageState] = useState(urlFilters.historyPage);
+  const [activeTab, setActiveTabState] = useState(urlFilters.tab);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  const PAGE_SIZE = 20;
+
+  // Sync URL → state when URL changes (e.g. browser back/forward)
   useEffect(() => {
-    setActivePage(getUrlPage());
+    const parsed = parseUrlFilters(searchString);
+    setStatusFilterState(parsed.status);
+    setTypeFilterState(parsed.type);
+    setMonthFilterState(parsed.month);
+    setSearchState(parsed.search);
+    setActivePageState(parsed.activePage);
+    setHistoryPageState(parsed.historyPage);
+    setActiveTabState(parsed.tab);
   }, [searchString]);
 
-  // Reset pages when filters change
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    setActivePage(1); 
-    setHistoryPage(1);
-  }, [statusFilter, typeFilter, monthFilter, search]);
+  // Helper: update URL with new filter values
+  const updateUrl = useCallback((overrides: Partial<{
+    status: string;
+    type: string;
+    month: string;
+    search: string;
+    activePage: number;
+    historyPage: number;
+    tab: string;
+  }>) => {
+    const current = {
+      status: statusFilter,
+      type: typeFilter,
+      month: monthFilter,
+      search,
+      activePage,
+      historyPage,
+      tab: activeTab,
+    };
+    const merged = { ...current, ...overrides };
+    const newSearch = buildUrlSearch(merged);
+    setLocation(`/invoices${newSearch}`, { replace: true });
+  }, [statusFilter, typeFilter, monthFilter, search, activePage, historyPage, activeTab, setLocation]);
+
+  // Filter setters that also update URL and reset page
+  const setStatusFilter = useCallback((val: string) => {
+    setStatusFilterState(val);
+    setActivePageState(1);
+    setHistoryPageState(1);
+    updateUrl({ status: val, activePage: 1, historyPage: 1 });
+  }, [updateUrl]);
+
+  const setTypeFilter = useCallback((val: string) => {
+    setTypeFilterState(val);
+    setActivePageState(1);
+    setHistoryPageState(1);
+    updateUrl({ type: val, activePage: 1, historyPage: 1 });
+  }, [updateUrl]);
+
+  const setMonthFilter = useCallback((val: string) => {
+    setMonthFilterState(val);
+    setActivePageState(1);
+    setHistoryPageState(1);
+    updateUrl({ month: val, activePage: 1, historyPage: 1 });
+  }, [updateUrl]);
+
+  const setSearch = useCallback((val: string) => {
+    setSearchState(val);
+    setActivePageState(1);
+    setHistoryPageState(1);
+    updateUrl({ search: val, activePage: 1, historyPage: 1 });
+  }, [updateUrl]);
+
+  const setActivePage = useCallback((val: number | ((prev: number) => number)) => {
+    setActivePageState((prev) => {
+      const newVal = typeof val === "function" ? val(prev) : val;
+      updateUrl({ activePage: newVal });
+      return newVal;
+    });
+  }, [updateUrl]);
+
+  const setHistoryPage = useCallback((val: number | ((prev: number) => number)) => {
+    setHistoryPageState((prev) => {
+      const newVal = typeof val === "function" ? val(prev) : val;
+      updateUrl({ historyPage: newVal });
+      return newVal;
+    });
+  }, [updateUrl]);
+
+  const setActiveTab = useCallback((val: string) => {
+    setActiveTabState(val as any);
+    updateUrl({ tab: val });
+  }, [updateUrl]);
+
+  // Clear all filters
+  const clearAllFilters = useCallback(() => {
+    setStatusFilterState("all");
+    setTypeFilterState("all");
+    setMonthFilterState("");
+    setSearchState("");
+    setActivePageState(1);
+    setHistoryPageState(1);
+    setLocation(`/invoices${activeTab !== "list" ? `?tab=${activeTab}` : ""}`, { replace: true });
+  }, [setLocation, activeTab]);
+
+  const hasActiveFilters = statusFilter !== "all" || typeFilter !== "all" || monthFilter !== "" || search !== "";
 
   const utils = trpc.useUtils();
 
-  const { data, isLoading } = trpc.invoices.list.useQuery({
+  // Build shared query filters for both tabs
+  const sharedFilters = useMemo(() => ({
     status: statusFilter !== "all" ? statusFilter : undefined,
+    invoiceType: typeFilter !== "all" ? typeFilter : undefined,
     invoiceMonth: monthFilter || undefined,
+    search: search || undefined,
     excludeCreditNotes: true,
-    limit: 200,
+  }), [statusFilter, typeFilter, monthFilter, search]);
+
+  // Active invoices query (server-side pagination)
+  const { data: activeData, isLoading: activeLoading } = trpc.invoices.list.useQuery({
+    ...sharedFilters,
+    tab: "active",
+    limit: PAGE_SIZE,
+    offset: (activePage - 1) * PAGE_SIZE,
   });
 
-  const { data: customers } = trpc.customers.list.useQuery({ limit: 200 });
+  // History invoices query (server-side pagination)
+  const { data: historyData, isLoading: historyLoading } = trpc.invoices.list.useQuery({
+    ...sharedFilters,
+    tab: "history",
+    limit: PAGE_SIZE,
+    offset: (historyPage - 1) * PAGE_SIZE,
+  });
 
+  const activeInvoices = activeData?.data || [];
+  const activeTotal = activeData?.total || 0;
+  const historyInvoices = historyData?.data || [];
+  const historyTotal = historyData?.total || 0;
+
+  const isLoading = activeLoading || historyLoading;
+
+  // Customer map from the data already returned (customerName is joined in backend)
   const customerMap = useMemo(() => {
     const map: Record<number, string> = {};
-    customers?.data?.forEach((c) => { map[c.id] = c.companyName; });
+    for (const inv of [...activeInvoices, ...historyInvoices]) {
+      if (inv.customerId && (inv as any).customerName) {
+        map[inv.customerId] = (inv as any).customerName;
+      }
+    }
     return map;
-  }, [customers]);
-
-  const invoices = data?.data || [];
-  const historyStatuses = ["paid", "cancelled"];
-  const activeInvoices = invoices.filter((inv) => !historyStatuses.includes(inv.status));
-  const historyInvoices = invoices.filter((inv) => historyStatuses.includes(inv.status));
-
-  const filterFn = (inv: any) => {
-    const matchSearch = !search
-      || inv.invoiceNumber.toLowerCase().includes(search.toLowerCase())
-      || (customerMap[inv.customerId] || "").toLowerCase().includes(search.toLowerCase());
-    const matchType = typeFilter === "all" || inv.invoiceType === typeFilter;
-    return matchSearch && matchType;
-  };
-  
-  const filtered = activeInvoices.filter(filterFn);
-  const filteredHistory = historyInvoices.filter(filterFn);
+  }, [activeInvoices, historyInvoices]);
 
   // Batch operations
   const batchMutation = trpc.invoices.batchUpdateStatus.useMutation({
@@ -116,11 +255,10 @@ export function useInvoices() {
 
   return {
     isLoading,
-    invoices,
     activeInvoices,
+    activeTotal,
     historyInvoices,
-    filtered,
-    filteredHistory,
+    historyTotal,
     customerMap,
     filters: {
       status: statusFilter,
@@ -131,6 +269,8 @@ export function useInvoices() {
       setMonth: setMonthFilter,
       search,
       setSearch,
+      clearAll: clearAllFilters,
+      hasActiveFilters,
     },
     pagination: {
       activePage,
@@ -138,6 +278,10 @@ export function useInvoices() {
       historyPage,
       setHistoryPage,
       pageSize: PAGE_SIZE,
+    },
+    tab: {
+      active: activeTab,
+      setActive: setActiveTab,
     },
     selection: {
       selectedIds,

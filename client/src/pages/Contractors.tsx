@@ -82,7 +82,7 @@ export function ContractorListContent() {
   // I see `pages/Contractors.tsx` but no `pages/ContractorInvoices.tsx`.
   // I should probably create `pages/ContractorInvoices.tsx`.
   
-  const { data: customers } = trpc.customers.list.useQuery({ limit: 200 });
+  const { data: customers } = trpc.customers.list.useQuery({ limit: 1000 });
   const { data: countriesList } = trpc.countries.list.useQuery();
 
   const statusColors: Record<string, string> = {

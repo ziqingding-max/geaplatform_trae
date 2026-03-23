@@ -67,7 +67,7 @@ export default function ContractorSelector({
 
   // Fetch data
   const { data: contractorsData } = trpc.contractors.list.useQuery({ limit: 500 });
-  const { data: customersData } = trpc.customers.list.useQuery({ limit: 200 });
+  const { data: customersData } = trpc.customers.list.useQuery({ limit: 1000 });
 
   const customersList = customersData?.data || [];
   const allContractors = contractorsData?.data || [];
