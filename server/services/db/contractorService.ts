@@ -7,7 +7,10 @@ import {
   contractorMilestones, InsertContractorMilestone,
   contractorAdjustments, InsertContractorAdjustment,
   contractorInvoices, InsertContractorInvoice,
-  contractorInvoiceItems
+  contractorInvoiceItems,
+  contractorDocuments,
+  contractorContracts,
+  workerUsers,
 } from "../../../drizzle/schema";
 import { getDb } from "./connection";
 
@@ -489,4 +492,56 @@ export async function markContractorInvoicesPaidByClientInvoice(clientInvoiceId:
     );
 
   return (result as any).changes || 0;
+}
+
+// DELETE CONTRACTOR (admin only, terminated status only)
+// Conservative strategy: only delete contractor_invoices (and their items) that are in draft/rejected status.
+// For approved/paid invoices, they remain in the system for financial record integrity.
+export async function deleteContractor(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // 1. Handle contractor invoices: only delete draft/rejected ones
+  const allInvoices = await db
+    .select({ id: contractorInvoices.id, status: contractorInvoices.status })
+    .from(contractorInvoices)
+    .where(eq(contractorInvoices.contractorId, id));
+
+  const draftRejectedInvoiceIds = allInvoices
+    .filter(inv => inv.status === "draft" || inv.status === "rejected")
+    .map(inv => inv.id);
+
+  // Delete invoice items for draft/rejected invoices
+  if (draftRejectedInvoiceIds.length > 0) {
+    await db.delete(contractorInvoiceItems).where(
+      inArray(contractorInvoiceItems.invoiceId, draftRejectedInvoiceIds)
+    );
+    // Delete the draft/rejected invoices themselves
+    await db.delete(contractorInvoices).where(
+      inArray(contractorInvoices.id, draftRejectedInvoiceIds)
+    );
+  }
+
+  // For non-draft/rejected invoices, nullify contractorId is not possible (notNull constraint)
+  // They will remain as orphaned records for financial audit trail
+
+  // 2. Delete contractor milestones
+  await db.delete(contractorMilestones).where(eq(contractorMilestones.contractorId, id));
+
+  // 3. Delete contractor adjustments
+  await db.delete(contractorAdjustments).where(eq(contractorAdjustments.contractorId, id));
+
+  // 4. Delete contractor documents
+  await db.delete(contractorDocuments).where(eq(contractorDocuments.contractorId, id));
+
+  // 5. Delete contractor contracts
+  await db.delete(contractorContracts).where(eq(contractorContracts.contractorId, id));
+
+  // 6. Delete worker user
+  await db.delete(workerUsers).where(eq(workerUsers.contractorId, id));
+
+  // 7. Delete contractor record
+  await db.delete(contractors).where(eq(contractors.id, id));
+
+  return { success: true };
 }

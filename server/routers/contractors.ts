@@ -2,7 +2,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { customerManagerProcedure, userProcedure } from "../procedures";
+import { adminProcedure, customerManagerProcedure, userProcedure } from "../procedures";
 import {
   createContractor,
   getContractorById,
@@ -22,6 +22,7 @@ import {
   listContractorInvoices,
   listAllContractorInvoices,
   logAuditAction,
+  deleteContractor,
   getDb
 } from "../db";
 import {
@@ -523,4 +524,32 @@ export const contractorsRouter = router({
       }),
   }),
 
+  // ── Delete Contractor (Admin only, terminated status only) ──
+  delete: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const contractor = await getContractorById(input.id);
+      if (!contractor) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Contractor not found" });
+      }
+      if (contractor.status !== "terminated") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only terminated contractors can be deleted. Current status: " + contractor.status,
+        });
+      }
+
+      await deleteContractor(input.id);
+
+      await logAuditAction({
+        userId: ctx.user.id,
+        userName: ctx.user.name || null,
+        action: "delete",
+        entityType: "contractor",
+        entityId: input.id,
+        changes: JSON.stringify({ contractorName: `${contractor.firstName} ${contractor.lastName}`, contractorCode: contractor.contractorCode }),
+      });
+
+      return { success: true };
+    }),
 });
