@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { customerManagerProcedure, userProcedure } from "../procedures";
+import { adminProcedure, customerManagerProcedure, userProcedure } from "../procedures";
 import {
   createEmployee,
   getEmployeeById,
@@ -28,6 +28,7 @@ import {
   listAdjustments,
   getCountryConfig,
   hasDepositBeenProcessed,
+  deleteEmployee,
   getDb,
 } from "../db";
 import { storagePut, storageGet, storageDownload } from "../storage";
@@ -943,4 +944,33 @@ export const employeesRouter = router({
         return { success: true };
       }),
   }),
+
+  // ── Delete Employee (Admin only, terminated status only) ──
+  delete: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const employee = await getEmployeeById(input.id);
+      if (!employee) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
+      }
+      if (employee.status !== "terminated") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only terminated employees can be deleted. Current status: " + employee.status,
+        });
+      }
+
+      await deleteEmployee(input.id);
+
+      await logAuditAction({
+        userId: ctx.user.id,
+        userName: ctx.user.name || null,
+        action: "delete",
+        entityType: "employee",
+        entityId: input.id,
+        changes: JSON.stringify({ employeeName: `${employee.firstName} ${employee.lastName}`, employeeCode: employee.employeeCode }),
+      });
+
+      return { success: true };
+    }),
 });

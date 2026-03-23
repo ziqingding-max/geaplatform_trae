@@ -7,7 +7,15 @@ import {
   leaveBalances, InsertLeaveBalance,
   leaveRecords, InsertLeaveRecord,
   leaveTypes,
-  customers
+  customers,
+  adjustments,
+  reimbursements,
+  payrollItems,
+  invoiceItems,
+  invoices,
+  onboardingInvites,
+  employeePayslips,
+  workerUsers,
 } from "../../../drizzle/schema";
 import { getDb } from "./connection";
 
@@ -646,4 +654,93 @@ export async function getSubmittedUnpaidLeaveForPayroll(countryCodeOrEmployeeId:
         inArray(leaveRecords.status, statuses as any[])
       ));
   }
+}
+
+// DELETE EMPLOYEE (admin only, terminated status only)
+// Conservative strategy: only delete invoice_items where the parent invoice is draft/cancelled.
+// For non-draft/cancelled invoices, set employeeId to null to preserve financial records.
+export async function deleteEmployee(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // 1. Handle invoice_items: delete only those linked to draft/cancelled invoices
+  //    For items in other invoice statuses, set employeeId to null
+  const employeeInvoiceItems = await db
+    .select({ id: invoiceItems.id, invoiceId: invoiceItems.invoiceId })
+    .from(invoiceItems)
+    .where(eq(invoiceItems.employeeId, id));
+
+  if (employeeInvoiceItems.length > 0) {
+    // Get the invoices to check their statuses
+    const invoiceIds = Array.from(new Set(employeeInvoiceItems.map(item => item.invoiceId)));
+    const relatedInvoices = await db
+      .select({ id: invoices.id, status: invoices.status })
+      .from(invoices)
+      .where(inArray(invoices.id, invoiceIds));
+
+    const draftCancelledInvoiceIds = relatedInvoices
+      .filter(inv => inv.status === "draft" || inv.status === "cancelled")
+      .map(inv => inv.id);
+
+    const otherInvoiceIds = relatedInvoices
+      .filter(inv => inv.status !== "draft" && inv.status !== "cancelled")
+      .map(inv => inv.id);
+
+    // Delete items in draft/cancelled invoices
+    if (draftCancelledInvoiceIds.length > 0) {
+      await db.delete(invoiceItems).where(
+        and(
+          eq(invoiceItems.employeeId, id),
+          inArray(invoiceItems.invoiceId, draftCancelledInvoiceIds)
+        )
+      );
+    }
+
+    // Nullify employeeId for items in non-draft/cancelled invoices
+    if (otherInvoiceIds.length > 0) {
+      await db.update(invoiceItems)
+        .set({ employeeId: null })
+        .where(
+          and(
+            eq(invoiceItems.employeeId, id),
+            inArray(invoiceItems.invoiceId, otherInvoiceIds)
+          )
+        );
+    }
+  }
+
+  // 2. Delete payroll items
+  await db.delete(payrollItems).where(eq(payrollItems.employeeId, id));
+
+  // 3. Delete leave records
+  await db.delete(leaveRecords).where(eq(leaveRecords.employeeId, id));
+
+  // 4. Delete leave balances
+  await db.delete(leaveBalances).where(eq(leaveBalances.employeeId, id));
+
+  // 5. Delete adjustments
+  await db.delete(adjustments).where(eq(adjustments.employeeId, id));
+
+  // 6. Delete reimbursements
+  await db.delete(reimbursements).where(eq(reimbursements.employeeId, id));
+
+  // 7. Delete employee documents
+  await db.delete(employeeDocuments).where(eq(employeeDocuments.employeeId, id));
+
+  // 8. Delete employee contracts
+  await db.delete(employeeContracts).where(eq(employeeContracts.employeeId, id));
+
+  // 9. Delete employee payslips
+  await db.delete(employeePayslips).where(eq(employeePayslips.employeeId, id));
+
+  // 10. Delete/nullify onboarding invites
+  await db.delete(onboardingInvites).where(eq(onboardingInvites.employeeId, id));
+
+  // 11. Delete worker user
+  await db.delete(workerUsers).where(eq(workerUsers.employeeId, id));
+
+  // 12. Delete employee record
+  await db.delete(employees).where(eq(employees.id, id));
+
+  return { success: true };
 }

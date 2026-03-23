@@ -3,7 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Calendar, DollarSign, User, Briefcase, FileText, CreditCard, Pencil, MapPin, UserPlus, CheckCircle, Send } from "lucide-react";
+import { ArrowLeft, Plus, Calendar, DollarSign, User, Briefcase, FileText, CreditCard, Pencil, MapPin, UserPlus, CheckCircle, Send, Trash2, AlertTriangle, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { isAdmin } from "@shared/roles";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, countryName } from "@/lib/format";
 
@@ -393,6 +399,23 @@ export default function ContractorDetail() {
   const id = params?.id ? parseInt(params.id, 10) : 0;
   const [activeTab, setActiveTab] = useState("overview");
 
+  // Auth for admin-only actions
+  const { user } = useAuth();
+  const userIsAdmin = isAdmin(user?.role);
+
+  // Delete contractor dialog state (admin only, terminated only)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const deleteContractorMutation = trpc.contractors.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Contractor permanently deleted");
+      setDeleteDialogOpen(false);
+      setDeleteConfirmName("");
+      setLocation("/people?tab=contractors");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const { data: contractor, isLoading, refetch } = trpc.contractors.get.useQuery({ id }, { enabled: !!id });
   const { data: milestones, refetch: refetchMilestones } = trpc.contractors.milestones.list.useQuery({ contractorId: id }, { enabled: !!id && activeTab === "milestones" });
   const { data: adjustments, refetch: refetchAdjustments } = trpc.contractors.adjustments.list.useQuery({ contractorId: id }, { enabled: !!id && activeTab === "adjustments" });
@@ -561,6 +584,17 @@ export default function ContractorDetail() {
                 {tr.label}
               </Button>
             ))}
+            {/* Delete button: admin only, terminated only */}
+            {userIsAdmin && contractor.status === "terminated" && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => { setDeleteConfirmName(""); setDeleteDialogOpen(true); }}
+              >
+                <Trash2 className="w-3 h-3 mr-1" />
+                Delete Contractor
+              </Button>
+            )}
           </div>
           <Badge variant="outline" className={`capitalize ${statusColors[contractor.status] || ""}`}>
             {t(`status.${contractor.status}`) || contractor.status}
@@ -908,6 +942,56 @@ export default function ContractorDetail() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Contractor Confirmation Dialog (Admin only, Terminated only) */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => { if (!open) { setDeleteDialogOpen(false); setDeleteConfirmName(""); } }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-red-600 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" />
+                Permanently Delete Contractor
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3">
+                  <p className="font-semibold text-red-600">
+                    ⚠️ WARNING: This action is irreversible and will permanently delete all data associated with this contractor.
+                  </p>
+                  <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">
+                    <p className="font-medium mb-2">The following data will be permanently deleted:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>Contractor personal information and profile</li>
+                      <li>All documents and contracts</li>
+                      <li>Milestones and adjustments</li>
+                      <li>Contractor invoices (only draft/rejected invoices)</li>
+                      <li>Worker Portal account</li>
+                    </ul>
+                    <p className="mt-2 font-medium">Approved/paid contractor invoices will be preserved for financial records.</p>
+                  </div>
+                  <div className="pt-2">
+                    <p className="text-sm mb-2">To confirm, please type the contractor's full name: <strong>{contractor.firstName} {contractor.lastName}</strong></p>
+                    <Input
+                      value={deleteConfirmName}
+                      onChange={(e) => setDeleteConfirmName(e.target.value)}
+                      placeholder={`Type "${contractor.firstName} ${contractor.lastName}" to confirm`}
+                      className="border-red-300 focus:ring-red-500"
+                    />
+                  </div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteContractorMutation.isPending}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteContractorMutation.mutate({ id: contractor.id })}
+                disabled={deleteConfirmName !== `${contractor.firstName} ${contractor.lastName}` || deleteContractorMutation.isPending}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-600 disabled:opacity-50"
+              >
+                {deleteContractorMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Permanently Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </Layout>
   );

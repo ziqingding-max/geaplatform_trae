@@ -34,13 +34,19 @@ import {
   Calendar, Building2, Briefcase, Shield, Globe, Pencil,
   Upload, FileText, Trash2, Eye, DollarSign, CalendarDays,
   Receipt, FileCheck, AlertTriangle, Undo2, Clock, Hash, User, Cake,
-  CreditCard, Home, UserPlus, CheckCircle, Send,
+  CreditCard, Home, UserPlus, CheckCircle, Send, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ContractorListContent } from "./Contractors";
 import ContractorCreateDialog from "@/components/pages/ContractorCreateDialog";
 import { BankDetailsForm, BankDetails } from "@/components/forms/BankDetailsForm";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { isAdmin } from "@shared/roles";
 
 import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
@@ -873,6 +879,23 @@ function EmployeeDetail({ id }: { id: number }) {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  // Auth for admin-only actions
+  const { user } = useAuth();
+  const userIsAdmin = isAdmin(user?.role);
+
+  // Delete employee dialog state (admin only, terminated only)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const deleteEmployeeMutation = trpc.employees.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Employee permanently deleted");
+      setDeleteDialogOpen(false);
+      setDeleteConfirmName("");
+      setLocation("/people?tab=employees");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   // Offboarding / Termination dialog state
   const [offboardingDialogOpen, setOffboardingDialogOpen] = useState(false);
   const [offboardingEndDate, setOffboardingEndDate] = useState("");
@@ -1216,6 +1239,17 @@ function EmployeeDetail({ id }: { id: number }) {
                 {t.label}
               </Button>
             ))}
+            {/* Delete button: admin only, terminated only */}
+            {userIsAdmin && employee.status === "terminated" && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => { setDeleteConfirmName(""); setDeleteDialogOpen(true); }}
+              >
+                <Trash2 className="w-3 h-3 mr-1" />
+                Delete Employee
+              </Button>
+            )}
           </div>
         </div>
 
@@ -1954,6 +1988,59 @@ function EmployeeDetail({ id }: { id: number }) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Employee Confirmation Dialog (Admin only, Terminated only) */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => { if (!open) { setDeleteDialogOpen(false); setDeleteConfirmName(""); } }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-red-600 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" />
+                Permanently Delete Employee
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3">
+                  <p className="font-semibold text-red-600">
+                    ⚠️ WARNING: This action is irreversible and will permanently delete all data associated with this employee.
+                  </p>
+                  <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">
+                    <p className="font-medium mb-2">The following data will be permanently deleted:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>Employee personal information and profile</li>
+                      <li>All documents and contracts</li>
+                      <li>Leave balances and leave records</li>
+                      <li>Payroll items and payslips</li>
+                      <li>Adjustments and reimbursements</li>
+                      <li>Invoice items (only from draft/cancelled invoices)</li>
+                      <li>Worker Portal account</li>
+                      <li>Onboarding invites</li>
+                    </ul>
+                    <p className="mt-2 font-medium">Invoice items from sent/paid invoices will be preserved for financial records.</p>
+                  </div>
+                  <div className="pt-2">
+                    <p className="text-sm mb-2">To confirm, please type the employee's full name: <strong>{employee.firstName} {employee.lastName}</strong></p>
+                    <Input
+                      value={deleteConfirmName}
+                      onChange={(e) => setDeleteConfirmName(e.target.value)}
+                      placeholder={`Type "${employee.firstName} ${employee.lastName}" to confirm`}
+                      className="border-red-300 focus:ring-red-500"
+                    />
+                  </div>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleteEmployeeMutation.isPending}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteEmployeeMutation.mutate({ id: employee.id })}
+                disabled={deleteConfirmName !== `${employee.firstName} ${employee.lastName}` || deleteEmployeeMutation.isPending}
+                className="bg-red-600 hover:bg-red-700 focus:ring-red-600 disabled:opacity-50"
+              >
+                {deleteEmployeeMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Permanently Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </Layout>
   );
