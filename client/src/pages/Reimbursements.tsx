@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/tabs";
 import {
   Plus, Search, Pencil, Trash2, Lock, Upload, Eye, ExternalLink,
-  CheckCircle2, XCircle, Receipt, Loader2, Download, Paperclip, FileText, X
+  CheckCircle2, XCircle, Receipt, Loader2, Download, Paperclip, FileText, X, FilterX
 } from "lucide-react";
 import { toast } from "sonner";
 import EmployeeSelector from "@/components/EmployeeSelector";
@@ -65,6 +65,7 @@ export default function Reimbursements() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [monthFilter, setMonthFilter] = useState<string>("all");
+  const [customerFilter, setCustomerFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -84,10 +85,14 @@ export default function Reimbursements() {
   const now = new Date();
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
+  const { data: customersData } = trpc.customers.list.useQuery({ limit: 1000 });
+  const customersList = customersData?.data || [];
+
   const { data, isLoading, refetch } = trpc.reimbursements.list.useQuery({
     status: statusFilter !== "all" ? statusFilter : undefined,
     category: categoryFilter !== "all" ? categoryFilter : undefined,
     effectiveMonth: monthFilter !== "all" ? monthFilter : undefined,
+    customerId: customerFilter !== "all" ? parseInt(customerFilter, 10) : undefined,
     limit: 1000,
     offset: 0,
   });
@@ -452,7 +457,7 @@ export default function Reimbursements() {
         </div>
 
         {/* Tabs & Filters */}
-        <Tabs value={viewTab} onValueChange={(v) => { setViewTab(v); setStatusFilter("all"); }} className="w-full">
+        <Tabs value={viewTab} onValueChange={(v) => { setViewTab(v); setStatusFilter("all"); setCustomerFilter("all"); }} className="w-full">
             <TabsList className="mb-4">
               <TabsTrigger value="active">{t("reimbursements.tabs.active")}</TabsTrigger>
               <TabsTrigger value="history">{t("reimbursements.tabs.history")}</TabsTrigger>
@@ -482,6 +487,17 @@ export default function Reimbursements() {
                 </SelectContent>
               </Select>
             )}
+            <Select value={customerFilter} onValueChange={setCustomerFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder={t("reimbursements.filters.customer") || "Customer"} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("reimbursements.filters.allCustomers") || "All Customers"}</SelectItem>
+                {customersList.map((c: any) => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.companyName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder={t("reimbursements.dialog.field.category")} />
@@ -504,6 +520,19 @@ export default function Reimbursements() {
                 ))}
               </SelectContent>
             </Select>
+            {/* Clear All Filters Button */}
+            {(statusFilter !== "all" || categoryFilter !== "all" || monthFilter !== "all" || customerFilter !== "all" || search !== "") && (
+              <Button variant="outline" size="sm" onClick={() => {
+                setStatusFilter("all");
+                setCategoryFilter("all");
+                setMonthFilter("all");
+                setCustomerFilter("all");
+                setSearch("");
+              }} className="gap-1.5 text-muted-foreground hover:text-foreground">
+                <FilterX className="w-3.5 h-3.5" />
+                {t("reimbursements.filters.clearAll") || "Clear All Filters"}
+              </Button>
+            )}
           </div>
 
         {/* Table */}

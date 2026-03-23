@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Search, XCircle, FilterX } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
+interface CustomerOption {
+  id: number;
+  companyName: string;
+}
+
 interface InvoiceFiltersProps {
   search: string;
   setSearch: (val: string) => void;
@@ -15,6 +20,9 @@ interface InvoiceFiltersProps {
   setTypeFilter: (val: string) => void;
   monthFilter?: string;
   setMonthFilter?: (val: string) => void;
+  customerFilter?: string;
+  setCustomerFilter?: (val: string) => void;
+  customers?: CustomerOption[];
   showStatusFilter?: boolean;
   hasActiveFilters?: boolean;
   onClearAll?: () => void;
@@ -25,6 +33,7 @@ export function InvoiceFilters({
   statusFilter, setStatusFilter,
   typeFilter, setTypeFilter,
   monthFilter, setMonthFilter,
+  customerFilter, setCustomerFilter, customers,
   showStatusFilter = true,
   hasActiveFilters = false,
   onClearAll,
@@ -54,6 +63,18 @@ export function InvoiceFilters({
             <SelectItem value="paid">{t("invoices.detail.summary.paid")}</SelectItem>
             <SelectItem value="overdue">{t("invoices.status.overdue")}</SelectItem>
             <SelectItem value="cancelled">{t("invoices.status.cancelled")}</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+
+      {customerFilter !== undefined && setCustomerFilter && customers && (
+        <Select value={customerFilter} onValueChange={setCustomerFilter}>
+          <SelectTrigger className="w-48"><SelectValue placeholder={t("invoices.list.filter.customerLabel") || "Customer"} /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("invoices.list.filter.allCustomers") || "All Customers"}</SelectItem>
+            {customers.map((c) => (
+              <SelectItem key={c.id} value={String(c.id)}>{c.companyName}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       )}
