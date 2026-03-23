@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MonthPicker } from "@/components/DatePicker";
 import { Button } from "@/components/ui/button";
-import { Search, XCircle } from "lucide-react";
+import { Search, XCircle, FilterX } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
 interface InvoiceFiltersProps {
@@ -16,6 +16,8 @@ interface InvoiceFiltersProps {
   monthFilter?: string;
   setMonthFilter?: (val: string) => void;
   showStatusFilter?: boolean;
+  hasActiveFilters?: boolean;
+  onClearAll?: () => void;
 }
 
 export function InvoiceFilters({
@@ -23,7 +25,9 @@ export function InvoiceFilters({
   statusFilter, setStatusFilter,
   typeFilter, setTypeFilter,
   monthFilter, setMonthFilter,
-  showStatusFilter = true
+  showStatusFilter = true,
+  hasActiveFilters = false,
+  onClearAll,
 }: InvoiceFiltersProps) {
   const { t } = useI18n();
 
@@ -39,7 +43,7 @@ export function InvoiceFilters({
         />
       </div>
       
-      {showStatusFilter && statusFilter && setStatusFilter && (
+      {showStatusFilter && statusFilter !== undefined && setStatusFilter && (
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-40"><SelectValue placeholder={t("invoices.list.filter.statusLabel")} /></SelectTrigger>
           <SelectContent>
@@ -83,6 +87,14 @@ export function InvoiceFilters({
             </Button>
           )}
         </div>
+      )}
+
+      {/* Clear All Filters Button */}
+      {hasActiveFilters && onClearAll && (
+        <Button variant="outline" size="sm" onClick={onClearAll} className="gap-1.5 text-muted-foreground hover:text-foreground">
+          <FilterX className="w-3.5 h-3.5" />
+          {t("invoices.list.filter.clearAll") || "Clear All Filters"}
+        </Button>
       )}
     </div>
   );

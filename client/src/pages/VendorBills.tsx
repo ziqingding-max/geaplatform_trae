@@ -85,7 +85,7 @@ function VendorBillList() {
     status: statusFilter !== "all" ? statusFilter : undefined,
     category: categoryFilter !== "all" ? categoryFilter : undefined,
     vendorId: vendorFilter !== "all" ? parseInt(vendorFilter) : undefined,
-    limit: 200,
+    limit: 1000,
   });
   const vendorsQuery = trpc.vendors.list.useQuery({ limit: 500 });
   const vendors = (vendorsQuery.data as any)?.data || vendorsQuery.data || [];

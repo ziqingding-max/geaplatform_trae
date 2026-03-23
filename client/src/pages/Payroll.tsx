@@ -74,7 +74,7 @@ function PayrollList() {
 
   const { data, isLoading, refetch } = trpc.payroll.list.useQuery({
     status: statusFilter !== "all" ? statusFilter : undefined,
-    limit: 200,
+    limit: 1000,
   });
 
   const { data: countries } = trpc.countries.list.useQuery();

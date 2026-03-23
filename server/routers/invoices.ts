@@ -153,6 +153,8 @@ export const invoicesRouter = router({
         invoiceType: z.string().optional(),
         invoiceMonth: z.string().optional(),
         excludeCreditNotes: z.boolean().optional(),
+        search: z.string().optional(),
+        tab: z.enum(["active", "history"]).optional(),
         limit: z.number().default(50),
         offset: z.number().default(0),
       })
@@ -165,6 +167,8 @@ export const invoicesRouter = router({
           invoiceType: input.invoiceType,
           invoiceMonth: input.invoiceMonth,
           excludeCreditNotes: input.excludeCreditNotes,
+          search: input.search,
+          tab: input.tab,
         },
         input.limit,
         input.offset

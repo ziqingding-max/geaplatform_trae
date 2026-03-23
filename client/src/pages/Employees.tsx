@@ -153,7 +153,7 @@ function EmployeeList() {
     offset: (page - 1) * pageSize,
   });
 
-  const { data: customers } = trpc.customers.list.useQuery({ limit: 200 });
+  const { data: customers } = trpc.customers.list.useQuery({ limit: 1000 });
   const { data: countriesList } = trpc.countries.list.useQuery();
 
   // Onboarding Invites
@@ -891,7 +891,7 @@ function EmployeeDetail({ id }: { id: number }) {
   const { data: leaveBalances, refetch: refetchLeave } = trpc.employees.leaveBalances.useQuery({ employeeId: id, year: new Date().getFullYear() });
   const { data: payrollHistory } = trpc.employees.payrollHistory.useQuery({ employeeId: id });
   const { data: adjustmentHistory } = trpc.employees.adjustmentHistory.useQuery({ employeeId: id });
-  const { data: customers } = trpc.customers.list.useQuery({ limit: 200 });
+  const { data: customers } = trpc.customers.list.useQuery({ limit: 1000 });
   const { data: detailCountriesList } = trpc.countries.list.useQuery();
 
   // Worker Portal invite

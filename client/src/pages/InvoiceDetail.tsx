@@ -1,4 +1,4 @@
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, useSearch } from "wouter";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
@@ -127,6 +127,16 @@ export default function InvoiceDetail() {
   const { user } = useAuth();
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
+
+  // Use browser history back if we came from the invoices list (preserves filters)
+  const goBackToList = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      setLocation("/invoices");
+    }
+  };
 
   const paramId = params.id || "";
   const isNumericId = /^\d+$/.test(paramId);
@@ -270,7 +280,7 @@ export default function InvoiceDetail() {
     return (
       <Layout breadcrumb={["GEA", "Invoices", "Not Found"]}>
         <div className="p-6 max-w-6xl mx-auto">
-          <Button variant="ghost" onClick={() => setLocation("/invoices")} className="gap-2 mb-8">
+          <Button variant="ghost" onClick={goBackToList} className="gap-2 mb-8">
             <ArrowLeft className="w-4 h-4" /> Back to Invoices
           </Button>
           <div className="text-center py-16">
@@ -338,7 +348,7 @@ export default function InvoiceDetail() {
       <div className="p-6 max-w-6xl mx-auto space-y-6 page-enter">
 
         {/* ── Back + Header ── */}
-        <Button variant="ghost" size="sm" onClick={() => setLocation("/invoices")} className="gap-2 text-muted-foreground hover:text-foreground -ml-2">
+        <Button variant="ghost" size="sm" onClick={goBackToList} className="gap-2 text-muted-foreground hover:text-foreground -ml-2">
           <ArrowLeft className="w-4 h-4" /> Back to Invoices
         </Button>
 

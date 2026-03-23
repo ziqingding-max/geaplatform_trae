@@ -218,14 +218,14 @@ export default function Invoices() {
   const { t } = useI18n();
   const {
     isLoading,
-    invoices,
     activeInvoices,
+    activeTotal,
     historyInvoices,
-    filtered,
-    filteredHistory,
+    historyTotal,
     customerMap,
     filters,
     pagination,
+    tab,
     selection,
     batch
   } = useInvoices();
@@ -253,7 +253,7 @@ export default function Invoices() {
     onError: (err) => toast.error(err.message),
   });
 
-  const { data: customers } = trpc.customers.list.useQuery({ limit: 200 });
+  const { data: customers } = trpc.customers.list.useQuery({ limit: 1000 });
   const { data: billingEntities } = trpc.billingEntities.list.useQuery();
   const { data: months } = trpc.invoices.monthlyOverview.useQuery({ limit: 12 });
 
@@ -295,9 +295,9 @@ export default function Invoices() {
             <Button
               variant="outline"
               size="sm"
-              disabled={invoices.length === 0}
+              disabled={activeInvoices.length === 0 && historyInvoices.length === 0}
               onClick={() => exportToCsv(
-                invoices,
+                [...activeInvoices, ...historyInvoices],
                 [
                   { header: t("invoices.list.table.header.invoiceNumber"), accessor: (r) => r.invoiceNumber },
                   { header: t("invoices.list.filter.typeLabel"), accessor: (r) => (typeLabelKeys[r.invoiceType] ? t(typeLabelKeys[r.invoiceType]) : r.invoiceType) },
@@ -331,10 +331,10 @@ export default function Invoices() {
 
         <InvoiceGenerationPanel />
 
-        <Tabs defaultValue="list" className="w-full">
+        <Tabs value={tab.active} onValueChange={tab.setActive} className="w-full">
           <TabsList>
-            <TabsTrigger value="list"><FileText className="w-3.5 h-3.5 mr-1.5" />{t("invoices.list.tab.active")} ({activeInvoices.length})</TabsTrigger>
-            <TabsTrigger value="history"><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />{t("invoices.list.tab.history")} ({historyInvoices.length})</TabsTrigger>
+            <TabsTrigger value="list"><FileText className="w-3.5 h-3.5 mr-1.5" />{t("invoices.list.tab.active")} ({activeTotal})</TabsTrigger>
+            <TabsTrigger value="history"><CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />{t("invoices.list.tab.history")} ({historyTotal})</TabsTrigger>
             <TabsTrigger value="monthly"><BarChart3 className="w-3.5 h-3.5 mr-1.5" />{t("invoices.list.tab.monthlyOverview")}</TabsTrigger>
           </TabsList>
 
@@ -344,6 +344,8 @@ export default function Invoices() {
               statusFilter={filters.status} setStatusFilter={filters.setStatus}
               typeFilter={filters.type} setTypeFilter={filters.setType}
               monthFilter={filters.month} setMonthFilter={filters.setMonth}
+              hasActiveFilters={filters.hasActiveFilters}
+              onClearAll={filters.clearAll}
             />
 
             {selection.selectedIds.size > 0 && (
@@ -371,11 +373,11 @@ export default function Invoices() {
             <Card>
               <CardContent className="p-0">
                 <InvoiceTable 
-                  invoices={filtered.slice((pagination.activePage - 1) * pagination.pageSize, pagination.activePage * pagination.pageSize)}
+                  invoices={activeInvoices}
                   isLoading={isLoading}
                   selectedIds={selection.selectedIds}
                   toggleSelect={selection.toggleSelect}
-                  toggleSelectAll={() => selection.toggleSelectAll(filtered)}
+                  toggleSelectAll={() => selection.toggleSelectAll(activeInvoices)}
                   customerMap={customerMap}
                   activePage={pagination.activePage}
                   statusColors={statusColors}
@@ -385,28 +387,33 @@ export default function Invoices() {
               </CardContent>
             </Card>
             
-            {/* Pagination */}
-            {filtered.length > pagination.pageSize && (
-              <div className="flex items-center justify-end space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => pagination.setActivePage(p => Math.max(1, p - 1))}
-                  disabled={pagination.activePage === 1}
-                >
-                  Previous
-                </Button>
-                <div className="text-sm text-muted-foreground">
-                  Page {pagination.activePage} of {Math.ceil(filtered.length / pagination.pageSize)}
+            {/* Server-side Pagination */}
+            {activeTotal > pagination.pageSize && (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Showing {Math.min((pagination.activePage - 1) * pagination.pageSize + 1, activeTotal)}–{Math.min(pagination.activePage * pagination.pageSize, activeTotal)} of {activeTotal}
+                </p>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => pagination.setActivePage(p => Math.max(1, p - 1))}
+                    disabled={pagination.activePage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <div className="text-sm text-muted-foreground">
+                    Page {pagination.activePage} of {Math.ceil(activeTotal / pagination.pageSize)}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => pagination.setActivePage(p => p + 1)}
+                    disabled={pagination.activePage >= Math.ceil(activeTotal / pagination.pageSize)}
+                  >
+                    Next
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => pagination.setActivePage(p => p + 1)}
-                  disabled={pagination.activePage >= Math.ceil(filtered.length / pagination.pageSize)}
-                >
-                  Next
-                </Button>
               </div>
             )}
           </TabsContent>
@@ -416,11 +423,13 @@ export default function Invoices() {
               search={filters.search} setSearch={filters.setSearch}
               typeFilter={filters.type} setTypeFilter={filters.setType}
               showStatusFilter={false}
+              hasActiveFilters={filters.hasActiveFilters}
+              onClearAll={filters.clearAll}
             />
             <Card>
               <CardContent className="p-0">
                 <InvoiceTable 
-                  invoices={filteredHistory.slice((pagination.historyPage - 1) * pagination.pageSize, pagination.historyPage * pagination.pageSize)}
+                  invoices={historyInvoices}
                   isLoading={isLoading}
                   customerMap={customerMap}
                   activePage={pagination.historyPage}
@@ -431,6 +440,36 @@ export default function Invoices() {
                 />
               </CardContent>
             </Card>
+
+            {/* Server-side Pagination for History */}
+            {historyTotal > pagination.pageSize && (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Showing {Math.min((pagination.historyPage - 1) * pagination.pageSize + 1, historyTotal)}–{Math.min(pagination.historyPage * pagination.pageSize, historyTotal)} of {historyTotal}
+                </p>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => pagination.setHistoryPage(p => Math.max(1, p - 1))}
+                    disabled={pagination.historyPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <div className="text-sm text-muted-foreground">
+                    Page {pagination.historyPage} of {Math.ceil(historyTotal / pagination.pageSize)}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => pagination.setHistoryPage(p => p + 1)}
+                    disabled={pagination.historyPage >= Math.ceil(historyTotal / pagination.pageSize)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="monthly" className="mt-4">

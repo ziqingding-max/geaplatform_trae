@@ -37,12 +37,22 @@ export async function getInvoiceByNumber(invoiceNumber: string) {
 }
 
 export async function listInvoices(
-  filters: { customerId?: number; status?: string; invoiceType?: string; invoiceMonth?: string; excludeCreditNotes?: boolean } = {},
+  filters: {
+    customerId?: number;
+    status?: string;
+    invoiceType?: string;
+    invoiceMonth?: string;
+    excludeCreditNotes?: boolean;
+    search?: string;
+    tab?: "active" | "history";
+  } = {},
   limit: number = 50,
   offset: number = 0
 ) {
   const db = await getDb();
   if (!db) return { data: [], total: 0 };
+
+  const { ne, or } = await import("drizzle-orm");
 
   // Build WHERE conditions from filters
   const conditions = [];
@@ -50,15 +60,33 @@ export async function listInvoices(
   if (filters.status) conditions.push(eq(invoices.status, filters.status as any));
   if (filters.invoiceType) conditions.push(eq(invoices.invoiceType, filters.invoiceType as any));
   if (filters.invoiceMonth) conditions.push(eq(invoices.invoiceMonth, filters.invoiceMonth));
+
+  // Tab-based status filtering: active = non-terminal, history = terminal
+  const historyStatuses = ["paid", "cancelled"];
+  if (filters.tab === "active") {
+    for (const s of historyStatuses) {
+      conditions.push(ne(invoices.status, s as any));
+    }
+  } else if (filters.tab === "history") {
+    const { inArray } = await import("drizzle-orm");
+    conditions.push(inArray(invoices.status, historyStatuses as any));
+  }
   
   // Exclude negative invoice types (Credit Notes & Deposit Refunds) if requested
   if (filters.excludeCreditNotes) {
-    const { ne, and } = await import("drizzle-orm");
-    // We want to exclude 'credit_note' and 'deposit_refund'
-    // Drizzle ORM doesn't have a simple 'notInArray' helper in all versions, 
-    // so we use multiple NE conditions combined with AND
     conditions.push(ne(invoices.invoiceType, "credit_note"));
     conditions.push(ne(invoices.invoiceType, "deposit_refund"));
+  }
+
+  // Search by invoiceNumber or customerName (case-insensitive)
+  if (filters.search) {
+    const searchTerm = `%${filters.search}%`;
+    conditions.push(
+      or(
+        like(invoices.invoiceNumber, searchTerm),
+        like(customers.companyName, searchTerm)
+      )!
+    );
   }
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -76,6 +104,8 @@ export async function listInvoices(
       dueDate: invoices.dueDate,
       total: invoices.total,
       amountDue: invoices.amountDue,
+      paidAmount: invoices.paidAmount,
+      paidDate: invoices.paidDate,
       currency: invoices.currency,
       createdAt: invoices.createdAt,
       creditNoteDisposition: invoices.creditNoteDisposition,
@@ -87,7 +117,10 @@ export async function listInvoices(
     .limit(limit)
     .offset(offset)
     .orderBy(desc(invoices.createdAt)),
-    db.select({ count: count() }).from(invoices).where(where)
+    db.select({ count: count() })
+      .from(invoices)
+      .leftJoin(customers, eq(invoices.customerId, customers.id))
+      .where(where)
   ]);
 
   return { data, total: totalResult[0]?.count || 0 };

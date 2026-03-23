@@ -95,7 +95,7 @@ export default function Leave() {
 
   // Load employees and customers for selectors
   const { data: employees } = trpc.employees.list.useQuery({ limit: 500 });
-  const { data: customersData } = trpc.customers.list.useQuery({ limit: 200 });
+  const { data: customersData } = trpc.customers.list.useQuery({ limit: 1000 });
   const customersList = customersData?.data || [];
 
   const createMutation = trpc.leave.create.useMutation({
