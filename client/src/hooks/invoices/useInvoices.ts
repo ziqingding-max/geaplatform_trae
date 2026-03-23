@@ -17,6 +17,7 @@ function parseUrlFilters(searchString: string) {
     type: params.get("type") || "all",
     month: params.get("month") || "",
     search: params.get("search") || "",
+    customer: params.get("customer") || "all",
     activePage: Math.max(1, parseInt(params.get("page") || "1", 10) || 1),
     historyPage: Math.max(1, parseInt(params.get("hpage") || "1", 10) || 1),
     tab: (params.get("tab") as "list" | "history" | "monthly") || "list",
@@ -32,6 +33,7 @@ function buildUrlSearch(filters: {
   type: string;
   month: string;
   search: string;
+  customer: string;
   activePage: number;
   historyPage: number;
   tab: string;
@@ -41,6 +43,7 @@ function buildUrlSearch(filters: {
   if (filters.type && filters.type !== "all") params.set("type", filters.type);
   if (filters.month) params.set("month", filters.month);
   if (filters.search) params.set("search", filters.search);
+  if (filters.customer && filters.customer !== "all") params.set("customer", filters.customer);
   if (filters.activePage > 1) params.set("page", String(filters.activePage));
   if (filters.historyPage > 1) params.set("hpage", String(filters.historyPage));
   if (filters.tab && filters.tab !== "list") params.set("tab", filters.tab);
@@ -60,6 +63,7 @@ export function useInvoices() {
   const [typeFilter, setTypeFilterState] = useState(urlFilters.type);
   const [monthFilter, setMonthFilterState] = useState(urlFilters.month);
   const [search, setSearchState] = useState(urlFilters.search);
+  const [customerFilter, setCustomerFilterState] = useState(urlFilters.customer);
   const [activePage, setActivePageState] = useState(urlFilters.activePage);
   const [historyPage, setHistoryPageState] = useState(urlFilters.historyPage);
   const [activeTab, setActiveTabState] = useState(urlFilters.tab);
@@ -74,6 +78,7 @@ export function useInvoices() {
     setTypeFilterState(parsed.type);
     setMonthFilterState(parsed.month);
     setSearchState(parsed.search);
+    setCustomerFilterState(parsed.customer);
     setActivePageState(parsed.activePage);
     setHistoryPageState(parsed.historyPage);
     setActiveTabState(parsed.tab);
@@ -85,6 +90,7 @@ export function useInvoices() {
     type: string;
     month: string;
     search: string;
+    customer: string;
     activePage: number;
     historyPage: number;
     tab: string;
@@ -94,6 +100,7 @@ export function useInvoices() {
       type: typeFilter,
       month: monthFilter,
       search,
+      customer: customerFilter,
       activePage,
       historyPage,
       tab: activeTab,
@@ -101,7 +108,7 @@ export function useInvoices() {
     const merged = { ...current, ...overrides };
     const newSearch = buildUrlSearch(merged);
     setLocation(`/invoices${newSearch}`, { replace: true });
-  }, [statusFilter, typeFilter, monthFilter, search, activePage, historyPage, activeTab, setLocation]);
+  }, [statusFilter, typeFilter, monthFilter, search, customerFilter, activePage, historyPage, activeTab, setLocation]);
 
   // Filter setters that also update URL and reset page
   const setStatusFilter = useCallback((val: string) => {
@@ -132,6 +139,13 @@ export function useInvoices() {
     updateUrl({ search: val, activePage: 1, historyPage: 1 });
   }, [updateUrl]);
 
+  const setCustomerFilter = useCallback((val: string) => {
+    setCustomerFilterState(val);
+    setActivePageState(1);
+    setHistoryPageState(1);
+    updateUrl({ customer: val, activePage: 1, historyPage: 1 });
+  }, [updateUrl]);
+
   const setActivePage = useCallback((val: number | ((prev: number) => number)) => {
     setActivePageState((prev) => {
       const newVal = typeof val === "function" ? val(prev) : val;
@@ -159,12 +173,13 @@ export function useInvoices() {
     setTypeFilterState("all");
     setMonthFilterState("");
     setSearchState("");
+    setCustomerFilterState("all");
     setActivePageState(1);
     setHistoryPageState(1);
     setLocation(`/invoices${activeTab !== "list" ? `?tab=${activeTab}` : ""}`, { replace: true });
   }, [setLocation, activeTab]);
 
-  const hasActiveFilters = statusFilter !== "all" || typeFilter !== "all" || monthFilter !== "" || search !== "";
+  const hasActiveFilters = statusFilter !== "all" || typeFilter !== "all" || monthFilter !== "" || search !== "" || customerFilter !== "all";
 
   const utils = trpc.useUtils();
 
@@ -174,8 +189,9 @@ export function useInvoices() {
     invoiceType: typeFilter !== "all" ? typeFilter : undefined,
     invoiceMonth: monthFilter || undefined,
     search: search || undefined,
+    customerId: customerFilter !== "all" ? parseInt(customerFilter, 10) : undefined,
     excludeCreditNotes: true,
-  }), [statusFilter, typeFilter, monthFilter, search]);
+  }), [statusFilter, typeFilter, monthFilter, search, customerFilter]);
 
   // Active invoices query (server-side pagination)
   const { data: activeData, isLoading: activeLoading } = trpc.invoices.list.useQuery({
@@ -269,6 +285,8 @@ export function useInvoices() {
       setMonth: setMonthFilter,
       search,
       setSearch,
+      customer: customerFilter,
+      setCustomer: setCustomerFilter,
       clearAll: clearAllFilters,
       hasActiveFilters,
     },

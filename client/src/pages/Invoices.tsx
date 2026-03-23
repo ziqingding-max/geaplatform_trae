@@ -344,6 +344,8 @@ export default function Invoices() {
               statusFilter={filters.status} setStatusFilter={filters.setStatus}
               typeFilter={filters.type} setTypeFilter={filters.setType}
               monthFilter={filters.month} setMonthFilter={filters.setMonth}
+              customerFilter={filters.customer} setCustomerFilter={filters.setCustomer}
+              customers={customers?.data?.map((c: any) => ({ id: c.id, companyName: c.companyName })) || []}
               hasActiveFilters={filters.hasActiveFilters}
               onClearAll={filters.clearAll}
             />
@@ -422,6 +424,8 @@ export default function Invoices() {
             <InvoiceFilters 
               search={filters.search} setSearch={filters.setSearch}
               typeFilter={filters.type} setTypeFilter={filters.setType}
+              customerFilter={filters.customer} setCustomerFilter={filters.setCustomer}
+              customers={customers?.data?.map((c: any) => ({ id: c.id, companyName: c.companyName })) || []}
               showStatusFilter={false}
               hasActiveFilters={filters.hasActiveFilters}
               onClearAll={filters.clearAll}
