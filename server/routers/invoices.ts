@@ -666,12 +666,15 @@ export const invoicesRouter = router({
               }
             }
 
+            // Convert followUpMonth to string format (YYYY-MM-DD) as invoiceMonth is a text column
+            const followUpMonthStr = followUpMonth.toISOString().slice(0, 10);
+
             const followUpResult = await createInvoice({
               customerId: invoice.customerId,
               billingEntityId: invoice.billingEntityId,
               invoiceNumber: followUpNumber,
               invoiceType: followUpInvoiceType,
-              invoiceMonth: followUpMonth,
+              invoiceMonth: followUpMonthStr,
               currency: invoice.currency || "USD",
               exchangeRate: "1",
               exchangeRateWithMarkup: "1",
