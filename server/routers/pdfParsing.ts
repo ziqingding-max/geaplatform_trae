@@ -302,7 +302,7 @@ The documents may include invoices, payment receipts (POP), bank statements, or 
 YOUR TASK:
 1. Cross-reference ALL uploaded documents to extract and verify vendor bill information
 2. Match line items to employees and customers in our system
-3. Classify each line item's cost type (employment_cost, service_fee, visa_fee, equipment_purchase, deposit, deposit_refund, or other)
+3. Classify each line item's cost type (employment_cost, service_fee, visa_fee, equipment_purchase, or other)
 4. Suggest cost allocations (link vendor costs to our customer invoices)
 5. Report confidence levels and any discrepancies between documents
 
@@ -344,8 +344,8 @@ Return a JSON object with these fields:
   - subtotal: number
   - tax: number
   - totalAmount: number
-  - category: string (one of: payroll_processing, social_contributions, tax_filing, legal_compliance, visa_immigration, hr_advisory, it_services, office_rent, insurance, bank_charges, consulting, equipment, travel, marketing, other)
-  - billType: string (one of: "pass_through", "vendor_service_fee", "non_recurring", "operational", "deposit", "deposit_refund"). Use "pass_through" for payroll/salary/social contributions/tax paid on behalf of employees (the bulk cost that GEA collects from clients and pays to vendor). Use "vendor_service_fee" for the vendor's own management/processing/service fee charged to GEA. Use "non_recurring" for one-off costs like visa processing, equipment procurement, onboarding/offboarding. Use "deposit" for security deposits. Use "deposit_refund" for returned deposits. Use "operational" for internal business costs (office rent, SaaS, etc.).
+  - category: string (one of: payroll_processing, social_contributions, visa_immigration, consulting, equipment, insurance, other). Use "payroll_processing" for payroll and tax filing. Use "social_contributions" for social security/pension. Use "consulting" for consulting, HR advisory, or legal services. Use "other" for IT, office rent, bank charges, travel, marketing, or anything else.
+  - billType: string (one of: "pass_through", "vendor_service_fee", "non_recurring", "operational"). Use "pass_through" for payroll/salary/social contributions/tax paid on behalf of employees (the bulk cost that GEA collects from clients and pays to vendor). Use "vendor_service_fee" for the vendor's own management/processing/service fee charged to GEA. Use "non_recurring" for one-off costs like visa processing, equipment procurement, onboarding/offboarding. Use "operational" for internal business costs (office rent, SaaS, etc.).
   - description: string
   - confidence: number (0-100)
 - payment: object | null (if POP/receipt is included):
@@ -365,7 +365,7 @@ Return a JSON object with these fields:
   - matchedEmployeeCode: string | null (employee code like EMP-0001 if matched)
   - matchedCustomerId: number | null (customer ID from our system if matched via employee)
   - matchedInvoiceId: number | null (invoice ID from our system if matched)
-  - itemType: string (REQUIRED - classify each line item as one of: "employment_cost" for salary/wages/social contributions/tax/pension/insurance paid on behalf of employee, "service_fee" for the vendor's own processing/management/service fee, "visa_fee" for visa/immigration/work permit related costs, "equipment_purchase" for equipment/hardware procurement, "deposit" for security deposit or guarantee, "deposit_refund" for deposit being returned, "other" for anything that doesn't fit above categories)
+  - itemType: string (REQUIRED - classify each line item as one of: "employment_cost" for salary/wages/social contributions/tax/pension/insurance paid on behalf of employee, "service_fee" for the vendor's own processing/management/service fee, "visa_fee" for visa/immigration/work permit related costs, "equipment_purchase" for equipment/hardware procurement, "other" for anything that doesn't fit above categories)
   - quantity: number
   - unitPrice: number
   - amount: number
@@ -586,12 +586,10 @@ CONFIDENCE SCORING RULES:
         tax: z.string().default("0"),
         totalAmount: z.string(),
         category: z.enum([
-          "payroll_processing", "social_contributions", "tax_filing",
-          "legal_compliance", "visa_immigration", "hr_advisory",
-          "it_services", "office_rent", "insurance", "bank_charges",
-          "consulting", "equipment", "travel", "marketing", "other",
+          "payroll_processing", "social_contributions", "visa_immigration",
+          "consulting", "equipment", "insurance", "other",
         ]).default("other"),
-        billType: z.enum(["operational", "deposit", "deposit_refund", "pass_through", "vendor_service_fee", "non_recurring"]).default("operational"),
+        billType: z.enum(["operational", "pass_through", "vendor_service_fee", "non_recurring"]).default("operational"),
         description: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
@@ -610,7 +608,7 @@ CONFIDENCE SCORING RULES:
             quantity: z.string().default("1"),
             unitPrice: z.string(),
             amount: z.string(),
-            itemType: z.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other"]).default("other"),
+            itemType: z.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "other"]).default("other"),
             relatedEmployeeId: z.number().optional(),
             relatedCustomerId: z.number().optional(),
             relatedCountryCode: z.string().optional(),
@@ -795,8 +793,8 @@ Return a JSON object with these fields:
 - subtotal: number
 - tax: number
 - totalAmount: number
-- category: string (one of: payroll_processing, social_contributions, tax_filing, legal_compliance, visa_immigration, hr_advisory, it_services, office_rent, insurance, bank_charges, consulting, equipment, travel, marketing, other)
-- billType: string (one of: "pass_through", "vendor_service_fee", "non_recurring", "operational", "deposit", "deposit_refund"). Use "pass_through" for payroll/salary/social contributions/tax paid on behalf of employees. Use "vendor_service_fee" for the vendor's own management/processing fee. Use "non_recurring" for one-off costs like visa, equipment. Use "deposit" for security deposits. Use "deposit_refund" for returned deposits. Use "operational" for internal business costs.
+- category: string (one of: payroll_processing, social_contributions, visa_immigration, consulting, equipment, insurance, other). Use "payroll_processing" for payroll and tax filing. Use "social_contributions" for social security/pension. Use "consulting" for consulting, HR advisory, or legal services. Use "other" for IT, office rent, bank charges, travel, marketing, or anything else.
+- billType: string (one of: "pass_through", "vendor_service_fee", "non_recurring", "operational"). Use "pass_through" for payroll/salary/social contributions/tax paid on behalf of employees. Use "vendor_service_fee" for the vendor's own management/processing fee. Use "non_recurring" for one-off costs like visa, equipment. Use "operational" for internal business costs.
 - description: string
 - lineItems: array of { description: string, employeeName: string | null, quantity: number, unitPrice: number, amount: number, countryCode: string | null }
 
@@ -853,12 +851,10 @@ Be precise with numbers. If a field is not found, use null.`,
         tax: z.string().default("0"),
         totalAmount: z.string(),
         category: z.enum([
-          "payroll_processing", "social_contributions", "tax_filing",
-          "legal_compliance", "visa_immigration", "hr_advisory",
-          "it_services", "office_rent", "insurance", "bank_charges",
-          "consulting", "equipment", "travel", "marketing", "other",
+          "payroll_processing", "social_contributions", "visa_immigration",
+          "consulting", "equipment", "insurance", "other",
         ]).default("other"),
-        billType: z.enum(["operational", "deposit", "deposit_refund", "pass_through", "vendor_service_fee", "non_recurring"]).default("operational"),
+        billType: z.enum(["operational", "pass_through", "vendor_service_fee", "non_recurring"]).default("operational"),
         description: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
@@ -868,7 +864,7 @@ Be precise with numbers. If a field is not found, use null.`,
             quantity: z.string().default("1"),
             unitPrice: z.string(),
             amount: z.string(),
-            itemType: z.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other"]).default("other"),
+            itemType: z.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "other"]).default("other"),
             relatedEmployeeId: z.number().optional(),
             relatedCustomerId: z.number().optional(),
             relatedCountryCode: z.string().optional(),

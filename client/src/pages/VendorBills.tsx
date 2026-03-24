@@ -63,9 +63,8 @@ const statusColorMap: Record<string, string> = {
 };
 
 const categoryKeys = [
-  "payroll_processing", "social_contributions", "tax_filing", "legal_compliance",
-  "visa_immigration", "hr_advisory", "it_services", "office_rent", "insurance",
-  "bank_charges", "consulting", "equipment", "travel", "marketing", "other",
+  "payroll_processing", "social_contributions", "visa_immigration",
+  "consulting", "equipment", "insurance", "other",
 ];
 const statusKeys = [
   "draft", "pending_approval", "approved", "paid", "partially_paid", "overdue", "cancelled", "void",
@@ -451,7 +450,7 @@ function VendorBillDetail() {
   const exceedsRevenue = allocWorker.employeeId && revTotal > 0 && allocAmtNum > revTotal;
 
   const itemTypeKeys = [
-    "employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other",
+    "employment_cost", "service_fee", "visa_fee", "equipment_purchase", "other",
   ];
 
   return (
@@ -700,22 +699,38 @@ function VendorBillDetail() {
           <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{t("common.edit")}</DialogTitle></DialogHeader>
             <div className="py-4 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">{t("vendorBills.table.billNumberHeader")}</Label>
                   <Input value={editBill.billNumber || ""} onChange={(e) => setEditBill({ ...editBill, billNumber: e.target.value })} className="h-8 text-sm" />
                 </div>
                 <div>
                   <Label className="text-xs">{t("vendorBills.createBill.billType")}</Label>
-                  <Select value={editBill.billType || "operational"} onValueChange={(v) => setEditBill({ ...editBill, billType: v })}>
+                  <Select value={editBill.billType || "operational"} onValueChange={(v) => {
+                    // Smart auto-fill: set recommended category based on billType
+                    const autoCategory: Record<string, string> = {
+                      pass_through: "payroll_processing",
+                      vendor_service_fee: "consulting",
+                      non_recurring: editBill.category || "other",
+                      operational: editBill.category || "other",
+                    };
+                    setEditBill({ ...editBill, billType: v, category: autoCategory[v] || "other" });
+                  }}>
                     <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="operational">{t("vendorBills.billType.operational")}</SelectItem>
                       <SelectItem value="pass_through">{t("vendorBills.billType.pass_through")}</SelectItem>
                       <SelectItem value="vendor_service_fee">{t("vendorBills.billType.vendor_service_fee")}</SelectItem>
                       <SelectItem value="non_recurring">{t("vendorBills.billType.non_recurring")}</SelectItem>
-                      <SelectItem value="deposit">{t("vendorBills.billType.deposit")}</SelectItem>
-                      <SelectItem value="deposit_refund">{t("vendorBills.billType.deposit_refund")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs">{t("vendorBills.filters.allCategories")}</Label>
+                  <Select value={editBill.category || "other"} onValueChange={(v) => setEditBill({ ...editBill, category: v })}>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {categoryKeys.map((c) => <SelectItem key={c} value={c}>{t(`vendorBills.category.${c}`)}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
