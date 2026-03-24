@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { workerTrpc } from "@/lib/workerTrpc";
-import { countryName } from "@/lib/format";
+import { countryName, formatDate } from "@/lib/format";
 import WorkerLayout from "./WorkerLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, User } from "lucide-react";
+import { Loader2, User, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 
 export default function WorkerProfile() {
@@ -35,15 +35,18 @@ export default function WorkerProfile() {
     );
   }
 
+  // Extract the nested profile data for convenience
+  const p = profile?.profile;
+
   const handleEdit = () => {
     setFormData({
-      firstName: profile?.firstName || "",
-      lastName: profile?.lastName || "",
-      phone: profile?.phone || "",
-      address: profile?.address || "",
-      city: profile?.city || "",
-      state: profile?.state || "",
-      postalCode: profile?.postalCode || "",
+      firstName: p?.firstName || "",
+      lastName: p?.lastName || "",
+      phone: p?.phone || "",
+      address: p?.address || "",
+      city: p?.city || "",
+      state: p?.state || "",
+      postalCode: p?.postalCode || "",
     });
     setIsEditing(true);
   };
@@ -77,14 +80,14 @@ export default function WorkerProfile() {
                 <User className="w-8 h-8 text-primary" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold">{profile?.firstName} {profile?.lastName}</h2>
-                <p className="text-sm text-muted-foreground">{profile?.email}</p>
+                <h2 className="text-lg font-semibold">{p?.firstName} {p?.lastName}</h2>
+                <p className="text-sm text-muted-foreground">{p?.email}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700">
                     {profile?.workerType === "contractor" ? "Contractor" : "Employee"}
                   </span>
-                  {profile?.country && (
-                    <span className="text-xs text-muted-foreground">{countryName(profile.country)}</span>
+                  {p?.country && (
+                    <span className="text-xs text-muted-foreground">{countryName(p.country)}</span>
                   )}
                 </div>
               </div>
@@ -103,7 +106,7 @@ export default function WorkerProfile() {
                 <div className="space-y-2">
                   <Label className="text-xs">First Name</Label>
                   <Input
-                    value={isEditing ? formData.firstName : profile?.firstName || ""}
+                    value={isEditing ? formData.firstName : p?.firstName || ""}
                     disabled={!isEditing}
                     onChange={e => setFormData({ ...formData, firstName: e.target.value })}
                   />
@@ -111,7 +114,7 @@ export default function WorkerProfile() {
                 <div className="space-y-2">
                   <Label className="text-xs">Last Name</Label>
                   <Input
-                    value={isEditing ? formData.lastName : profile?.lastName || ""}
+                    value={isEditing ? formData.lastName : p?.lastName || ""}
                     disabled={!isEditing}
                     onChange={e => setFormData({ ...formData, lastName: e.target.value })}
                   />
@@ -120,13 +123,13 @@ export default function WorkerProfile() {
 
               <div className="space-y-2">
                 <Label className="text-xs">Email</Label>
-                <Input value={profile?.email || ""} disabled className="bg-muted" />
+                <Input value={p?.email || ""} disabled className="bg-muted" />
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs">Phone</Label>
                 <Input
-                  value={isEditing ? formData.phone : profile?.phone || ""}
+                  value={isEditing ? formData.phone : p?.phone || ""}
                   disabled={!isEditing}
                   onChange={e => setFormData({ ...formData, phone: e.target.value })}
                 />
@@ -143,7 +146,7 @@ export default function WorkerProfile() {
               <div className="space-y-2">
                 <Label className="text-xs">Street Address</Label>
                 <Input
-                  value={isEditing ? formData.address : profile?.address || ""}
+                  value={isEditing ? formData.address : p?.address || ""}
                   disabled={!isEditing}
                   onChange={e => setFormData({ ...formData, address: e.target.value })}
                 />
@@ -153,7 +156,7 @@ export default function WorkerProfile() {
                 <div className="space-y-2">
                   <Label className="text-xs">City</Label>
                   <Input
-                    value={isEditing ? formData.city : profile?.city || ""}
+                    value={isEditing ? formData.city : p?.city || ""}
                     disabled={!isEditing}
                     onChange={e => setFormData({ ...formData, city: e.target.value })}
                   />
@@ -161,7 +164,7 @@ export default function WorkerProfile() {
                 <div className="space-y-2">
                   <Label className="text-xs">State/Province</Label>
                   <Input
-                    value={isEditing ? formData.state : profile?.state || ""}
+                    value={isEditing ? formData.state : p?.state || ""}
                     disabled={!isEditing}
                     onChange={e => setFormData({ ...formData, state: e.target.value })}
                   />
@@ -172,19 +175,68 @@ export default function WorkerProfile() {
                 <div className="space-y-2">
                   <Label className="text-xs">Postal Code</Label>
                   <Input
-                    value={isEditing ? formData.postalCode : profile?.postalCode || ""}
+                    value={isEditing ? formData.postalCode : p?.postalCode || ""}
                     disabled={!isEditing}
                     onChange={e => setFormData({ ...formData, postalCode: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs">Country/Region</Label>
-                  <Input value={countryName(profile?.country)} disabled className="bg-muted" />
+                  <Input value={countryName(p?.country)} disabled className="bg-muted" />
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {/* Employment Details Card — read-only, managed by Admin/Client */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Briefcase className="w-4 h-4" />
+              Employment Details
+            </CardTitle>
+            <CardDescription>Managed by your employer</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Job Title</Label>
+                <Input value={p?.jobTitle || "—"} disabled className="bg-muted" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Department</Label>
+                <Input value={p?.department || "—"} disabled className="bg-muted" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Country/Region</Label>
+                <Input value={countryName(p?.country)} disabled className="bg-muted" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Status</Label>
+                <Input value={p?.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : "—"} disabled className="bg-muted" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Start Date</Label>
+                <Input value={p?.startDate ? formatDate(p.startDate) : "—"} disabled className="bg-muted" />
+              </div>
+              {p?.endDate && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">End Date</Label>
+                  <Input value={formatDate(p.endDate)} disabled className="bg-muted" />
+                </div>
+              )}
+            </div>
+            {p?.jobDescription && (
+              <div className="mt-4 space-y-2">
+                <Label className="text-xs text-muted-foreground">Job Description</Label>
+                <div className="min-h-[60px] px-3 py-2 bg-muted rounded-md border text-sm whitespace-pre-wrap">
+                  {p.jobDescription}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </WorkerLayout>
   );
