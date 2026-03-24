@@ -6066,6 +6066,51 @@ const adminTranslations = {
     "vendorBills.createBill.noLineItems": "No line items yet. Click below to add one.",
     "vendorBills.lineItems.totalLabel": "Total",
 
+    // Vendor Bill Settlement
+    "vendorBills.settlement.title": "Confirm Payment Settlement",
+    "vendorBills.settlement.billAmount": "Original Bill Amount",
+    "vendorBills.settlement.currency": "Settlement Currency",
+    "vendorBills.settlement.amount": "Settlement Amount",
+    "vendorBills.settlement.amountHint": "The actual amount debited from your bank account (principal only, excluding bank fees)",
+    "vendorBills.settlement.bankFee": "Bank Fee (USD)",
+    "vendorBills.settlement.bankFeeHint": "Wire transfer fee charged by your bank for this payment",
+    "vendorBills.settlement.date": "Settlement Date",
+    "vendorBills.settlement.notes": "Settlement Notes",
+    "vendorBills.settlement.notesPlaceholder": "e.g. Paid via HSBC wire transfer",
+    "vendorBills.settlement.confirm": "Confirm Payment",
+    "vendorBills.settlement.amountRequired": "Settlement amount is required and must be greater than 0",
+    "vendorBills.settlement.totalOutflow": "Total Cash Outflow",
+
+    // Vendor Bill Types (new)
+    "vendorBills.billType.pass_through": "Pass-through (Payroll/Benefits)",
+    "vendorBills.billType.vendor_service_fee": "Vendor Service Fee",
+    "vendorBills.billType.non_recurring": "Non-recurring",
+
+    // Vendor Types (new)
+    "vendors.type.eor_vendor": "EOR Vendor",
+    "vendors.type.bank_financial": "Bank / Financial Institution",
+    "vendors.type.professional_service": "Professional Service",
+    "vendors.type.recruitment_agency": "Recruitment Agency",
+    "vendors.type.equipment_provider": "Equipment Provider",
+    "vendors.type.operational": "Operational",
+
+    // P&L Waterfall
+    "profit_loss_report.waterfall.title": "Net Revenue Breakdown (Waterfall)",
+    "profit_loss_report.waterfall.description": "Detailed breakdown of revenue sources and cost categories after excluding pass-through funds",
+    "profit_loss_report.waterfall.item": "Item",
+    "profit_loss_report.waterfall.amount": "Amount (USD)",
+    "profit_loss_report.waterfall.pct": "% of Revenue",
+    "profit_loss_report.waterfall.net_revenue": "Net Revenue (Total)",
+    "profit_loss_report.waterfall.service_fee": "Service Fee Revenue",
+    "profit_loss_report.waterfall.fx_profit": "FX & Markup Profit",
+    "profit_loss_report.waterfall.non_recurring_rev": "Non-recurring Revenue",
+    "profit_loss_report.waterfall.total_costs": "Total Direct Costs",
+    "profit_loss_report.waterfall.vendor_service_fee": "Vendor Service Fees",
+    "profit_loss_report.waterfall.bank_fees": "Bank Fees",
+    "profit_loss_report.waterfall.non_recurring_cost": "Non-recurring Costs",
+    "profit_loss_report.waterfall.operational_costs": "Operational Costs",
+    "profit_loss_report.waterfall.net_profit": "Net Profit",
+
     // Vendors
     "vendors.create.create_button": "Create Vendor",
     "vendors.create.creating_button": "Creating...",
@@ -9040,6 +9085,51 @@ const adminTranslations = {
     "vendorBills.analyze.parsingHint": "解析可能需要 30-60 秒，取决于文档复杂度。",
     "vendorBills.createBill.noLineItems": "暂无行项目，点击下方按钮添加。",
     "vendorBills.lineItems.totalLabel": "合计",
+
+    // 供应商账单结算
+    "vendorBills.settlement.title": "确认付款结算",
+    "vendorBills.settlement.billAmount": "账单原始金额",
+    "vendorBills.settlement.currency": "结算币种",
+    "vendorBills.settlement.amount": "结算金额",
+    "vendorBills.settlement.amountHint": "银行实际扣款金额（仅本金，不含手续费）",
+    "vendorBills.settlement.bankFee": "银行手续费 (USD)",
+    "vendorBills.settlement.bankFeeHint": "本次付款银行收取的电汇手续费",
+    "vendorBills.settlement.date": "结算日期",
+    "vendorBills.settlement.notes": "结算备注",
+    "vendorBills.settlement.notesPlaceholder": "例：通过汇丰银行电汇支付",
+    "vendorBills.settlement.confirm": "确认付款",
+    "vendorBills.settlement.amountRequired": "结算金额为必填项且必须大于0",
+    "vendorBills.settlement.totalOutflow": "实际现金流出",
+
+    // 账单类型（新增）
+    "vendorBills.billType.pass_through": "代收代付（工资/社保）",
+    "vendorBills.billType.vendor_service_fee": "供应商服务费",
+    "vendorBills.billType.non_recurring": "非经常性",
+
+    // 供应商类型（新增）
+    "vendors.type.eor_vendor": "EOR 供应商",
+    "vendors.type.bank_financial": "银行/金融机构",
+    "vendors.type.professional_service": "专业服务",
+    "vendors.type.recruitment_agency": "猎头机构",
+    "vendors.type.equipment_provider": "设备供应商",
+    "vendors.type.operational": "运营类",
+
+    // P&L 瀑布流
+    "profit_loss_report.waterfall.title": "净收入分解（瀑布流）",
+    "profit_loss_report.waterfall.description": "剔除代收代付资金后的收入来源和成本类别详细分解",
+    "profit_loss_report.waterfall.item": "科目",
+    "profit_loss_report.waterfall.amount": "金额 (USD)",
+    "profit_loss_report.waterfall.pct": "占收入比",
+    "profit_loss_report.waterfall.net_revenue": "净收入（合计）",
+    "profit_loss_report.waterfall.service_fee": "服务费收入",
+    "profit_loss_report.waterfall.fx_profit": "汇差及加价利润",
+    "profit_loss_report.waterfall.non_recurring_rev": "非经常性收入",
+    "profit_loss_report.waterfall.total_costs": "直接成本合计",
+    "profit_loss_report.waterfall.vendor_service_fee": "供应商服务费",
+    "profit_loss_report.waterfall.bank_fees": "银行手续费",
+    "profit_loss_report.waterfall.non_recurring_cost": "非经常性成本",
+    "profit_loss_report.waterfall.operational_costs": "运营成本",
+    "profit_loss_report.waterfall.net_profit": "净利润",
 
     // Vendors
     "vendors.create.create_button": "创建供应商",

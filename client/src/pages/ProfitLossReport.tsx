@@ -140,7 +140,10 @@ export default function ProfitLossReport() {
     );
   }
 
-  const summary = data?.summary || { totalRevenue: 0, totalExpenses: 0, netProfit: 0, profitMargin: 0, totalUnallocated: 0 };
+  const summary = data?.summary || { totalRevenue: 0, totalExpenses: 0, netProfit: 0, profitMargin: 0, totalUnallocated: 0,
+    serviceFeeRevenue: 0, fxMarkupProfit: 0, nonRecurringRevenue: 0,
+    passThroughCollected: 0, passThroughPaid: 0,
+    netRevenue: 0, directCOGS: 0, grossProfit: 0, operationalExpenses: 0 };
   const monthly = data?.monthlyBreakdown || [];
   const revenueByType = data?.revenueByType || [];
   const expensesByCategory = data?.expensesByCategory || [];
@@ -180,7 +183,7 @@ export default function ProfitLossReport() {
           </div>
         </div>
 
-        {/* Summary Cards */}
+        {/* Summary Cards - Top Level */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="p-5">
@@ -240,6 +243,80 @@ export default function ProfitLossReport() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Net Revenue Breakdown (Waterfall) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("profit_loss_report.waterfall.title")}</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("profit_loss_report.waterfall.description")}</p>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[300px]">{t("profit_loss_report.waterfall.item")}</TableHead>
+                  <TableHead className="text-right">{t("profit_loss_report.waterfall.amount")}</TableHead>
+                  <TableHead className="text-right">{t("profit_loss_report.waterfall.pct")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {/* Revenue Section */}
+                <TableRow className="bg-emerald-50/50 font-semibold">
+                  <TableCell>{t("profit_loss_report.waterfall.net_revenue")}</TableCell>
+                  <TableCell className="text-right text-emerald-600">USD {formatAmount(summary.totalRevenue)}</TableCell>
+                  <TableCell className="text-right">100%</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.service_fee")}</TableCell>
+                  <TableCell className="text-right text-sm">USD {formatAmount(summary.serviceFeeRevenue || 0)}</TableCell>
+                  <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.serviceFeeRevenue || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.fx_profit")}</TableCell>
+                  <TableCell className="text-right text-sm">USD {formatAmount(summary.fxMarkupProfit || 0)}</TableCell>
+                  <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.fxMarkupProfit || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.non_recurring_rev")}</TableCell>
+                  <TableCell className="text-right text-sm">USD {formatAmount(summary.nonRecurringRevenue || 0)}</TableCell>
+                  <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.nonRecurringRevenue || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                </TableRow>
+                {/* Cost Section */}
+                <TableRow className="bg-red-50/50 font-semibold">
+                  <TableCell>{t("profit_loss_report.waterfall.total_costs")}</TableCell>
+                  <TableCell className="text-right text-red-600">USD ({formatAmount(summary.totalExpenses)})</TableCell>
+                  <TableCell className="text-right">{summary.totalRevenue ? (summary.totalExpenses / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.vendor_service_fee")}</TableCell>
+                  <TableCell className="text-right text-sm">USD ({formatAmount(summary.directCOGS || 0)})</TableCell>
+                  <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.directCOGS || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.bank_fees")}</TableCell>
+                  <TableCell className="text-right text-sm">USD ({formatAmount((summary as any).bankFees || 0)})</TableCell>
+                  <TableCell className="text-right text-sm">{summary.totalRevenue ? (((summary as any).bankFees || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.non_recurring_cost")}</TableCell>
+                  <TableCell className="text-right text-sm">USD ({formatAmount((summary as any).nonRecurringCosts || 0)})</TableCell>
+                  <TableCell className="text-right text-sm">{summary.totalRevenue ? (((summary as any).nonRecurringCosts || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.operational_costs")}</TableCell>
+                  <TableCell className="text-right text-sm">USD ({formatAmount(summary.operationalExpenses || 0)})</TableCell>
+                  <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.operationalExpenses || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                </TableRow>
+                {/* Net Profit */}
+                <TableRow className="bg-blue-50/50 font-bold border-t-2">
+                  <TableCell>{t("profit_loss_report.waterfall.net_profit")}</TableCell>
+                  <TableCell className={`text-right ${isProfit ? "text-blue-600" : "text-red-600"}`}>USD {isProfit ? "" : "("}{ formatAmount(Math.abs(summary.netProfit))}{isProfit ? "" : ")"}</TableCell>
+                  <TableCell className="text-right">{summary.profitMargin.toFixed(1)}%</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
 
         {/* Monthly Trend Chart */}
         <Card>

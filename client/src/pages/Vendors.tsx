@@ -40,11 +40,21 @@ const statusColors: Record<string, string> = {
 const vendorTypeColors: Record<string, string> = {
   client_related: "bg-blue-500/15 text-blue-600 border-blue-500/30",
   operational: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+  eor_vendor: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
+  bank_financial: "bg-violet-500/15 text-violet-600 border-violet-500/30",
+  professional_service: "bg-cyan-500/15 text-cyan-600 border-cyan-500/30",
+  recruitment_agency: "bg-rose-500/15 text-rose-600 border-rose-500/30",
+  equipment_provider: "bg-orange-500/15 text-orange-600 border-orange-500/30",
 };
 
 const vendorTypeLabels: Record<string, string> = {
   client_related: "Client Related",
   operational: "Operational",
+  eor_vendor: "EOR Vendor",
+  bank_financial: "Bank / Financial",
+  professional_service: "Professional Service",
+  recruitment_agency: "Recruitment Agency",
+  equipment_provider: "Equipment Provider",
 };
 
 const serviceTypeOptions = [
@@ -187,6 +197,11 @@ function VendorList() {
                     <SelectContent>
                       <SelectItem value="client_related">{t("vendors.form.vendor_type.client_related")}</SelectItem>
                       <SelectItem value="operational">{t("vendors.form.vendor_type.operational")}</SelectItem>
+                      <SelectItem value="eor_vendor">{t("vendors.type.eor_vendor")}</SelectItem>
+                      <SelectItem value="bank_financial">{t("vendors.type.bank_financial")}</SelectItem>
+                      <SelectItem value="professional_service">{t("vendors.type.professional_service")}</SelectItem>
+                      <SelectItem value="recruitment_agency">{t("vendors.type.recruitment_agency")}</SelectItem>
+                      <SelectItem value="equipment_provider">{t("vendors.type.equipment_provider")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -242,6 +257,11 @@ function VendorList() {
               <SelectItem value="all">{t("vendors.list.filter.type.all")}</SelectItem>
               <SelectItem value="client_related">{t("vendors.list.filter.type.client_related")}</SelectItem>
               <SelectItem value="operational">{t("vendors.list.filter.type.operational")}</SelectItem>
+              <SelectItem value="eor_vendor">{t("vendors.type.eor_vendor")}</SelectItem>
+              <SelectItem value="bank_financial">{t("vendors.type.bank_financial")}</SelectItem>
+              <SelectItem value="professional_service">{t("vendors.type.professional_service")}</SelectItem>
+              <SelectItem value="recruitment_agency">{t("vendors.type.recruitment_agency")}</SelectItem>
+              <SelectItem value="equipment_provider">{t("vendors.type.equipment_provider")}</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -290,7 +310,7 @@ function VendorList() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={vendorTypeColors[vendor.vendorType] || ""}>
-                          {vendor.vendorType === "client_related" ? t("vendors.list.filter.type.client_related") : t("vendors.list.filter.type.operational")}
+                          {vendorTypeLabels[vendor.vendorType] || vendor.vendorType}
                         </Badge>
                       </TableCell>
                       <TableCell>{countryName(vendor.country)}</TableCell>
@@ -480,7 +500,7 @@ function VendorDetail({ id }: { id: number }) {
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight">{vendor.name}</h1>
               <Badge variant="outline" className={vendorTypeColors[vendor.vendorType] || ""}>
-                {vendor.vendorType === "client_related" ? t("vendors.list.filter.type.client_related") : t("vendors.list.filter.type.operational")}
+                {vendorTypeLabels[vendor.vendorType] || vendor.vendorType}
               </Badge>
               <Badge variant="outline" className={statusColors[vendor.status] || ""}>
                 {vendor.status === "active" ? t("vendors.list.filter.status.active") : t("vendors.list.filter.status.inactive")}
@@ -542,7 +562,7 @@ function VendorDetail({ id }: { id: number }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div><div className="text-xs text-muted-foreground">{t("vendors.detail.field.vendor_type")}</div><div className="font-medium"><Badge variant="outline" className={vendorTypeColors[vendor.vendorType] || ""}>{vendor.vendorType === "client_related" ? t("vendors.list.filter.type.client_related") : t("vendors.list.filter.type.operational")}</Badge></div></div>
+              <div><div className="text-xs text-muted-foreground">{t("vendors.detail.field.vendor_type")}</div><div className="font-medium"><Badge variant="outline" className={vendorTypeColors[vendor.vendorType] || ""}>{vendorTypeLabels[vendor.vendorType] || vendor.vendorType}</Badge></div></div>
               <div><div className="text-xs text-muted-foreground">{t("vendors.form.service_type.label")}</div><div className="font-medium">{formatServiceType(vendor.serviceType)}</div></div>
               <div><div className="text-xs text-muted-foreground">{t("vendors.form.default_currency.label")}</div><div className="font-medium">{vendor.currency}</div></div>
               <div><div className="text-xs text-muted-foreground">{t("vendors.detail.field.payment_terms")}</div><div className="font-medium">{vendor.paymentTermDays} {t("employees.detail.field.days")}</div></div>
@@ -643,6 +663,11 @@ function VendorDetail({ id }: { id: number }) {
                   <SelectContent>
                     <SelectItem value="client_related">{t("vendors.list.filter.type.client_related")}</SelectItem>
                     <SelectItem value="operational">{t("vendors.list.filter.type.operational")}</SelectItem>
+                    <SelectItem value="eor_vendor">{t("vendors.type.eor_vendor")}</SelectItem>
+                    <SelectItem value="bank_financial">{t("vendors.type.bank_financial")}</SelectItem>
+                    <SelectItem value="professional_service">{t("vendors.type.professional_service")}</SelectItem>
+                    <SelectItem value="recruitment_agency">{t("vendors.type.recruitment_agency")}</SelectItem>
+                    <SelectItem value="equipment_provider">{t("vendors.type.equipment_provider")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
