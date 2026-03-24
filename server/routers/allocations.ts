@@ -178,7 +178,7 @@ export const allocationsRouter = router({
         allocatedAmount: input.allocatedAmount,
         description: input.description,
         allocatedBy: ctx.user.id,
-      } as any);
+      });
 
       // Recalculate denormalized fields
       await recalcBillAllocation(input.vendorBillId);
@@ -236,7 +236,7 @@ export const allocationsRouter = router({
           employeeId: alloc.employeeId || null,
           contractorId: alloc.contractorId || null,
           allocatedBy: ctx.user.id,
-        } as any);
+        });
         results.push({ id: allocationId });
         if (!affectedBills.includes(alloc.vendorBillId)) affectedBills.push(alloc.vendorBillId);
         if (!affectedInvoices.includes(alloc.invoiceId)) affectedInvoices.push(alloc.invoiceId);

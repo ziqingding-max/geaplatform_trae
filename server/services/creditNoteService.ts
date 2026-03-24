@@ -200,10 +200,10 @@ export async function generateCreditNote(params: {
         }
       }
       // Check for AOR contractor deposit
-      const depositItemWithContractor = originalItems.find(item => (item as any).contractorId);
-      if (depositItemWithContractor && (depositItemWithContractor as any).contractorId) {
+      const depositItemWithContractor = originalItems.find(item => item.contractorId);
+      if (depositItemWithContractor?.contractorId) {
         const { getContractorById } = await import("./db/contractorService");
-        const contractor = await getContractorById((depositItemWithContractor as any).contractorId);
+        const contractor = await getContractorById(depositItemWithContractor.contractorId);
         if (contractor && contractor.status !== "terminated") {
           throw new Error("Contractor must be in 'terminated' status before creating a credit note for a deposit invoice");
         }
@@ -301,7 +301,7 @@ export async function generateCreditNote(params: {
       creditItems = originalItems.map((item) => ({
         invoiceId: 0, // Will be set after invoice creation
         employeeId: item.employeeId,
-        contractorId: (item as any).contractorId || undefined, // Preserve AOR contractor association
+        contractorId: item.contractorId || undefined, // Preserve AOR contractor association
         description: `Credit: ${item.description}`,
         quantity: item.quantity?.toString() || "1",
         unitPrice: (-Math.abs(parseFloat(item.unitPrice?.toString() ?? "0"))).toFixed(2),

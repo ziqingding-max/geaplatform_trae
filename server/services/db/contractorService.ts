@@ -534,7 +534,7 @@ export async function deleteContractor(id: number) {
 
   // 1c. Nullify contractorId in bill_invoice_allocations to preserve allocation history
   await db.update(billInvoiceAllocations)
-    .set({ contractorId: null } as any)
+    .set({ contractorId: null })
     .where(eq(billInvoiceAllocations.contractorId, id));
 
   // 2. Delete contractor milestones

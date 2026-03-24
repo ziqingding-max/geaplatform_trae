@@ -311,7 +311,7 @@ ${JSON.stringify(systemContext.employees.slice(0, 200), null, 1)}
 
 CONTRACTORS (AOR workers):
 Each contractor has: id, type ("contractor"), code (unique identifier like CTR-0001), name, country, customerId, customerName, linkedInvoices.
-${JSON.stringify((systemContext as any).contractors?.slice(0, 100) || [], null, 1)}
+${JSON.stringify(systemContext.contractors.slice(0, 100), null, 1)}
 
 CUSTOMERS:
 ${JSON.stringify(systemContext.customers, null, 1)}
@@ -677,7 +677,7 @@ CONFIDENCE SCORING RULES:
               allocatedAmount: alloc.allocatedAmount,
               description: alloc.description || "Auto-allocated from AI parsing",
               allocatedBy: ctx.user.id,
-            } as any);
+            });
             allocationsCreated++;
             if (!affectedInvoices.includes(alloc.invoiceId)) {
               affectedInvoices.push(alloc.invoiceId);
