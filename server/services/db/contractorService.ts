@@ -11,6 +11,8 @@ import {
   contractorDocuments,
   contractorContracts,
   workerUsers,
+  invoiceItems,
+  billInvoiceAllocations,
 } from "../../../drizzle/schema";
 import { getDb } from "./connection";
 
@@ -524,6 +526,16 @@ export async function deleteContractor(id: number) {
 
   // For non-draft/rejected invoices, nullify contractorId is not possible (notNull constraint)
   // They will remain as orphaned records for financial audit trail
+
+  // 1b. Nullify contractorId in invoice_items to preserve financial audit trail
+  await db.update(invoiceItems)
+    .set({ contractorId: null })
+    .where(eq(invoiceItems.contractorId, id));
+
+  // 1c. Nullify contractorId in bill_invoice_allocations to preserve allocation history
+  await db.update(billInvoiceAllocations)
+    .set({ contractorId: null } as any)
+    .where(eq(billInvoiceAllocations.contractorId, id));
 
   // 2. Delete contractor milestones
   await db.delete(contractorMilestones).where(eq(contractorMilestones.contractorId, id));

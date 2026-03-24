@@ -406,6 +406,7 @@ async function generateAorInvoices(
 
       lineItems.push({
         invoiceId: 0,
+        contractorId: inv.contractorId, // Link to AOR contractor
         description: `Contractor Payment: ${contractorName} (${inv.invoiceNumber})`,
         quantity: "1",
         unitPrice: amountLocal.toFixed(2), // Show local amount in unit price? Or settlement?
@@ -447,6 +448,7 @@ async function generateAorInvoices(
        
        lineItems.push({
          invoiceId: 0,
+         contractorId: ctr.id, // Link service fee to AOR contractor
          description: `AOR Service Fee - ${ctr.firstName} ${ctr.lastName}`,
          quantity: "1",
          unitPrice: fee.toFixed(2),

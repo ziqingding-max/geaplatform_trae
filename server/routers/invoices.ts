@@ -778,6 +778,7 @@ export const invoicesRouter = router({
       z.object({
         invoiceId: z.number(),
         employeeId: z.number().optional(),
+        contractorId: z.number().optional(),
         description: z.string(),
         quantity: z.string().default("1"),
         unitPrice: z.string(),
@@ -860,6 +861,7 @@ export const invoicesRouter = router({
           itemType: invoiceItemTypeEnum.optional(),
           vatRate: z.string().optional(),
           employeeId: z.number().nullable().optional(),
+          contractorId: z.number().nullable().optional(),
           countryCode: z.string().optional(),
           localCurrency: z.string().optional(),
           localAmount: z.string().optional(),

@@ -22,6 +22,7 @@ import {
   invoiceItems,
   vendors,
   customers,
+  contractors,
 } from "../../drizzle/schema";
 import { eq, like, sql, and, inArray, desc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
@@ -93,6 +94,7 @@ async function buildSystemContext(serviceMonth?: string) {
   let invItemRows: Array<{
     invoiceId: number;
     employeeId: number | null;
+    contractorId: number | null;
     description: string;
     amount: string | number;
     countryCode: string | null;
@@ -102,6 +104,7 @@ async function buildSystemContext(serviceMonth?: string) {
       .select({
         invoiceId: invoiceItems.invoiceId,
         employeeId: invoiceItems.employeeId,
+        contractorId: invoiceItems.contractorId,
         description: invoiceItems.description,
         amount: invoiceItems.amount,
         countryCode: invoiceItems.countryCode,
@@ -127,9 +130,40 @@ async function buildSystemContext(serviceMonth?: string) {
     }
   }
 
+  // Build contractor-to-invoice mapping
+  const ctrInvoiceMap: Record<number, Array<{ invoiceId: number; invoiceNumber: string; customerId: number; amount: string | number }>> = {};
+  for (const item of invItemRows) {
+    if (item.contractorId) {
+      if (!ctrInvoiceMap[item.contractorId]) ctrInvoiceMap[item.contractorId] = [];
+      const inv = invRows.find((i) => i.id === item.invoiceId);
+      if (inv) {
+        ctrInvoiceMap[item.contractorId].push({
+          invoiceId: inv.id,
+          invoiceNumber: inv.invoiceNumber,
+          customerId: inv.customerId,
+          amount: item.amount,
+        });
+      }
+    }
+  }
+
+  // Get all active contractors
+  const ctrRows = await db
+    .select({
+      id: contractors.id,
+      contractorCode: contractors.contractorCode,
+      firstName: contractors.firstName,
+      lastName: contractors.lastName,
+      country: contractors.country,
+      customerId: contractors.customerId,
+    })
+    .from(contractors)
+    .where(eq(contractors.status, "active"));
+
   // Format context for AI
   const empContext = empRows.map((e) => ({
     id: e.id,
+    type: 'employee' as const,
     code: e.employeeCode,
     name: `${e.firstName} ${e.lastName}`,
     country: e.country,
@@ -137,6 +171,17 @@ async function buildSystemContext(serviceMonth?: string) {
     customerName: custRows.find((c) => c.id === e.customerId)?.companyName || "Unknown",
     salary: `${e.salaryCurrency} ${e.baseSalary}`,
     linkedInvoices: empInvoiceMap[e.id] || [],
+  }));
+
+  const ctrContext = ctrRows.map((c) => ({
+    id: c.id,
+    type: 'contractor' as const,
+    code: c.contractorCode,
+    name: `${c.firstName} ${c.lastName}`,
+    country: c.country,
+    customerId: c.customerId,
+    customerName: custRows.find((cu) => cu.id === c.customerId)?.companyName || "Unknown",
+    linkedInvoices: ctrInvoiceMap[c.id] || [],
   }));
 
   const custContext = custRows.map((c) => ({
@@ -161,9 +206,10 @@ async function buildSystemContext(serviceMonth?: string) {
 
   return {
     employees: empContext,
+    contractors: ctrContext,
     customers: custContext,
     invoices: invContext,
-    summary: `${empContext.length} active employees, ${custContext.length} active customers, ${invContext.length} invoices`,
+    summary: `${empContext.length} active employees, ${ctrContext.length} active contractors, ${custContext.length} active customers, ${invContext.length} invoices`,
   };
 }
 
@@ -259,9 +305,13 @@ YOUR TASK:
 4. Suggest cost allocations (link vendor costs to our customer invoices)
 5. Report confidence levels and any discrepancies between documents
 
-SYSTEM DATA (our active employees, customers, and invoices):
-Each employee has: id, code (unique identifier like EMP-0001), name, country, customerId, customerName, salary, linkedInvoices.
+SYSTEM DATA (our active employees, contractors, customers, and invoices):
+Each employee has: id, type ("employee"), code (unique identifier like EMP-0001), name, country, customerId, customerName, salary, linkedInvoices.
 ${JSON.stringify(systemContext.employees.slice(0, 200), null, 1)}
+
+CONTRACTORS (AOR workers):
+Each contractor has: id, type ("contractor"), code (unique identifier like CTR-0001), name, country, customerId, customerName, linkedInvoices.
+${JSON.stringify((systemContext as any).contractors?.slice(0, 100) || [], null, 1)}
 
 CUSTOMERS:
 ${JSON.stringify(systemContext.customers, null, 1)}
@@ -324,7 +374,8 @@ Return a JSON object with these fields:
   - matchReason: string | null (explain WHY you matched or didn't match this line item to an employee, e.g. "Name 'John Zhang' exactly matches employee EMP-0012 John Zhang" or "Line item mentions 'China payroll' but cannot determine specific employee" or "No employee information found in this line item")
   - allocationSuggestion: object | null (only for client_related vendor type):
     - invoiceId: number (from our system)
-    - employeeId: number (from our system)
+    - employeeId: number | null (from our system, for EOR employees)
+    - contractorId: number | null (from our system, for AOR contractors)
     - allocatedAmount: number
     - reason: string (why this allocation is suggested)
 - crossValidation: object with:
@@ -336,13 +387,14 @@ Return a JSON object with these fields:
   - warnings: array of strings (any discrepancies or issues found)
   - notes: array of strings (any helpful observations)
 
-CRITICAL RULES FOR EMPLOYEE MATCHING:
-- Employee code (e.g. EMP-0001) is the MOST RELIABLE identifier. If you see an employee code in the document, use it as the primary matching key.
-- If no employee code is found, match by name. Names may appear in different orders (e.g. "John Smith" vs "Smith, John"), in local scripts (Chinese, Japanese, Korean), or with slight variations.
-- NEVER guess an employee match. If you are not confident (matchConfidence < 50), set matchedEmployeeId to null and explain in matchReason.
-- For matchedEmployeeId, ONLY use IDs from the SYSTEM DATA provided. If no match, use null.
-- For matchedCustomerId, derive from the matched employee's customerId in SYSTEM DATA.
-- For matchedInvoiceId, find the invoice linked to the matched employee for this service month.
+CRITICAL RULES FOR EMPLOYEE/CONTRACTOR MATCHING:
+- Employee code (e.g. EMP-0001) or Contractor code (e.g. CTR-0001) is the MOST RELIABLE identifier. If you see such a code in the document, use it as the primary matching key.
+- If no code is found, match by name. Names may appear in different orders (e.g. "John Smith" vs "Smith, John"), in local scripts (Chinese, Japanese, Korean), or with slight variations.
+- NEVER guess a match. If you are not confident (matchConfidence < 50), set matchedEmployeeId/matchedContractorId to null and explain in matchReason.
+- For matchedEmployeeId, ONLY use IDs from the SYSTEM DATA employees list. For matchedContractorId, ONLY use IDs from the SYSTEM DATA contractors list. If no match, use null.
+- For matchedCustomerId, derive from the matched employee's or contractor's customerId in SYSTEM DATA.
+- For matchedInvoiceId, find the invoice linked to the matched employee/contractor for this service month.
+- In allocationSuggestion, set employeeId for EOR workers and contractorId for AOR contractors. Do NOT set both.
 
 CRITICAL RULES FOR ITEM TYPE CLASSIFICATION:
 - itemType is REQUIRED for every line item. You MUST classify each line item.
@@ -411,9 +463,9 @@ CONFIDENCE SCORING RULES:
       if (parsed.lineItems) {
         parsed.lineItems = parsed.lineItems.map((item: any) => {
           if (!item.allocationSuggestion || item.allocationSuggestion === null) {
-            item.allocationSuggestion = { hasAllocation: false, invoiceId: null, employeeId: null, allocatedAmount: null, reason: null };
+            item.allocationSuggestion = { hasAllocation: false, invoiceId: null, employeeId: null, contractorId: null, allocatedAmount: null, reason: null };
           } else if (item.allocationSuggestion.hasAllocation === undefined) {
-            item.allocationSuggestion.hasAllocation = !!(item.allocationSuggestion.invoiceId || item.allocationSuggestion.employeeId);
+            item.allocationSuggestion.hasAllocation = !!(item.allocationSuggestion.invoiceId || item.allocationSuggestion.employeeId || item.allocationSuggestion.contractorId);
           }
           return item;
         });
@@ -566,7 +618,8 @@ CONFIDENCE SCORING RULES:
         allocations: z.array(
           z.object({
             invoiceId: z.number(),
-            employeeId: z.number(),
+            employeeId: z.number().optional(),
+            contractorId: z.number().optional(),
             allocatedAmount: z.string(),
             description: z.string().optional(),
           })
@@ -619,11 +672,12 @@ CONFIDENCE SCORING RULES:
             await createBillInvoiceAllocation({
               vendorBillId: billId,
               invoiceId: alloc.invoiceId,
-              employeeId: alloc.employeeId,
+              employeeId: alloc.employeeId || null,
+              contractorId: alloc.contractorId || null,
               allocatedAmount: alloc.allocatedAmount,
               description: alloc.description || "Auto-allocated from AI parsing",
               allocatedBy: ctx.user.id,
-            });
+            } as any);
             allocationsCreated++;
             if (!affectedInvoices.includes(alloc.invoiceId)) {
               affectedInvoices.push(alloc.invoiceId);

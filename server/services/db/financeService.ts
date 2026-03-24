@@ -783,7 +783,7 @@ export async function recalcInvoiceCostAllocation(invoiceId: number) {
 export async function listDetailedAllocationsByBill(billId: number) {
   const db = await getDb();
   if (!db) return [];
-  const { employees, invoices: inv, vendorBillItems: vbi } = await import("../../../drizzle/schema");
+  const { employees, invoices: inv, vendorBillItems: vbi, contractors: ctr } = await import("../../../drizzle/schema");
   const rows = await db
     .select({
       id: billInvoiceAllocations.id,
@@ -791,27 +791,36 @@ export async function listDetailedAllocationsByBill(billId: number) {
       vendorBillItemId: billInvoiceAllocations.vendorBillItemId,
       invoiceId: billInvoiceAllocations.invoiceId,
       employeeId: billInvoiceAllocations.employeeId,
+      contractorId: billInvoiceAllocations.contractorId,
       allocatedAmount: billInvoiceAllocations.allocatedAmount,
       description: billInvoiceAllocations.description,
       allocatedBy: billInvoiceAllocations.allocatedBy,
       createdAt: billInvoiceAllocations.createdAt,
       employeeName: sql<string>`${employees.firstName} || ' ' || ${employees.lastName}`,
       employeeCode: employees.employeeCode,
+      contractorName: sql<string>`${ctr.firstName} || ' ' || ${ctr.lastName}`,
+      contractorCode: ctr.contractorCode,
       invoiceNumber: inv.invoiceNumber,
       invoiceTotal: inv.total,
       invoiceCurrency: inv.currency,
     })
     .from(billInvoiceAllocations)
     .leftJoin(employees, eq(billInvoiceAllocations.employeeId, employees.id))
+    .leftJoin(ctr, eq(billInvoiceAllocations.contractorId, ctr.id))
     .leftJoin(inv, eq(billInvoiceAllocations.invoiceId, inv.id))
     .where(eq(billInvoiceAllocations.vendorBillId, billId))
     .orderBy(desc(billInvoiceAllocations.createdAt));
-  return rows;
+  // Add computed workerName and workerType for frontend convenience
+  return rows.map(row => ({
+    ...row,
+    workerName: row.contractorId ? row.contractorName : row.employeeName,
+    workerType: row.contractorId ? 'contractor' as const : 'employee' as const,
+  }));
 }
 export async function listDetailedAllocationsByInvoice(invoiceId: number) {
   const db = await getDb();
   if (!db) return [];
-  const { employees, vendorBills: vb } = await import("../../../drizzle/schema");
+  const { employees, vendorBills: vb, contractors: ctr } = await import("../../../drizzle/schema");
   const rows = await db
     .select({
       id: billInvoiceAllocations.id,
@@ -819,12 +828,15 @@ export async function listDetailedAllocationsByInvoice(invoiceId: number) {
       vendorBillItemId: billInvoiceAllocations.vendorBillItemId,
       invoiceId: billInvoiceAllocations.invoiceId,
       employeeId: billInvoiceAllocations.employeeId,
+      contractorId: billInvoiceAllocations.contractorId,
       allocatedAmount: billInvoiceAllocations.allocatedAmount,
       description: billInvoiceAllocations.description,
       allocatedBy: billInvoiceAllocations.allocatedBy,
       createdAt: billInvoiceAllocations.createdAt,
       employeeName: sql<string>`${employees.firstName} || ' ' || ${employees.lastName}`,
       employeeCode: employees.employeeCode,
+      contractorName: sql<string>`${ctr.firstName} || ' ' || ${ctr.lastName}`,
+      contractorCode: ctr.contractorCode,
       billNumber: vb.billNumber,
       billTotal: vb.totalAmount,
       billCurrency: vb.currency,
@@ -832,10 +844,16 @@ export async function listDetailedAllocationsByInvoice(invoiceId: number) {
     })
     .from(billInvoiceAllocations)
     .leftJoin(employees, eq(billInvoiceAllocations.employeeId, employees.id))
+    .leftJoin(ctr, eq(billInvoiceAllocations.contractorId, ctr.id))
     .leftJoin(vb, eq(billInvoiceAllocations.vendorBillId, vb.id))
     .where(eq(billInvoiceAllocations.invoiceId, invoiceId))
     .orderBy(desc(billInvoiceAllocations.createdAt));
-  return rows;
+  // Add computed workerName and workerType for frontend convenience
+  return rows.map(row => ({
+    ...row,
+    workerName: row.contractorId ? row.contractorName : row.employeeName,
+    workerType: row.contractorId ? 'contractor' as const : 'employee' as const,
+  }));
 }
 
 // ── REIMBURSEMENT PAYROLL INTEGRATION ──
@@ -1027,6 +1045,7 @@ export async function getAllEmployeesMonthlyRevenue(serviceMonth: string) {
   const items = await db
     .select({
       employeeId: invoiceItems.employeeId,
+      contractorId: invoiceItems.contractorId,
       itemType: invoiceItems.itemType,
       amount: invoiceItems.amount,
     })
@@ -1051,49 +1070,133 @@ export async function getAllEmployeesMonthlyRevenue(serviceMonth: string) {
     empMap[item.employeeId].breakdown[type] = (empMap[item.employeeId].breakdown[type] || 0) + amount;
   }
 
-  // Enrich with employee info
-  const empIds = Object.keys(empMap).map(Number);
-  if (empIds.length === 0) return [];
-
-  const empRows = await db
-    .select({
-      id: employees.id,
-      employeeCode: employees.employeeCode,
-      firstName: employees.firstName,
-      lastName: employees.lastName,
-      customerId: employees.customerId,
-      country: employees.country,
-    })
-    .from(employees)
-    .where(inArray(employees.id, empIds));
-
-  // Get customer names
-  const customerIds = Array.from(new Set(empRows.map((e) => e.customerId)));
-  const custRows = customerIds.length > 0
-    ? await db
-        .select({ id: customers.id, companyName: customers.companyName })
-        .from(customers)
-        .where(inArray(customers.id, customerIds))
-    : [];
-  const custMap: Record<number, string> = {};
-  for (const c of custRows) {
-    custMap[c.id] = c.companyName;
+  // Also group by contractor for AOR items
+  const ctrMap: Record<number, { total: number; breakdown: Record<string, number> }> = {};
+  for (const item of items) {
+    const contractorId = item.contractorId;
+    if (!contractorId) continue;
+    if (!ctrMap[contractorId]) {
+      ctrMap[contractorId] = { total: 0, breakdown: {} };
+    }
+    const amount = parseFloat(String(item.amount || "0"));
+    ctrMap[contractorId].total += amount;
+    const type = item.itemType || "other";
+    ctrMap[contractorId].breakdown[type] = (ctrMap[contractorId].breakdown[type] || 0) + amount;
   }
 
-  return empRows.map((emp) => {
-    const data = empMap[emp.id];
-    return {
-      employeeId: emp.id,
-      employeeCode: emp.employeeCode,
-      employeeName: `${emp.firstName} ${emp.lastName}`,
-      customerId: emp.customerId,
-      customerName: custMap[emp.customerId] || "Unknown",
-      country: emp.country,
-      total: Math.round(data.total * 100) / 100,
-      breakdown: Object.entries(data.breakdown).map(([itemType, amount]) => ({
-        itemType,
-        amount: Math.round(amount * 100) / 100,
-      })),
-    };
-  });
+  // Enrich with employee info
+  const empIds = Object.keys(empMap).map(Number);
+  const results: Array<{
+    employeeId?: number;
+    contractorId?: number;
+    employeeCode?: string;
+    contractorCode?: string;
+    employeeName?: string;
+    contractorName?: string;
+    workerName: string;
+    workerType: 'employee' | 'contractor';
+    customerId: number;
+    customerName: string;
+    country: string | null;
+    total: number;
+    breakdown: Array<{ itemType: string; amount: number }>;
+  }> = [];
+
+  // Process employees
+  if (empIds.length > 0) {
+    const empRows = await db
+      .select({
+        id: employees.id,
+        employeeCode: employees.employeeCode,
+        firstName: employees.firstName,
+        lastName: employees.lastName,
+        customerId: employees.customerId,
+        country: employees.country,
+      })
+      .from(employees)
+      .where(inArray(employees.id, empIds));
+
+    // Get customer names for employees
+    const empCustomerIds = Array.from(new Set(empRows.map((e) => e.customerId)));
+    const empCustRows = empCustomerIds.length > 0
+      ? await db
+          .select({ id: customers.id, companyName: customers.companyName })
+          .from(customers)
+          .where(inArray(customers.id, empCustomerIds))
+      : [];
+    const custMap: Record<number, string> = {};
+    for (const c of empCustRows) {
+      custMap[c.id] = c.companyName;
+    }
+
+    for (const emp of empRows) {
+      const data = empMap[emp.id];
+      results.push({
+        employeeId: emp.id,
+        employeeCode: emp.employeeCode,
+        employeeName: `${emp.firstName} ${emp.lastName}`,
+        workerName: `${emp.firstName} ${emp.lastName}`,
+        workerType: 'employee',
+        customerId: emp.customerId,
+        customerName: custMap[emp.customerId] || "Unknown",
+        country: emp.country,
+        total: Math.round(data.total * 100) / 100,
+        breakdown: Object.entries(data.breakdown).map(([itemType, amount]) => ({
+          itemType,
+          amount: Math.round(amount * 100) / 100,
+        })),
+      });
+    }
+  }
+
+  // Process contractors
+  const ctrIds = Object.keys(ctrMap).map(Number);
+  if (ctrIds.length > 0) {
+    const { contractors: contractorsTable } = await import("../../../drizzle/schema");
+    const ctrRows = await db
+      .select({
+        id: contractorsTable.id,
+        contractorCode: contractorsTable.contractorCode,
+        firstName: contractorsTable.firstName,
+        lastName: contractorsTable.lastName,
+        customerId: contractorsTable.customerId,
+        country: contractorsTable.country,
+      })
+      .from(contractorsTable)
+      .where(inArray(contractorsTable.id, ctrIds));
+
+    // Get customer names for contractors
+    const ctrCustomerIds = Array.from(new Set(ctrRows.map((c) => c.customerId)));
+    const ctrCustRows = ctrCustomerIds.length > 0
+      ? await db
+          .select({ id: customers.id, companyName: customers.companyName })
+          .from(customers)
+          .where(inArray(customers.id, ctrCustomerIds))
+      : [];
+    const ctrCustMap: Record<number, string> = {};
+    for (const c of ctrCustRows) {
+      ctrCustMap[c.id] = c.companyName;
+    }
+
+    for (const ctr of ctrRows) {
+      const data = ctrMap[ctr.id];
+      results.push({
+        contractorId: ctr.id,
+        contractorCode: ctr.contractorCode,
+        contractorName: `${ctr.firstName} ${ctr.lastName}`,
+        workerName: `${ctr.firstName} ${ctr.lastName}`,
+        workerType: 'contractor',
+        customerId: ctr.customerId,
+        customerName: ctrCustMap[ctr.customerId] || "Unknown",
+        country: ctr.country,
+        total: Math.round(data.total * 100) / 100,
+        breakdown: Object.entries(data.breakdown).map(([itemType, amount]) => ({
+          itemType,
+          amount: Math.round(amount * 100) / 100,
+        })),
+      });
+    }
+  }
+
+  return results;
 }
