@@ -1055,6 +1055,7 @@ function EmployeeDetail({ id }: { id: number }) {
       visaStatus: employee.visaStatus || "not_required",
       visaExpiryDate: formatDateISO(employee.visaExpiryDate),
       visaNotes: employee.visaNotes || "",
+      bankDetails: employee.bankDetails || {},
     });
     setEditOpen(true);
   }
@@ -1893,6 +1894,14 @@ function EmployeeDetail({ id }: { id: number }) {
                 </div>
                 <p className="text-xs text-muted-foreground">{t("employees.create.form.leavePolicyHint")}</p>
               </fieldset>
+
+              {/* Bank Details */}
+              <BankDetailsForm
+                value={editForm.bankDetails || {}}
+                onChange={(val) => setEditForm({ ...editForm, bankDetails: { ...editForm.bankDetails, ...val } })}
+                countryCode={editForm.country}
+                currency={editForm.salaryCurrency}
+              />
 
               <div className="flex justify-end gap-3 pt-2">
                 <Button variant="outline" onClick={() => setEditOpen(false)}>{t("common.cancel")}</Button>
