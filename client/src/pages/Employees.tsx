@@ -194,6 +194,7 @@ function EmployeeList() {
     country: "",
     department: "",
     jobTitle: "",
+    jobDescription: "",
     serviceType: "eor" as "eor" | "visa_eor",
     employmentType: "long_term" as "fixed_term" | "long_term",
     startDate: "",
@@ -316,6 +317,7 @@ function EmployeeList() {
     if (!submitData.state) delete submitData.state;
     if (!submitData.postalCode) delete submitData.postalCode;
     if (!submitData.department) delete submitData.department;
+    if (!submitData.jobDescription) delete submitData.jobDescription;
     createMutation.mutate(submitData);
   };
 
@@ -508,6 +510,10 @@ function EmployeeList() {
                       <Label>{t("employees.create.form.department")}</Label>
                       <Input value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} placeholder="Engineering" />
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("employees.create.form.jobDescription")}</Label>
+                    <Textarea rows={3} value={formData.jobDescription} onChange={(e) => setFormData({ ...formData, jobDescription: e.target.value })} placeholder={t("employees.create.form.jobDescriptionPlaceholder")} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -1044,6 +1050,7 @@ function EmployeeDetail({ id }: { id: number }) {
       country: employee.country || "",
       department: employee.department || "",
       jobTitle: employee.jobTitle || "",
+      jobDescription: employee.jobDescription || "",
       serviceType: employee.serviceType || "eor",
       employmentType: employee.employmentType || "long_term",
       baseSalary: employee.baseSalary || "",
@@ -1295,6 +1302,7 @@ function EmployeeDetail({ id }: { id: number }) {
               <CardContent className="space-y-3">
                 <InfoRow icon={<Building2 className="w-3.5 h-3.5" />} label={t("employees.create.form.customer")} value={customerName} />
                 <InfoRow icon={<Briefcase className="w-3.5 h-3.5" />} label={t("employees.detail.jobTitle")} value={employee.jobTitle} />
+                {employee.jobDescription && <InfoRow icon={<Briefcase className="w-3.5 h-3.5" />} label={t("employees.detail.jobDescription")} value={employee.jobDescription} />}
                 <InfoRow icon={<Users className="w-3.5 h-3.5" />} label={t("employees.create.form.department")} value={employee.department} />
                 <InfoRow icon={<MapPin className="w-3.5 h-3.5" />} label={t("employees.list.table.header.country")} value={countryName(employee.country)} />
                 <InfoRow icon={<Clock className="w-3.5 h-3.5" />} label={t("employees.detail.employmentType")} value={employee.employmentType?.replace(/_/g, " ")} />
@@ -1822,6 +1830,10 @@ function EmployeeDetail({ id }: { id: number }) {
                     <Label>{t("employees.create.form.department")}</Label>
                     <Input value={editForm.department || ""} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })} />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>{t("employees.create.form.jobDescription")}</Label>
+                  <Textarea rows={3} value={editForm.jobDescription || ""} onChange={(e) => setEditForm({ ...editForm, jobDescription: e.target.value })} placeholder={t("employees.create.form.jobDescriptionPlaceholder")} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

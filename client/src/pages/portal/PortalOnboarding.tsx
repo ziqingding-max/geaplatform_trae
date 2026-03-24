@@ -149,6 +149,7 @@ interface OnboardingFormData {
   postalCode: string;
   department: string;
   jobTitle: string;
+  jobDescription: string;
   serviceType: string;
   employmentType: string;
   startDate: string;
@@ -189,6 +190,7 @@ const initialFormData: OnboardingFormData = {
   postalCode: "",
   department: "",
   jobTitle: "",
+  jobDescription: "",
   serviceType: "",
   employmentType: "long_term",
   startDate: "",
@@ -484,6 +486,7 @@ export default function PortalOnboarding() {
           postalCode: formData.postalCode || undefined,
           department: formData.department || undefined,
           jobTitle: formData.jobTitle,
+          jobDescription: formData.jobDescription || undefined,
           startDate: formData.startDate,
           endDate: formData.endDate || undefined,
           paymentFrequency: (formData.paymentFrequency as any) || "monthly",
@@ -510,6 +513,7 @@ export default function PortalOnboarding() {
           postalCode: formData.postalCode || undefined,
           department: formData.department || undefined,
           jobTitle: formData.jobTitle,
+          jobDescription: formData.jobDescription || undefined,
           serviceType: (needsVisa && formData.serviceType === "eor" ? "visa_eor" : formData.serviceType) as any || "eor",
           employmentType: (formData.employmentType as any) || "long_term",
           startDate: formData.startDate,
@@ -547,6 +551,7 @@ export default function PortalOnboarding() {
       serviceType: (formData.serviceType as any) || "eor",
       country: formData.country || undefined,
       jobTitle: formData.jobTitle || undefined,
+      jobDescription: formData.jobDescription || undefined,
       department: formData.department || undefined,
       startDate: formData.startDate || undefined,
       endDate: formData.endDate || undefined,
@@ -765,6 +770,10 @@ export default function PortalOnboarding() {
           <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.department")}</Label>
           <Input value={formData.department} onChange={(e) => updateField("department", e.target.value)} placeholder="e.g. Engineering" className="h-10 rounded-xl" />
         </div>
+      </div>
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.job_description")}</Label>
+        <Textarea rows={3} value={formData.jobDescription} onChange={(e) => updateField("jobDescription", e.target.value)} placeholder={t("employees.create.form.jobDescriptionPlaceholder")} className="rounded-xl" />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {!isAor && (
@@ -1034,6 +1043,10 @@ export default function PortalOnboarding() {
           <Input value={formData.jobTitle} onChange={(e) => updateField("jobTitle", e.target.value)} placeholder="e.g. Software Engineer" className="h-10 rounded-xl" />
         </div>
       </div>
+      <div className="space-y-2">
+        <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.job_description")}</Label>
+        <Textarea rows={3} value={formData.jobDescription} onChange={(e) => updateField("jobDescription", e.target.value)} placeholder={t("employees.create.form.jobDescriptionPlaceholder")} className="rounded-xl" />
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label className="text-sm font-medium">{t("portal_onboarding.employment.label.department")}</Label>
@@ -1207,6 +1220,12 @@ export default function PortalOnboarding() {
             <span className="text-muted-foreground">{t("portal_onboarding.employment.label.job_title")}:</span>{" "}
             <span className="font-medium">{formData.jobTitle || "-"}</span>
           </div>
+          {formData.jobDescription && (
+            <div>
+              <span className="text-muted-foreground">{t("portal_onboarding.employment.label.job_description")}:</span>{" "}
+              <span className="font-medium">{formData.jobDescription}</span>
+            </div>
+          )}
           <div>
             <span className="text-muted-foreground">{t("portal_onboarding.employment.label.start_date")}:</span>{" "}
             <span className="font-medium">{formData.startDate ? new Date(formData.startDate).toLocaleDateString() : "-"}</span>

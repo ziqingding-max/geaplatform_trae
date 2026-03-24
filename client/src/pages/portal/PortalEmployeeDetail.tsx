@@ -317,6 +317,7 @@ export default function PortalEmployeeDetail() {
                       <InfoField icon={MapPin} label={t("portal_employees.employment.employmentCountry")} value={countryName(employee.country)} hint={t("portal_employees.employment.employmentCountryHint")} />
                       <InfoField icon={Briefcase} label={t("portal_employees.employment.department")} value={employee.department} hint={t("portal_employees.employment.departmentHint")} />
                       <InfoField icon={Briefcase} label={t("portal_employees.employment.jobTitle")} value={employee.jobTitle} hint={t("portal_employees.employment.jobTitleHint")} />
+                      {employee.jobDescription && <InfoField icon={Briefcase} label={t("portal_employees.employment.jobDescription")} value={employee.jobDescription} hint={t("portal_employees.employment.jobDescriptionHint")} />}
                       <InfoField icon={Hash} label={t("portal_employees.employment.employeeCode")} value={employee.employeeCode} hint={t("portal_employees.employment.employeeCodeHint")} />
                     </div>
 

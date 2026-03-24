@@ -99,6 +99,13 @@
       "when": 1742204800000,
       "tag": "0013_invoice_items_contractor_id",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1742291200000,
+      "tag": "0014_add_job_description",
+      "breakpoints": true
     }
   ]
 }

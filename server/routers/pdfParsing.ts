@@ -42,6 +42,7 @@ async function buildSystemContext(serviceMonth?: string) {
       country: employees.country,
       customerId: employees.customerId,
       jobTitle: employees.jobTitle,
+      jobDescription: employees.jobDescription,
       baseSalary: employees.baseSalary,
       salaryCurrency: employees.salaryCurrency,
     })

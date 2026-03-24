@@ -47,6 +47,7 @@ async function main() {
       email: `john.${Date.now()}@example.com`,
       country: 'US',
       jobTitle: 'Software Engineer',
+      jobDescription: 'Full-stack development and code review',
       paymentFrequency: 'monthly',
       rateType: 'fixed_monthly',
       rateAmount: '5000',

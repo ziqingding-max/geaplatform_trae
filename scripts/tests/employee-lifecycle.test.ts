@@ -40,6 +40,7 @@ async function runTests() {
       email: 'life@cycletest.com',
       country: 'SG',
       jobTitle: 'Tester',
+      jobDescription: 'Responsible for testing employee lifecycle features',
       baseSalary: '5000',
       status: 'onboarding',
       startDate: new Date().toISOString().split('T')[0],
