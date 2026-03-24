@@ -397,7 +397,7 @@ export default function Adjustments() {
             type: type,
             description: editFormData.description || editFormData.category,
             amount: editFormData.amount,
-            date: date,
+            effectiveMonth: date,
           }
         });
       }
@@ -421,7 +421,7 @@ export default function Adjustments() {
     if (adj.workerType === "employee") {
       adminApproveEmployeeMutation.mutate({ id: adj.id });
     } else {
-      updateContractorMutation.mutate({ id: adj.id, data: { status: "approved" } });
+      updateContractorMutation.mutate({ id: adj.id, data: { status: "admin_approved" } });
     }
   };
 
@@ -429,7 +429,7 @@ export default function Adjustments() {
     if (adj.workerType === "employee") {
       adminRejectEmployeeMutation.mutate({ id: adj.id });
     } else {
-      updateContractorMutation.mutate({ id: adj.id, data: { status: "rejected" } });
+      updateContractorMutation.mutate({ id: adj.id, data: { status: "admin_rejected" } });
     }
   };
 

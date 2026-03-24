@@ -535,7 +535,8 @@ export async function lockSubmittedLeaveRecords(monthStr: string, countryCode?: 
     const empRows = await db.select({ id: employees.id }).from(employees).where(eq(employees.country, countryCode));
     const empIds = empRows.map(e => e.id);
     if (empIds.length === 0) return 0;
-    conditions.push(or(...empIds.map(id => eq(leaveRecords.employeeId, id))));
+    const orCondition = or(...empIds.map(id => eq(leaveRecords.employeeId, id)));
+    if (orCondition) conditions.push(orCondition);
   }
 
   const setData: any = { status: 'locked' };
@@ -550,11 +551,12 @@ export async function lockSubmittedLeaveRecords(monthStr: string, countryCode?: 
 export async function getActiveLeaveRecordsForDate(employeeId: number, date: Date) {
   const db = await getDb();
   if (!db) return [];
+  const dateStr = date.toISOString().split('T')[0];
   return await db.select().from(leaveRecords)
     .where(and(
       eq(leaveRecords.employeeId, employeeId),
-      lte(leaveRecords.startDate, date),
-      gte(leaveRecords.endDate, date),
+      lte(leaveRecords.startDate, dateStr),
+      gte(leaveRecords.endDate, dateStr),
       or(
         eq(leaveRecords.status, 'admin_approved'),
         eq(leaveRecords.status, 'locked')

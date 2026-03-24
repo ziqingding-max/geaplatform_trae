@@ -728,7 +728,7 @@ async function getServiceFeeRate(
         eq(customerPricing.isActive, true),
         eq(customerPricing.pricingType, "country_specific"),
         eq(customerPricing.countryCode, countryCode),
-        eq(customerPricing.serviceType, serviceType)
+        eq(customerPricing.serviceType, serviceType as "eor" | "visa_eor" | "aor")
       )
     )
     .limit(1);

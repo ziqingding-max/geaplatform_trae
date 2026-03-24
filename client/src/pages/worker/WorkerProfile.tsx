@@ -35,15 +35,18 @@ export default function WorkerProfile() {
     );
   }
 
+  // Extract profile fields from the discriminated union
+  const p = profile as any;
+
   const handleEdit = () => {
     setFormData({
-      firstName: profile?.firstName || "",
-      lastName: profile?.lastName || "",
-      phone: profile?.phone || "",
-      address: profile?.address || "",
-      city: profile?.city || "",
-      state: profile?.state || "",
-      postalCode: profile?.postalCode || "",
+      firstName: p?.firstName || p?.profile?.firstName || "",
+      lastName: p?.lastName || p?.profile?.lastName || "",
+      phone: p?.phone || p?.profile?.phone || "",
+      address: p?.address || p?.profile?.address || "",
+      city: p?.city || p?.profile?.city || "",
+      state: p?.state || p?.profile?.state || "",
+      postalCode: p?.postalCode || p?.profile?.postalCode || "",
     });
     setIsEditing(true);
   };
@@ -77,14 +80,14 @@ export default function WorkerProfile() {
                 <User className="w-8 h-8 text-primary" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold">{profile?.firstName} {profile?.lastName}</h2>
-                <p className="text-sm text-muted-foreground">{profile?.email}</p>
+                <h2 className="text-lg font-semibold">{p?.firstName || p?.profile?.firstName} {p?.lastName || p?.profile?.lastName}</h2>
+                <p className="text-sm text-muted-foreground">{p?.email || p?.profile?.email}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 text-blue-700">
-                    {profile?.workerType === "contractor" ? "Contractor" : "Employee"}
+                    {p?.workerType === "contractor" ? "Contractor" : "Employee"}
                   </span>
-                  {profile?.country && (
-                    <span className="text-xs text-muted-foreground">{countryName(profile.country)}</span>
+                  {(p?.country || p?.profile?.country) && (
+                    <span className="text-xs text-muted-foreground">{countryName(p?.country || p?.profile?.country)}</span>
                   )}
                 </div>
               </div>
@@ -103,7 +106,7 @@ export default function WorkerProfile() {
                 <div className="space-y-2">
                   <Label className="text-xs">First Name</Label>
                   <Input
-                    value={isEditing ? formData.firstName : profile?.firstName || ""}
+                    value={isEditing ? formData.firstName : (p?.firstName || p?.profile?.firstName || "")}
                     disabled={!isEditing}
                     onChange={e => setFormData({ ...formData, firstName: e.target.value })}
                   />
@@ -111,7 +114,7 @@ export default function WorkerProfile() {
                 <div className="space-y-2">
                   <Label className="text-xs">Last Name</Label>
                   <Input
-                    value={isEditing ? formData.lastName : profile?.lastName || ""}
+                    value={isEditing ? formData.lastName : (p?.lastName || p?.profile?.lastName || "")}
                     disabled={!isEditing}
                     onChange={e => setFormData({ ...formData, lastName: e.target.value })}
                   />
@@ -120,13 +123,13 @@ export default function WorkerProfile() {
 
               <div className="space-y-2">
                 <Label className="text-xs">Email</Label>
-                <Input value={profile?.email || ""} disabled className="bg-muted" />
+                <Input value={p?.email || p?.profile?.email || ""} disabled className="bg-muted" />
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs">Phone</Label>
                 <Input
-                  value={isEditing ? formData.phone : profile?.phone || ""}
+                  value={isEditing ? formData.phone : (p?.phone || p?.profile?.phone || "")}
                   disabled={!isEditing}
                   onChange={e => setFormData({ ...formData, phone: e.target.value })}
                 />
@@ -143,7 +146,7 @@ export default function WorkerProfile() {
               <div className="space-y-2">
                 <Label className="text-xs">Street Address</Label>
                 <Input
-                  value={isEditing ? formData.address : profile?.address || ""}
+                  value={isEditing ? formData.address : (p?.address || p?.profile?.address || "")}
                   disabled={!isEditing}
                   onChange={e => setFormData({ ...formData, address: e.target.value })}
                 />
@@ -153,7 +156,7 @@ export default function WorkerProfile() {
                 <div className="space-y-2">
                   <Label className="text-xs">City</Label>
                   <Input
-                    value={isEditing ? formData.city : profile?.city || ""}
+                    value={isEditing ? formData.city : (p?.city || p?.profile?.city || "")}
                     disabled={!isEditing}
                     onChange={e => setFormData({ ...formData, city: e.target.value })}
                   />
@@ -161,7 +164,7 @@ export default function WorkerProfile() {
                 <div className="space-y-2">
                   <Label className="text-xs">State/Province</Label>
                   <Input
-                    value={isEditing ? formData.state : profile?.state || ""}
+                    value={isEditing ? formData.state : (p?.state || p?.profile?.state || "")}
                     disabled={!isEditing}
                     onChange={e => setFormData({ ...formData, state: e.target.value })}
                   />
@@ -172,14 +175,14 @@ export default function WorkerProfile() {
                 <div className="space-y-2">
                   <Label className="text-xs">Postal Code</Label>
                   <Input
-                    value={isEditing ? formData.postalCode : profile?.postalCode || ""}
+                    value={isEditing ? formData.postalCode : (p?.postalCode || p?.profile?.postalCode || "")}
                     disabled={!isEditing}
                     onChange={e => setFormData({ ...formData, postalCode: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs">Country/Region</Label>
-                  <Input value={countryName(profile?.country)} disabled className="bg-muted" />
+                  <Input value={countryName(p?.country || p?.profile?.country)} disabled className="bg-muted" />
                 </div>
               </div>
             </CardContent>

@@ -67,7 +67,7 @@ export default function NotificationCenter() {
           {unreadCount > 0 && (
             <Button 
               variant="ghost" 
-              size="xs" 
+              size="sm" 
               className="h-7 text-xs gap-1"
               onClick={handleMarkAllRead}
               disabled={markAllReadMutation.isPending}
@@ -121,7 +121,7 @@ export default function NotificationCenter() {
                       <div className="pt-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button 
                           variant="outline" 
-                          size="xs" 
+                          size="sm" 
                           className="h-6 text-[10px]"
                           onClick={() => handleMarkRead(notif.id)}
                         >

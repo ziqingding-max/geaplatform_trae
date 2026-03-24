@@ -112,6 +112,7 @@ function EditContractorDialog({ contractor, open, onOpenChange, onSuccess }: {
   onOpenChange: (o: boolean) => void;
   onSuccess: () => void;
 }) {
+  const { t } = useI18n();
   const { data: approvers } = trpc.contractors.getApprovers.useQuery();
 
   const [form, setForm] = useState({

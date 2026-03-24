@@ -214,7 +214,7 @@ export async function syncLeaveBalancesOnPolicyUpdate(customerId: number, countr
 
   for (const employee of activeEmployees) {
     for (const policy of policies) {
-      if (policy.isStatutory) continue; // Skip statutory, usually handled by country rules
+      // isStatutory is not a field on customerLeavePolicies; skip this check
 
       try {
         // Find existing balance

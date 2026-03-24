@@ -98,13 +98,13 @@ async function migrateAorData() {
         if (["submitted", "client_approved", "admin_approved"].includes(adj.status)) {
              await db.insert(contractorAdjustments).values({
                 contractorId: newContractorId,
+                customerId: emp.customerId,
                 type: mapAdjustmentType(adj.adjustmentType),
                 description: adj.description || "Migrated Adjustment",
                 amount: adj.amount,
                 currency: adj.currency,
-                date: adj.effectiveMonth || new Date().toISOString(), // Fallback date
-                status: "pending", // Reset status or map? Let's default to pending for review
-                invoiceId: undefined, // Not invoiced yet
+                effectiveMonth: adj.effectiveMonth || new Date().toISOString().slice(0, 7) + "-01",
+                status: "submitted", // Reset status to submitted for review
              });
         }
       }

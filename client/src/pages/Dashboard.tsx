@@ -32,6 +32,7 @@ import {
   ArrowUpDown, Package, Star, PartyPopper, Cake, Award,
   Target, Megaphone, HandshakeIcon, CircleDollarSign,
   ClipboardList, CreditCard, AlertTriangle, BarChart3,
+  TrendingDown, Landmark,
 } from "lucide-react";
 
 // ─── Glass Stat Card ─────────────────────────────────────────────────────────
@@ -714,6 +715,51 @@ function FinanceWorkspace({ t }: { t: (key: string) => string }) {
           icon={Wallet}
           accent="purple"
           description={`${data?.walletCount ?? 0} ${t("dashboard.fin_wallets")} · ${t("dashboard.fin_frozen")}: ${formatCurrencyCompact(data?.frozenBalance ?? "0")}`}
+        />
+      </div>
+
+      {/* Cost & Profit KPI Cards - Row 2 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard
+          title={t("dashboard.total_settled_cost")}
+          value={formatCurrencyCompact(data?.vendorPaidThisMonth?.totalSettled ?? "0")}
+          icon={TrendingDown}
+          href="/vendor-bills"
+          accent={parseFloat(data?.vendorPaidThisMonth?.totalSettled ?? "0") > 0 ? "red" : "default"}
+          description={`${data?.vendorPaidThisMonth?.billCount ?? 0} ${t("dashboard.fin_bills")}`}
+        />
+        <StatCard
+          title={t("dashboard.bank_fees")}
+          value={formatCurrencyCompact(data?.vendorPaidThisMonth?.totalBankFees ?? "0")}
+          icon={Landmark}
+          accent="default"
+          description={t("dashboard.bank_fees_desc")}
+        />
+        <StatCard
+          title={t("dashboard.estimated_net_profit")}
+          value={formatCurrencyCompact(
+            String(
+              parseFloat(data?.settledThisMonth?.totalCollected ?? "0")
+              - parseFloat(data?.vendorPaidThisMonth?.totalSettled ?? "0")
+              - parseFloat(data?.vendorPaidThisMonth?.totalBankFees ?? "0")
+            )
+          )}
+          icon={TrendingUp}
+          accent={
+            parseFloat(data?.settledThisMonth?.totalCollected ?? "0")
+            - parseFloat(data?.vendorPaidThisMonth?.totalSettled ?? "0")
+            - parseFloat(data?.vendorPaidThisMonth?.totalBankFees ?? "0") >= 0
+              ? "green" : "red"
+          }
+          description={t("dashboard.estimated_net_profit_desc")}
+        />
+        <StatCard
+          title={t("dashboard.unsettled_bills")}
+          value={formatCurrencyCompact(totalAP)}
+          icon={Clock}
+          href="/vendor-bills"
+          accent={totalAP > 0 ? "amber" : "default"}
+          description={t("dashboard.unsettled_bills_desc")}
         />
       </div>
 

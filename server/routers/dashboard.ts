@@ -49,7 +49,7 @@ export const dashboardRouter = router({
   }),
 
   recentActivity: adminProcedure.query(async () => {
-    const { data } = await listAuditLogs(undefined, 20, 0);
+    const { data } = await listAuditLogs({ page: 1, pageSize: 20 });
     return data;
   }),
 
@@ -115,8 +115,9 @@ export const dashboardRouter = router({
       totalRevenue: "0", totalServiceFeeRevenue: "0", totalPaidInvoices: 0,
       totalOutstandingAmount: "0", totalOverdueAmount: "0",
       totalDeferredRevenue: "0", totalDepositInvoices: 0,
-      // New: cost & profit fields
+      // Cost & profit fields
       totalCost: "0", totalNetProfit: "0",
+      totalSettledCost: "0", totalBankFees: "0", totalUnsettledBills: "0",
       monthlyRevenue: [] as { month: string; totalRevenue: string; serviceFeeRevenue: string; invoiceCount: number; totalCost: string; netProfit: string }[],
     };
 
@@ -218,13 +219,39 @@ export const dashboardRouter = router({
       });
     }
 
-    // ── Total vendor cost (all paid bills, using actual settlement amounts) ──
+    // ── Total vendor cost (all paid bills, using actual settlement amounts, excluding deposits) ──
     const actualCostExpr = sql<string>`COALESCE(${vendorBills.settlementAmount}, ${vendorBills.totalAmount})`;
     const [totalCostResult] = await db.select({
       total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+    }).from(vendorBills).where(and(
+      inArray(vendorBills.status, ["paid", "partially_paid"]),
+      sql`${vendorBills.billType} NOT IN ('deposit', 'deposit_refund')`
+    ));
+
+    // ── Total settled cost (settlement principal only, excluding deposits) ──
+    const [settledCostResult] = await db.select({
+      total: sql<string>`COALESCE(SUM(CAST(${vendorBills.settlementAmount} AS REAL)), 0)`,
+    }).from(vendorBills).where(and(
+      inArray(vendorBills.status, ["paid", "partially_paid"]),
+      isNotNull(vendorBills.settlementAmount),
+      sql`${vendorBills.billType} NOT IN ('deposit', 'deposit_refund')`
+    ));
+
+    // ── Total bank fees from all paid bills ──
+    const bankFeeExpr = sql<string>`COALESCE(${vendorBills.settlementBankFee}, ${vendorBills.bankFee}, '0')`;
+    const [totalBankFeesResult] = await db.select({
+      total: sql<string>`COALESCE(SUM(CAST(${bankFeeExpr} AS REAL)), 0)`,
     }).from(vendorBills).where(
       inArray(vendorBills.status, ["paid", "partially_paid"])
     );
+
+    // ── Unsettled bills (approved but not yet paid, excluding deposits) ──
+    const [unsettledBillsResult] = await db.select({
+      total: sql<string>`COALESCE(SUM(CAST(${vendorBills.totalAmount} AS REAL)), 0)`,
+    }).from(vendorBills).where(and(
+      inArray(vendorBills.status, ["pending_approval", "approved", "overdue"]),
+      sql`${vendorBills.billType} NOT IN ('deposit', 'deposit_refund')`
+    ));
 
     const totalRevenueNum = parseFloat(paidTotal?.total ?? "0");
     const totalCostNum = parseFloat(totalCostResult?.total ?? "0");
@@ -238,9 +265,12 @@ export const dashboardRouter = router({
       totalOverdueAmount: overdue?.total ?? "0",
       totalDeferredRevenue: depositTotal?.total ?? "0",
       totalDepositInvoices: depositTotal?.count ?? 0,
-      // New: cost & profit fields
+      // Cost & profit fields
       totalCost: String(Math.round(totalCostNum * 100) / 100),
       totalNetProfit: String(Math.round(totalNetProfitNum * 100) / 100),
+      totalSettledCost: String(Math.round(parseFloat(settledCostResult?.total ?? "0") * 100) / 100),
+      totalBankFees: String(Math.round(parseFloat(totalBankFeesResult?.total ?? "0") * 100) / 100),
+      totalUnsettledBills: String(Math.round(parseFloat(unsettledBillsResult?.total ?? "0") * 100) / 100),
       monthlyRevenue,
     };
   }),

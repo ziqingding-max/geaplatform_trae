@@ -81,7 +81,9 @@ export const reportsRouter = router({
    *   3. Pass-through Collected = SUM of employment_cost itemTypes (USD collected from clients)
    *
    * Cost side (from vendor bills, using COALESCE(settlementAmount, totalAmount) for backward compat):
-   *   4. Pass-through Paid = SUM of pass_through + non_recurring billType settlements
+   *   4a. Pass-through Paid = SUM of pass_through billType settlements
+   *   4b. Non-recurring Costs = SUM of non_recurring billType settlements
+   *   (passThroughPaid = 4a + 4b for backward compatibility)
    *   5. Direct COGS = SUM of vendor_service_fee billType settlements + SUM of all settlementBankFee
    *   6. Operational Expenses = SUM of operational billType settlements
    *
@@ -120,6 +122,8 @@ export const reportsRouter = router({
             grossProfit: 0,
             operationalExpenses: 0,
             totalUnallocated: 0,
+            bankFees: 0,
+            nonRecurringCosts: 0,
           },
           monthlyBreakdown: [] as {
             month: string;
@@ -193,6 +197,8 @@ export const reportsRouter = router({
       let totalOperational = 0;
       let totalRevenue = 0;
       let totalExpenses = 0;
+      let totalBankFees = 0;
+      let totalNonRecurringCosts = 0;
 
       for (const m of months) {
         const [y, mo] = m.split("-").map(Number);
@@ -253,7 +259,7 @@ export const reportsRouter = router({
           );
         const passThroughCollected = parseFloat(ptcResult?.total ?? "0");
 
-        // ── 4. Pass-through Paid (vendor bills: pass_through + non_recurring billType) ──
+        // ── 4a. Pass-through Paid (vendor bills: pass_through billType only) ──
         const [ptpResult] = await db
           .select({
             total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
@@ -264,10 +270,27 @@ export const reportsRouter = router({
               inArray(vendorBillsTable.status, ["paid", "partially_paid"]),
               sql`${vendorBillsTable.billMonth} >= ${monthStart}`,
               sql`${vendorBillsTable.billMonth} < ${nextMonth}`,
-              sql`${vendorBillsTable.billType} IN ('pass_through', 'non_recurring')`
+              sql`${vendorBillsTable.billType} = 'pass_through'`
             )
           );
-        const passThroughPaid = parseFloat(ptpResult?.total ?? "0");
+        const passThroughPaidOnly = parseFloat(ptpResult?.total ?? "0");
+
+        // ── 4b. Non-recurring Costs (vendor bills: non_recurring billType) ──
+        const [nrCostResult] = await db
+          .select({
+            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+          })
+          .from(vendorBillsTable)
+          .where(
+            and(
+              inArray(vendorBillsTable.status, ["paid", "partially_paid"]),
+              sql`${vendorBillsTable.billMonth} >= ${monthStart}`,
+              sql`${vendorBillsTable.billMonth} < ${nextMonth}`,
+              sql`${vendorBillsTable.billType} = 'non_recurring'`
+            )
+          );
+        const nonRecurringCosts = parseFloat(nrCostResult?.total ?? "0");
+        const passThroughPaid = passThroughPaidOnly + nonRecurringCosts;
 
         // ── 5. Direct COGS (vendor_service_fee bills + all bank fees) ──
         const [vsResult] = await db
@@ -298,9 +321,9 @@ export const reportsRouter = router({
               sql`${vendorBillsTable.billMonth} < ${nextMonth}`
             )
           );
-        const totalBankFees = parseFloat(bfResult?.total ?? "0");
+        const totalBankFees_month = parseFloat(bfResult?.total ?? "0");
 
-        const directCOGS = vendorServiceCost + totalBankFees;
+        const directCOGS = vendorServiceCost + totalBankFees_month;
 
         // ── 6. Operational Expenses (operational billType) ──
         const [opResult] = await db
@@ -377,6 +400,8 @@ export const reportsRouter = router({
         totalOperational += operationalExpenses;
         totalRevenue += monthRevenue;
         totalExpenses += monthExpenses;
+        totalBankFees += totalBankFees_month;
+        totalNonRecurringCosts += nonRecurringCosts;
       }
 
       const totalFxProfit = (totalPassThroughCollected + totalNonRecurring) - totalPassThroughPaid;
@@ -516,6 +541,9 @@ export const reportsRouter = router({
           directCOGS: r2(totalDirectCOGS),
           grossProfit: r2(totalGrossProfit),
           operationalExpenses: r2(totalOperational),
+          // Detailed cost breakdown for waterfall chart
+          bankFees: r2(totalBankFees),
+          nonRecurringCosts: r2(totalNonRecurringCosts),
         },
         monthlyBreakdown,
         revenueByType: revenueByTypeResult.map((r) => ({
