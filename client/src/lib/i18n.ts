@@ -4348,6 +4348,14 @@ const adminTranslations = {
     "dashboard.monthly_revenue_12m": "Monthly Revenue (12 Months)",
     "dashboard.monthly_paid_invoice_count": "Monthly Paid Invoice Count",
     "dashboard.awaiting_review": "Awaiting review & approval",
+    "dashboard.total_settled_cost": "Total Cost (Settled)",
+    "dashboard.total_settled_cost_desc": "Sum of all settled vendor bill payments",
+    "dashboard.bank_fees": "Bank Fees",
+    "dashboard.bank_fees_desc": "Wire transfer & payment processing fees",
+    "dashboard.estimated_net_profit": "Estimated Net Profit",
+    "dashboard.estimated_net_profit_desc": "Revenue minus settled costs and bank fees",
+    "dashboard.unsettled_bills": "Unsettled Bills",
+    "dashboard.unsettled_bills_desc": "Approved bills pending payment settlement",
 
     // Contractors
     "contractors.title": "Contractors",
@@ -6969,6 +6977,14 @@ const adminTranslations = {
     "dashboard.monthly_revenue_12m": "月度收入（12个月）",
     "dashboard.monthly_paid_invoice_count": "月度已收款发票数量",
     "dashboard.awaiting_review": "等待审核与批准",
+    "dashboard.total_settled_cost": "总成本（已结算）",
+    "dashboard.total_settled_cost_desc": "所有已结算供应商账单的支付总额",
+    "dashboard.bank_fees": "银行手续费",
+    "dashboard.bank_fees_desc": "电汇及支付处理手续费",
+    "dashboard.estimated_net_profit": "预估净利润",
+    "dashboard.estimated_net_profit_desc": "收入减去已结算成本和银行手续费",
+    "dashboard.unsettled_bills": "未结算账单",
+    "dashboard.unsettled_bills_desc": "已批准但尚未付款的账单",
 
     // Contractors
     "contractors.title": "承包商管理",

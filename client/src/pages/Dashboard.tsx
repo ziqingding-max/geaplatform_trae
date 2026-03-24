@@ -615,35 +615,35 @@ function FinanceTab() {
       {/* Finance KPIs - Row 2: Cost & Profit */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Total Cost (Settled)"
+          title={t("dashboard.total_settled_cost")}
           value={formatCurrencyCompact((finance as any)?.totalSettledCost ?? "0")}
           icon={TrendingDown}
           variant="danger"
-          description="Sum of all settled vendor bill payments"
+          description={t("dashboard.total_settled_cost_desc")}
         />
         <StatCard
-          title="Bank Fees"
+          title={t("dashboard.bank_fees")}
           value={formatCurrencyCompact((finance as any)?.totalBankFees ?? "0")}
           icon={Landmark}
           variant="default"
-          description="Wire transfer & payment processing fees"
+          description={t("dashboard.bank_fees_desc")}
         />
         <StatCard
-          title="Estimated Net Profit"
+          title={t("dashboard.estimated_net_profit")}
           value={formatCurrencyCompact(
             String(parseFloat(finance?.totalRevenue ?? "0") - parseFloat((finance as any)?.totalSettledCost ?? "0") - parseFloat((finance as any)?.totalBankFees ?? "0"))
           )}
           icon={TrendingUp}
           variant={parseFloat(finance?.totalRevenue ?? "0") - parseFloat((finance as any)?.totalSettledCost ?? "0") - parseFloat((finance as any)?.totalBankFees ?? "0") >= 0 ? "success" : "danger"}
-          description="Revenue minus settled costs and bank fees"
+          description={t("dashboard.estimated_net_profit_desc")}
         />
         <StatCard
-          title="Unsettled Bills"
+          title={t("dashboard.unsettled_bills")}
           value={formatCurrencyCompact((finance as any)?.totalUnsettledBills ?? "0")}
           icon={Clock}
           href="/vendor-bills"
           variant={parseFloat((finance as any)?.totalUnsettledBills ?? "0") > 0 ? "warning" : "default"}
-          description="Approved bills pending payment settlement"
+          description={t("dashboard.unsettled_bills_desc")}
         />
       </div>
 
