@@ -268,10 +268,18 @@ function VendorBillDetail() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [allocOpen, setAllocOpen] = useState(false);
-  const [allocEmployeeId, setAllocEmployeeId] = useState("");
+  const [allocWorkerValue, setAllocWorkerValue] = useState(""); // "emp-123" or "con-456"
   const [allocInvoiceId, setAllocInvoiceId] = useState("");
   const [allocAmount, setAllocAmount] = useState("");
   const [allocNote, setAllocNote] = useState("");
+
+  // Parse worker value into employeeId / contractorId
+  const parseWorkerValue = (val: string) => {
+    if (val.startsWith("emp-")) return { employeeId: parseInt(val.substring(4)), contractorId: undefined };
+    if (val.startsWith("con-")) return { employeeId: undefined, contractorId: parseInt(val.substring(4)) };
+    return { employeeId: undefined, contractorId: undefined };
+  };
+  const allocWorker = parseWorkerValue(allocWorkerValue);
 
   const { data: bill, isLoading, refetch } = trpc.vendorBills.get.useQuery(
     { id: billId },
@@ -299,6 +307,13 @@ function VendorBillDetail() {
     return Array.isArray(raw) ? raw : [];
   }, [employeesData]);
 
+  // Contractors for allocation
+  const { data: contractorsData } = trpc.contractors.list.useQuery({ limit: 500 });
+  const contractors = useMemo(() => {
+    const raw = (contractorsData as any)?.data || contractorsData || [];
+    return Array.isArray(raw) ? raw : [];
+  }, [contractorsData]);
+
   // Invoices for allocation
   const { data: invoicesData } = trpc.invoices.list.useQuery({ limit: 500 });
   const invoices = useMemo(() => {
@@ -306,13 +321,13 @@ function VendorBillDetail() {
     return Array.isArray(raw) ? raw : [];
   }, [invoicesData]);
 
-  // Employee monthly revenue (for selected employee)
+  // Worker monthly revenue (for selected employee - only applicable for EOR employees)
   const { data: empRevenue } = trpc.allocations.singleEmployeeRevenue.useQuery(
     {
-      employeeId: allocEmployeeId ? parseInt(allocEmployeeId) : 0,
+      employeeId: allocWorker.employeeId || 0,
       serviceMonth: bill?.billMonth || safeMonth(bill?.billDate) || "",
     },
-    { enabled: !!allocEmployeeId && allocEmployeeId !== "" && billId > 0 }
+    { enabled: !!allocWorker.employeeId && billId > 0 }
   );
 
   // Mutations
@@ -330,7 +345,7 @@ function VendorBillDetail() {
     onSuccess: () => {
       toast.success(t("vendorBills.toast.allocationCreated"));
       setAllocOpen(false);
-      setAllocEmployeeId(""); setAllocInvoiceId(""); setAllocAmount(""); setAllocNote("");
+      setAllocWorkerValue(""); setAllocInvoiceId(""); setAllocAmount(""); setAllocNote("");
       refetchAllocs(); refetch();
     },
     onError: (err) => toast.error(err.message || t("vendorBills.toast.allocationFailed")),
@@ -377,14 +392,16 @@ function VendorBillDetail() {
   }
 
   function handleCreateAlloc() {
-    if (!allocEmployeeId || !allocInvoiceId || !allocAmount) {
+    if (!allocWorkerValue || !allocInvoiceId || !allocAmount) {
       toast.error(t("vendorBills.toast.fillRequired"));
       return;
     }
+    const { employeeId, contractorId } = parseWorkerValue(allocWorkerValue);
     createAllocMutation.mutate({
       vendorBillId: billId,
       invoiceId: parseInt(allocInvoiceId),
-      employeeId: parseInt(allocEmployeeId),
+      ...(employeeId ? { employeeId } : {}),
+      ...(contractorId ? { contractorId } : {}),
       allocatedAmount: allocAmount,
       description: allocNote || "",
     });
@@ -424,7 +441,7 @@ function VendorBillDetail() {
   // Revenue info for selected employee
   const revTotal = empRevenue ? parseFloat((empRevenue as any)?.totalRevenue?.toString() || "0") : 0;
   const allocAmtNum = parseFloat(allocAmount || "0");
-  const exceedsRevenue = allocEmployeeId && revTotal > 0 && allocAmtNum > revTotal;
+  const exceedsRevenue = allocWorker.employeeId && revTotal > 0 && allocAmtNum > revTotal;
 
   const itemTypeKeys = [
     "employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other",
@@ -598,7 +615,7 @@ function VendorBillDetail() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs">{t("vendorBills.lineItems.employeeHeader")}</TableHead>
+                      <TableHead className="text-xs">Worker</TableHead>
                       <TableHead className="text-xs">{t("vendorBills.review.invoiceHeader")}</TableHead>
                       <TableHead className="text-xs text-right">{t("vendorBills.lineItems.amountHeader")}</TableHead>
                       <TableHead className="text-xs">{t("vendorBills.allocations.noteLabel")}</TableHead>
@@ -608,7 +625,13 @@ function VendorBillDetail() {
                   <TableBody>
                     {allocs.map((a: any) => (
                       <TableRow key={a.id}>
-                        <TableCell className="text-sm">{a.employeeName || t("vendorBills.allocations.unknownEmployee")}{a.employeeCode ? ` (${a.employeeCode})` : ""}</TableCell>
+                        <TableCell className="text-sm">
+                          {a.employeeName
+                            ? <span>{a.employeeName}{a.employeeCode ? ` (${a.employeeCode})` : ""} <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-blue-50 text-blue-700 ml-1">EOR</Badge></span>
+                            : a.contractorName
+                              ? <span>{a.contractorName}{a.contractorCode ? ` (${a.contractorCode})` : ""} <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-orange-50 text-orange-700 ml-1">AOR</Badge></span>
+                              : t("vendorBills.allocations.unknownEmployee")}
+                        </TableCell>
                         <TableCell className="text-sm">{a.invoiceNumber || t("vendorBills.allocations.unknownInvoice")}{a.invoiceCurrency && a.invoiceTotal ? ` - ${a.invoiceCurrency} ${formatAmount(parseFloat(a.invoiceTotal))}` : ""}</TableCell>
                         <TableCell className="text-sm text-right font-medium">{formatAmount(parseFloat(a.allocatedAmount || "0"))}</TableCell>
                         <TableCell className="text-sm text-muted-foreground truncate max-w-[200px]">{a.description || "\u2014"}</TableCell>
@@ -698,24 +721,48 @@ function VendorBillDetail() {
             <DialogHeader><DialogTitle>{t("vendorBills.actions.createAllocation")}</DialogTitle></DialogHeader>
             <div className="py-4 space-y-4">
               <div>
-                <Label className="text-xs">{t("vendorBills.allocations.selectEmployee")}</Label>
-                <Select value={allocEmployeeId} onValueChange={setAllocEmployeeId}>
-                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={t("vendorBills.allocations.selectEmployee")} /></SelectTrigger>
+                <Label className="text-xs">Worker</Label>
+                <Select value={allocWorkerValue} onValueChange={setAllocWorkerValue}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select worker..." /></SelectTrigger>
                   <SelectContent>
-                    {employees.map((emp: any) => (
-                      <SelectItem key={emp.id} value={emp.id.toString()}>
-                        {emp.fullName || emp.firstName + " " + emp.lastName} ({emp.employeeCode || emp.id})
-                      </SelectItem>
-                    ))}
+                    {employees.length > 0 && (
+                      <>
+                        <SelectItem value="__emp_header" disabled className="text-xs font-bold text-muted-foreground bg-muted/30">
+                          ── EOR Employees ──
+                        </SelectItem>
+                        {employees.map((emp: any) => (
+                          <SelectItem key={`emp-${emp.id}`} value={`emp-${emp.id}`}>
+                            {emp.fullName || emp.firstName + " " + emp.lastName} ({emp.employeeCode || emp.id})
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
+                    {contractors.length > 0 && (
+                      <>
+                        <SelectItem value="__ctr_header" disabled className="text-xs font-bold text-muted-foreground bg-muted/30">
+                          ── AOR Contractors ──
+                        </SelectItem>
+                        {contractors.map((ctr: any) => (
+                          <SelectItem key={`con-${ctr.id}`} value={`con-${ctr.id}`}>
+                            {ctr.fullName || ctr.firstName + " " + ctr.lastName} ({ctr.contractorCode || ctr.id})
+                          </SelectItem>
+                        ))}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
-                {allocEmployeeId && empRevenue && (
+                {allocWorker.employeeId && empRevenue && (
                   <div className="mt-1 p-2 rounded bg-muted/50 text-xs">
                     <span className="text-muted-foreground">{t("vendorBills.allocations.revenueHint")}: </span>
                     <span className="font-medium">{formatAmount(revTotal)}</span>
                     {(empRevenue as any)?.breakdown?.map((b: any, i: number) => (
                       <span key={i} className="ml-2 text-muted-foreground">({b.itemType}: {formatAmount(parseFloat(b.total || "0"))})</span>
                     ))}
+                  </div>
+                )}
+                {allocWorker.contractorId && (
+                  <div className="mt-1 p-2 rounded bg-muted/50 text-xs">
+                    <span className="text-muted-foreground">AOR contractor selected. Revenue ceiling check is not applicable.</span>
                   </div>
                 )}
               </div>
