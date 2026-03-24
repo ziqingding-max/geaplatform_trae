@@ -1,1110 +1,850 @@
-/*
- * GEA Admin — Dashboard (Multi-Tab)
- * 5 tabs: Overview, Operations, Finance, HR & Leave, Activity Log
- * Strict role-based tab visibility
- * Interactive Recharts charts for monthly trends and revenue
+/**
+ * GEA Admin — Dashboard (Role-based Workspace)
+ *
+ * Replaces the old multi-tab report-heavy dashboard with a task-oriented,
+ * role-specific workspace. Each role sees their own action items, metrics,
+ * and team pulse — all on a single, clean page.
+ *
+ * Roles:
+ *   - Sales:              Pipeline funnel, quotation stats, stale leads
+ *   - AM (Customer Mgr):  Onboarding, employee lifecycle, client health
+ *   - Ops Manager:        Pending tasks across all operations & finance modules
+ *   - Finance Manager:    AR/AP, settlement, wallet balances
+ *   - Admin:              Everything
  */
-
 import { useMemo } from "react";
 import Layout from "@/components/Layout";
-import { formatDateTime, formatCurrencyCompact, formatMonthShort, countryName } from "@/lib/format";
-import { formatActivitySummary } from "@/lib/auditDescriptions";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useI18n } from "@/lib/i18n";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { hasAnyRole, isAdmin, parseRoles } from "@shared/roles";
+import { cn } from "@/lib/utils";
+import { formatCurrencyCompact, formatDate, formatStatusLabel, countryName } from "@/lib/format";
+import { formatActivitySummary } from "@/lib/auditDescriptions";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
-import {
-  Users,
-  Building2,
-  DollarSign,
-  FileText,
-  ArrowUpDown,
-  CalendarDays,
-  Globe,
-  AlertCircle,
-  AlertTriangle,
-  TrendingUp,
-  TrendingDown,
-  BarChart3,
-  Activity,
-  ClipboardList,
-  Wallet,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Briefcase,
-  UserPlus,
-  UserMinus,
-  FileWarning,
-  Landmark,
-} from "lucide-react";
 import { Link } from "wouter";
-import { hasAnyRole, hasRole } from "@shared/roles";
+import {
+  Users, Globe, Clock, AlertCircle, ArrowRight, CalendarDays,
+  Receipt, UserPlus, CheckCircle2, TrendingUp, DollarSign,
+  Activity, FileText, Briefcase, Building2, Wallet, ShieldCheck,
+  ArrowUpDown, Package, Star, PartyPopper, Cake, Award,
+  Target, Megaphone, HandshakeIcon, CircleDollarSign,
+  ClipboardList, CreditCard, AlertTriangle, BarChart3,
+} from "lucide-react";
 
-// ── Role visibility rules ──
-// Overview: all users
-// Operations: admin, operations_manager
-// Finance: admin, finance_manager
-// HR & Leave: admin, operations_manager
-// Activity Log: admin
-
-function canSeeOperations(role: string | null | undefined): boolean {
-  return hasAnyRole(role, ["admin", "operations_manager"]);
-}
-function canSeeFinance(role: string | null | undefined): boolean {
-  return hasAnyRole(role, ["admin", "finance_manager"]);
-}
-function canSeeHR(role: string | null | undefined): boolean {
-  return hasAnyRole(role, ["admin", "operations_manager"]);
-}
-function canSeeActivity(role: string | null | undefined): boolean {
-  return hasRole(role, "admin");
-}
-
-// ── Shared components ──
-
+// ─── Glass Stat Card ─────────────────────────────────────────────────────────
 function StatCard({
   title,
   value,
   icon: Icon,
   description,
   href,
-  variant = "default",
-  trend,
+  accent = "default",
 }: {
   title: string;
   value: string | number;
   icon: React.ComponentType<{ className?: string }>;
   description?: string;
   href?: string;
-  variant?: "default" | "warning" | "success" | "danger";
-  trend?: { value: number; label: string };
+  accent?: "default" | "green" | "amber" | "red" | "blue" | "purple";
 }) {
+  const accentStyles = {
+    default: "bg-gray-500/10 text-gray-600",
+    green: "bg-emerald-500/15 text-emerald-600",
+    amber: "bg-amber-500/15 text-amber-600",
+    red: "bg-red-500/15 text-red-600",
+    blue: "bg-blue-500/15 text-blue-600",
+    purple: "bg-purple-500/15 text-purple-600",
+  };
   const content = (
-    <Card className={`relative overflow-hidden transition-all duration-200 ${href ? "hover:shadow-md cursor-pointer" : ""}`}>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold tracking-tight">{value}</p>
-            {trend && (
-              <div className="flex items-center gap-1 text-xs">
-                {trend.value > 0 ? (
-                  <TrendingUp className="w-3 h-3 text-emerald-600" />
-                ) : trend.value < 0 ? (
-                  <TrendingDown className="w-3 h-3 text-red-600" />
-                ) : null}
-                <span className={trend.value > 0 ? "text-emerald-600" : trend.value < 0 ? "text-red-600" : "text-muted-foreground"}>
-                  {trend.value > 0 ? "+" : ""}{trend.value}% {trend.label}
-                </span>
-              </div>
-            )}
-            {description && !trend && (
-              <p className="text-xs text-muted-foreground">{description}</p>
-            )}
-          </div>
-          <div className={`p-2.5 rounded-lg ${
-            variant === "warning" ? "bg-amber-50 text-amber-600" :
-            variant === "success" ? "bg-emerald-50 text-emerald-600" :
-            variant === "danger" ? "bg-red-50 text-red-600" :
-            "bg-primary/10 text-primary"
-          }`}>
-            <Icon className="w-5 h-5" />
-          </div>
+    <div className={cn(
+      "glass-stat-card p-5 relative overflow-hidden group h-full",
+      href && "cursor-pointer"
+    )}>
+      <div className="flex items-start justify-between relative z-10">
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">{title}</p>
+          <p className="text-3xl font-bold tracking-tight">{value}</p>
+          {description && (
+            <p className="text-xs text-muted-foreground">{description}</p>
+          )}
         </div>
-      </CardContent>
-    </Card>
+        <div className={cn("p-2.5 rounded-xl", accentStyles[accent])}>
+          <Icon className="w-5 h-5" />
+        </div>
+      </div>
+      {href && (
+        <div className="absolute bottom-3 right-4 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <ArrowRight className="w-4 h-4 text-muted-foreground" />
+        </div>
+      )}
+    </div>
   );
-
-  if (href) return <Link href={href}>{content}</Link>;
+  if (href) {
+    return <Link href={href}>{content}</Link>;
+  }
   return content;
 }
 
-function StatCardSkeleton() {
+// ─── Action Item Row ─────────────────────────────────────────────────────────
+function ActionItem({
+  icon: Icon,
+  label,
+  count,
+  href,
+  colorClass,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  count: number;
+  href: string;
+  colorClass: string;
+}) {
+  if (count === 0) return null;
   return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div className="space-y-2">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-8 w-16" />
-            <Skeleton className="h-3 w-32" />
+    <Link href={href}>
+      <div className="flex items-center justify-between p-3 rounded-xl bg-white/40 border border-white/30 hover:bg-white/60 transition-all duration-200 cursor-pointer group">
+        <div className="flex items-center gap-3">
+          <div className={cn("p-1.5 rounded-lg", colorClass)}>
+            <Icon className="w-4 h-4" />
           </div>
-          <Skeleton className="h-10 w-10 rounded-lg" />
+          <span className="text-sm font-medium">{label}</span>
         </div>
-      </CardContent>
-    </Card>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="font-mono bg-white/50">{count}</Badge>
+          <ArrowRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+      </div>
+    </Link>
   );
 }
 
-function ChartSkeleton({ height = "h-[300px]" }: { height?: string }) {
+// ─── Pending Actions Card ────────────────────────────────────────────────────
+function PendingActionsCard({
+  items,
+  t,
+}: {
+  items: Array<{
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    count: number;
+    href: string;
+    colorClass: string;
+  }>;
+  t: (key: string) => string;
+}) {
+  const totalPending = items.reduce((s, i) => s + i.count, 0);
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <Skeleton className="h-5 w-40" />
-      </CardHeader>
-      <CardContent>
-        <Skeleton className={`w-full ${height} rounded-lg`} />
-      </CardContent>
-    </Card>
+    <div className="glass-card p-6 h-full">
+      <div className="flex items-center gap-2 mb-4">
+        <Clock className="w-4 h-4 text-muted-foreground" />
+        <h3 className="text-base font-semibold">{t("dashboard.pending_actions")}</h3>
+        {totalPending > 0 && (
+          <Badge variant="destructive" className="ml-auto text-xs">{totalPending}</Badge>
+        )}
+      </div>
+      {totalPending === 0 ? (
+        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+          <CheckCircle2 className="w-8 h-8 mb-2 text-green-500" />
+          <p className="text-sm font-medium">{t("dashboard.all_caught_up")}</p>
+          <p className="text-xs mt-1">{t("dashboard.no_pending_tasks")}</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {items.map((item, i) => (
+            <ActionItem key={i} {...item} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
+// ─── Team Pulse Card ─────────────────────────────────────────────────────────
+function TeamPulseCard({ t }: { t: (key: string) => string }) {
+  const { data: events, isLoading } = trpc.adminDashboard.teamPulse.useQuery();
 
-
-
-// ── Tab: Overview ──
-function OverviewTab() {
-  const { t } = useI18n();
-  const { data: stats, isLoading } = trpc.dashboard.stats.useQuery();
-  const { data: byCountry } = trpc.dashboard.employeesByCountry.useQuery();
-  const { data: byStatus } = trpc.dashboard.employeesByStatus.useQuery();
-  const { data: trends } = trpc.dashboard.monthlyTrends.useQuery();
-
-  const trendChartData = useMemo(() => {
-    if (!trends) return [];
-    return trends.months.map((m, i) => ({
-      month: formatMonthShort(m),
-      employees: trends.employeeTrend[i],
-      customers: trends.customerTrend[i],
-    }));
-  }, [trends]);
-
-  const trendConfig: ChartConfig = {
-    employees: { label: t("dashboard.total_employees"), color: "oklch(0.65 0.19 250)" },
-    customers: { label: t("dashboard.total_customers"), color: "oklch(0.72 0.17 150)" },
+  const typeConfig: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; labelKey: string }> = {
+    birthday: { icon: Cake, color: "text-pink-500 bg-pink-500/10", labelKey: "dashboard.team_birthday" },
+    new_joiner: { icon: PartyPopper, color: "text-blue-500 bg-blue-500/10", labelKey: "dashboard.team_new_joiner" },
+    anniversary: { icon: Award, color: "text-amber-500 bg-amber-500/10", labelKey: "dashboard.team_anniversary" },
+    onboarding: { icon: UserPlus, color: "text-green-500 bg-green-500/10", labelKey: "dashboard.team_onboarding" },
   };
 
-  const statusColors: Record<string, string> = {
-    active: "#10b981",
-    pending_review: "#f59e0b",
-    onboarding: "#3b82f6",
-    contract_signed: "#8b5cf6",
-    on_leave: "#a855f7",
-    offboarding: "#f97316",
-    terminated: "#ef4444",
-  };
+  return (
+    <div className="glass-card p-6 h-full">
+      <div className="flex items-center gap-2 mb-4">
+        <Star className="w-4 h-4 text-muted-foreground" />
+        <h3 className="text-base font-semibold">{t("dashboard.team_pulse")}</h3>
+      </div>
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
+        </div>
+      ) : !events || events.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+          <Users className="w-8 h-8 mb-2 text-muted-foreground/50" />
+          <p className="text-sm">{t("dashboard.team_no_events")}</p>
+        </div>
+      ) : (
+        <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+          {events.map((event, i) => {
+            const cfg = typeConfig[event.type] || typeConfig.new_joiner;
+            const EventIcon = cfg.icon;
+            return (
+              <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg bg-white/30 border border-white/20">
+                <div className={cn("p-1.5 rounded-lg shrink-0", cfg.color)}>
+                  <EventIcon className="w-3.5 h-3.5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{event.employeeName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t(cfg.labelKey)} · {event.country ? countryName(event.country) : ""} {event.detail ? `· ${event.detail}` : ""}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
-  const pieData = useMemo(() => {
-    if (!byStatus) return [];
-    return byStatus.map(s => ({
-      name: t(`status.${s.status}`) || s.status || "Unknown",
-      value: Number(s.count),
-      fill: statusColors[s.status ?? ""] || "#9ca3af",
-    }));
-  }, [byStatus]);
+// ─── Recent Activity Card ────────────────────────────────────────────────────
+function RecentActivityCard({ t }: { t: (key: string) => string }) {
+  const { data: logs, isLoading } = trpc.adminDashboard.recentActivity.useQuery({ limit: 10 });
+
+  return (
+    <div className="glass-card p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Activity className="w-4 h-4 text-muted-foreground" />
+        <h3 className="text-base font-semibold">{t("dashboard.recent_activity")}</h3>
+      </div>
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-10 w-full rounded-lg" />)}
+        </div>
+      ) : !logs || logs.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-4 text-center">{t("dashboard.no_recent_activity")}</p>
+      ) : (
+        <div className="space-y-1.5 max-h-[400px] overflow-y-auto pr-1">
+          {logs.map((log) => (
+            <div key={log.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-white/30 transition-colors">
+              <div className="w-6 h-6 rounded-full bg-muted/50 flex items-center justify-center shrink-0 mt-0.5">
+                <Activity className="w-3 h-3 text-muted-foreground" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm">
+                  <span className="font-medium">{log.userName || "System"}</span>{" "}
+                  <span className="text-muted-foreground">
+                    {formatActivitySummary({ action: log.action, entityType: log.entityType, changes: log.changes, userName: log.userName })}
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {formatDate(log.createdAt)}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SALES WORKSPACE
+// ═══════════════════════════════════════════════════════════════════════════════
+function SalesWorkspace({ t }: { t: (key: string) => string }) {
+  const { data, isLoading } = trpc.adminDashboard.salesMetrics.useQuery();
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    );
+  }
+
+  const pipeline = data?.pipeline ?? {};
+  const quotationStats = data?.quotationStats ?? {};
+  const staleLeads = data?.staleLeads ?? [];
+  const recentLeads = data?.recentLeads ?? [];
+
+  // Pipeline stages for funnel display
+  const stages = [
+    { key: "discovery", label: t("dashboard.sales_discovery"), color: "bg-slate-400" },
+    { key: "leads", label: t("dashboard.sales_leads"), color: "bg-blue-400" },
+    { key: "quotation_sent", label: t("dashboard.sales_quotation_sent"), color: "bg-indigo-400" },
+    { key: "msa_sent", label: t("dashboard.sales_msa_sent"), color: "bg-purple-400" },
+    { key: "msa_signed", label: t("dashboard.sales_msa_signed"), color: "bg-emerald-400" },
+  ];
+
+  const pendingQuotations = (quotationStats["draft"]?.count ?? 0) + (quotationStats["sent"]?.count ?? 0);
 
   return (
     <div className="space-y-6">
-      {/* KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
-        ) : (
-          <>
-            <StatCard title={t("dashboard.total_customers")} value={stats?.totalCustomers ?? 0} icon={Building2} href="/customers" description={t("dashboard.active_customer_accounts")} />
-            <StatCard title={t("dashboard.total_employees")} value={stats?.totalEmployees ?? 0} icon={Users} description={`${stats?.activeEmployees ?? 0} ${t("dashboard.active")}`} href="/employees" />
-            <StatCard title={t("dashboard.pending_payrolls")} value={stats?.pendingPayrolls ?? 0} icon={DollarSign} description={t("dashboard.awaiting_approval")} href="/payroll" variant={Number(stats?.pendingPayrolls) > 0 ? "warning" : "default"} />
-            <StatCard title={t("dashboard.draft_invoices")} value={stats?.pendingInvoices ?? 0} icon={FileText} description={t("dashboard.ready_for_review")} href="/invoices" variant={Number(stats?.pendingInvoices) > 0 ? "warning" : "default"} />
-          </>
-        )}
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard
+          title={t("dashboard.sales_active_leads")}
+          value={data?.totalActiveLeads ?? 0}
+          icon={Target}
+          href="/sales"
+          accent="blue"
+        />
+        <StatCard
+          title={t("dashboard.sales_pending_quotations")}
+          value={pendingQuotations}
+          icon={FileText}
+          href="/quotations"
+          accent="amber"
+        />
+        <StatCard
+          title={t("dashboard.sales_closed_won")}
+          value={pipeline["closed_won"] ?? 0}
+          icon={HandshakeIcon}
+          accent="green"
+        />
+        <StatCard
+          title={t("dashboard.sales_stale_leads")}
+          value={staleLeads.length}
+          icon={AlertCircle}
+          href="/sales"
+          accent={staleLeads.length > 0 ? "red" : "default"}
+          description={staleLeads.length > 0 ? t("dashboard.sales_needs_followup") : undefined}
+        />
       </div>
 
-      {/* Monthly incremental + pending items */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        {isLoading ? (
-          Array.from({ length: 6 }).map((_, i) => <StatCardSkeleton key={i} />)
-        ) : (
-          <>
-            <StatCard title={t("dashboard.new_hires_month")} value={stats?.newHiresThisMonth ?? 0} icon={UserPlus} href="/employees" description={t("dashboard.this_month")} />
-            <StatCard title={t("dashboard.terminations_month")} value={stats?.terminationsThisMonth ?? 0} icon={UserMinus} href="/employees" variant={Number(stats?.terminationsThisMonth) > 0 ? "danger" : "default"} description={t("dashboard.this_month")} />
-            <StatCard title={t("dashboard.new_clients_month")} value={stats?.newClientsThisMonth ?? 0} icon={Building2} href="/customers" description={t("dashboard.this_month")} />
-            <StatCard title={t("dashboard.pending_adjustments")} value={stats?.pendingAdjustments ?? 0} icon={ArrowUpDown} href="/adjustments" variant={Number(stats?.pendingAdjustments) > 0 ? "warning" : "default"} description={t("dashboard.bonus_allowance_reimbursement")} />
-            <StatCard title={t("dashboard.pending_leave")} value={stats?.pendingLeaves ?? 0} icon={CalendarDays} href="/leave" variant={Number(stats?.pendingLeaves) > 0 ? "warning" : "default"} description={t("dashboard.leave_awaiting_approval")} />
-            <StatCard title={t("dashboard.countries_active")} value={byCountry?.length ?? 0} icon={Globe} href="/countries" variant="success" description={t("dashboard.countries_with_employees")} />
-          </>
-        )}
-      </div>
-
-      {/* Trend chart + Employee distribution */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">{t("dashboard.growth_trend")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {trendChartData.length > 0 ? (
-              <ChartContainer config={trendConfig} className="h-[280px] w-full">
-                <AreaChart data={trendChartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="fillEmployees" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-employees)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--color-employees)" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="fillCustomers" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-customers)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--color-customers)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={11} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={11} width={35} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Area type="monotone" dataKey="employees" stroke="var(--color-employees)" fill="url(#fillEmployees)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="customers" stroke="var(--color-customers)" fill="url(#fillCustomers)" strokeWidth={2} />
-                </AreaChart>
-              </ChartContainer>
-            ) : (
-              <Skeleton className="h-[280px] w-full rounded-lg" />
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">{t("dashboard.employee_status_distribution")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {pieData.length > 0 ? (
-              <>
-                <ChartContainer config={{}} className="h-[180px] w-full">
-                  <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} dataKey="value">
-                      {pieData.map((entry, i) => (
-                        <Cell key={i} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                  </PieChart>
-                </ChartContainer>
-                <div className="space-y-1.5 mt-2">
-                  {pieData.map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.fill }} />
-                      <span className="flex-1 text-muted-foreground">{item.name}</span>
-                      <span className="font-medium">{item.value}</span>
-                    </div>
-                  ))}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Pipeline Funnel */}
+        <div className="glass-card p-6">
+          <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-muted-foreground" />
+            {t("dashboard.sales_pipeline")}
+          </h3>
+          <div className="space-y-3">
+            {stages.map((stage) => {
+              const cnt = pipeline[stage.key] ?? 0;
+              const maxCount = Math.max(...stages.map(s => pipeline[s.key] ?? 0), 1);
+              const pct = Math.max((cnt / maxCount) * 100, 4);
+              return (
+                <div key={stage.key} className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-28 truncate">{stage.label}</span>
+                  <div className="flex-1 h-7 bg-white/30 rounded-lg overflow-hidden relative">
+                    <div
+                      className={cn("h-full rounded-lg transition-all duration-500", stage.color)}
+                      style={{ width: `${pct}%` }}
+                    />
+                    <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold">
+                      {cnt}
+                    </span>
+                  </div>
                 </div>
-              </>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Recent Leads */}
+        <div className="glass-card p-6">
+          <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+            <Megaphone className="w-4 h-4 text-muted-foreground" />
+            {t("dashboard.sales_recent_leads")}
+          </h3>
+          <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+            {recentLeads.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">{t("dashboard.sales_no_leads")}</p>
             ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <Users className="w-8 h-8 mb-2 opacity-40" />
-                <p className="text-sm">{t("common.no_data")}</p>
-              </div>
+              recentLeads.map((lead) => (
+                <Link key={lead.id} href={`/sales?id=${lead.id}`}>
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/30 border border-white/20 hover:bg-white/50 transition-colors cursor-pointer">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{lead.companyName}</p>
+                      <p className="text-xs text-muted-foreground">{lead.contactName || "—"}</p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] shrink-0 ml-2">
+                      {formatStatusLabel(lead.status)}
+                    </Badge>
+                  </div>
+                </Link>
+              ))
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AM (CUSTOMER MANAGER) WORKSPACE
+// ═══════════════════════════════════════════════════════════════════════════════
+function AmWorkspace({ t }: { t: (key: string) => string }) {
+  const { data, isLoading } = trpc.adminDashboard.amMetrics.useQuery();
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    );
+  }
+
+  const empStatus = data?.employeeStatus ?? {};
+  const expiringContracts = data?.expiringContracts ?? [];
+  const empByCountry = data?.employeesByCountry ?? [];
+
+  // Pending action items for AM
+  const actionItems = [
+    {
+      icon: UserPlus,
+      label: t("dashboard.am_pending_onboarding"),
+      count: data?.pendingOnboardingInvites ?? 0,
+      href: "/onboarding",
+      colorClass: "text-blue-500 bg-blue-500/10",
+    },
+    {
+      icon: ClipboardList,
+      label: t("dashboard.am_pending_review"),
+      count: (empStatus["pending_review"] ?? 0) + (empStatus["documents_incomplete"] ?? 0),
+      href: "/employees",
+      colorClass: "text-amber-500 bg-amber-500/10",
+    },
+    {
+      icon: AlertTriangle,
+      label: t("dashboard.am_expiring_contracts"),
+      count: expiringContracts.length,
+      href: "/employees",
+      colorClass: "text-red-500 bg-red-500/10",
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard
+          title={t("dashboard.am_active_employees")}
+          value={data?.totalActiveEmployees ?? 0}
+          icon={Users}
+          href="/employees"
+          accent="blue"
+        />
+        <StatCard
+          title={t("dashboard.am_active_contractors")}
+          value={data?.totalActiveContractors ?? 0}
+          icon={Briefcase}
+          href="/contractors"
+          accent="purple"
+        />
+        <StatCard
+          title={t("dashboard.am_active_customers")}
+          value={data?.activeCustomers ?? 0}
+          icon={Building2}
+          href="/customers"
+          accent="green"
+        />
+        <StatCard
+          title={t("dashboard.am_new_hires_month")}
+          value={data?.newHiresThisMonth ?? 0}
+          icon={UserPlus}
+          accent="amber"
+          description={t("dashboard.this_month")}
+        />
       </div>
 
-      {/* Employees by Country */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">{t("dashboard.employees_by_country")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {byCountry && byCountry.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {byCountry.map((item) => {
-                const total = byCountry.reduce((sum, c) => sum + Number(c.count), 0);
-                const pct = total > 0 ? ((Number(item.count) / total) * 100) : 0;
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Pending Actions */}
+        <PendingActionsCard items={actionItems} t={t} />
+
+        {/* Employees by Country */}
+        <div className="glass-card p-6">
+          <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+            <Globe className="w-4 h-4 text-muted-foreground" />
+            {t("dashboard.am_employees_by_country")}
+          </h3>
+          <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
+            {empByCountry.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">{t("dashboard.am_no_employees")}</p>
+            ) : (
+              empByCountry.map((row) => {
+                const maxCount = Math.max(...empByCountry.map(r => r.cnt), 1);
+                const pct = Math.max((row.cnt / maxCount) * 100, 8);
                 return (
-                  <div key={item.country} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                    <span className="text-sm flex-1 font-medium">{countryName(item.country) || "Unknown"}</span>
-                    <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
+                  <div key={row.country} className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground w-24 truncate">
+                      {countryName(row.country)}
+                    </span>
+                    <div className="flex-1 h-6 bg-white/30 rounded-md overflow-hidden relative">
+                      <div
+                        className="h-full bg-blue-400/60 rounded-md transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                      <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold">
+                        {row.cnt}
+                      </span>
                     </div>
-                    <span className="text-sm font-medium w-8 text-right">{item.count}</span>
                   </div>
                 );
-              })}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <Globe className="w-8 h-8 mb-2 opacity-40" />
-              <p className="text-sm">{t("common.no_data")}</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              })
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-// ── Tab: Operations ──
-function OperationsTab() {
-  const { t } = useI18n();
-  const { data: ops, isLoading } = trpc.dashboard.operationsOverview.useQuery();
-  const { data: trends } = trpc.dashboard.monthlyTrends.useQuery();
+// ═══════════════════════════════════════════════════════════════════════════════
+// OPS MANAGER WORKSPACE
+// ═══════════════════════════════════════════════════════════════════════════════
+function OpsWorkspace({ t }: { t: (key: string) => string }) {
+  const { data, isLoading } = trpc.adminDashboard.opsMetrics.useQuery();
 
-  const payrollStatusColors: Record<string, string> = {
-    draft: "#9ca3af",
-    pending_approval: "#f59e0b",
-    approved: "#3b82f6",
-    processing: "#8b5cf6",
-    completed: "#10b981",
-    rejected: "#ef4444",
-  };
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    );
+  }
 
-  const payrollPieData = useMemo(() => {
-    if (!ops) return [];
-    return ops.payrollByStatus.map(s => ({
-      name: t(`status.${s.status}`) || s.status,
-      value: s.count,
-      fill: payrollStatusColors[s.status] || "#9ca3af",
-    }));
-  }, [ops]);
+  const payroll = data?.payroll ?? {};
+  const inv = data?.invoices ?? {};
+  const vb = data?.vendorBills ?? {};
 
-  const payrollTrendData = useMemo(() => {
-    if (!trends) return [];
-    return trends.months.map((m, i) => ({
-      month: formatMonthShort(m),
-      payrollRuns: trends.payrollTrend[i],
-      invoices: trends.invoiceTrend[i],
-    }));
-  }, [trends]);
+  const totalPayrollPending = (payroll["draft"] ?? 0) + (payroll["pending_approval"] ?? 0);
+  const totalInvoicePending = (inv["draft"] ?? 0) + (inv["pending_review"] ?? 0);
+  const totalVendorBillPending = (vb["draft"] ?? 0) + (vb["pending_approval"] ?? 0);
+  const totalHRPending = (data?.pendingLeaves ?? 0) + (data?.pendingAdjustments ?? 0) + (data?.pendingReimbursements ?? 0);
 
-  const trendConfig: ChartConfig = {
-    payrollRuns: { label: "Payroll Runs", color: "oklch(0.65 0.19 250)" },
-    invoices: { label: "Invoices", color: "oklch(0.72 0.17 30)" },
-  };
-
-  if (isLoading) return <div className="space-y-6"><ChartSkeleton /><ChartSkeleton /></div>;
+  const actionItems = [
+    {
+      icon: DollarSign,
+      label: `${t("dashboard.ops_payroll")} (${payroll["draft"] ?? 0} ${t("dashboard.ops_draft")}, ${payroll["pending_approval"] ?? 0} ${t("dashboard.ops_pending")})`,
+      count: totalPayrollPending,
+      href: "/payroll",
+      colorClass: "text-blue-500 bg-blue-500/10",
+    },
+    {
+      icon: FileText,
+      label: `${t("dashboard.ops_invoices")} (${inv["draft"] ?? 0} ${t("dashboard.ops_draft")}, ${inv["pending_review"] ?? 0} ${t("dashboard.ops_pending")})`,
+      count: totalInvoicePending,
+      href: "/invoices",
+      colorClass: "text-indigo-500 bg-indigo-500/10",
+    },
+    {
+      icon: Package,
+      label: `${t("dashboard.ops_vendor_bills")} (${vb["draft"] ?? 0} ${t("dashboard.ops_draft")}, ${vb["pending_approval"] ?? 0} ${t("dashboard.ops_pending")})`,
+      count: totalVendorBillPending,
+      href: "/vendor-bills",
+      colorClass: "text-amber-500 bg-amber-500/10",
+    },
+    {
+      icon: CalendarDays,
+      label: t("dashboard.ops_pending_leaves"),
+      count: data?.pendingLeaves ?? 0,
+      href: "/leave",
+      colorClass: "text-purple-500 bg-purple-500/10",
+    },
+    {
+      icon: ArrowUpDown,
+      label: t("dashboard.ops_pending_adjustments"),
+      count: data?.pendingAdjustments ?? 0,
+      href: "/adjustments",
+      colorClass: "text-orange-500 bg-orange-500/10",
+    },
+    {
+      icon: Receipt,
+      label: t("dashboard.ops_pending_reimbursements"),
+      count: data?.pendingReimbursements ?? 0,
+      href: "/reimbursements",
+      colorClass: "text-green-500 bg-green-500/10",
+    },
+    {
+      icon: UserPlus,
+      label: t("dashboard.ops_employee_reviews"),
+      count: data?.pendingEmployeeReviews ?? 0,
+      href: "/employees",
+      colorClass: "text-cyan-500 bg-cyan-500/10",
+    },
+    {
+      icon: Briefcase,
+      label: t("dashboard.ops_contractor_reviews"),
+      count: data?.pendingContractorReviews ?? 0,
+      href: "/contractors",
+      colorClass: "text-pink-500 bg-pink-500/10",
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Pending Approvals */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard
-          title={t("dashboard.pending_payrolls")}
-          value={ops?.pendingApprovals.payrolls ?? 0}
+          title={t("dashboard.ops_payroll_tasks")}
+          value={totalPayrollPending}
           icon={DollarSign}
           href="/payroll"
-          variant={Number(ops?.pendingApprovals.payrolls) > 0 ? "warning" : "default"}
-          description={t("dashboard.awaiting_review")}
+          accent={totalPayrollPending > 0 ? "amber" : "green"}
         />
         <StatCard
-          title={t("dashboard.onboarding")}
-          value={ops?.employeeOnboarding ?? 0}
-          icon={Briefcase}
-          href="/employees"
-          variant={Number(ops?.employeeOnboarding) > 0 ? "warning" : "success"}
-          description={t("dashboard.employee_onboarding")}
-        />
-        <StatCard
-          title={t("dashboard.offboarding")}
-          value={ops?.employeeOffboarding ?? 0}
-          icon={XCircle}
-          href="/employees"
-          variant={Number(ops?.employeeOffboarding) > 0 ? "danger" : "default"}
-          description={t("dashboard.employee_offboarding")}
-        />
-      </div>
-
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Payroll & Invoice trend */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">{t("dashboard.monthly_payroll_invoice_volume")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {payrollTrendData.length > 0 ? (
-              <ChartContainer config={trendConfig} className="h-[280px] w-full">
-                <BarChart data={payrollTrendData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={11} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={11} width={30} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Bar dataKey="payrollRuns" fill="var(--color-payrollRuns)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="invoices" fill="var(--color-invoices)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ChartContainer>
-            ) : (
-              <Skeleton className="h-[280px] w-full rounded-lg" />
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Payroll status distribution */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">{t("dashboard.payroll_status")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {payrollPieData.length > 0 ? (
-              <>
-                <ChartContainer config={{}} className="h-[180px] w-full">
-                  <PieChart>
-                    <Pie data={payrollPieData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} dataKey="value">
-                      {payrollPieData.map((entry, i) => (
-                        <Cell key={i} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                  </PieChart>
-                </ChartContainer>
-                <div className="space-y-1.5 mt-2">
-                  {payrollPieData.map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.fill }} />
-                      <span className="flex-1 text-muted-foreground">{item.name}</span>
-                      <span className="font-medium">{item.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <BarChart3 className="w-8 h-8 mb-2 opacity-40" />
-                <p className="text-sm">{t("common.no_data")}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Payroll Runs */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">{t("dashboard.recent_payroll_runs")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {ops?.recentPayrollRuns && ops.recentPayrollRuns.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 font-medium">Country/Region</th>
-                    <th className="pb-2 font-medium">Month</th>
-                    <th className="pb-2 font-medium">Status</th>
-                    <th className="pb-2 font-medium text-right">Gross Total</th>
-                    <th className="pb-2 font-medium text-right">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ops.recentPayrollRuns.map((run) => (
-                    <tr key={run.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="py-2.5 font-medium">{run.countryCode}</td>
-                      <td className="py-2.5">{run.payrollMonth ? formatMonthShort(String(run.payrollMonth).substring(0, 7)) : "-"}</td>
-                      <td className="py-2.5">
-                        <Badge variant="outline" className="text-xs font-normal">
-                          {t(`status.${run.status}`) || run.status}
-                        </Badge>
-                      </td>
-                      <td className="py-2.5 text-right font-mono">{run.totalGrossSalary ? formatCurrencyCompact(run.totalGrossSalary) : "-"}</td>
-                      <td className="py-2.5 text-right text-muted-foreground text-xs">{run.createdAt ? formatDateTime(run.createdAt) : "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <ClipboardList className="w-8 h-8 mb-2 opacity-40" />
-              <p className="text-sm">{t("common.no_data")}</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// ── Tab: Finance ──
-function FinanceTab() {
-  const { t } = useI18n();
-  const { data: finance, isLoading } = trpc.dashboard.financeOverview.useQuery();
-
-  const revenueChartData = useMemo(() => {
-    if (!finance) return [];
-    return finance.monthlyRevenue.map(m => ({
-      month: formatMonthShort(m.month),
-      totalRevenue: parseFloat(m.totalRevenue),
-      serviceFeeRevenue: parseFloat(m.serviceFeeRevenue),
-      invoiceCount: m.invoiceCount,
-      totalCost: parseFloat((m as any).totalCost || "0"),
-      netProfit: parseFloat(m.totalRevenue) - parseFloat((m as any).totalCost || "0"),
-    }));
-  }, [finance]);
-
-  const revenueConfig: ChartConfig = {
-    totalRevenue: { label: "Total Invoice Revenue", color: "oklch(0.65 0.19 250)" },
-    serviceFeeRevenue: { label: "Service Fee Revenue", color: "oklch(0.72 0.17 150)" },
-    totalCost: { label: "Total Cost (Settled)", color: "oklch(0.60 0.20 25)" },
-    netProfit: { label: "Net Profit", color: "oklch(0.65 0.15 145)" },
-  };
-
-  const invoiceCountConfig: ChartConfig = {
-    invoiceCount: { label: "Paid Invoices", color: "oklch(0.65 0.15 30)" },
-  };
-
-  if (isLoading) return <div className="space-y-6">{Array.from({ length: 3 }).map((_, i) => <StatCardSkeleton key={i} />)}<ChartSkeleton /></div>;
-
-  return (
-    <div className="space-y-6">
-      {/* Finance KPIs - Row 1: Revenue */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <StatCard
-          title={t("dashboard.total_revenue")}
-          value={formatCurrencyCompact(finance?.totalRevenue ?? "0")}
-          icon={DollarSign}
-          variant="success"
-          description={t("dashboard.from_paid_invoices")}
-        />
-        <StatCard
-          title={t("dashboard.service_fee_revenue")}
-          value={formatCurrencyCompact(finance?.totalServiceFeeRevenue ?? "0")}
-          icon={Wallet}
-          variant="success"
-          description={t("dashboard.management_service_fees")}
-        />
-        <StatCard
-          title={t("dashboard.deferred_revenue")}
-          value={formatCurrencyCompact(finance?.totalDeferredRevenue ?? "0")}
-          icon={Landmark}
-          variant="default"
-          description={t("dashboard.deposit_liability")}
-        />
-        <StatCard
-          title={t("dashboard.outstanding")}
-          value={formatCurrencyCompact(finance?.totalOutstandingAmount ?? "0")}
-          icon={Clock}
+          title={t("dashboard.ops_invoice_tasks")}
+          value={totalInvoicePending}
+          icon={FileText}
           href="/invoices"
-          variant={parseFloat(finance?.totalOutstandingAmount ?? "0") > 0 ? "warning" : "default"}
-          description={t("dashboard.unpaid_invoices")}
+          accent={totalInvoicePending > 0 ? "amber" : "green"}
         />
         <StatCard
-          title={t("dashboard.overdue")}
-          value={formatCurrencyCompact(finance?.totalOverdueAmount ?? "0")}
-          icon={AlertCircle}
-          href="/invoices"
-          variant={parseFloat(finance?.totalOverdueAmount ?? "0") > 0 ? "danger" : "default"}
-          description={t("dashboard.past_due_invoices")}
-        />
-      </div>
-
-      {/* Finance KPIs - Row 2: Cost & Profit */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Cost (Settled)"
-          value={formatCurrencyCompact((finance as any)?.totalSettledCost ?? "0")}
-          icon={TrendingDown}
-          variant="danger"
-          description="Sum of all settled vendor bill payments"
-        />
-        <StatCard
-          title="Bank Fees"
-          value={formatCurrencyCompact((finance as any)?.totalBankFees ?? "0")}
-          icon={Landmark}
-          variant="default"
-          description="Wire transfer & payment processing fees"
-        />
-        <StatCard
-          title="Estimated Net Profit"
-          value={formatCurrencyCompact(
-            String(parseFloat(finance?.totalRevenue ?? "0") - parseFloat((finance as any)?.totalSettledCost ?? "0") - parseFloat((finance as any)?.totalBankFees ?? "0"))
-          )}
-          icon={TrendingUp}
-          variant={parseFloat(finance?.totalRevenue ?? "0") - parseFloat((finance as any)?.totalSettledCost ?? "0") - parseFloat((finance as any)?.totalBankFees ?? "0") >= 0 ? "success" : "danger"}
-          description="Revenue minus settled costs and bank fees"
-        />
-        <StatCard
-          title="Unsettled Bills"
-          value={formatCurrencyCompact((finance as any)?.totalUnsettledBills ?? "0")}
-          icon={Clock}
+          title={t("dashboard.ops_vendor_bill_tasks")}
+          value={totalVendorBillPending}
+          icon={Package}
           href="/vendor-bills"
-          variant={parseFloat((finance as any)?.totalUnsettledBills ?? "0") > 0 ? "warning" : "default"}
-          description="Approved bills pending payment settlement"
+          accent={totalVendorBillPending > 0 ? "amber" : "green"}
+        />
+        <StatCard
+          title={t("dashboard.ops_hr_tasks")}
+          value={totalHRPending}
+          icon={Users}
+          accent={totalHRPending > 0 ? "amber" : "green"}
+          description={`${t("dashboard.ops_leave_adj_reimb")}`}
         />
       </div>
 
-      {/* Revenue trend chart */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">{t("dashboard.monthly_revenue_12m")}</CardTitle>
-          <p className="text-xs text-muted-foreground mt-0.5">By payment date (Cash Basis) · Excludes deposits & credit notes</p>
-        </CardHeader>
-        <CardContent>
-          {revenueChartData.length > 0 ? (
-            <ChartContainer config={revenueConfig} className="h-[320px] w-full">
-              <BarChart data={revenueChartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={11} />
-                <YAxis tickLine={false} axisLine={false} fontSize={11} width={50} tickFormatter={(v) => formatCurrencyCompact(v)} />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value, name) => (
-                        <span className="font-mono">{formatCurrencyCompact(value as number)}</span>
-                      )}
-                    />
-                  }
-                />
-                <ChartLegend content={<ChartLegendContent />} />
-                <Bar dataKey="totalRevenue" fill="var(--color-totalRevenue)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="serviceFeeRevenue" fill="var(--color-serviceFeeRevenue)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ChartContainer>
-          ) : (
-            <Skeleton className="h-[320px] w-full rounded-lg" />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Invoice count trend */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold">{t("dashboard.monthly_paid_invoice_count")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {revenueChartData.length > 0 ? (
-            <ChartContainer config={invoiceCountConfig} className="h-[220px] w-full">
-              <LineChart data={revenueChartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={11} />
-                <YAxis tickLine={false} axisLine={false} fontSize={11} width={30} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Line type="monotone" dataKey="invoiceCount" stroke="var(--color-invoiceCount)" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-              </LineChart>
-            </ChartContainer>
-          ) : (
-            <Skeleton className="h-[220px] w-full rounded-lg" />
-          )}
-        </CardContent>
-      </Card>
-      {/* Link to full P&L Report */}
-      <Card>
-        <CardContent className="py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold">Profit & Loss Report</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">View detailed P&L breakdown by month, customer, vendor, and category</p>
-            </div>
-            <Link href="/reports/profit-loss">
-              <Button variant="outline" size="sm" className="gap-1.5">
-                <BarChart3 className="w-4 h-4" />View Full Report
-              </Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+      {/* All Action Items */}
+      <PendingActionsCard items={actionItems} t={t} />
     </div>
   );
 }
-// ── Tab: HR & Leave ───
-function HRLeaveTab() {
-  const { t } = useI18n();
-  const { data: hr, isLoading } = trpc.dashboard.hrOverview.useQuery();
 
-  const leaveStatusColors: Record<string, string> = {
-    submitted: "#f59e0b",
-    locked: "#3b82f6",
-    cancelled: "#9ca3af",
-  };
+// ═══════════════════════════════════════════════════════════════════════════════
+// FINANCE WORKSPACE
+// ═══════════════════════════════════════════════════════════════════════════════
+function FinanceWorkspace({ t }: { t: (key: string) => string }) {
+  const { data, isLoading } = trpc.adminDashboard.financeMetrics.useQuery();
 
-  const leavePieData = useMemo(() => {
-    if (!hr) return [];
-    return hr.leaveByStatus.map(s => ({
-      name: t(`status.${s.status}`) || s.status,
-      value: s.count,
-      fill: leaveStatusColors[s.status] || "#9ca3af",
-    }));
-  }, [hr]);
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}
+        </div>
+        <Skeleton className="h-64 rounded-xl" />
+      </div>
+    );
+  }
 
-  const monthlyLeaveData = useMemo(() => {
-    if (!hr) return [];
-    return hr.monthlyLeave.map(m => ({
-      month: formatMonthShort(m.month),
-      count: m.count,
-      totalDays: parseFloat(m.totalDays),
-    }));
-  }, [hr]);
+  const ar = data?.accountsReceivable ?? {};
+  const ap = data?.accountsPayable ?? {};
+  const overdueInvoices = data?.overdueInvoices ?? [];
 
-  const workforceTrendData = useMemo(() => {
-    if (!hr) return [];
-    return hr.monthlyWorkforce.map(m => ({
-      month: formatMonthShort(m.month),
-      active: m.active,
-      newHires: m.newHires,
-      terminations: m.terminations,
-      onLeave: m.onLeave,
-    }));
-  }, [hr]);
+  // Calculate totals
+  const totalAR = Object.values(ar).reduce((s, v) => s + parseFloat(v.amount || "0"), 0);
+  const totalARCount = Object.values(ar).reduce((s, v) => s + v.count, 0);
+  const totalAP = Object.values(ap).reduce((s, v) => s + parseFloat(v.amount || "0"), 0);
+  const totalAPCount = Object.values(ap).reduce((s, v) => s + v.count, 0);
 
-  const leaveChartConfig: ChartConfig = {
-    count: { label: "Leave Records", color: "oklch(0.65 0.19 280)" },
-    totalDays: { label: "Total Days", color: "oklch(0.72 0.17 30)" },
-  };
-
-  const workforceChartConfig: ChartConfig = {
-    active: { label: "Active", color: "oklch(0.65 0.19 150)" },
-    newHires: { label: "New Hires", color: "oklch(0.65 0.19 250)" },
-    terminations: { label: "Terminations", color: "oklch(0.65 0.22 25)" },
-    onLeave: { label: "On Leave", color: "oklch(0.72 0.17 300)" },
-  };
-
-  const adjustmentTypeColors: Record<string, string> = {
-    bonus: "#10b981",
-    allowance: "#3b82f6",
-    reimbursement: "#8b5cf6",
-    deduction: "#ef4444",
-    other: "#9ca3af",
-  };
-
-  // Combine all contract expiry alerts (deduplicated by employeeId, shortest window)
-  const contractAlerts = useMemo(() => {
-    if (!hr) return [];
-    const all30 = hr.contractExpiry30.map(c => ({ ...c, urgency: "critical" as const, days: 30 }));
-    const all60 = hr.contractExpiry60
-      .filter(c => !hr.contractExpiry30.some(c30 => c30.employeeId === c.employeeId))
-      .map(c => ({ ...c, urgency: "warning" as const, days: 60 }));
-    const all90 = hr.contractExpiry90
-      .filter(c => !hr.contractExpiry60.some(c60 => c60.employeeId === c.employeeId))
-      .map(c => ({ ...c, urgency: "info" as const, days: 90 }));
-    return [...all30, ...all60, ...all90];
-  }, [hr]);
-
-  if (isLoading) return <div className="space-y-6">{Array.from({ length: 6 }).map((_, i) => <StatCardSkeleton key={i} />)}<ChartSkeleton /></div>;
+  const actionItems = [
+    {
+      icon: CircleDollarSign,
+      label: `${t("dashboard.fin_unpaid_invoices")} (${formatCurrencyCompact(totalAR)})`,
+      count: totalARCount,
+      href: "/invoices",
+      colorClass: "text-blue-500 bg-blue-500/10",
+    },
+    {
+      icon: CreditCard,
+      label: `${t("dashboard.fin_unsettled_bills")} (${formatCurrencyCompact(totalAP)})`,
+      count: totalAPCount,
+      href: "/vendor-bills",
+      colorClass: "text-amber-500 bg-amber-500/10",
+    },
+    {
+      icon: AlertTriangle,
+      label: t("dashboard.fin_overdue_invoices"),
+      count: overdueInvoices.length,
+      href: "/invoices",
+      colorClass: "text-red-500 bg-red-500/10",
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Workforce KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <StatCard title={t("dashboard.active_employees")} value={hr?.activeEmployees ?? 0} icon={Users} variant="success" href="/employees" />
-        <StatCard title={t("dashboard.on_leave_employees")} value={hr?.onLeaveEmployees ?? 0} icon={CalendarDays} variant={Number(hr?.onLeaveEmployees) > 0 ? "warning" : "default"} href="/employees" />
-        <StatCard title={t("dashboard.new_hires_month")} value={hr?.newHiresThisMonth ?? 0} icon={UserPlus} variant="default" href="/employees" />
-        <StatCard title={t("dashboard.terminations_month")} value={hr?.terminationsThisMonth ?? 0} icon={UserMinus} variant={Number(hr?.terminationsThisMonth) > 0 ? "danger" : "default"} href="/employees" />
-        <StatCard title={t("dashboard.onboarding")} value={hr?.onboardingEmployees ?? 0} icon={Briefcase} variant="default" href="/employees" />
-        <StatCard title={t("dashboard.offboarding")} value={hr?.offboardingEmployees ?? 0} icon={XCircle} variant={Number(hr?.offboardingEmployees) > 0 ? "warning" : "default"} href="/employees" />
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard
+          title={t("dashboard.fin_accounts_receivable")}
+          value={formatCurrencyCompact(totalAR)}
+          icon={CircleDollarSign}
+          href="/invoices"
+          accent={totalAR > 0 ? "blue" : "green"}
+          description={`${totalARCount} ${t("dashboard.fin_invoices")}`}
+        />
+        <StatCard
+          title={t("dashboard.fin_accounts_payable")}
+          value={formatCurrencyCompact(totalAP)}
+          icon={CreditCard}
+          href="/vendor-bills"
+          accent={totalAP > 0 ? "amber" : "green"}
+          description={`${totalAPCount} ${t("dashboard.fin_bills")}`}
+        />
+        <StatCard
+          title={t("dashboard.fin_collected_month")}
+          value={formatCurrencyCompact(data?.settledThisMonth?.totalCollected ?? "0")}
+          icon={TrendingUp}
+          accent="green"
+          description={`${data?.settledThisMonth?.invoiceCount ?? 0} ${t("dashboard.fin_invoices")}`}
+        />
+        <StatCard
+          title={t("dashboard.fin_wallet_balance")}
+          value={formatCurrencyCompact(data?.walletBalance ?? "0")}
+          icon={Wallet}
+          accent="purple"
+          description={`${data?.walletCount ?? 0} ${t("dashboard.fin_wallets")} · ${t("dashboard.fin_frozen")}: ${formatCurrencyCompact(data?.frozenBalance ?? "0")}`}
+        />
       </div>
 
-      {/* Contract Expiry Alerts */}
-      {contractAlerts.length > 0 && (
-        <Card className="border-amber-200 dark:border-amber-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <FileWarning className="w-4 h-4 text-amber-500" />
-              {t("dashboard.contract_expiry_alerts")} ({contractAlerts.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {contractAlerts.map((alert, i) => (
-                <div key={`${alert.employeeId}-${i}`} className="flex items-center gap-3 p-2.5 rounded-lg border hover:bg-muted/30 transition-colors">
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${
-                    alert.urgency === "critical" ? "bg-red-500" :
-                    alert.urgency === "warning" ? "bg-amber-500" : "bg-blue-500"
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <Link href={`/employees`}>
-                      <span className="text-sm font-medium hover:underline cursor-pointer">
-                        {alert.employeeCode} — {alert.employeeName}
-                      </span>
-                    </Link>
-                    <p className="text-xs text-muted-foreground">
-                      {alert.contractType || "Contract"} expires {String(alert.expiryDate)}
-                    </p>
-                  </div>
-                  <Badge variant="outline" className={`text-xs ${
-                    alert.urgency === "critical" ? "border-red-300 text-red-600 dark:text-red-400" :
-                    alert.urgency === "warning" ? "border-amber-300 text-amber-600 dark:text-amber-400" :
-                    "border-blue-300 text-blue-600 dark:text-blue-400"
-                  }`}>
-                    {alert.urgency === "critical" ? "≤30 days" : alert.urgency === "warning" ? "≤60 days" : "≤90 days"}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Workforce Trend + Leave Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">{t("dashboard.monthly_workforce_trend")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {workforceTrendData.length > 0 ? (
-              <ChartContainer config={workforceChartConfig} className="h-[280px] w-full">
-                <AreaChart data={workforceTrendData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="fillActive" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--color-active)" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="var(--color-active)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={11} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={11} width={35} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Area type="monotone" dataKey="active" stroke="var(--color-active)" fill="url(#fillActive)" strokeWidth={2} />
-                  <Line type="monotone" dataKey="newHires" stroke="var(--color-newHires)" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="terminations" stroke="var(--color-terminations)" strokeWidth={2} dot={{ r: 3 }} />
-                </AreaChart>
-              </ChartContainer>
-            ) : (
-              <Skeleton className="h-[280px] w-full rounded-lg" />
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">{t("dashboard.leave_status")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {leavePieData.length > 0 ? (
-              <>
-                <ChartContainer config={{}} className="h-[180px] w-full">
-                  <PieChart>
-                    <Pie data={leavePieData} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} dataKey="value">
-                      {leavePieData.map((entry, i) => (
-                        <Cell key={i} fill={entry.fill} />
-                      ))}
-                    </Pie>
-                    <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                  </PieChart>
-                </ChartContainer>
-                <div className="space-y-1.5 mt-2">
-                  {leavePieData.map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.fill }} />
-                      <span className="flex-1 text-muted-foreground">{item.name}</span>
-                      <span className="font-medium">{item.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <CalendarDays className="w-8 h-8 mb-2 opacity-40" />
-                <p className="text-sm">{t("common.no_data")}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Monthly Leave Trend + Adjustment Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">{t("dashboard.monthly_leave_trend")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {monthlyLeaveData.length > 0 ? (
-              <ChartContainer config={leaveChartConfig} className="h-[250px] w-full">
-                <BarChart data={monthlyLeaveData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={11} />
-                  <YAxis tickLine={false} axisLine={false} fontSize={11} width={30} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Bar dataKey="count" fill="var(--color-count)" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="totalDays" fill="var(--color-totalDays)" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ChartContainer>
-            ) : (
-              <Skeleton className="h-[250px] w-full rounded-lg" />
-            )}
-          </CardContent>
-        </Card>
+        {/* Pending Actions */}
+        <PendingActionsCard items={actionItems} t={t} />
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">{t("dashboard.adjustment_breakdown")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {hr?.adjustmentByType && hr.adjustmentByType.length > 0 ? (
-              <div className="space-y-3">
-                {hr.adjustmentByType.map((item) => (
-                  <div key={item.type} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: adjustmentTypeColors[item.type] || "#9ca3af" }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium capitalize">{item.type}</p>
-                      <p className="text-xs text-muted-foreground">{item.count} records</p>
-                    </div>
-                    <p className="text-sm font-mono font-medium">{formatCurrencyCompact(item.totalAmount)}</p>
-                  </div>
-                ))}
+        {/* Overdue Invoices */}
+        <div className="glass-card p-6">
+          <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-red-500" />
+            {t("dashboard.fin_overdue_list")}
+          </h3>
+          <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+            {overdueInvoices.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
+                <CheckCircle2 className="w-8 h-8 mb-2 text-green-500" />
+                <p className="text-sm">{t("dashboard.fin_no_overdue")}</p>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-                <ArrowUpDown className="w-8 h-8 mb-2 opacity-40" />
-                <p className="text-sm">{t("common.no_data")}</p>
-              </div>
+              overdueInvoices.map((inv) => (
+                <Link key={inv.id} href={`/invoices?id=${inv.id}`}>
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/30 border border-red-200/40 hover:bg-white/50 transition-colors cursor-pointer">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">{inv.invoiceNumber}</p>
+                      <p className="text-xs text-muted-foreground">{t("dashboard.fin_due")}: {formatDate(inv.dueDate)}</p>
+                    </div>
+                    <span className="text-sm font-semibold text-red-600 shrink-0 ml-2">
+                      {inv.currency} {formatCurrencyCompact(inv.total)}
+                    </span>
+                  </div>
+                </Link>
+              ))
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Tab: Activity Log ──
-function ActivityLogTab() {
-  const { t } = useI18n();
-  const { data: recentActivity, isLoading } = trpc.dashboard.recentActivity.useQuery();
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-          <CardTitle className="text-base font-semibold">{t("dashboard.recent_activity")}</CardTitle>
-          <Link href="/audit-logs">
-            <Badge variant="outline" className="cursor-pointer hover:bg-muted text-xs font-normal">
-              View All Audit Logs →
-            </Badge>
-          </Link>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="flex items-start gap-3 py-2">
-                  <Skeleton className="w-2 h-2 rounded-full mt-1.5" />
-                  <div className="flex-1 space-y-1">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-3 w-1/4" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : recentActivity && recentActivity.length > 0 ? (
-            <div className="space-y-1">
-              {recentActivity.map((log) => (
-                <div key={log.id} className="flex items-start gap-3 py-2.5 border-b border-border last:border-0 hover:bg-muted/30 transition-colors rounded px-1">
-                  <div className="mt-1.5">
-                    <div className="w-2 h-2 rounded-full bg-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm">{formatActivitySummary(log)}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{formatDateTime(log.createdAt)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-              <Activity className="w-8 h-8 mb-2 opacity-40" />
-              <p className="text-sm">{t("common.no_data")}</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// ── Main Dashboard ──
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function Dashboard() {
-  const { t } = useI18n();
   const { user } = useAuth();
-  const role = user?.role;
+  const { t, locale } = useI18n();
+  const { data: greeting } = trpc.adminDashboard.greeting.useQuery();
 
-  // Determine default tab
-  const defaultTab = "overview";
+  const userRole = user?.role ?? "user";
+  const isAdminUser = isAdmin(userRole);
 
-  // Build visible tabs
-  const tabs = useMemo(() => {
-    const result: { value: string; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-      { value: "overview", label: t("dashboard.tab_overview"), icon: BarChart3 },
-    ];
-    if (canSeeOperations(role)) {
-      result.push({ value: "operations", label: t("dashboard.tab_operations"), icon: ClipboardList });
-    }
-    if (canSeeFinance(role)) {
-      result.push({ value: "finance", label: t("dashboard.tab_finance"), icon: Wallet });
-    }
-    if (canSeeHR(role)) {
-      result.push({ value: "hr", label: t("dashboard.tab_hr"), icon: CalendarDays });
-    }
-    if (canSeeActivity(role)) {
-      result.push({ value: "activity", label: t("dashboard.tab_activity"), icon: Activity });
-    }
-    return result;
-  }, [role, t]);
+  // Determine which workspaces to show
+  const showSales = isAdminUser || hasAnyRole(userRole, ["sales"]);
+  const showAM = isAdminUser || hasAnyRole(userRole, ["customer_manager"]);
+  const showOps = isAdminUser || hasAnyRole(userRole, ["operations_manager"]);
+  const showFinance = isAdminUser || hasAnyRole(userRole, ["finance_manager"]);
+
+  // Greeting text
+  const greetingText = useMemo(() => {
+    if (!greeting) return "";
+    return locale === "zh" ? greeting.zh : greeting.en;
+  }, [greeting, locale]);
 
   return (
-    <Layout breadcrumb={["GEA", t("nav.dashboard")]}>
-      <div className="p-6 space-y-6 page-enter">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{t("dashboard.title")}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t("dashboard.subtitle")}</p>
+    <Layout>
+      <div className="space-y-8 pb-8">
+        {/* ─── Greeting Header ─── */}
+        <div className="glass-card p-6">
+          <h1 className="text-2xl font-bold tracking-tight">
+            {greetingText || `${t("dashboard.welcome")}, ${user?.name?.split(" ")[0] || ""}!`}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {new Date().toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </p>
         </div>
 
-        {/* Tabs */}
-        <Tabs defaultValue={defaultTab}>
-          <TabsList className="flex-wrap h-auto gap-1">
-            {tabs.map(tab => (
-              <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
-                <tab.icon className="w-3.5 h-3.5" />
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+        {/* ─── Sales Workspace ─── */}
+        {showSales && (
+          <section>
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Target className="w-5 h-5 text-blue-500" />
+              {t("dashboard.workspace_sales")}
+            </h2>
+            <SalesWorkspace t={t} />
+          </section>
+        )}
 
-          <TabsContent value="overview" className="mt-6">
-            <OverviewTab />
-          </TabsContent>
+        {/* ─── AM Workspace ─── */}
+        {showAM && (
+          <section>
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Users className="w-5 h-5 text-emerald-500" />
+              {t("dashboard.workspace_am")}
+            </h2>
+            <AmWorkspace t={t} />
+          </section>
+        )}
 
-          {canSeeOperations(role) && (
-            <TabsContent value="operations" className="mt-6">
-              <OperationsTab />
-            </TabsContent>
-          )}
+        {/* ─── Ops Workspace ─── */}
+        {showOps && (
+          <section>
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-amber-500" />
+              {t("dashboard.workspace_ops")}
+            </h2>
+            <OpsWorkspace t={t} />
+          </section>
+        )}
 
-          {canSeeFinance(role) && (
-            <TabsContent value="finance" className="mt-6">
-              <FinanceTab />
-            </TabsContent>
-          )}
+        {/* ─── Finance Workspace ─── */}
+        {showFinance && (
+          <section>
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-purple-500" />
+              {t("dashboard.workspace_finance")}
+            </h2>
+            <FinanceWorkspace t={t} />
+          </section>
+        )}
 
-          {canSeeHR(role) && (
-            <TabsContent value="hr" className="mt-6">
-              <HRLeaveTab />
-            </TabsContent>
-          )}
-
-          {canSeeActivity(role) && (
-            <TabsContent value="activity" className="mt-6">
-              <ActivityLogTab />
-            </TabsContent>
-          )}
-        </Tabs>
+        {/* ─── Team Pulse + Recent Activity ─── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <TeamPulseCard t={t} />
+          <RecentActivityCard t={t} />
+        </div>
       </div>
     </Layout>
   );
