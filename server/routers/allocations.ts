@@ -25,7 +25,7 @@ import {
   getAllEmployeesMonthlyRevenue,
 } from "../db";
 import { TRPCError } from "@trpc/server";
-import { invoices, employees, vendors, billInvoiceAllocations, vendorBills } from "../../drizzle/schema";
+import { invoices, employees, vendors, billInvoiceAllocations, vendorBills, contractors } from "../../drizzle/schema";
 import { eq, sql, and, desc } from "drizzle-orm";
 
 export const allocationsRouter = router({
@@ -76,17 +76,24 @@ export const allocationsRouter = router({
       return await getVendorProfitAnalysis(input.vendorId);
     }),
 
-  // Create a new allocation (link bill item to invoice via employee)
+  // Create a new allocation (link bill item to invoice via employee or contractor)
   create: financeManagerProcedure
     .input(
       z.object({
         vendorBillId: z.number(),
         vendorBillItemId: z.number().optional(),
         invoiceId: z.number(),
-        employeeId: z.number(),
+        employeeId: z.number().optional(),
+        contractorId: z.number().optional(),
         allocatedAmount: z.string().refine((v) => parseFloat(v) > 0, "Amount must be positive"),
         description: z.string().optional(),
-      })
+      }).refine(
+        (data) => data.employeeId || data.contractorId,
+        { message: "Either employeeId or contractorId must be provided" }
+      ).refine(
+        (data) => !(data.employeeId && data.contractorId),
+        { message: "Cannot specify both employeeId and contractorId" }
+      )
     )
     .mutation(async ({ input, ctx }) => {
       const amount = parseFloat(input.allocatedAmount);
@@ -114,9 +121,15 @@ export const allocationsRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Operational vendor bills should not be allocated to deposit invoices. Use a deposit-type vendor bill instead." });
       }
 
-      // Validate employee exists
-      const empRows = await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1);
-      if (!empRows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
+      // Validate employee or contractor exists
+      if (input.employeeId) {
+        const empRows = await db.select().from(employees).where(eq(employees.id, input.employeeId)).limit(1);
+        if (!empRows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
+      }
+      if (input.contractorId) {
+        const ctrRows = await db.select().from(contractors).where(eq(contractors.id, input.contractorId)).limit(1);
+        if (!ctrRows[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Contractor not found" });
+      }
 
       // Check bill-side allocation cap (warn but allow)
       const billAllocated = await getBillAllocatedTotal(input.vendorBillId);
@@ -128,15 +141,15 @@ export const allocationsRouter = router({
       const invoiceTotal = parseFloat(String(invRows[0].total));
       const newInvoiceCostTotal = invoiceCostTotal + amount;
 
-      // Check employee monthly revenue ceiling (warn but allow)
+      // Check worker monthly revenue ceiling (warn but allow)
       const billMonth = (bill as any).billMonth;
-      let employeeRevenueWarning = false;
-      let employeeRevenue = 0;
-      let employeeAllocatedTotal = 0;
-      if (billMonth) {
+      let workerRevenueWarning = false;
+      let workerRevenue = 0;
+      let workerAllocatedTotal = 0;
+      if (billMonth && input.employeeId) {
         const monthStr = typeof billMonth === 'string' ? billMonth.substring(0, 7) : new Date(billMonth).toISOString().substring(0, 7);
         const revenueData = await getEmployeeMonthlyRevenue(input.employeeId, monthStr);
-        employeeRevenue = revenueData.total;
+        workerRevenue = revenueData.total;
         // Get existing allocations for this employee in this month
         const existingAllocations = await db
           .select({ allocatedAmount: billInvoiceAllocations.allocatedAmount })
@@ -148,22 +161,24 @@ export const allocationsRouter = router({
               sql`strftime('%Y-%m', ${vendorBills.billMonth}) = ${monthStr}`
             )
           );
-        employeeAllocatedTotal = existingAllocations.reduce((sum, a) => sum + parseFloat(String(a.allocatedAmount || '0')), 0);
-        if (employeeRevenue > 0 && (employeeAllocatedTotal + amount) > employeeRevenue) {
-          employeeRevenueWarning = true;
+        workerAllocatedTotal = existingAllocations.reduce((sum, a) => sum + parseFloat(String(a.allocatedAmount || '0')), 0);
+        if (workerRevenue > 0 && (workerAllocatedTotal + amount) > workerRevenue) {
+          workerRevenueWarning = true;
         }
       }
+      // For AOR contractors, revenue ceiling check is not yet implemented (future enhancement)
 
       // Create the allocation
       const allocationId = await createBillInvoiceAllocation({
         vendorBillId: input.vendorBillId,
         vendorBillItemId: input.vendorBillItemId,
         invoiceId: input.invoiceId,
-        employeeId: input.employeeId,
+        employeeId: input.employeeId || null,
+        contractorId: input.contractorId || null,
         allocatedAmount: input.allocatedAmount,
         description: input.description,
         allocatedBy: ctx.user.id,
-      });
+      } as any);
 
       // Recalculate denormalized fields
       await recalcBillAllocation(input.vendorBillId);
@@ -186,9 +201,9 @@ export const allocationsRouter = router({
           billOverAmount: newBillTotal > billTotal ? newBillTotal - billTotal : 0,
           invoiceLoss: newInvoiceCostTotal > invoiceTotal,
           invoiceLossAmount: newInvoiceCostTotal > invoiceTotal ? newInvoiceCostTotal - invoiceTotal : 0,
-          employeeRevenueExceeded: employeeRevenueWarning,
-          employeeRevenue,
-          employeeAllocatedTotal: employeeAllocatedTotal + amount,
+          workerRevenueExceeded: workerRevenueWarning,
+          workerRevenue,
+          workerAllocatedTotal: workerAllocatedTotal + amount,
         },
       };
     }),
@@ -202,7 +217,8 @@ export const allocationsRouter = router({
             vendorBillId: z.number(),
             vendorBillItemId: z.number().optional(),
             invoiceId: z.number(),
-            employeeId: z.number(),
+            employeeId: z.number().optional(),
+            contractorId: z.number().optional(),
             allocatedAmount: z.string(),
             description: z.string().optional(),
           })
@@ -217,8 +233,10 @@ export const allocationsRouter = router({
       for (const alloc of input.allocations) {
         const allocationId = await createBillInvoiceAllocation({
           ...alloc,
+          employeeId: alloc.employeeId || null,
+          contractorId: alloc.contractorId || null,
           allocatedBy: ctx.user.id,
-        });
+        } as any);
         results.push({ id: allocationId });
         if (!affectedBills.includes(alloc.vendorBillId)) affectedBills.push(alloc.vendorBillId);
         if (!affectedInvoices.includes(alloc.invoiceId)) affectedInvoices.push(alloc.invoiceId);
@@ -243,7 +261,8 @@ export const allocationsRouter = router({
         allocatedAmount: z.string().optional(),
         description: z.string().optional(),
         invoiceId: z.number().optional(),
-        employeeId: z.number().optional(),
+        employeeId: z.number().nullable().optional(),
+        contractorId: z.number().nullable().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {

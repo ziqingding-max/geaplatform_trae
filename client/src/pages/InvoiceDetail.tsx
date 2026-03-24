@@ -175,6 +175,10 @@ export default function InvoiceDetail() {
     { limit: 500, customerId: invoice?.customerId },
     { enabled: !!invoice?.customerId }
   );
+  const { data: contractorsData } = trpc.contractors.list.useQuery(
+    { limit: 500 },
+    { enabled: !!invoice?.customerId }
+  );
 
   // Exchange rate reference (finance manager only)
   const isFinanceManager = user?.role?.includes("admin") || user?.role?.includes("finance_manager");
@@ -260,6 +264,19 @@ export default function InvoiceDetail() {
     employeeList.forEach((e: any) => { m[e.id] = e; });
     return m;
   }, [employeeList]);
+
+  const contractorList = (contractorsData as any)?.data || [];
+  const contractorMap = useMemo(() => {
+    const m: Record<number, any> = {};
+    contractorList.forEach((c: any) => { m[c.id] = c; });
+    return m;
+  }, [contractorList]);
+
+  // Filter contractors by customerId for the current invoice
+  const filteredContractorList = useMemo(() => {
+    if (!invoice?.customerId) return [];
+    return contractorList.filter((c: any) => c.customerId === invoice.customerId);
+  }, [contractorList, invoice?.customerId]);
 
   // ── Loading / Not Found ──
   if (isLoading) {
@@ -547,7 +564,7 @@ export default function InvoiceDetail() {
                     <TableHeader>
                       <TableRow className="bg-muted/30">
                         <TableHead className="pl-6 min-w-[240px]">Item</TableHead>
-                        <TableHead>Employee</TableHead>
+                        <TableHead>Worker</TableHead>
                         <TableHead className="text-center">Currency</TableHead>
                         <TableHead className="text-right">Qty</TableHead>
                         <TableHead className="text-right">Rate</TableHead>
@@ -576,6 +593,13 @@ export default function InvoiceDetail() {
                       ) : (
                         (items || []).map((item: any) => {
                           const emp = item.employeeId ? employeeMap[item.employeeId] : null;
+                          const ctr = item.contractorId ? contractorMap[item.contractorId] : null;
+                          const workerName = emp
+                            ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim()
+                            : ctr
+                              ? `${ctr.firstName || ""} ${ctr.lastName || ""}`.trim()
+                              : null;
+                          const workerType = emp ? "EOR" : ctr ? "AOR" : null;
                           return (
                             <TableRow key={item.id} className="group">
                               <TableCell className="pl-6">
@@ -589,7 +613,16 @@ export default function InvoiceDetail() {
                                 </div>
                               </TableCell>
                               <TableCell className="text-sm">
-                                {emp ? `${emp.firstName || ""} ${emp.lastName || ""}`.trim() : (item.employeeId ? `#${item.employeeId}` : "—")}
+                                {workerName ? (
+                                  <span className="flex items-center gap-1.5">
+                                    {workerName}
+                                    {workerType && (
+                                      <Badge variant="secondary" className={`text-[10px] h-4 px-1 ${workerType === 'AOR' ? 'bg-orange-50 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
+                                        {workerType}
+                                      </Badge>
+                                    )}
+                                  </span>
+                                ) : (item.employeeId ? `#${item.employeeId}` : item.contractorId ? `#CTR-${item.contractorId}` : "\u2014")}
                               </TableCell>
                               <TableCell className="text-center text-sm font-mono">
                                 {item.localCurrency || invoice.currency || "USD"}
@@ -864,7 +897,9 @@ export default function InvoiceDetail() {
           item={editingItem}
           invoiceId={invoiceId}
           invoiceCurrency={invoice.currency || "USD"}
+          invoiceType={invoice.invoiceType || "manual"}
           employees={employeeList}
+          contractors={filteredContractorList}
           onAdd={(data) => {
             addItemMutation.mutate(data);
             setLineItemDialogOpen(false);
@@ -1322,36 +1357,51 @@ function EditNotesDialog({ open, onOpenChange, invoice, canEditExternal, onSave,
 }
 
 /* ── Line Item Dialog (Add / Edit) ── */
-function LineItemDialog({ open, onOpenChange, item, invoiceId, invoiceCurrency, employees, onAdd, onUpdate, isPending }: {
+function LineItemDialog({ open, onOpenChange, item, invoiceId, invoiceCurrency, invoiceType, employees, contractors, onAdd, onUpdate, isPending }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   item: any | null; // null = add new
   invoiceId: number;
   invoiceCurrency: string;
+  invoiceType: string;
   employees: any[];
+  contractors: any[];
   onAdd: (data: any) => void;
   onUpdate: (data: any) => void;
   isPending: boolean;
 }) {
   const isEdit = !!item;
+  // Determine which worker types to show based on invoiceType
+  const showEmployees = invoiceType === "manual" || invoiceType === "monthly" || invoiceType === "deposit" || invoiceType === "visa_service";
+  const showContractors = invoiceType === "manual" || invoiceType === "monthly_aor";
+  const workerLabel = showEmployees && showContractors ? "Worker (optional)" : showContractors ? "Contractor (optional)" : "Employee (optional)";
+
   const [form, setForm] = useState({
     itemType: "employment_cost",
     description: "",
     localCurrency: invoiceCurrency,
-    employeeId: undefined as number | undefined,
+    workerValue: "none" as string, // "none", "emp-123", "con-456"
     quantity: "1",
     unitPrice: "0",
     vatRate: "0",
   });
 
+  // Parse workerValue into employeeId / contractorId
+  const parseWorkerValue = (val: string) => {
+    if (val.startsWith("emp-")) return { employeeId: parseInt(val.substring(4)), contractorId: undefined };
+    if (val.startsWith("con-")) return { employeeId: undefined, contractorId: parseInt(val.substring(4)) };
+    return { employeeId: undefined, contractorId: undefined };
+  };
+
   useEffect(() => {
     if (open) {
       if (item) {
+        const wv = item.employeeId ? `emp-${item.employeeId}` : item.contractorId ? `con-${item.contractorId}` : "none";
         setForm({
           itemType: item.itemType || "employment_cost",
           description: item.description || "",
           localCurrency: item.localCurrency || invoiceCurrency,
-          employeeId: item.employeeId || undefined,
+          workerValue: wv,
           quantity: item.quantity?.toString() || "1",
           unitPrice: item.unitPrice?.toString() || "0",
           vatRate: item.vatRate?.toString() || "0",
@@ -1361,7 +1411,7 @@ function LineItemDialog({ open, onOpenChange, item, invoiceId, invoiceCurrency, 
           itemType: "employment_cost",
           description: "",
           localCurrency: invoiceCurrency,
-          employeeId: undefined,
+          workerValue: "none",
           quantity: "1",
           unitPrice: "0",
           vatRate: "0",
@@ -1376,6 +1426,7 @@ function LineItemDialog({ open, onOpenChange, item, invoiceId, invoiceCurrency, 
 
   const handleSave = () => {
     const amount = baseAmount.toFixed(2);
+    const { employeeId, contractorId } = parseWorkerValue(form.workerValue);
     if (isEdit) {
       onUpdate({
         id: item.id,
@@ -1384,7 +1435,8 @@ function LineItemDialog({ open, onOpenChange, item, invoiceId, invoiceCurrency, 
           itemType: form.itemType,
           description: form.description,
           localCurrency: form.localCurrency,
-          employeeId: form.employeeId || null,
+          employeeId: employeeId || null,
+          contractorId: contractorId || null,
           quantity: form.quantity,
           unitPrice: form.unitPrice,
           amount,
@@ -1398,7 +1450,8 @@ function LineItemDialog({ open, onOpenChange, item, invoiceId, invoiceCurrency, 
         itemType: form.itemType,
         description: form.description,
         localCurrency: form.localCurrency,
-        employeeId: form.employeeId,
+        employeeId: employeeId,
+        contractorId: contractorId,
         quantity: form.quantity,
         unitPrice: form.unitPrice,
         amount,
@@ -1448,16 +1501,41 @@ function LineItemDialog({ open, onOpenChange, item, invoiceId, invoiceCurrency, 
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Employee (optional)</Label>
-              <Select value={form.employeeId?.toString() || "none"} onValueChange={(v) => setForm(prev => ({ ...prev, employeeId: v === "none" ? undefined : parseInt(v) }))}>
+              <Label>{workerLabel}</Label>
+              <Select value={form.workerValue} onValueChange={(v) => setForm(prev => ({ ...prev, workerValue: v }))}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
-                  {employees.map((e: any) => (
-                    <SelectItem key={e.id} value={e.id.toString()}>
-                      {`${e.firstName || ""} ${e.lastName || ""}`.trim() || `#${e.id}`}
-                    </SelectItem>
-                  ))}
+                  {showEmployees && employees.length > 0 && (
+                    <>
+                      {(showEmployees && showContractors) && (
+                        <SelectItem value="__emp_header" disabled className="text-xs font-bold text-muted-foreground bg-muted/30">
+                          ── EOR Employees ──
+                        </SelectItem>
+                      )}
+                      {employees.map((e: any) => (
+                        <SelectItem key={`emp-${e.id}`} value={`emp-${e.id}`}>
+                          {`${e.firstName || ""} ${e.lastName || ""}`.trim() || `#${e.id}`}
+                          {(showEmployees && showContractors) ? " (EOR)" : ""}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  {showContractors && contractors.length > 0 && (
+                    <>
+                      {(showEmployees && showContractors) && (
+                        <SelectItem value="__ctr_header" disabled className="text-xs font-bold text-muted-foreground bg-muted/30">
+                          ── AOR Contractors ──
+                        </SelectItem>
+                      )}
+                      {contractors.map((c: any) => (
+                        <SelectItem key={`con-${c.id}`} value={`con-${c.id}`}>
+                          {`${c.firstName || ""} ${c.lastName || ""}`.trim() || `#${c.id}`}
+                          {(showEmployees && showContractors) ? " (AOR)" : ""}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>

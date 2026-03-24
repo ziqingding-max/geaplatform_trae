@@ -187,15 +187,25 @@ export async function generateCreditNote(params: {
       throw new Error(`Cannot create credit note for a ${originalInvoice.invoiceType} invoice.`);
     }
 
-    // 2b. If original invoice is a deposit, verify the employee is terminated
+    // 2b. If original invoice is a deposit, verify the employee/contractor is terminated
     if (originalInvoice.invoiceType === "deposit") {
       const originalItems = await listInvoiceItemsByInvoice(params.originalInvoiceId);
-      const depositItem = originalItems.find(item => item.employeeId);
-      if (depositItem?.employeeId) {
+      // Check for EOR employee deposit
+      const depositItemWithEmployee = originalItems.find(item => item.employeeId);
+      if (depositItemWithEmployee?.employeeId) {
         const { getEmployeeById: getEmp } = await import("../db");
-        const employee = await getEmp(depositItem.employeeId);
+        const employee = await getEmp(depositItemWithEmployee.employeeId);
         if (employee && employee.status !== "terminated") {
           throw new Error("Employee must be in 'terminated' status before creating a credit note for a deposit invoice");
+        }
+      }
+      // Check for AOR contractor deposit
+      const depositItemWithContractor = originalItems.find(item => (item as any).contractorId);
+      if (depositItemWithContractor && (depositItemWithContractor as any).contractorId) {
+        const { getContractorById } = await import("./db/contractorService");
+        const contractor = await getContractorById((depositItemWithContractor as any).contractorId);
+        if (contractor && contractor.status !== "terminated") {
+          throw new Error("Contractor must be in 'terminated' status before creating a credit note for a deposit invoice");
         }
       }
 
@@ -291,6 +301,7 @@ export async function generateCreditNote(params: {
       creditItems = originalItems.map((item) => ({
         invoiceId: 0, // Will be set after invoice creation
         employeeId: item.employeeId,
+        contractorId: (item as any).contractorId || undefined, // Preserve AOR contractor association
         description: `Credit: ${item.description}`,
         quantity: item.quantity?.toString() || "1",
         unitPrice: (-Math.abs(parseFloat(item.unitPrice?.toString() ?? "0"))).toFixed(2),

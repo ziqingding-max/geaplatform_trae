@@ -59,6 +59,8 @@ interface LineItem {
   itemType: string;
   relatedEmployeeId?: string;
   employeeName?: string;
+  relatedContractorId?: string;
+  contractorName?: string;
   relatedCountryCode?: string;
   matchConfidence?: number;
   matchReason?: string;
@@ -235,7 +237,7 @@ function LineItemsEditor({ items, onChange, t, showConfidence = false }: {
                   <TableHead className="text-xs text-right w-[80px]">{t("vendorBills.lineItems.quantityHeader")}</TableHead>
                   <TableHead className="text-xs text-right w-[120px]">{t("vendorBills.lineItems.unitPriceHeader")}</TableHead>
                   <TableHead className="text-xs text-right w-[120px]">{t("vendorBills.lineItems.amountHeader")}</TableHead>
-                  {showConfidence && <TableHead className="text-xs w-[200px]">{t("vendorBills.lineItems.employeeHeader")}</TableHead>}
+                  {showConfidence && <TableHead className="text-xs w-[200px]">Worker</TableHead>}
                   {showConfidence && <TableHead className="text-xs text-center w-[70px]">{t("vendorBills.lineItems.confidenceHeader")}</TableHead>}
                   <TableHead className="w-[44px]"></TableHead>
                 </TableRow>
@@ -243,8 +245,9 @@ function LineItemsEditor({ items, onChange, t, showConfidence = false }: {
               <TableBody>
                 {items.map((item, idx) => {
                   const mc = item.matchConfidence ?? item.confidence ?? 0;
+                  const hasWorkerMatch = !!(item.relatedEmployeeId || item.relatedContractorId);
                   const rowBg = showConfidence
-                    ? mc >= 85 ? "bg-emerald-50/50" : mc >= 50 ? "bg-amber-50/50" : item.relatedEmployeeId ? "bg-red-50/50" : ""
+                    ? mc >= 85 ? "bg-emerald-50/50" : mc >= 50 ? "bg-amber-50/50" : hasWorkerMatch ? "bg-red-50/50" : ""
                     : "";
                   return (
                     <TableRow key={idx} className={rowBg}>
@@ -295,11 +298,16 @@ function LineItemsEditor({ items, onChange, t, showConfidence = false }: {
                         <TableCell className="p-1.5">
                           <div className="flex items-center gap-1.5">
                             <span className="text-sm truncate max-w-[130px]">
-                              {item.employeeName || "\u2014"}
+                              {item.employeeName || item.contractorName || "\u2014"}
                             </span>
+                            {(item.employeeName || item.contractorName) && (
+                              <Badge variant="secondary" className={`text-[10px] h-4 px-1 flex-shrink-0 ${item.contractorName ? 'bg-orange-50 text-orange-700' : 'bg-blue-50 text-blue-700'}`}>
+                                {item.contractorName ? 'AOR' : 'EOR'}
+                              </Badge>
+                            )}
                             {mc >= 85 && <span className="text-emerald-600 text-xs flex-shrink-0">●</span>}
                             {mc >= 50 && mc < 85 && <span className="text-amber-500 text-xs flex-shrink-0">●</span>}
-                            {item.relatedEmployeeId && mc < 50 && <span className="text-red-500 text-xs flex-shrink-0">●</span>}
+                            {hasWorkerMatch && mc < 50 && <span className="text-red-500 text-xs flex-shrink-0">●</span>}
                             {item.matchReason && (
                               <TooltipProvider delayDuration={200}>
                                 <Tooltip>
@@ -423,7 +431,7 @@ function AllocationSuggestions({ allocations, onChange, t }: {
             <TableHeader>
               <TableRow className="bg-muted/30">
                 <TableHead className="text-xs w-10">{t("vendorBills.review.useHeader")}</TableHead>
-                <TableHead className="text-xs">{t("vendorBills.lineItems.employeeHeader")}</TableHead>
+                <TableHead className="text-xs">Worker</TableHead>
                 <TableHead className="text-xs">{t("vendorBills.review.invoiceHeader")}</TableHead>
                 <TableHead className="text-xs text-right w-[140px]">{t("vendorBills.lineItems.amountHeader")}</TableHead>
                 <TableHead className="text-xs">{t("vendorBills.review.reasonHeader")}</TableHead>
@@ -441,7 +449,11 @@ function AllocationSuggestions({ allocations, onChange, t }: {
                       }}
                       className="h-4 w-4 rounded border-gray-300" />
                   </TableCell>
-                  <TableCell className="text-xs">ID: {alloc.employeeId}</TableCell>
+                  <TableCell className="text-xs">
+                    {alloc.employeeId ? `Employee ID: ${alloc.employeeId}` : alloc.contractorId ? `Contractor ID: ${alloc.contractorId}` : "\u2014"}
+                    {alloc.employeeId && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-blue-50 text-blue-700 ml-1">EOR</Badge>}
+                    {alloc.contractorId && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-orange-50 text-orange-700 ml-1">AOR</Badge>}
+                  </TableCell>
                   <TableCell className="text-xs">ID: {alloc.invoiceId}</TableCell>
                   <TableCell className="p-1.5">
                     <Input type="number" step="0.01" value={alloc.allocatedAmount} onChange={(e) => {
@@ -691,6 +703,8 @@ export default function AnalyzeBill() {
           itemType: li.itemType || "other",
           relatedEmployeeId: li.relatedEmployeeId?.toString() || "",
           employeeName: li.employeeName || "",
+          relatedContractorId: li.relatedContractorId?.toString() || "",
+          contractorName: li.contractorName || "",
           relatedCountryCode: li.relatedCountryCode || "",
           matchConfidence: li.matchConfidence || 0,
           matchReason: li.matchReason || "",
@@ -740,7 +754,8 @@ export default function AnalyzeBill() {
           })),
           allocations: allocations.filter((a) => a.enabled).map((a) => ({
             invoiceId: a.invoiceId,
-            employeeId: a.employeeId,
+            ...(a.employeeId ? { employeeId: a.employeeId } : {}),
+            ...(a.contractorId ? { contractorId: a.contractorId } : {}),
             allocatedAmount: a.allocatedAmount?.toString(),
             description: a.reason || "",
           })),
