@@ -14,7 +14,7 @@
  */
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { protectedProcedure } from "../procedures";
+import { protectedProcedure, adminProcedure } from "../procedures";
 import { getDb } from "../db";
 import {
   salesLeads,
@@ -34,8 +34,13 @@ import {
   customerFrozenWallets,
   auditLogs,
   contractors,
+  countriesConfig,
+  customerPricing,
+  billingEntities,
+  vendors,
+  contractorContracts,
 } from "../../drizzle/schema";
-import { eq, and, or, sql, gte, lte, count, sum, desc, inArray, ne, lt, isNull } from "drizzle-orm";
+import { eq, and, or, sql, gte, lte, count, sum, desc, inArray, ne, lt, isNull, isNotNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { parseRoles, hasAnyRole, isAdmin } from "../../shared/roles";
 
@@ -700,4 +705,253 @@ export const adminDashboardRouter = router({
 
       return logs;
     }),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SYSTEM HEALTH — Admin-only monitoring dashboard
+  // ═══════════════════════════════════════════════════════════════════════════
+  systemHealth: adminProcedure.query(async () => {
+    const db = getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not initialized" });
+
+    const todayStr = today();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const thirtyDaysAgoMs = thirtyDaysAgo.getTime();
+
+    // ── 1. Orphan Employees ──
+    // Employees whose customer doesn't exist or is terminated, but employee is still active-ish
+    const orphanEmployees = await db
+      .select({
+        id: employees.id,
+        firstName: employees.firstName,
+        lastName: employees.lastName,
+        status: employees.status,
+        customerId: employees.customerId,
+        customerName: customers.companyName,
+        customerStatus: customers.status,
+      })
+      .from(employees)
+      .leftJoin(customers, eq(employees.customerId, customers.id))
+      .where(
+        and(
+          inArray(employees.status, ["pending_review", "documents_incomplete", "onboarding", "contract_signed", "active", "on_leave"]),
+          or(
+            isNull(customers.id),
+            eq(customers.status, "terminated")
+          )
+        )
+      );
+
+    // ── 2. Active Customers Missing Billing Entity ──
+    const customersMissingBillingEntity = await db
+      .select({
+        id: customers.id,
+        companyName: customers.companyName,
+      })
+      .from(customers)
+      .where(
+        and(
+          eq(customers.status, "active"),
+          isNull(customers.billingEntityId)
+        )
+      );
+
+    // ── 3. Active Customers Missing Pricing ──
+    // Active customers that have NO active customerPricing record at all
+    const customersWithPricing = db
+      .select({ customerId: customerPricing.customerId })
+      .from(customerPricing)
+      .where(eq(customerPricing.isActive, true))
+      .groupBy(customerPricing.customerId);
+
+    const customersMissingPricing = await db
+      .select({
+        id: customers.id,
+        companyName: customers.companyName,
+      })
+      .from(customers)
+      .where(
+        and(
+          eq(customers.status, "active"),
+          sql`${customers.id} NOT IN (SELECT ${customerPricing.customerId} FROM ${customerPricing} WHERE ${customerPricing.isActive} = 1)`
+        )
+      );
+
+    // ── 4. Countries Missing Rate Config ──
+    // a) isActive = true but standardEorRate is NULL
+    const countriesMissingRate = await db
+      .select({
+        id: countriesConfig.id,
+        countryCode: countriesConfig.countryCode,
+        countryName: countriesConfig.countryName,
+      })
+      .from(countriesConfig)
+      .where(
+        and(
+          eq(countriesConfig.isActive, true),
+          isNull(countriesConfig.standardEorRate)
+        )
+      );
+
+    // b) Employees in countries not in countriesConfig at all
+    const unmappedCountries = await db
+      .select({
+        country: employees.country,
+        employeeCount: count(employees.id),
+      })
+      .from(employees)
+      .where(
+        and(
+          inArray(employees.status, ["active", "onboarding", "contract_signed"]),
+          sql`${employees.country} NOT IN (SELECT ${countriesConfig.countryCode} FROM ${countriesConfig})`
+        )
+      )
+      .groupBy(employees.country);
+
+    // ── 5. Expired Employee Contracts (still marked as signed) ──
+    const expiredEmployeeContracts = await db
+      .select({
+        id: employeeContracts.id,
+        employeeId: employeeContracts.employeeId,
+        expiryDate: employeeContracts.expiryDate,
+        empFirstName: employees.firstName,
+        empLastName: employees.lastName,
+      })
+      .from(employeeContracts)
+      .leftJoin(employees, eq(employeeContracts.employeeId, employees.id))
+      .where(
+        and(
+          eq(employeeContracts.status, "signed"),
+          isNotNull(employeeContracts.expiryDate),
+          lt(employeeContracts.expiryDate, todayStr)
+        )
+      );
+
+    // ── 6. Expired Contractor Contracts (still marked as signed) ──
+    const expiredContractorContracts = await db
+      .select({
+        id: contractorContracts.id,
+        contractorId: contractorContracts.contractorId,
+        expiryDate: contractorContracts.expiryDate,
+        ctrFirstName: contractors.firstName,
+        ctrLastName: contractors.lastName,
+      })
+      .from(contractorContracts)
+      .leftJoin(contractors, eq(contractorContracts.contractorId, contractors.id))
+      .where(
+        and(
+          eq(contractorContracts.status, "signed"),
+          isNotNull(contractorContracts.expiryDate),
+          lt(contractorContracts.expiryDate, todayStr)
+        )
+      );
+
+    // ── 7. Stale Draft Documents (>30 days old) ──
+    const staleDraftPayrolls = await db
+      .select({ cnt: count(payrollRuns.id) })
+      .from(payrollRuns)
+      .where(
+        and(
+          eq(payrollRuns.status, "draft"),
+          lt(payrollRuns.createdAt, new Date(thirtyDaysAgoMs))
+        )
+      );
+
+    const staleDraftInvoices = await db
+      .select({ cnt: count(invoices.id) })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.status, "draft"),
+          lt(invoices.createdAt, new Date(thirtyDaysAgoMs))
+        )
+      );
+
+    const staleDraftVendorBills = await db
+      .select({ cnt: count(vendorBills.id) })
+      .from(vendorBills)
+      .where(
+        and(
+          eq(vendorBills.status, "draft"),
+          lt(vendorBills.createdAt, new Date(thirtyDaysAgoMs))
+        )
+      );
+
+    // ── 8. Negative Wallet Balances ──
+    const negativeWallets = await db
+      .select({
+        id: customerWallets.id,
+        customerId: customerWallets.customerId,
+        currency: customerWallets.currency,
+        balance: customerWallets.balance,
+        companyName: customers.companyName,
+      })
+      .from(customerWallets)
+      .leftJoin(customers, eq(customerWallets.customerId, customers.id))
+      .where(sql`CAST(${customerWallets.balance} AS REAL) < 0`);
+
+    // ── 9. Expired Onboarding Invites (still pending) ──
+    const expiredInvites = await db
+      .select({ cnt: count(onboardingInvites.id) })
+      .from(onboardingInvites)
+      .where(
+        and(
+          eq(onboardingInvites.status, "pending"),
+          lt(onboardingInvites.expiresAt, new Date())
+        )
+      );
+
+    // ── Aggregate into health items ──
+    return {
+      orphanEmployees: orphanEmployees.map(e => ({
+        id: e.id,
+        name: `${e.firstName} ${e.lastName}`,
+        status: e.status,
+        customerId: e.customerId,
+        customerName: e.customerName ?? null,
+        customerStatus: e.customerStatus ?? null,
+      })),
+      customersMissingBillingEntity: customersMissingBillingEntity.map(c => ({
+        id: c.id,
+        companyName: c.companyName,
+      })),
+      customersMissingPricing: customersMissingPricing.map(c => ({
+        id: c.id,
+        companyName: c.companyName,
+      })),
+      countriesMissingRate: countriesMissingRate.map(c => ({
+        countryCode: c.countryCode,
+        countryName: c.countryName,
+      })),
+      unmappedCountries: unmappedCountries.map(c => ({
+        country: c.country,
+        employeeCount: c.employeeCount,
+      })),
+      expiredEmployeeContracts: expiredEmployeeContracts.map(c => ({
+        id: c.id,
+        employeeId: c.employeeId,
+        employeeName: c.empFirstName && c.empLastName ? `${c.empFirstName} ${c.empLastName}` : `Employee #${c.employeeId}`,
+        expiryDate: c.expiryDate,
+      })),
+      expiredContractorContracts: expiredContractorContracts.map(c => ({
+        id: c.id,
+        contractorId: c.contractorId,
+        contractorName: c.ctrFirstName && c.ctrLastName ? `${c.ctrFirstName} ${c.ctrLastName}` : `Contractor #${c.contractorId}`,
+        expiryDate: c.expiryDate,
+      })),
+      staleDrafts: {
+        payrolls: staleDraftPayrolls[0]?.cnt ?? 0,
+        invoices: staleDraftInvoices[0]?.cnt ?? 0,
+        vendorBills: staleDraftVendorBills[0]?.cnt ?? 0,
+      },
+      negativeWallets: negativeWallets.map(w => ({
+        id: w.id,
+        customerId: w.customerId,
+        companyName: w.companyName ?? `Customer #${w.customerId}`,
+        currency: w.currency,
+        balance: w.balance,
+      })),
+      expiredInvitesCount: expiredInvites[0]?.cnt ?? 0,
+    };
+  }),
 });

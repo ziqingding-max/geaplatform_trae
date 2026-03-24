@@ -32,7 +32,8 @@ import {
   ArrowUpDown, Package, Star, PartyPopper, Cake, Award,
   Target, Megaphone, HandshakeIcon, CircleDollarSign,
   ClipboardList, CreditCard, AlertTriangle, BarChart3,
-  TrendingDown, Landmark,
+  TrendingDown, Landmark, HeartPulse, XCircle, MapPin,
+  FileWarning, Timer, WalletCards, Mail,
 } from "lucide-react";
 
 // ─── Glass Stat Card ─────────────────────────────────────────────────────────
@@ -802,6 +803,239 @@ function FinanceWorkspace({ t }: { t: (key: string) => string }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// SYSTEM HEALTH CARD — Admin only
+// ═══════════════════════════════════════════════════════════════════════════════
+type HealthSeverity = "critical" | "warning" | "ok";
+
+function HealthIndicator({ severity, count, label, children }: {
+  severity: HealthSeverity;
+  count: number;
+  label: string;
+  children?: React.ReactNode;
+}) {
+  const colors = {
+    critical: "bg-red-100 text-red-700 border-red-200",
+    warning: "bg-amber-50 text-amber-700 border-amber-200",
+    ok: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  };
+  const dotColors = {
+    critical: "bg-red-500",
+    warning: "bg-amber-500",
+    ok: "bg-emerald-500",
+  };
+  return (
+    <div className={cn("rounded-lg border p-3", colors[severity])}>
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center gap-2">
+          <span className={cn("w-2 h-2 rounded-full", dotColors[severity])} />
+          <span className="text-sm font-medium">{label}</span>
+        </div>
+        <Badge variant={severity === "ok" ? "outline" : "destructive"} className="text-xs">
+          {count}
+        </Badge>
+      </div>
+      {children && count > 0 && (
+        <div className="mt-2 text-xs space-y-1 max-h-32 overflow-y-auto">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SystemHealthCard({ t }: { t: (key: string) => string }) {
+  const { data, isLoading } = trpc.adminDashboard.systemHealth.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000, // 5 min cache
+  });
+
+  if (isLoading) {
+    return (
+      <div className="glass-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <HeartPulse className="w-5 h-5 text-red-500" />
+          <h3 className="font-semibold">{t("dashboard.health_title")}</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 rounded-lg" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const orphanCount = data.orphanEmployees.length;
+  const missingBillingCount = data.customersMissingBillingEntity.length;
+  const missingPricingCount = data.customersMissingPricing.length;
+  const countryIssueCount = data.countriesMissingRate.length + data.unmappedCountries.length;
+  const expiredEmpContractCount = data.expiredEmployeeContracts.length;
+  const expiredCtrContractCount = data.expiredContractorContracts.length;
+  const staleDraftTotal = data.staleDrafts.payrolls + data.staleDrafts.invoices + data.staleDrafts.vendorBills;
+  const negativeWalletCount = data.negativeWallets.length;
+  const expiredInviteCount = data.expiredInvitesCount;
+
+  const totalIssues = orphanCount + missingBillingCount + missingPricingCount + countryIssueCount
+    + expiredEmpContractCount + expiredCtrContractCount + staleDraftTotal + negativeWalletCount + expiredInviteCount;
+
+  const overallSeverity: HealthSeverity = (orphanCount > 0 || missingBillingCount > 0 || negativeWalletCount > 0)
+    ? "critical"
+    : totalIssues > 0 ? "warning" : "ok";
+
+  const overallColors = {
+    critical: "border-red-200 bg-red-50/50",
+    warning: "border-amber-200 bg-amber-50/30",
+    ok: "border-emerald-200 bg-emerald-50/30",
+  };
+
+  return (
+    <div className={cn("glass-card p-6 border", overallColors[overallSeverity])}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <HeartPulse className={cn("w-5 h-5", overallSeverity === "ok" ? "text-emerald-500" : overallSeverity === "critical" ? "text-red-500" : "text-amber-500")} />
+          <h3 className="font-semibold">{t("dashboard.health_title")}</h3>
+        </div>
+        <Badge variant={overallSeverity === "ok" ? "outline" : "destructive"} className="text-xs">
+          {totalIssues === 0 ? t("dashboard.health_all_clear") : `${totalIssues} ${t("dashboard.health_issues")}`}
+        </Badge>
+      </div>
+
+      {totalIssues === 0 ? (
+        <div className="flex items-center justify-center py-6 text-emerald-600">
+          <CheckCircle2 className="w-8 h-8 mr-3" />
+          <span className="text-lg font-medium">{t("dashboard.health_all_good")}</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {/* 1. Orphan Employees */}
+          <HealthIndicator
+            severity={orphanCount > 0 ? "critical" : "ok"}
+            count={orphanCount}
+            label={t("dashboard.health_orphan_employees")}
+          >
+            {data.orphanEmployees.slice(0, 5).map(e => (
+              <div key={e.id} className="flex justify-between">
+                <span>{e.name}</span>
+                <span className="opacity-70">{e.customerStatus === "terminated" ? t("dashboard.health_customer_terminated") : t("dashboard.health_customer_missing")}</span>
+              </div>
+            ))}
+            {orphanCount > 5 && <div className="opacity-60">+{orphanCount - 5} more...</div>}
+          </HealthIndicator>
+
+          {/* 2. Missing Billing Entity */}
+          <HealthIndicator
+            severity={missingBillingCount > 0 ? "critical" : "ok"}
+            count={missingBillingCount}
+            label={t("dashboard.health_missing_billing")}
+          >
+            {data.customersMissingBillingEntity.slice(0, 5).map(c => (
+              <div key={c.id}>{c.companyName}</div>
+            ))}
+            {missingBillingCount > 5 && <div className="opacity-60">+{missingBillingCount - 5} more...</div>}
+          </HealthIndicator>
+
+          {/* 3. Missing Pricing */}
+          <HealthIndicator
+            severity={missingPricingCount > 0 ? "warning" : "ok"}
+            count={missingPricingCount}
+            label={t("dashboard.health_missing_pricing")}
+          >
+            {data.customersMissingPricing.slice(0, 5).map(c => (
+              <div key={c.id}>{c.companyName}</div>
+            ))}
+            {missingPricingCount > 5 && <div className="opacity-60">+{missingPricingCount - 5} more...</div>}
+          </HealthIndicator>
+
+          {/* 4. Country Config Issues */}
+          <HealthIndicator
+            severity={countryIssueCount > 0 ? "warning" : "ok"}
+            count={countryIssueCount}
+            label={t("dashboard.health_country_issues")}
+          >
+            {data.countriesMissingRate.map(c => (
+              <div key={c.countryCode}>{c.countryName} — {t("dashboard.health_no_rate")}</div>
+            ))}
+            {data.unmappedCountries.map(c => (
+              <div key={c.country}>{c.country} — {c.employeeCount} {t("dashboard.health_unmapped")}</div>
+            ))}
+          </HealthIndicator>
+
+          {/* 5. Expired Employee Contracts */}
+          <HealthIndicator
+            severity={expiredEmpContractCount > 0 ? "warning" : "ok"}
+            count={expiredEmpContractCount}
+            label={t("dashboard.health_expired_emp_contracts")}
+          >
+            {data.expiredEmployeeContracts.slice(0, 5).map(c => (
+              <div key={c.id} className="flex justify-between">
+                <span>{c.employeeName}</span>
+                <span className="opacity-70">{c.expiryDate}</span>
+              </div>
+            ))}
+            {expiredEmpContractCount > 5 && <div className="opacity-60">+{expiredEmpContractCount - 5} more...</div>}
+          </HealthIndicator>
+
+          {/* 6. Expired Contractor Contracts */}
+          <HealthIndicator
+            severity={expiredCtrContractCount > 0 ? "warning" : "ok"}
+            count={expiredCtrContractCount}
+            label={t("dashboard.health_expired_ctr_contracts")}
+          >
+            {data.expiredContractorContracts.slice(0, 5).map(c => (
+              <div key={c.id} className="flex justify-between">
+                <span>{c.contractorName}</span>
+                <span className="opacity-70">{c.expiryDate}</span>
+              </div>
+            ))}
+            {expiredCtrContractCount > 5 && <div className="opacity-60">+{expiredCtrContractCount - 5} more...</div>}
+          </HealthIndicator>
+
+          {/* 7. Stale Drafts */}
+          <HealthIndicator
+            severity={staleDraftTotal > 0 ? "warning" : "ok"}
+            count={staleDraftTotal}
+            label={t("dashboard.health_stale_drafts")}
+          >
+            {data.staleDrafts.payrolls > 0 && (
+              <div>{t("dashboard.ops_payroll")}: {data.staleDrafts.payrolls}</div>
+            )}
+            {data.staleDrafts.invoices > 0 && (
+              <div>{t("dashboard.ops_invoices")}: {data.staleDrafts.invoices}</div>
+            )}
+            {data.staleDrafts.vendorBills > 0 && (
+              <div>{t("dashboard.ops_vendor_bills")}: {data.staleDrafts.vendorBills}</div>
+            )}
+          </HealthIndicator>
+
+          {/* 8. Negative Wallets */}
+          <HealthIndicator
+            severity={negativeWalletCount > 0 ? "critical" : "ok"}
+            count={negativeWalletCount}
+            label={t("dashboard.health_negative_wallets")}
+          >
+            {data.negativeWallets.slice(0, 5).map(w => (
+              <div key={w.id} className="flex justify-between">
+                <span>{w.companyName}</span>
+                <span className="font-mono text-red-600">{w.currency} {w.balance}</span>
+              </div>
+            ))}
+            {negativeWalletCount > 5 && <div className="opacity-60">+{negativeWalletCount - 5} more...</div>}
+          </HealthIndicator>
+
+          {/* 9. Expired Onboarding Invites */}
+          <HealthIndicator
+            severity={expiredInviteCount > 0 ? "warning" : "ok"}
+            count={expiredInviteCount}
+            label={t("dashboard.health_expired_invites")}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // MAIN DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function Dashboard() {
@@ -883,6 +1117,17 @@ export default function Dashboard() {
               {t("dashboard.workspace_finance")}
             </h2>
             <FinanceWorkspace t={t} />
+          </section>
+        )}
+
+        {/* ─── System Health (Admin only) ─── */}
+        {isAdminUser && (
+          <section>
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <HeartPulse className="w-5 h-5 text-red-500" />
+              {t("dashboard.workspace_health")}
+            </h2>
+            <SystemHealthCard t={t} />
           </section>
         )}
 
