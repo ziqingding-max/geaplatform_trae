@@ -780,7 +780,7 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="space-y-8 pb-8">
+      <div className="p-6 space-y-8 pb-8 page-enter">
         {/* ─── Greeting Header ─── */}
         <div className="glass-card p-6">
           <h1 className="text-2xl font-bold tracking-tight">
