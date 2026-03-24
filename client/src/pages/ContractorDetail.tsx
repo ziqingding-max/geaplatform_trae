@@ -130,6 +130,7 @@ function EditContractorDialog({ contractor, open, onOpenChange, onSuccess }: {
     postalCode: "",
     department: "",
     jobTitle: "",
+    jobDescription: "",
     startDate: "",
     endDate: "",
     currency: "USD",
@@ -160,6 +161,7 @@ function EditContractorDialog({ contractor, open, onOpenChange, onSuccess }: {
         postalCode: contractor.postalCode || "",
         department: contractor.department || "",
         jobTitle: contractor.jobTitle || "",
+        jobDescription: contractor.jobDescription || "",
         startDate: contractor.startDate || "",
         endDate: contractor.endDate || "",
         currency: contractor.currency || "USD",
@@ -200,6 +202,7 @@ function EditContractorDialog({ contractor, open, onOpenChange, onSuccess }: {
     if (form.postalCode !== (contractor.postalCode || "")) data.postalCode = form.postalCode;
     if (form.department !== (contractor.department || "")) data.department = form.department;
     if (form.jobTitle !== (contractor.jobTitle || "")) data.jobTitle = form.jobTitle;
+    if (form.jobDescription !== (contractor.jobDescription || "")) data.jobDescription = form.jobDescription;
     if (form.startDate !== (contractor.startDate || "")) data.startDate = form.startDate;
     if (form.endDate !== (contractor.endDate || "")) data.endDate = form.endDate;
     if (form.currency !== (contractor.currency || "USD")) data.currency = form.currency;
@@ -322,6 +325,10 @@ function EditContractorDialog({ contractor, open, onOpenChange, onSuccess }: {
               <Label>Department</Label>
               <Input value={form.department} onChange={e => setForm({...form, department: e.target.value})} />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>{t("employees.create.form.jobDescription")}</Label>
+            <Textarea rows={3} value={form.jobDescription} onChange={e => setForm({...form, jobDescription: e.target.value})} placeholder={t("employees.create.form.jobDescriptionPlaceholder")} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -658,6 +665,7 @@ export default function ContractorDetail() {
                 <CardHeader><CardTitle className="text-base flex items-center gap-2"><Briefcase className="w-4 h-4" /> {t("contractors.overview.serviceInfo")}</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                   <InfoRow label="Job Title" value={contractor.jobTitle} />
+                  {contractor.jobDescription && <InfoRow label={t("employees.detail.jobDescription")} value={contractor.jobDescription} />}
                   <InfoRow label="Department" value={contractor.department} />
                   <InfoRow label="Start Date" value={formatDate(contractor.startDate)} />
                   <InfoRow label="End Date" value={formatDate(contractor.endDate)} />

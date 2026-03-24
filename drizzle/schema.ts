@@ -344,6 +344,7 @@ export const employees = sqliteTable(
     // Employment details
     department: text("department", { length: 100 }),
     jobTitle: text("jobTitle", { length: 255 }).notNull(),
+    jobDescription: text("jobDescription"),
     serviceType: text("serviceType", { enum: ["eor", "visa_eor"] }).default("eor").notNull(),
     employmentType: text("employmentType", { enum: ["fixed_term", "long_term"] }).default("long_term").notNull(),
     startDate: text("startDate").notNull(),
@@ -966,6 +967,7 @@ export const onboardingInvites = sqliteTable(
     serviceType: text("serviceType", { enum: ["eor", "visa_eor", "aor"] }).default("eor"),
     country: text("country", { length: 100 }),
     jobTitle: text("jobTitle", { length: 255 }),
+    jobDescription: text("jobDescription"),
     department: text("department", { length: 100 }),
     startDate: text("startDate"),
     endDate: text("endDate"),

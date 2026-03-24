@@ -64,6 +64,7 @@ async function migrateAorData() {
         country: emp.country,
         postalCode: emp.postalCode,
         jobTitle: emp.jobTitle,
+        jobDescription: emp.jobDescription || null,
         department: emp.department,
         startDate: emp.startDate,
         endDate: emp.endDate,
