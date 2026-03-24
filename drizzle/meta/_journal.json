@@ -78,6 +78,27 @@
       "when": 1741945600000,
       "tag": "0010_leave_records_payroll_run_id",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1742032000000,
+      "tag": "0011_worker_portal_refactor",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1742118400000,
+      "tag": "0012_leave_type_applicable_gender",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1742204800000,
+      "tag": "0013_invoice_items_contractor_id",
+      "breakpoints": true
     }
   ]
 }

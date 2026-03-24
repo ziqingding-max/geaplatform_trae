@@ -718,6 +718,7 @@ export const invoiceItems = sqliteTable(
     id: integer("id").primaryKey({ autoIncrement: true }),
     invoiceId: integer("invoiceId").notNull(),
     employeeId: integer("employeeId"),
+    contractorId: integer("contractorId"), // FK → contractors.id (for AOR line items)
     description: text("description", { length: 500 }).notNull(),
     quantity: text("quantity").default("1").notNull(),
     unitPrice: text("unitPrice").notNull(),
@@ -756,6 +757,7 @@ export const invoiceItems = sqliteTable(
   (table) => ({
     iiInvoiceIdIdx: index("ii_invoice_id_idx").on(table.invoiceId),
     iiEmployeeIdIdx: index("ii_employee_id_idx").on(table.employeeId),
+    iiContractorIdIdx: index("ii_contractor_id_idx").on(table.contractorId),
   })
 );
 
@@ -1257,7 +1259,8 @@ export const billInvoiceAllocations = sqliteTable(
     vendorBillId: integer("vendorBillId").notNull(), // FK → vendor_bills.id
     vendorBillItemId: integer("vendorBillItemId"), // FK → vendor_bill_items.id (optional, for item-level allocation)
     invoiceId: integer("invoiceId").notNull(), // FK → invoices.id
-    employeeId: integer("employeeId").notNull(), // FK → employees.id (the bridge between bill and invoice)
+    employeeId: integer("employeeId"), // FK → employees.id (for EOR allocations, nullable)
+    contractorId: integer("contractorId"), // FK → contractors.id (for AOR allocations, nullable)
     allocatedAmount: text("allocatedAmount").notNull(), // USD amount allocated
     description: text("description"), // Optional note about this allocation
     allocatedBy: integer("allocatedBy"), // User who created this allocation
@@ -1269,6 +1272,7 @@ export const billInvoiceAllocations = sqliteTable(
     biaVendorBillItemIdIdx: index("bia_vendor_bill_item_id_idx").on(table.vendorBillItemId),
     biaInvoiceIdIdx: index("bia_invoice_id_idx").on(table.invoiceId),
     biaEmployeeIdIdx: index("bia_employee_id_idx").on(table.employeeId),
+    biaContractorIdIdx: index("bia_contractor_id_idx").on(table.contractorId),
   })
 );
 
