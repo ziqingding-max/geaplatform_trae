@@ -658,7 +658,7 @@ export const invoicesRouter = router({
               billingEntityId: invoice.billingEntityId,
               invoiceNumber: followUpNumber,
               invoiceType: "manual",
-              invoiceMonth: followUpMonth,
+              invoiceMonth: followUpMonth.toISOString().slice(0, 7),
               currency: invoice.currency || "USD",
               exchangeRate: "1",
               exchangeRateWithMarkup: "1",
@@ -999,7 +999,7 @@ export const invoicesRouter = router({
       const remainingDue = total - totalPaidSoFar;
       
       // Determine new status
-      let newStatus = invoice.status;
+      let newStatus: string = invoice.status;
       if (remainingDue <= 0.01) { // Floating point tolerance
          newStatus = 'paid';
       } else {

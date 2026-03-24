@@ -447,7 +447,7 @@ function generateSocialInsuranceArticle(
 function generatePublicHolidaysArticle(
   countryCode: string,
   holidays: Array<{
-    holidayDate: Date;
+    holidayDate: string | Date;
     holidayName: string;
     localName: string | null;
     year: number;

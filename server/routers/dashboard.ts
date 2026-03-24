@@ -49,7 +49,7 @@ export const dashboardRouter = router({
   }),
 
   recentActivity: adminProcedure.query(async () => {
-    const { data } = await listAuditLogs(undefined, 20, 0);
+    const { data } = await listAuditLogs({ page: 1, pageSize: 20 });
     return data;
   }),
 

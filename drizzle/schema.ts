@@ -244,7 +244,7 @@ export const customerPricing = sqliteTable(
     // For country_specific: fixed price per employee per month
     // For client_aor_fixed: fixed price for AOR globally (ignores countryCode)
     countryCode: text("countryCode", { length: 3 }),
-    serviceType: text("serviceType", { enum: ["eor", "visa_eor"] }),
+    serviceType: text("serviceType", { enum: ["eor", "visa_eor", "aor"] }),
     fixedPrice: text("fixedPrice"),
     visaOneTimeFee: text("visaOneTimeFee"),
     currency: text("currency", { length: 3 }).default("USD"),
@@ -344,7 +344,7 @@ export const employees = sqliteTable(
     // Employment details
     department: text("department", { length: 100 }),
     jobTitle: text("jobTitle", { length: 255 }).notNull(),
-    serviceType: text("serviceType", { enum: ["eor", "visa_eor"] }).default("eor").notNull(),
+    serviceType: text("serviceType", { enum: ["eor", "visa_eor", "aor"] }).default("eor").notNull(),
     employmentType: text("employmentType", { enum: ["fixed_term", "long_term"] }).default("long_term").notNull(),
     startDate: text("startDate").notNull(),
     endDate: text("endDate"),
@@ -1546,7 +1546,7 @@ export const aiTaskExecutions = sqliteTable(
   "ai_task_executions",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    taskType: text("taskType", { enum: ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit", "knowledge_generate_guide", "copilot_chat"] }).notNull(),
+    taskType: text("taskType", { enum: ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit", "knowledge_generate_guide"] }).notNull(),
     providerPrimary: text("providerPrimary", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
     providerActual: text("providerActual", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
     fallbackTriggered: integer("fallbackTriggered", { mode: "boolean" }).default(false).notNull(),
@@ -1809,41 +1809,7 @@ export type SalesDocument = typeof salesDocuments.$inferSelect;
 export type InsertSalesDocument = typeof salesDocuments.$inferInsert;
 
 // ============================================================================
-// 18. COPILOT ASSISTANT — AI-Powered Enterprise Assistant
-// ============================================================================
-// Re-export all Copilot-related tables and types from copilot-schema.ts
-// This maintains consistency with the project's import patterns
-// ============================================================================
-
-export {
-  // Tables
-  copilotUserConfigs,
-  copilotConversations,
-  copilotMessages,
-  copilotFileAnalyses,
-  copilotPredictions,
-  copilotShortcuts,
-  copilotMetrics,
-  
-  // Types
-  type CopilotUserConfig,
-  type CopilotConversation,
-  type CopilotMessage,
-  type CopilotFileAnalysis,
-  type CopilotPrediction,
-  type CopilotShortcut,
-  type CopilotMetric,
-  type InsertCopilotUserConfig,
-  type InsertCopilotConversation,
-  type InsertCopilotMessage,
-  type InsertCopilotFileAnalysis,
-  type InsertCopilotPrediction,
-  type InsertCopilotShortcut,
-  type InsertCopilotMetric,
-} from "./copilot-schema";
-
-// ============================================================================
-// 19. CUSTOMER WALLET (PREPAYMENT) SYSTEM
+// 18. CUSTOMER WALLET (PREPAYMENT) SYSTEM
 // ============================================================================
 
 /**

@@ -18,13 +18,13 @@ const NotificationConfigSchema = z.object({
       emailSubject: z.string().default(""),
       emailBody: z.string().default(""),
       inAppMessage: z.string().default(""),
-    }).default({}),
+    }).default({ emailSubject: "", emailBody: "", inAppMessage: "" }),
     zh: z.object({
       emailSubject: z.string().default(""),
       emailBody: z.string().default(""),
       inAppMessage: z.string().default(""),
-    }).default({}),
-  }).default({}),
+    }).default({ emailSubject: "", emailBody: "", inAppMessage: "" }),
+  }).default({ en: { emailSubject: "", emailBody: "", inAppMessage: "" }, zh: { emailSubject: "", emailBody: "", inAppMessage: "" } }),
 });
 
 export const notificationsRouter = router({

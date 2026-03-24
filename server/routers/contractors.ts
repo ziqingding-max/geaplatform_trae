@@ -404,8 +404,8 @@ export const contractorsRouter = router({
           type: z.enum(["bonus", "expense", "deduction"]).optional(),
           description: z.string().optional(),
           amount: z.string().optional(),
-          date: z.string().optional(),
-          status: z.enum(["pending", "approved", "rejected", "invoiced"]).optional(),
+          effectiveMonth: z.string().optional(),
+          status: z.enum(["submitted", "client_approved", "client_rejected", "admin_approved", "admin_rejected", "locked"]).optional(),
         })
       }))
       .mutation(async ({ input }) => {

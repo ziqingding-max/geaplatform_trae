@@ -1133,7 +1133,7 @@ export async function getAllEmployeesMonthlyRevenue(serviceMonth: string) {
       const data = empMap[emp.id];
       results.push({
         employeeId: emp.id,
-        employeeCode: emp.employeeCode,
+        employeeCode: emp.employeeCode ?? undefined,
         employeeName: `${emp.firstName} ${emp.lastName}`,
         workerName: `${emp.firstName} ${emp.lastName}`,
         workerType: 'employee',
@@ -1182,7 +1182,7 @@ export async function getAllEmployeesMonthlyRevenue(serviceMonth: string) {
       const data = ctrMap[ctr.id];
       results.push({
         contractorId: ctr.id,
-        contractorCode: ctr.contractorCode,
+        contractorCode: ctr.contractorCode ?? undefined,
         contractorName: `${ctr.firstName} ${ctr.lastName}`,
         workerName: `${ctr.firstName} ${ctr.lastName}`,
         workerType: 'contractor',

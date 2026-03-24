@@ -65,7 +65,7 @@ export function ContractorListContent() {
     search: search || undefined,
     status: statusFilter !== "all" ? statusFilter : undefined,
     customerId: customerFilter !== "all" ? parseInt(customerFilter) : undefined,
-    country: countryFilter !== "all" ? countryFilter : undefined,
+    // Note: country filter is applied client-side since the API doesn't support it yet
     limit: pageSize,
     offset: (page - 1) * pageSize,
   });

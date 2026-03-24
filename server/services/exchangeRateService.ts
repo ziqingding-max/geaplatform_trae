@@ -252,11 +252,11 @@ export async function convertCurrency(
 export async function getExchangeRatesForDate(effectiveDate: Date) {
   const db = await getDb();
   if (!db) return [];
-
+  const dateStr = effectiveDate.toISOString().split('T')[0];
   return await db
     .select()
     .from(exchangeRates)
-    .where(eq(exchangeRates.effectiveDate, effectiveDate))
+    .where(eq(exchangeRates.effectiveDate, dateStr))
     .orderBy(exchangeRates.fromCurrency, exchangeRates.toCurrency);
 }
 

@@ -94,9 +94,19 @@ export const customerLeavePoliciesRouter = router({
       });
 
       // After successful policy update, sync leave balances for all affected employees
-      syncLeaveBalancesOnPolicyUpdate(input.id).catch(err => {
-        console.error(`[LeaveSync] Background sync failed for policy ID ${input.id}:`, err);
-      });
+      // Fetch the policy record to get customerId and countryCode for sync
+      const { getDb } = await import("../services/db/connection");
+      const { customerLeavePolicies: clpTable } = await import("../../drizzle/schema");
+      const { eq: eqOp } = await import("drizzle-orm");
+      const dbSync = await getDb();
+      if (dbSync) {
+        const [policyRecord] = await dbSync.select().from(clpTable).where(eqOp(clpTable.id, input.id)).limit(1);
+        if (policyRecord) {
+          syncLeaveBalancesOnPolicyUpdate(policyRecord.customerId, policyRecord.countryCode).catch(err => {
+            console.error(`[LeaveSync] Background sync failed for policy ID ${input.id}:`, err);
+          });
+        }
+      }
 
       return updateResult;
     }),

@@ -54,11 +54,13 @@ export async function getSystemConfig(key: string) {
   return result.length > 0 ? result[0].configValue : null;
 }
 
-export async function setSystemConfig(key: string, value: string) {
+export async function setSystemConfig(key: string, value: string, description?: string) {
   const db = await getDb();
   if (!db) return;
   // Upsert logic
-  await db.insert(systemConfig).values({ configKey: key, configValue: value })
+  const insertData: any = { configKey: key, configValue: value };
+  if (description !== undefined) insertData.description = description;
+  await db.insert(systemConfig).values(insertData)
     .onConflictDoUpdate({ target: systemConfig.configKey, set: { configValue: value } });
 }
 
