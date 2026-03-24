@@ -4,6 +4,7 @@ import { financeManagerProcedure } from "../procedures";
 import { getDb } from "../db";
 import {
   invoices as invoicesTable,
+  invoiceItems as invoiceItemsTable,
   vendorBills as vendorBillsTable,
   vendors as vendorsTable,
   customers as customersTable,
@@ -27,10 +28,68 @@ function getLastNMonths(n: number, fromDate?: Date): string[] {
   return months;
 }
 
+/**
+ * Service-fee itemTypes: pure USD-denominated service charges (no FX component)
+ */
+const SERVICE_FEE_ITEM_TYPES = [
+  "eor_service_fee",
+  "visa_eor_service_fee",
+  "aor_service_fee",
+] as const;
+
+/**
+ * Non-recurring revenue itemTypes: one-off charges billed to clients
+ */
+const NON_RECURRING_ITEM_TYPES = [
+  "equipment_procurement_fee",
+  "onboarding_fee",
+  "offboarding_fee",
+  "admin_setup_fee",
+  "contract_termination_fee",
+  "payroll_processing_fee",
+  "tax_filing_fee",
+  "hr_advisory_fee",
+  "legal_compliance_fee",
+  "visa_immigration_fee",
+  "relocation_fee",
+  "benefits_admin_fee",
+  "bank_transfer_fee",
+  "consulting_fee",
+  "management_consulting_fee",
+] as const;
+
+/**
+ * Pass-through itemTypes: funds collected from clients on behalf of employees/governments
+ * (employment_cost is the main one; deposit is excluded from revenue entirely)
+ */
+const PASS_THROUGH_ITEM_TYPES = [
+  "employment_cost",
+] as const;
+
+/** Round to 2 decimal places */
+function r2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 export const reportsRouter = router({
   /**
-   * Profit & Loss Report
-   * Aggregates revenue (from invoices) and expenses (from vendor_bills) by month.
+   * Profit & Loss Report — Net-Basis (全局代收代付净额法)
+   *
+   * Revenue side (from invoices):
+   *   1. Service Fee Revenue = SUM of service-fee itemTypes (pure USD)
+   *   2. Non-recurring Revenue = SUM of non-recurring itemTypes
+   *   3. Pass-through Collected = SUM of employment_cost itemTypes (USD collected from clients)
+   *
+   * Cost side (from vendor bills, using COALESCE(settlementAmount, totalAmount) for backward compat):
+   *   4. Pass-through Paid = SUM of pass_through + non_recurring billType settlements
+   *   5. Direct COGS = SUM of vendor_service_fee billType settlements + SUM of all settlementBankFee
+   *   6. Operational Expenses = SUM of operational billType settlements
+   *
+   * Derived:
+   *   - FX & Markup Profit = (Pass-through Collected + Non-recurring Revenue) - Pass-through Paid
+   *   - Net Revenue = Service Fee Revenue + FX & Markup Profit + (Non-recurring Revenue already captured in FX calc)
+   *   - Gross Profit = Net Revenue - Direct COGS
+   *   - Net Profit = Gross Profit - Operational Expenses
    */
   profitAndLoss: financeManagerProcedure
     .input(
@@ -50,6 +109,17 @@ export const reportsRouter = router({
             totalExpenses: 0,
             netProfit: 0,
             profitMargin: 0,
+            // New net-basis fields
+            serviceFeeRevenue: 0,
+            nonRecurringRevenue: 0,
+            passThroughCollected: 0,
+            passThroughPaid: 0,
+            fxMarkupProfit: 0,
+            netRevenue: 0,
+            directCOGS: 0,
+            grossProfit: 0,
+            operationalExpenses: 0,
+            totalUnallocated: 0,
           },
           monthlyBreakdown: [] as {
             month: string;
@@ -58,11 +128,21 @@ export const reportsRouter = router({
             netProfit: number;
             invoiceCount: number;
             billCount: number;
+            serviceFeeRevenue: number;
+            nonRecurringRevenue: number;
+            passThroughCollected: number;
+            passThroughPaid: number;
+            fxMarkupProfit: number;
+            netRevenue: number;
+            directCOGS: number;
+            grossProfit: number;
+            operationalExpenses: number;
           }[],
           revenueByType: [] as { type: string; amount: number }[],
           expensesByCategory: [] as { category: string; amount: number }[],
           expensesByVendor: [] as { vendorId: number; vendorName: string; amount: number }[],
           revenueByCustomer: [] as { customerId: number; customerName: string; amount: number }[],
+          customerProfit: [] as { customerId: number; customerName: string; revenue: number; costAllocated: number; profit: number; margin: number; isLoss: boolean }[],
         };
       }
 
@@ -82,6 +162,10 @@ export const reportsRouter = router({
         months = getLastNMonths(input.months);
       }
 
+      // ── Reusable SQL expression: actual cost = COALESCE(settlementAmount, totalAmount) ──
+      const actualCostExpr = sql<string>`COALESCE(${vendorBillsTable.settlementAmount}, ${vendorBillsTable.totalAmount})`;
+      const bankFeeExpr = sql<string>`COALESCE(${vendorBillsTable.settlementBankFee}, ${vendorBillsTable.bankFee}, '0')`;
+
       const monthlyBreakdown: {
         month: string;
         revenue: number;
@@ -89,8 +173,24 @@ export const reportsRouter = router({
         netProfit: number;
         invoiceCount: number;
         billCount: number;
+        serviceFeeRevenue: number;
+        nonRecurringRevenue: number;
+        passThroughCollected: number;
+        passThroughPaid: number;
+        fxMarkupProfit: number;
+        netRevenue: number;
+        directCOGS: number;
+        grossProfit: number;
+        operationalExpenses: number;
       }[] = [];
 
+      // Accumulators for summary
+      let totalServiceFee = 0;
+      let totalNonRecurring = 0;
+      let totalPassThroughCollected = 0;
+      let totalPassThroughPaid = 0;
+      let totalDirectCOGS = 0;
+      let totalOperational = 0;
       let totalRevenue = 0;
       let totalExpenses = 0;
 
@@ -99,33 +199,139 @@ export const reportsRouter = router({
         const monthStart = `${m}-01`;
         const nextMonth = mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, "0")}-01`;
 
-        // ── Revenue: sum of paid invoices (excluding deposits & deposit refunds) ──
-        // Credit notes have negative totals, so they naturally reduce revenue
-        const revenueResult = await db
+        // ── 1. Service Fee Revenue (from invoice items) ──
+        const [sfResult] = await db
           .select({
-            total: sql<string>`COALESCE(SUM(${invoicesTable.total}), 0)`,
-            cnt: count(),
+            total: sql<string>`COALESCE(SUM(CAST(${invoiceItemsTable.amount} AS REAL)), 0)`,
           })
+          .from(invoiceItemsTable)
+          .innerJoin(invoicesTable, eq(invoiceItemsTable.invoiceId, invoicesTable.id))
+          .where(
+            and(
+              eq(invoicesTable.status, "paid"),
+              sql`${invoicesTable.invoiceMonth} >= ${monthStart}`,
+              sql`${invoicesTable.invoiceMonth} < ${nextMonth}`,
+              sql`${invoicesTable.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
+              sql`${invoiceItemsTable.itemType} IN (${sql.join(SERVICE_FEE_ITEM_TYPES.map(t => sql`${t}`), sql`, `)})`
+            )
+          );
+        const serviceFee = parseFloat(sfResult?.total ?? "0");
+
+        // ── 2. Non-recurring Revenue (from invoice items) ──
+        const [nrResult] = await db
+          .select({
+            total: sql<string>`COALESCE(SUM(CAST(${invoiceItemsTable.amount} AS REAL)), 0)`,
+          })
+          .from(invoiceItemsTable)
+          .innerJoin(invoicesTable, eq(invoiceItemsTable.invoiceId, invoicesTable.id))
+          .where(
+            and(
+              eq(invoicesTable.status, "paid"),
+              sql`${invoicesTable.invoiceMonth} >= ${monthStart}`,
+              sql`${invoicesTable.invoiceMonth} < ${nextMonth}`,
+              sql`${invoicesTable.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
+              sql`${invoiceItemsTable.itemType} IN (${sql.join(NON_RECURRING_ITEM_TYPES.map(t => sql`${t}`), sql`, `)})`
+            )
+          );
+        const nonRecurring = parseFloat(nrResult?.total ?? "0");
+
+        // ── 3. Pass-through Collected (employment_cost from invoice items — USD collected from clients) ──
+        const [ptcResult] = await db
+          .select({
+            total: sql<string>`COALESCE(SUM(CAST(${invoiceItemsTable.amount} AS REAL)), 0)`,
+          })
+          .from(invoiceItemsTable)
+          .innerJoin(invoicesTable, eq(invoiceItemsTable.invoiceId, invoicesTable.id))
+          .where(
+            and(
+              eq(invoicesTable.status, "paid"),
+              sql`${invoicesTable.invoiceMonth} >= ${monthStart}`,
+              sql`${invoicesTable.invoiceMonth} < ${nextMonth}`,
+              sql`${invoicesTable.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`,
+              sql`${invoiceItemsTable.itemType} IN (${sql.join(PASS_THROUGH_ITEM_TYPES.map(t => sql`${t}`), sql`, `)})`
+            )
+          );
+        const passThroughCollected = parseFloat(ptcResult?.total ?? "0");
+
+        // ── 4. Pass-through Paid (vendor bills: pass_through + non_recurring billType) ──
+        const [ptpResult] = await db
+          .select({
+            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+          })
+          .from(vendorBillsTable)
+          .where(
+            and(
+              inArray(vendorBillsTable.status, ["paid", "partially_paid"]),
+              sql`${vendorBillsTable.billMonth} >= ${monthStart}`,
+              sql`${vendorBillsTable.billMonth} < ${nextMonth}`,
+              sql`${vendorBillsTable.billType} IN ('pass_through', 'non_recurring')`
+            )
+          );
+        const passThroughPaid = parseFloat(ptpResult?.total ?? "0");
+
+        // ── 5. Direct COGS (vendor_service_fee bills + all bank fees) ──
+        const [vsResult] = await db
+          .select({
+            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+          })
+          .from(vendorBillsTable)
+          .where(
+            and(
+              inArray(vendorBillsTable.status, ["paid", "partially_paid"]),
+              sql`${vendorBillsTable.billMonth} >= ${monthStart}`,
+              sql`${vendorBillsTable.billMonth} < ${nextMonth}`,
+              sql`${vendorBillsTable.billType} = 'vendor_service_fee'`
+            )
+          );
+        const vendorServiceCost = parseFloat(vsResult?.total ?? "0");
+
+        // Bank fees from all paid bills in this month
+        const [bfResult] = await db
+          .select({
+            total: sql<string>`COALESCE(SUM(CAST(${bankFeeExpr} AS REAL)), 0)`,
+          })
+          .from(vendorBillsTable)
+          .where(
+            and(
+              inArray(vendorBillsTable.status, ["paid", "partially_paid"]),
+              sql`${vendorBillsTable.billMonth} >= ${monthStart}`,
+              sql`${vendorBillsTable.billMonth} < ${nextMonth}`
+            )
+          );
+        const totalBankFees = parseFloat(bfResult?.total ?? "0");
+
+        const directCOGS = vendorServiceCost + totalBankFees;
+
+        // ── 6. Operational Expenses (operational billType) ──
+        const [opResult] = await db
+          .select({
+            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+          })
+          .from(vendorBillsTable)
+          .where(
+            and(
+              inArray(vendorBillsTable.status, ["paid", "approved", "partially_paid"]),
+              sql`${vendorBillsTable.billMonth} >= ${monthStart}`,
+              sql`${vendorBillsTable.billMonth} < ${nextMonth}`,
+              sql`${vendorBillsTable.billType} = 'operational'`
+            )
+          );
+        const operationalExpenses = parseFloat(opResult?.total ?? "0");
+
+        // ── Invoice & bill counts ──
+        const [invCount] = await db
+          .select({ cnt: count() })
           .from(invoicesTable)
           .where(
             and(
               eq(invoicesTable.status, "paid"),
               sql`${invoicesTable.invoiceMonth} >= ${monthStart}`,
               sql`${invoicesTable.invoiceMonth} < ${nextMonth}`,
-              // Exclude deposit & deposit_refund — they are not revenue
               sql`${invoicesTable.invoiceType} NOT IN ('deposit', 'deposit_refund', 'credit_note')`
             )
           );
-
-        const monthRevenue = parseFloat(revenueResult[0]?.total ?? "0");
-        const invoiceCount = revenueResult[0]?.cnt ?? 0;
-
-        // ── Expenses: sum of paid/approved vendor bills ──
-        const expenseResult = await db
-          .select({
-            total: sql<string>`COALESCE(SUM(${vendorBillsTable.totalAmount}), 0)`,
-            cnt: count(),
-          })
+        const [billCount] = await db
+          .select({ cnt: count() })
           .from(vendorBillsTable)
           .where(
             and(
@@ -135,28 +341,51 @@ export const reportsRouter = router({
             )
           );
 
-        const monthExpenses = parseFloat(expenseResult[0]?.total ?? "0");
-        const billCount = expenseResult[0]?.cnt ?? 0;
+        // ── Derived metrics ──
+        const fxMarkupProfit = (passThroughCollected + nonRecurring) - passThroughPaid;
+        const netRevenue = serviceFee + fxMarkupProfit;
+        const grossProfit = netRevenue - directCOGS;
+        const netProfit = grossProfit - operationalExpenses;
 
-        const netProfit = monthRevenue - monthExpenses;
+        // Legacy compatible: totalRevenue = all invoice revenue, totalExpenses = all vendor bill costs
+        const monthRevenue = serviceFee + nonRecurring + passThroughCollected;
+        const monthExpenses = passThroughPaid + directCOGS + operationalExpenses;
 
         monthlyBreakdown.push({
           month: m,
-          revenue: Math.round(monthRevenue * 100) / 100,
-          expenses: Math.round(monthExpenses * 100) / 100,
-          netProfit: Math.round(netProfit * 100) / 100,
-          invoiceCount,
-          billCount,
+          revenue: r2(monthRevenue),
+          expenses: r2(monthExpenses),
+          netProfit: r2(netProfit),
+          invoiceCount: invCount?.cnt ?? 0,
+          billCount: billCount?.cnt ?? 0,
+          serviceFeeRevenue: r2(serviceFee),
+          nonRecurringRevenue: r2(nonRecurring),
+          passThroughCollected: r2(passThroughCollected),
+          passThroughPaid: r2(passThroughPaid),
+          fxMarkupProfit: r2(fxMarkupProfit),
+          netRevenue: r2(netRevenue),
+          directCOGS: r2(directCOGS),
+          grossProfit: r2(grossProfit),
+          operationalExpenses: r2(operationalExpenses),
         });
 
+        totalServiceFee += serviceFee;
+        totalNonRecurring += nonRecurring;
+        totalPassThroughCollected += passThroughCollected;
+        totalPassThroughPaid += passThroughPaid;
+        totalDirectCOGS += directCOGS;
+        totalOperational += operationalExpenses;
         totalRevenue += monthRevenue;
         totalExpenses += monthExpenses;
       }
 
-      const netProfit = totalRevenue - totalExpenses;
-      const profitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+      const totalFxProfit = (totalPassThroughCollected + totalNonRecurring) - totalPassThroughPaid;
+      const totalNetRevenue = totalServiceFee + totalFxProfit;
+      const totalGrossProfit = totalNetRevenue - totalDirectCOGS;
+      const totalNetProfit = totalGrossProfit - totalOperational;
+      const profitMargin = totalNetRevenue > 0 ? (totalNetProfit / totalNetRevenue) * 100 : 0;
 
-      // ── Revenue breakdown by invoice type ──
+      // ── Revenue breakdown by invoice type (legacy compatible) ──
       const globalStart = `${months[0]}-01`;
       const lastMonth = months[months.length - 1].split("-").map(Number);
       const globalEnd = lastMonth[1] === 12
@@ -179,11 +408,11 @@ export const reportsRouter = router({
         )
         .groupBy(invoicesTable.invoiceType);
 
-      // ── Expense breakdown by category ──
+      // ── Expense breakdown by category (using actual settlement amounts) ──
       const expensesByCategoryResult = await db
         .select({
           category: vendorBillsTable.category,
-          amount: sql<string>`COALESCE(SUM(${vendorBillsTable.totalAmount}), 0)`,
+          amount: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
         })
         .from(vendorBillsTable)
         .where(
@@ -195,12 +424,12 @@ export const reportsRouter = router({
         )
         .groupBy(vendorBillsTable.category);
 
-      // ── Expense breakdown by vendor ──
+      // ── Expense breakdown by vendor (using actual settlement amounts) ──
       const expensesByVendorResult = await db
         .select({
           vendorId: vendorBillsTable.vendorId,
           vendorName: vendorsTable.name,
-          amount: sql<string>`COALESCE(SUM(${vendorBillsTable.totalAmount}), 0)`,
+          amount: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
         })
         .from(vendorBillsTable)
         .innerJoin(vendorsTable, eq(vendorBillsTable.vendorId, vendorsTable.id))
@@ -232,7 +461,7 @@ export const reportsRouter = router({
         )
         .groupBy(invoicesTable.customerId, customersTable.companyName);
 
-      // ── Customer Profit Analysis (via allocations) ──
+      // ── Customer Profit Analysis (via allocations — kept as-is) ──
       const customerProfitResult = await db
         .select({
           customerId: invoicesTable.customerId,
@@ -253,10 +482,10 @@ export const reportsRouter = router({
         )
         .groupBy(invoicesTable.customerId, customersTable.companyName);
 
-      // ── Unallocated expenses (operational costs) ──
+      // ── Unallocated expenses (operational costs — kept as-is) ──
       const unallocatedResult = await db
         .select({
-          total: sql<string>`COALESCE(SUM(${vendorBillsTable.unallocatedAmount}), 0)`,
+          total: sql<string>`COALESCE(SUM(CAST(${sql`COALESCE(${vendorBillsTable.unallocatedAmount}, '0')`} AS REAL)), 0)`,
         })
         .from(vendorBillsTable)
         .where(
@@ -267,40 +496,51 @@ export const reportsRouter = router({
           )
         );
 
-      const totalUnallocated = Math.round(parseFloat(unallocatedResult[0]?.total ?? "0") * 100) / 100;
+      const totalUnallocated = r2(parseFloat(unallocatedResult[0]?.total ?? "0"));
 
       return {
         summary: {
-          totalRevenue: Math.round(totalRevenue * 100) / 100,
-          totalExpenses: Math.round(totalExpenses * 100) / 100,
-          netProfit: Math.round(netProfit * 100) / 100,
-          profitMargin: Math.round(profitMargin * 100) / 100,
+          // Legacy fields (backward compatible — frontend still reads these)
+          totalRevenue: r2(totalRevenue),
+          totalExpenses: r2(totalExpenses),
+          netProfit: r2(totalNetProfit),
+          profitMargin: r2(profitMargin),
           totalUnallocated,
+          // New net-basis P&L fields
+          serviceFeeRevenue: r2(totalServiceFee),
+          nonRecurringRevenue: r2(totalNonRecurring),
+          passThroughCollected: r2(totalPassThroughCollected),
+          passThroughPaid: r2(totalPassThroughPaid),
+          fxMarkupProfit: r2(totalFxProfit),
+          netRevenue: r2(totalNetRevenue),
+          directCOGS: r2(totalDirectCOGS),
+          grossProfit: r2(totalGrossProfit),
+          operationalExpenses: r2(totalOperational),
         },
         monthlyBreakdown,
         revenueByType: revenueByTypeResult.map((r) => ({
           type: r.type || "unknown",
-          amount: Math.round(parseFloat(r.amount) * 100) / 100,
+          amount: r2(parseFloat(r.amount)),
         })),
         expensesByCategory: expensesByCategoryResult.map((r) => ({
           category: r.category || "other",
-          amount: Math.round(parseFloat(r.amount) * 100) / 100,
+          amount: r2(parseFloat(r.amount)),
         })),
         expensesByVendor: expensesByVendorResult.map((r) => ({
           vendorId: r.vendorId,
           vendorName: r.vendorName || "Unknown",
-          amount: Math.round(parseFloat(r.amount) * 100) / 100,
+          amount: r2(parseFloat(r.amount)),
         })),
         revenueByCustomer: revenueByCustomerResult.map((r) => ({
           customerId: r.customerId,
           customerName: r.customerName || "Unknown",
-          amount: Math.round(parseFloat(r.amount) * 100) / 100,
+          amount: r2(parseFloat(r.amount)),
         })),
         customerProfit: customerProfitResult.map((r) => {
-          const rev = Math.round(parseFloat(r.revenue) * 100) / 100;
-          const cost = Math.round(parseFloat(r.costAllocated) * 100) / 100;
-          const profit = Math.round((rev - cost) * 100) / 100;
-          const margin = rev > 0 ? Math.round((profit / rev) * 10000) / 100 : 0;
+          const rev = r2(parseFloat(r.revenue));
+          const cost = r2(parseFloat(r.costAllocated));
+          const profit = r2(rev - cost);
+          const margin = rev > 0 ? r2((profit / rev) * 100) : 0;
           return {
             customerId: r.customerId,
             customerName: r.customerName || "Unknown",
@@ -316,6 +556,7 @@ export const reportsRouter = router({
 
   /**
    * Quick financial summary for dashboard integration
+   * Uses COALESCE(settlementAmount, totalAmount) for backward compatibility
    */
   financialSummary: financeManagerProcedure.query(async () => {
     const db = await getDb();
@@ -331,6 +572,8 @@ export const reportsRouter = router({
         totalOutstandingInvoices: 0,
       };
     }
+
+    const actualCostExpr = sql<string>`COALESCE(${vendorBillsTable.settlementAmount}, ${vendorBillsTable.totalAmount})`;
 
     const now = new Date();
     const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
@@ -354,9 +597,9 @@ export const reportsRouter = router({
         )
       );
 
-    // Current month expenses
+    // Current month expenses (using actual settlement amounts)
     const [curExpenses] = await db
-      .select({ total: sql<string>`COALESCE(SUM(${vendorBillsTable.totalAmount}), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)` })
       .from(vendorBillsTable)
       .where(
         and(
@@ -379,9 +622,9 @@ export const reportsRouter = router({
         )
       );
 
-    // Previous month expenses
+    // Previous month expenses (using actual settlement amounts)
     const [prevExpenses] = await db
-      .select({ total: sql<string>`COALESCE(SUM(${vendorBillsTable.totalAmount}), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)` })
       .from(vendorBillsTable)
       .where(
         and(
@@ -393,7 +636,7 @@ export const reportsRouter = router({
 
     // Outstanding bills (pending_approval + approved + overdue)
     const [outstandingBills] = await db
-      .select({ total: sql<string>`COALESCE(SUM(${vendorBillsTable.totalAmount}), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${vendorBillsTable.totalAmount} AS REAL)), 0)` })
       .from(vendorBillsTable)
       .where(inArray(vendorBillsTable.status, ["pending_approval", "approved", "overdue"]));
 
@@ -414,14 +657,14 @@ export const reportsRouter = router({
     const prevExp = parseFloat(prevExpenses?.total ?? "0");
 
     return {
-      currentMonthRevenue: Math.round(curRev * 100) / 100,
-      currentMonthExpenses: Math.round(curExp * 100) / 100,
-      currentMonthProfit: Math.round((curRev - curExp) * 100) / 100,
-      previousMonthRevenue: Math.round(prevRev * 100) / 100,
-      previousMonthExpenses: Math.round(prevExp * 100) / 100,
-      previousMonthProfit: Math.round((prevRev - prevExp) * 100) / 100,
-      totalOutstandingBills: Math.round(parseFloat(outstandingBills?.total ?? "0") * 100) / 100,
-      totalOutstandingInvoices: Math.round(parseFloat(outstandingInvoices?.total ?? "0") * 100) / 100,
+      currentMonthRevenue: r2(curRev),
+      currentMonthExpenses: r2(curExp),
+      currentMonthProfit: r2(curRev - curExp),
+      previousMonthRevenue: r2(prevRev),
+      previousMonthExpenses: r2(prevExp),
+      previousMonthProfit: r2(prevRev - prevExp),
+      totalOutstandingBills: r2(parseFloat(outstandingBills?.total ?? "0")),
+      totalOutstandingInvoices: r2(parseFloat(outstandingInvoices?.total ?? "0")),
     };
   }),
 });

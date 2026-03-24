@@ -161,6 +161,33 @@ const REQUIRED_COLUMNS: ColumnMigration[] = [
     type: "INTEGER NOT NULL",
     defaultValue: "1",  // Existing records default to confirmed (1=true)
   },
+  // ── vendor_bills: Settlement (Actual Payment) fields ──
+  {
+    table: "vendor_bills",
+    column: "settlementCurrency",
+    type: "TEXT",
+    defaultValue: "'USD'",
+  },
+  {
+    table: "vendor_bills",
+    column: "settlementAmount",
+    type: "TEXT",
+  },
+  {
+    table: "vendor_bills",
+    column: "settlementBankFee",
+    type: "TEXT",
+  },
+  {
+    table: "vendor_bills",
+    column: "settlementDate",
+    type: "TEXT",
+  },
+  {
+    table: "vendor_bills",
+    column: "settlementNotes",
+    type: "TEXT",
+  },
 ];
 
 /**

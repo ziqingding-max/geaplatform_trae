@@ -1085,7 +1085,15 @@ export const vendors = sqliteTable(
     bankDetails: text("bankDetails"), // Free-text bank info (multiline)
     taxId: text("taxId", { length: 100 }),
     paymentTermDays: integer("paymentTermDays").default(30).notNull(),
-    vendorType: text("vendorType", { enum: ["client_related", "operational"] }).default("client_related").notNull(),
+    vendorType: text("vendorType", { enum: [
+      "client_related",
+      "operational",
+      "eor_vendor",          // Core EOR landing partner (pass-through payroll + service fee)
+      "bank_financial",      // Banks & payment gateways (wire fees, FX, account maintenance)
+      "professional_service", // Law firms, accounting firms, tax advisors
+      "recruitment_agency",  // Headhunters & staffing agencies
+      "equipment_provider",  // Hardware / equipment suppliers
+    ] }).default("client_related").notNull(),
     status: text("status", { enum: ["active", "inactive"] }).default("active").notNull(),
     notes: text("notes"),
     createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
@@ -1152,11 +1160,14 @@ export const vendorBills = sqliteTable(
       "marketing",
       "other",
     ] }).default("other").notNull(),
-    // Bill type: operational (regular service costs), deposit (vendor deposit/guarantee), deposit_refund
+    // Bill type classification for P&L attribution
     billType: text("billType", { enum: [
-      "operational",
-      "deposit",
-      "deposit_refund",
+      "operational",        // Regular operational service costs (COGS or OpEx)
+      "deposit",            // Vendor deposit / guarantee
+      "deposit_refund",     // Deposit returned by vendor
+      "pass_through",       // Pass-through payroll/social costs (deducted before Net Revenue)
+      "vendor_service_fee", // Vendor's own management/processing fee (Direct COGS)
+      "non_recurring",      // One-off costs: visa, equipment, relocation, etc.
     ] }).default("operational").notNull(),
     description: text("description"),
     internalNotes: text("internalNotes"),
@@ -1167,6 +1178,13 @@ export const vendorBills = sqliteTable(
     bankReference: text("bankReference", { length: 200 }), // Bank transaction reference number
     bankName: text("bankName", { length: 255 }),
     bankFee: text("bankFee").default("0"), // Bank wire fee (USD)
+    // ── Settlement (Actual Payment) fields ──
+    // Populated when bill is marked as "paid"; represents the REAL USD cost
+    settlementCurrency: text("settlementCurrency", { length: 3 }).default("USD"), // Currency actually used for bank transfer
+    settlementAmount: text("settlementAmount"),   // Actual USD principal paid to vendor via bank
+    settlementBankFee: text("settlementBankFee"), // Bank wire/transfer fee incurred during this payment
+    settlementDate: text("settlementDate"),       // Date the bank transfer was executed
+    settlementNotes: text("settlementNotes"),     // Optional notes about the payment (e.g. bank ref)
     // Allocation tracking (denormalized for query performance)
     allocatedAmount: text("allocatedAmount").default("0"), // Total USD allocated to invoices
     unallocatedAmount: text("unallocatedAmount").default("0"), // totalAmount - allocatedAmount (operational cost)

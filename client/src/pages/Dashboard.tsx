@@ -551,12 +551,16 @@ function FinanceTab() {
       totalRevenue: parseFloat(m.totalRevenue),
       serviceFeeRevenue: parseFloat(m.serviceFeeRevenue),
       invoiceCount: m.invoiceCount,
+      totalCost: parseFloat((m as any).totalCost || "0"),
+      netProfit: parseFloat(m.totalRevenue) - parseFloat((m as any).totalCost || "0"),
     }));
   }, [finance]);
 
   const revenueConfig: ChartConfig = {
     totalRevenue: { label: "Total Invoice Revenue", color: "oklch(0.65 0.19 250)" },
     serviceFeeRevenue: { label: "Service Fee Revenue", color: "oklch(0.72 0.17 150)" },
+    totalCost: { label: "Total Cost (Settled)", color: "oklch(0.60 0.20 25)" },
+    netProfit: { label: "Net Profit", color: "oklch(0.65 0.15 145)" },
   };
 
   const invoiceCountConfig: ChartConfig = {
@@ -567,7 +571,7 @@ function FinanceTab() {
 
   return (
     <div className="space-y-6">
-      {/* Finance KPIs */}
+      {/* Finance KPIs - Row 1: Revenue */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title={t("dashboard.total_revenue")}
@@ -605,6 +609,41 @@ function FinanceTab() {
           href="/invoices"
           variant={parseFloat(finance?.totalOverdueAmount ?? "0") > 0 ? "danger" : "default"}
           description={t("dashboard.past_due_invoices")}
+        />
+      </div>
+
+      {/* Finance KPIs - Row 2: Cost & Profit */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title="Total Cost (Settled)"
+          value={formatCurrencyCompact((finance as any)?.totalSettledCost ?? "0")}
+          icon={TrendingDown}
+          variant="danger"
+          description="Sum of all settled vendor bill payments"
+        />
+        <StatCard
+          title="Bank Fees"
+          value={formatCurrencyCompact((finance as any)?.totalBankFees ?? "0")}
+          icon={Landmark}
+          variant="default"
+          description="Wire transfer & payment processing fees"
+        />
+        <StatCard
+          title="Estimated Net Profit"
+          value={formatCurrencyCompact(
+            String(parseFloat(finance?.totalRevenue ?? "0") - parseFloat((finance as any)?.totalSettledCost ?? "0") - parseFloat((finance as any)?.totalBankFees ?? "0"))
+          )}
+          icon={TrendingUp}
+          variant={parseFloat(finance?.totalRevenue ?? "0") - parseFloat((finance as any)?.totalSettledCost ?? "0") - parseFloat((finance as any)?.totalBankFees ?? "0") >= 0 ? "success" : "danger"}
+          description="Revenue minus settled costs and bank fees"
+        />
+        <StatCard
+          title="Unsettled Bills"
+          value={formatCurrencyCompact((finance as any)?.totalUnsettledBills ?? "0")}
+          icon={Clock}
+          href="/vendor-bills"
+          variant={parseFloat((finance as any)?.totalUnsettledBills ?? "0") > 0 ? "warning" : "default"}
+          description="Approved bills pending payment settlement"
         />
       </div>
 

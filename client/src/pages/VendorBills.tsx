@@ -268,6 +268,12 @@ function VendorBillDetail() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [allocOpen, setAllocOpen] = useState(false);
+  // Settlement modal state (for Mark as Paid)
+  const [settlementOpen, setSettlementOpen] = useState(false);
+  const [settlementAmount, setSettlementAmount] = useState("");
+  const [settlementBankFee, setSettlementBankFee] = useState("");
+  const [settlementCurrency, setSettlementCurrency] = useState("USD");
+  const [settlementNotes, setSettlementNotes] = useState("");
   const [allocWorkerValue, setAllocWorkerValue] = useState(""); // "emp-123" or "con-456"
   const [allocInvoiceId, setAllocInvoiceId] = useState("");
   const [allocAmount, setAllocAmount] = useState("");
@@ -481,7 +487,13 @@ function VendorBillDetail() {
               </>
             )}
             {(bill.status === "approved" || bill.status === "partially_paid") && (
-              <Button size="sm" onClick={() => statusMutation.mutate({ id: billId, status: "paid" })}>
+              <Button size="sm" onClick={() => {
+                setSettlementAmount("");
+                setSettlementBankFee("");
+                setSettlementCurrency("USD");
+                setSettlementNotes("");
+                setSettlementOpen(true);
+              }}>
                 <DollarSign className="w-4 h-4 mr-1" /> {t("vendorBills.actions.markPaid")}
               </Button>
             )}
@@ -518,6 +530,36 @@ function VendorBillDetail() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Settlement Info (shown when paid) */}
+        {bill.status === "paid" && (bill as any).settlementAmount && (
+          <Card className="border-emerald-200 bg-emerald-50/30">
+            <CardHeader className="pb-2"><CardTitle className="text-sm text-emerald-700">{t("vendorBills.settlement.title")}</CardTitle></CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("vendorBills.settlement.currency")}</p>
+                  <p className="font-medium">{(bill as any).settlementCurrency || "USD"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("vendorBills.settlement.amount")}</p>
+                  <p className="font-bold text-emerald-700">{formatAmount(parseFloat((bill as any).settlementAmount || "0"))}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("vendorBills.settlement.bankFee")}</p>
+                  <p className="font-medium">{formatAmount(parseFloat((bill as any).settlementBankFee || "0"))}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{t("vendorBills.settlement.totalOutflow")}</p>
+                  <p className="font-bold">{formatAmount(parseFloat((bill as any).settlementAmount || "0") + parseFloat((bill as any).settlementBankFee || "0"))}</p>
+                </div>
+              </div>
+              {(bill as any).settlementNotes && (
+                <p className="text-xs text-muted-foreground mt-2">{(bill as any).settlementNotes}</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Bill Info */}
         <Card>
@@ -710,6 +752,92 @@ function VendorBillDetail() {
               <Button variant="outline" onClick={() => setEditOpen(false)}>{t("common.cancel")}</Button>
               <Button onClick={handleSaveEdit} disabled={updateMutation.isPending}>
                 {updateMutation.isPending ? t("vendorBills.actions.saving") : t("vendorBills.actions.saveChanges")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Settlement Dialog (Mark as Paid) */}
+        <Dialog open={settlementOpen} onOpenChange={setSettlementOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("vendorBills.settlement.title")}</DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="p-3 rounded-lg bg-muted/50 text-sm">
+                <p className="text-xs text-muted-foreground mb-1">{t("vendorBills.settlement.billAmount")}</p>
+                <p className="font-bold text-lg">{bill?.currency} {formatAmount(parseFloat(bill?.totalAmount?.toString() || "0"))}</p>
+              </div>
+              <div>
+                <Label className="text-xs">{t("vendorBills.settlement.currency")}</Label>
+                <Select value={settlementCurrency} onValueChange={setSettlementCurrency}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="EUR">EUR</SelectItem>
+                    <SelectItem value="GBP">GBP</SelectItem>
+                    <SelectItem value="CNY">CNY</SelectItem>
+                    <SelectItem value="JPY">JPY</SelectItem>
+                    <SelectItem value="SGD">SGD</SelectItem>
+                    <SelectItem value="HKD">HKD</SelectItem>
+                    <SelectItem value="AUD">AUD</SelectItem>
+                    <SelectItem value="CAD">CAD</SelectItem>
+                    <SelectItem value="OTHER">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">{t("vendorBills.settlement.amount")}</Label>
+                <Input
+                  type="number" step="0.01" placeholder="0.00"
+                  value={settlementAmount}
+                  onChange={(e) => setSettlementAmount(e.target.value)}
+                  className={`h-8 text-sm font-medium ${noSpin}`}
+                />
+                <p className="text-xs text-muted-foreground mt-1">{t("vendorBills.settlement.amountHint")}</p>
+              </div>
+              <div>
+                <Label className="text-xs">{t("vendorBills.settlement.bankFee")}</Label>
+                <Input
+                  type="number" step="0.01" placeholder="0.00"
+                  value={settlementBankFee}
+                  onChange={(e) => setSettlementBankFee(e.target.value)}
+                  className={`h-8 text-sm ${noSpin}`}
+                />
+                <p className="text-xs text-muted-foreground mt-1">{t("vendorBills.settlement.bankFeeHint")}</p>
+              </div>
+              <div>
+                <Label className="text-xs">{t("vendorBills.settlement.notes")}</Label>
+                <Input
+                  value={settlementNotes}
+                  onChange={(e) => setSettlementNotes(e.target.value)}
+                  placeholder={t("vendorBills.settlement.notesPlaceholder")}
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSettlementOpen(false)}>{t("common.cancel")}</Button>
+              <Button
+                onClick={() => {
+                  if (!settlementAmount || parseFloat(settlementAmount) <= 0) {
+                    toast.error(t("vendorBills.settlement.amountRequired"));
+                    return;
+                  }
+                  statusMutation.mutate({
+                    id: billId,
+                    status: "paid",
+                    settlementCurrency,
+                    settlementAmount,
+                    settlementBankFee: settlementBankFee || "0",
+                    settlementNotes: settlementNotes || undefined,
+                  });
+                  setSettlementOpen(false);
+                }}
+                disabled={statusMutation.isPending}
+              >
+                {statusMutation.isPending ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
+                {t("vendorBills.settlement.confirm")}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -332,7 +332,7 @@ Return a JSON object with these fields:
   - contactPhone: string | null
   - taxId: string | null
   - serviceType: string | null (e.g. "Payroll Processing", "Legal", "IT Services")
-  - vendorType: string ("client_related" if costs relate to specific employees/customers, "operational" if general business cost)
+  - vendorType: string ("eor_vendor" for EOR/PEO service providers, "bank_financial" for banks/payment gateways, "recruitment_agency" for headhunters, "equipment_provider" for equipment suppliers, "professional_service" for law firms/accountants, "client_related" for other client-related vendors, "operational" for general business costs)
   - confidence: number (0-100)
 - bill: object with:
   - invoiceNumber: string
@@ -344,7 +344,7 @@ Return a JSON object with these fields:
   - tax: number
   - totalAmount: number
   - category: string (one of: payroll_processing, social_contributions, tax_filing, legal_compliance, visa_immigration, hr_advisory, it_services, office_rent, insurance, bank_charges, consulting, equipment, travel, marketing, other)
-  - billType: string (one of: "operational", "deposit", "deposit_refund"). Use "deposit" if the bill is for a security deposit, guarantee deposit, or refundable advance payment to the vendor. Use "deposit_refund" if the vendor is returning a previously paid deposit. Use "operational" for all regular service/expense bills.
+  - billType: string (one of: "pass_through", "vendor_service_fee", "non_recurring", "operational", "deposit", "deposit_refund"). Use "pass_through" for payroll/salary/social contributions/tax paid on behalf of employees (the bulk cost that GEA collects from clients and pays to vendor). Use "vendor_service_fee" for the vendor's own management/processing/service fee charged to GEA. Use "non_recurring" for one-off costs like visa processing, equipment procurement, onboarding/offboarding. Use "deposit" for security deposits. Use "deposit_refund" for returned deposits. Use "operational" for internal business costs (office rent, SaaS, etc.).
   - description: string
   - confidence: number (0-100)
 - payment: object | null (if POP/receipt is included):
@@ -409,7 +409,8 @@ CONFIDENCE SCORING RULES:
 - Use 70-89 when data is readable but has minor ambiguity or cannot be cross-validated.
 - Use 50-69 when data requires inference or interpretation.
 - Use below 50 when you are uncertain. In this case, set the field to null and explain in matchReason or crossValidation.warnings.
-- For operational costs (bank fees, office rent, etc.), set vendorType to "operational" and skip allocation suggestions.`,
+- For operational costs (bank fees, office rent, etc.), set vendorType to "operational" and skip allocation suggestions.
+- For EOR vendor bills, the billType is critical for P&L accuracy: use "pass_through" for the employment cost portion and "vendor_service_fee" for the vendor's own fee. If the bill mixes both, classify the overall bill as "pass_through" (the larger portion) and use itemType on line items to distinguish.`,
           },
           {
             // 2nd system message: document content via fileid:// references
@@ -589,7 +590,7 @@ CONFIDENCE SCORING RULES:
           "it_services", "office_rent", "insurance", "bank_charges",
           "consulting", "equipment", "travel", "marketing", "other",
         ]).default("other"),
-        billType: z.enum(["operational", "deposit", "deposit_refund"]).default("operational"),
+        billType: z.enum(["operational", "deposit", "deposit_refund", "pass_through", "vendor_service_fee", "non_recurring"]).default("operational"),
         description: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
@@ -794,7 +795,7 @@ Return a JSON object with these fields:
 - tax: number
 - totalAmount: number
 - category: string (one of: payroll_processing, social_contributions, tax_filing, legal_compliance, visa_immigration, hr_advisory, it_services, office_rent, insurance, bank_charges, consulting, equipment, travel, marketing, other)
-- billType: string (one of: "operational", "deposit", "deposit_refund"). Use "deposit" if the bill is for a security deposit, guarantee deposit, or refundable advance payment. Use "deposit_refund" if the vendor is returning a previously paid deposit. Use "operational" for all regular service/expense bills.
+- billType: string (one of: "pass_through", "vendor_service_fee", "non_recurring", "operational", "deposit", "deposit_refund"). Use "pass_through" for payroll/salary/social contributions/tax paid on behalf of employees. Use "vendor_service_fee" for the vendor's own management/processing fee. Use "non_recurring" for one-off costs like visa, equipment. Use "deposit" for security deposits. Use "deposit_refund" for returned deposits. Use "operational" for internal business costs.
 - description: string
 - lineItems: array of { description: string, employeeName: string | null, quantity: number, unitPrice: number, amount: number, countryCode: string | null }
 
@@ -856,7 +857,7 @@ Be precise with numbers. If a field is not found, use null.`,
           "it_services", "office_rent", "insurance", "bank_charges",
           "consulting", "equipment", "travel", "marketing", "other",
         ]).default("other"),
-        billType: z.enum(["operational", "deposit", "deposit_refund"]).default("operational"),
+        billType: z.enum(["operational", "deposit", "deposit_refund", "pass_through", "vendor_service_fee", "non_recurring"]).default("operational"),
         description: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),

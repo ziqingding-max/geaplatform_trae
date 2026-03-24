@@ -17,6 +17,7 @@ import {
   invoiceItems,
   adjustments,
   leaveRecords,
+  vendorBills,
 } from "../../drizzle/schema";
 import { eq, and, gte, lte, lt, sql, count, sum, desc, inArray, isNotNull } from "drizzle-orm";
 
@@ -114,7 +115,9 @@ export const dashboardRouter = router({
       totalRevenue: "0", totalServiceFeeRevenue: "0", totalPaidInvoices: 0,
       totalOutstandingAmount: "0", totalOverdueAmount: "0",
       totalDeferredRevenue: "0", totalDepositInvoices: 0,
-      monthlyRevenue: [] as { month: string; totalRevenue: string; serviceFeeRevenue: string; invoiceCount: number }[],
+      // New: cost & profit fields
+      totalCost: "0", totalNetProfit: "0",
+      monthlyRevenue: [] as { month: string; totalRevenue: string; serviceFeeRevenue: string; invoiceCount: number; totalCost: string; netProfit: string }[],
     };
 
     // Total paid invoice revenue (EXCLUDE deposits and credit notes from revenue)
@@ -161,7 +164,7 @@ export const dashboardRouter = router({
 
     // Monthly revenue breakdown (last 12 months)
     const months = getLastNMonths(12);
-    const monthlyRevenue: { month: string; totalRevenue: string; serviceFeeRevenue: string; invoiceCount: number }[] = [];
+    const monthlyRevenue: { month: string; totalRevenue: string; serviceFeeRevenue: string; invoiceCount: number; totalCost: string; netProfit: string }[] = [];
 
     for (const m of months) {
       const [y, mo] = m.split("-").map(Number);
@@ -192,13 +195,40 @@ export const dashboardRouter = router({
               OR (${invoices.paidDate} IS NULL AND ${invoices.createdAt} >= ${monthStart} AND ${invoices.createdAt} < ${nextMonth})`,
         ));
 
+      // Monthly vendor cost
+      const monthlyCostExpr = sql<string>`COALESCE(${vendorBills.settlementAmount}, ${vendorBills.totalAmount})`;
+      const [monthCost] = await db.select({
+        total: sql<string>`COALESCE(SUM(CAST(${monthlyCostExpr} AS REAL)), 0)`,
+      }).from(vendorBills).where(and(
+        inArray(vendorBills.status, ["paid", "partially_paid"]),
+        sql`${vendorBills.billMonth} >= ${monthStart}`,
+        sql`${vendorBills.billMonth} < ${nextMonth}`,
+      ));
+
+      const mRev = parseFloat(monthTotal?.total ?? "0");
+      const mCost = parseFloat(monthCost?.total ?? "0");
+
       monthlyRevenue.push({
         month: m,
         totalRevenue: monthTotal?.total ?? "0",
         serviceFeeRevenue: monthServiceFee?.total ?? "0",
         invoiceCount: monthTotal?.count ?? 0,
+        totalCost: String(Math.round(mCost * 100) / 100),
+        netProfit: String(Math.round((mRev - mCost) * 100) / 100),
       });
     }
+
+    // ── Total vendor cost (all paid bills, using actual settlement amounts) ──
+    const actualCostExpr = sql<string>`COALESCE(${vendorBills.settlementAmount}, ${vendorBills.totalAmount})`;
+    const [totalCostResult] = await db.select({
+      total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+    }).from(vendorBills).where(
+      inArray(vendorBills.status, ["paid", "partially_paid"])
+    );
+
+    const totalRevenueNum = parseFloat(paidTotal?.total ?? "0");
+    const totalCostNum = parseFloat(totalCostResult?.total ?? "0");
+    const totalNetProfitNum = totalRevenueNum - totalCostNum;
 
     return {
       totalRevenue: paidTotal?.total ?? "0",
@@ -208,6 +238,9 @@ export const dashboardRouter = router({
       totalOverdueAmount: overdue?.total ?? "0",
       totalDeferredRevenue: depositTotal?.total ?? "0",
       totalDepositInvoices: depositTotal?.count ?? 0,
+      // New: cost & profit fields
+      totalCost: String(Math.round(totalCostNum * 100) / 100),
+      totalNetProfit: String(Math.round(totalNetProfitNum * 100) / 100),
       monthlyRevenue,
     };
   }),

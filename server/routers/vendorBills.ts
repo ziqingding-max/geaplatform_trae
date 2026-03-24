@@ -100,11 +100,17 @@ export const vendorBillsRouter = router({
             "other",
           ])
           .default("other"),
-        billType: z.enum(["operational", "deposit", "deposit_refund"]).default("operational"),
+        billType: z.enum(["operational", "deposit", "deposit_refund", "pass_through", "vendor_service_fee", "non_recurring"]).default("operational"),
         description: z.string().optional(),
         internalNotes: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
+        // Settlement fields (optional at creation, typically filled when marking as paid)
+        settlementCurrency: z.string().optional(),
+        settlementAmount: z.string().optional(),
+        settlementBankFee: z.string().optional(),
+        settlementDate: z.string().optional(),
+        settlementNotes: z.string().optional(),
         items: z.array(billItemSchema).optional(),
       })
     )
@@ -189,11 +195,17 @@ export const vendorBillsRouter = router({
             "other",
           ])
           .optional(),
-        billType: z.enum(["operational", "deposit", "deposit_refund"]).optional(),
+        billType: z.enum(["operational", "deposit", "deposit_refund", "pass_through", "vendor_service_fee", "non_recurring"]).optional(),
         description: z.string().optional(),
         internalNotes: z.string().optional(),
         receiptFileUrl: z.string().optional().nullable(),
         receiptFileKey: z.string().optional().nullable(),
+        // Settlement fields
+        settlementCurrency: z.string().optional().nullable(),
+        settlementAmount: z.string().optional().nullable(),
+        settlementBankFee: z.string().optional().nullable(),
+        settlementDate: z.string().optional().nullable(),
+        settlementNotes: z.string().optional().nullable(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -212,11 +224,29 @@ export const vendorBillsRouter = router({
       if (data.paidDate === null) updateValues.paidDate = null;
       if (data.billMonth) updateValues.billMonth = new Date(`${data.billMonth}-01`);
       if (data.billMonth === null) updateValues.billMonth = null;
+      if (data.settlementDate) updateValues.settlementDate = data.settlementDate;
+      if (data.settlementDate === null) updateValues.settlementDate = null;
 
       // If marking as approved, record approver
       if (data.status === "approved") {
         updateValues.approvedBy = ctx.user.id;
         updateValues.approvedAt = new Date();
+      }
+
+      // ── Settlement validation: require settlementAmount when marking as paid ──
+      if (data.status === "paid" && !data.settlementAmount && !existing.settlementAmount) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Settlement amount is required when marking a bill as paid. Please enter the actual USD amount paid via bank.",
+        });
+      }
+
+      // ── Status rollback protection: clear settlement data when reverting from paid ──
+      if (data.status && data.status !== "paid" && data.status !== "partially_paid" && existing.status === "paid") {
+        updateValues.settlementAmount = null;
+        updateValues.settlementBankFee = null;
+        updateValues.settlementDate = null;
+        updateValues.settlementNotes = null;
       }
 
       await updateVendorBill(id, updateValues);
