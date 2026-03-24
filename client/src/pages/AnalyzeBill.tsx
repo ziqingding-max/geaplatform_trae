@@ -130,6 +130,9 @@ function BillFormFields({ bill, onChange, vendors, t }: {
               <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="operational">{t("vendorBills.billType.operational")}</SelectItem>
+                <SelectItem value="pass_through">{t("vendorBills.billType.pass_through")}</SelectItem>
+                <SelectItem value="vendor_service_fee">{t("vendorBills.billType.vendor_service_fee")}</SelectItem>
+                <SelectItem value="non_recurring">{t("vendorBills.billType.non_recurring")}</SelectItem>
                 <SelectItem value="deposit">{t("vendorBills.billType.deposit")}</SelectItem>
                 <SelectItem value="deposit_refund">{t("vendorBills.billType.deposit_refund")}</SelectItem>
               </SelectContent>

@@ -274,6 +274,7 @@ function VendorBillDetail() {
   const [settlementBankFee, setSettlementBankFee] = useState("");
   const [settlementCurrency, setSettlementCurrency] = useState("USD");
   const [settlementNotes, setSettlementNotes] = useState("");
+  const [settlementDate, setSettlementDate] = useState(new Date().toISOString().split("T")[0]);
   const [allocWorkerValue, setAllocWorkerValue] = useState(""); // "emp-123" or "con-456"
   const [allocInvoiceId, setAllocInvoiceId] = useState("");
   const [allocAmount, setAllocAmount] = useState("");
@@ -492,6 +493,7 @@ function VendorBillDetail() {
                 setSettlementBankFee("");
                 setSettlementCurrency("USD");
                 setSettlementNotes("");
+                setSettlementDate(new Date().toISOString().split("T")[0]);
                 setSettlementOpen(true);
               }}>
                 <DollarSign className="w-4 h-4 mr-1" /> {t("vendorBills.actions.markPaid")}
@@ -709,6 +711,9 @@ function VendorBillDetail() {
                     <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="operational">{t("vendorBills.billType.operational")}</SelectItem>
+                      <SelectItem value="pass_through">{t("vendorBills.billType.pass_through")}</SelectItem>
+                      <SelectItem value="vendor_service_fee">{t("vendorBills.billType.vendor_service_fee")}</SelectItem>
+                      <SelectItem value="non_recurring">{t("vendorBills.billType.non_recurring")}</SelectItem>
                       <SelectItem value="deposit">{t("vendorBills.billType.deposit")}</SelectItem>
                       <SelectItem value="deposit_refund">{t("vendorBills.billType.deposit_refund")}</SelectItem>
                     </SelectContent>
@@ -807,6 +812,15 @@ function VendorBillDetail() {
                 <p className="text-xs text-muted-foreground mt-1">{t("vendorBills.settlement.bankFeeHint")}</p>
               </div>
               <div>
+                <Label className="text-xs">{t("vendorBills.settlement.date")}</Label>
+                <Input
+                  type="date"
+                  value={settlementDate}
+                  onChange={(e) => setSettlementDate(e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div>
                 <Label className="text-xs">{t("vendorBills.settlement.notes")}</Label>
                 <Input
                   value={settlementNotes}
@@ -830,6 +844,7 @@ function VendorBillDetail() {
                     settlementCurrency,
                     settlementAmount,
                     settlementBankFee: settlementBankFee || "0",
+                    settlementDate: settlementDate || undefined,
                     settlementNotes: settlementNotes || undefined,
                   });
                   setSettlementOpen(false);
