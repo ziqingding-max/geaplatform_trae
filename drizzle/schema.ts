@@ -1143,30 +1143,19 @@ export const vendorBills = sqliteTable(
       "overdue",
       "cancelled",
       "void",
-      "applied", // For deposit bills that are applied
     ] }).default("draft").notNull(),
     category: text("category", { enum: [
-      "payroll_processing",
-      "social_contributions",
-      "tax_filing",
-      "legal_compliance",
-      "visa_immigration",
-      "hr_advisory",
-      "it_services",
-      "office_rent",
-      "insurance",
-      "bank_charges",
-      "consulting",
-      "equipment",
-      "travel",
-      "marketing",
-      "other",
+      "payroll_processing",    // Payroll processing & tax filing
+      "social_contributions",  // Social security, pension, insurance contributions
+      "visa_immigration",      // Visa, work permit, immigration
+      "consulting",            // Consulting, HR advisory, legal
+      "equipment",             // Equipment procurement
+      "insurance",             // Insurance premiums
+      "other",                 // IT, office, bank charges, travel, marketing, etc.
     ] }).default("other").notNull(),
     // Bill type classification for P&L attribution
     billType: text("billType", { enum: [
       "operational",        // Regular operational service costs (COGS or OpEx)
-      "deposit",            // Vendor deposit / guarantee
-      "deposit_refund",     // Deposit returned by vendor
       "pass_through",       // Pass-through payroll/social costs (deducted before Net Revenue)
       "vendor_service_fee", // Vendor's own management/processing fee (Direct COGS)
       "non_recurring",      // One-off costs: visa, equipment, relocation, etc.
@@ -1234,8 +1223,6 @@ export const vendorBillItems = sqliteTable(
       "service_fee",         // Vendor's own service/processing fee
       "visa_fee",            // Visa/immigration related costs
       "equipment_purchase",  // Equipment procurement costs
-      "deposit",             // Security deposit / guarantee
-      "deposit_refund",      // Deposit returned by vendor
       "other",               // Miscellaneous / unclassified
     ] }).default("other").notNull(),
     // Cost allocation fields (optional — for linking expenses to revenue)

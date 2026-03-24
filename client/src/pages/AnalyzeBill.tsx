@@ -42,12 +42,11 @@ import { toast } from "sonner";
 
 /* ─── Constants ─── */
 const categoryKeys = [
-  "payroll_processing", "social_contributions", "tax_filing", "legal_compliance",
-  "visa_immigration", "hr_advisory", "it_services", "office_rent", "insurance",
-  "bank_charges", "consulting", "equipment", "travel", "marketing", "other",
+  "payroll_processing", "social_contributions", "visa_immigration",
+  "consulting", "equipment", "insurance", "other",
 ];
 const itemTypeKeys = [
-  "employment_cost", "service_fee", "visa_fee", "equipment_purchase", "deposit", "deposit_refund", "other",
+  "employment_cost", "service_fee", "visa_fee", "equipment_purchase", "other",
 ];
 
 /* ─── Types ─── */
@@ -126,15 +125,22 @@ function BillFormFields({ bill, onChange, vendors, t }: {
           </div>
           <div className="col-span-1">
             <Label className="text-xs">{t("vendorBills.createBill.billType")}</Label>
-            <Select value={bill.billType || "operational"} onValueChange={(v) => set("billType", v)}>
+            <Select value={bill.billType || "operational"} onValueChange={(v) => {
+              // Smart auto-fill: set recommended category based on billType
+              const autoCategory: Record<string, string> = {
+                pass_through: "payroll_processing",
+                vendor_service_fee: "consulting",
+                non_recurring: bill.category || "other",
+                operational: bill.category || "other",
+              };
+              onChange({ ...bill, billType: v, category: autoCategory[v] || "other" });
+            }}>
               <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="operational">{t("vendorBills.billType.operational")}</SelectItem>
                 <SelectItem value="pass_through">{t("vendorBills.billType.pass_through")}</SelectItem>
                 <SelectItem value="vendor_service_fee">{t("vendorBills.billType.vendor_service_fee")}</SelectItem>
                 <SelectItem value="non_recurring">{t("vendorBills.billType.non_recurring")}</SelectItem>
-                <SelectItem value="deposit">{t("vendorBills.billType.deposit")}</SelectItem>
-                <SelectItem value="deposit_refund">{t("vendorBills.billType.deposit_refund")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -751,7 +757,7 @@ export default function AnalyzeBill() {
             quantity: item.quantity || "1",
             unitPrice: item.unitPrice || item.amount,
             amount: item.amount,
-            itemType: (item.itemType || "other") as "employment_cost" | "service_fee" | "visa_fee" | "equipment_purchase" | "deposit" | "deposit_refund" | "other",
+            itemType: (item.itemType || "other") as "employment_cost" | "service_fee" | "visa_fee" | "equipment_purchase" | "other",
             relatedEmployeeId: item.relatedEmployeeId ? parseInt(String(item.relatedEmployeeId)) : undefined,
             relatedCountryCode: item.relatedCountryCode || undefined,
           })),
@@ -792,7 +798,7 @@ export default function AnalyzeBill() {
             quantity: item.quantity || "1",
             unitPrice: item.unitPrice || item.amount,
             amount: item.amount,
-            itemType: (item.itemType || "other") as "employment_cost" | "service_fee" | "visa_fee" | "equipment_purchase" | "deposit" | "deposit_refund" | "other",
+            itemType: (item.itemType || "other") as "employment_cost" | "service_fee" | "visa_fee" | "equipment_purchase" | "other",
           })) : undefined,
         });
       }
