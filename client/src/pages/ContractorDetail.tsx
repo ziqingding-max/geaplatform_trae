@@ -27,6 +27,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { isAdmin } from "@shared/roles";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, countryName } from "@/lib/format";
+import { BankDetailsForm, type BankDetails } from "@/components/forms/BankDetailsForm";
 
 function InvoiceDetailDialog({ invoiceId, open, onOpenChange }: { invoiceId: number | null, open: boolean, onOpenChange: (o: boolean) => void }) {
   const { data: invoice, isLoading } = trpc.contractors.invoices.get.useQuery(
@@ -137,6 +138,7 @@ function EditContractorDialog({ contractor, open, onOpenChange, onSuccess }: {
     rateAmount: "",
     defaultApproverId: 0,
     notes: "",
+    bankDetails: {} as Partial<BankDetails>,
   });
 
   // Populate form when contractor data changes
@@ -166,6 +168,7 @@ function EditContractorDialog({ contractor, open, onOpenChange, onSuccess }: {
         rateAmount: contractor.rateAmount || "",
         defaultApproverId: contractor.defaultApproverId || 0,
         notes: contractor.notes || "",
+        bankDetails: (contractor.bankDetails as Partial<BankDetails>) || {},
       });
     }
   }, [contractor, open]);
@@ -207,6 +210,13 @@ function EditContractorDialog({ contractor, open, onOpenChange, onSuccess }: {
       if (form.defaultApproverId > 0) data.defaultApproverId = form.defaultApproverId;
     }
     if (form.notes !== (contractor.notes || "")) data.notes = form.notes;
+
+    // Bank details: compare JSON serialized form to detect changes
+    const currentBankJson = JSON.stringify(form.bankDetails || {});
+    const originalBankJson = JSON.stringify((contractor.bankDetails as any) || {});
+    if (currentBankJson !== originalBankJson && currentBankJson !== "{}") {
+      data.bankDetails = currentBankJson;
+    }
 
     if (Object.keys(data).length === 0) {
       toast.info("No changes detected");
@@ -373,6 +383,14 @@ function EditContractorDialog({ contractor, open, onOpenChange, onSuccess }: {
               </div>
             )}
           </div>
+
+          {/* Bank Details */}
+          <BankDetailsForm
+            value={form.bankDetails || {}}
+            onChange={(details) => setForm({...form, bankDetails: {...form.bankDetails, ...details}})}
+            countryCode={form.country}
+            currency={form.currency}
+          />
 
           {/* Notes */}
           <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide mt-2">Notes</h4>
