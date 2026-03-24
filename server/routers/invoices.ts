@@ -648,17 +648,33 @@ export const invoicesRouter = router({
             followUpMonth.setMonth(followUpMonth.getMonth() + 1);
             followUpMonth.setDate(1);
 
-            const followUpNumber = await generateInvoiceNumber(
-              invoice.billingEntityId,
-              followUpMonth.toISOString()
-            );
+            // Determine follow-up invoice type and number based on original invoice type
+            const isDepositFollowUp = invoice.invoiceType === "deposit";
+            const followUpInvoiceType = isDepositFollowUp ? "deposit" : "manual";
+
+            const followUpNumber = isDepositFollowUp
+              ? await generateDepositInvoiceNumber(invoice.billingEntityId, followUpMonth)
+              : await generateInvoiceNumber(invoice.billingEntityId, followUpMonth.toISOString());
+
+            // For deposit follow-ups, retrieve employeeId from original invoice line items
+            let originalEmployeeId: number | undefined;
+            if (isDepositFollowUp) {
+              const originalItems = await listInvoiceItemsByInvoice(input.id);
+              const depositItem = originalItems.find((item: any) => item.itemType === "deposit" && item.employeeId);
+              if (depositItem) {
+                originalEmployeeId = (depositItem as any).employeeId;
+              }
+            }
+
+            // Convert followUpMonth to string format (YYYY-MM-DD) as invoiceMonth is a text column
+            const followUpMonthStr = followUpMonth.toISOString().slice(0, 10);
 
             const followUpResult = await createInvoice({
               customerId: invoice.customerId,
               billingEntityId: invoice.billingEntityId,
               invoiceNumber: followUpNumber,
-              invoiceType: "manual",
-              invoiceMonth: followUpMonth.toISOString().slice(0, 7),
+              invoiceType: followUpInvoiceType,
+              invoiceMonth: followUpMonthStr,
               currency: invoice.currency || "USD",
               exchangeRate: "1",
               exchangeRateWithMarkup: "1",
@@ -668,7 +684,9 @@ export const invoicesRouter = router({
               total: paymentResult.difference,
               status: "draft",
               relatedInvoiceId: input.id,
-              notes: `Outstanding balance from ${invoice.invoiceNumber}. Original total: ${invoice.currency} ${paymentResult.invoiceTotal}, Paid: ${invoice.currency} ${input.paidAmount}, Shortfall: ${invoice.currency} ${paymentResult.difference}`,
+              notes: isDepositFollowUp
+                ? `Outstanding deposit balance from ${invoice.invoiceNumber}. Original total: ${invoice.currency} ${paymentResult.invoiceTotal}, Paid: ${invoice.currency} ${input.paidAmount}, Shortfall: ${invoice.currency} ${paymentResult.difference}`
+                : `Outstanding balance from ${invoice.invoiceNumber}. Original total: ${invoice.currency} ${paymentResult.invoiceTotal}, Paid: ${invoice.currency} ${input.paidAmount}, Shortfall: ${invoice.currency} ${paymentResult.difference}`,
               dueDate: new Date(followUpMonth.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
             });
 
@@ -676,14 +694,23 @@ export const invoicesRouter = router({
 
             // Add a single line item for the outstanding balance
             if (followUpInvoiceId) {
-              await createInvoiceItem({
+              const lineItemData: any = {
                 invoiceId: followUpInvoiceId,
-                description: `Outstanding balance from invoice ${invoice.invoiceNumber}`,
+                description: isDepositFollowUp
+                  ? `Outstanding deposit balance from invoice ${invoice.invoiceNumber}`
+                  : `Outstanding balance from invoice ${invoice.invoiceNumber}`,
                 quantity: "1",
                 unitPrice: paymentResult.difference,
                 amount: paymentResult.difference,
-                itemType: "employment_cost" as any,
-              });
+                itemType: isDepositFollowUp ? "deposit" : "employment_cost",
+              };
+
+              // Inherit employeeId from original deposit invoice line item
+              if (isDepositFollowUp && originalEmployeeId) {
+                lineItemData.employeeId = originalEmployeeId;
+              }
+
+              await createInvoiceItem(lineItemData);
 
               await logAuditAction({
                 userId: ctx.user.id, userName: ctx.user.name || null,
@@ -693,14 +720,18 @@ export const invoicesRouter = router({
                 changes: JSON.stringify({
                   type: "underpayment_followup",
                   originalInvoiceId: input.id,
+                  originalInvoiceType: invoice.invoiceType,
                   shortfall: paymentResult.difference,
                 }),
               });
 
               // Notify finance manager about follow-up invoice
+              const notificationTitle = isDepositFollowUp
+                ? `Follow-up Invoice Created (Deposit Underpayment)`
+                : `Follow-up Invoice Created (Underpayment)`;
               notifyOwner({
-                title: `Follow-up Invoice Created (Underpayment)`,
-                content: `A follow-up invoice has been automatically created for underpayment on invoice ${invoice.invoiceNumber}.\n\nOriginal Invoice: ${invoice.invoiceNumber}\nInvoice Total: ${invoice.currency} ${paymentResult.invoiceTotal}\nAmount Paid: ${invoice.currency} ${input.paidAmount}\nShortfall: ${invoice.currency} ${paymentResult.difference}\nFollow-up Invoice ID: #${followUpInvoiceId}\n\nPlease review and send the follow-up invoice to the client.`,
+                title: notificationTitle,
+                content: `A follow-up invoice has been automatically created for underpayment on invoice ${invoice.invoiceNumber}.\n\nOriginal Invoice: ${invoice.invoiceNumber}\nInvoice Type: ${invoice.invoiceType}\nInvoice Total: ${invoice.currency} ${paymentResult.invoiceTotal}\nAmount Paid: ${invoice.currency} ${input.paidAmount}\nShortfall: ${invoice.currency} ${paymentResult.difference}\nFollow-up Invoice ID: #${followUpInvoiceId}\n\nPlease review and send the follow-up invoice to the client.`,
               }).catch((err) => console.warn("[Notification] Failed to notify about follow-up invoice:", err));
             }
           } else if (paymentResult.type === "overpayment") {
@@ -999,6 +1030,9 @@ export const invoicesRouter = router({
       const remainingDue = total - totalPaidSoFar;
       
       // Determine new status
+      // Explicitly type as string to avoid TS narrowing issue:
+      // After the guard clause (line 988) excludes 'paid'/'cancelled'/'void',
+      // TS narrows invoice.status and would reject re-assigning 'paid' here.
       let newStatus: string = invoice.status;
       if (remainingDue <= 0.01) { // Floating point tolerance
          newStatus = 'paid';

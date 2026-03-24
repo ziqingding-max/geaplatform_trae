@@ -215,6 +215,7 @@ async function seedBusinessData() {
         nationality: e.nationality,
         country: e.country,
         jobTitle: e.jobTitle,
+        jobDescription: e.jobDescription || null,
         startDate: e.startDate,
         endDate: e.endDate || null,
         baseSalary: e.baseSalary.toString(),

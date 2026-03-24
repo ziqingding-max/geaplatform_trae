@@ -94,6 +94,7 @@ export const contractorsRouter = router({
         postalCode: z.string().optional(),
         department: z.string().optional(),
         jobTitle: z.string(),
+        jobDescription: z.string().optional(),
         startDate: z.string(),
         endDate: z.string().optional(),
         
@@ -158,6 +159,7 @@ export const contractorsRouter = router({
           postalCode: z.string().optional(),
           department: z.string().optional(),
           jobTitle: z.string().optional(),
+          jobDescription: z.string().optional(),
           startDate: z.string().optional(),
           endDate: z.string().optional(),
           status: z.enum(["pending_review", "active", "terminated"]).optional(),

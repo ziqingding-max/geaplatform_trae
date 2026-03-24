@@ -33,6 +33,7 @@ const initialFormData = {
   state: "",
   postalCode: "",
   jobTitle: "",
+  jobDescription: "",
   department: "",
   country: "",
   currency: "USD",
@@ -168,6 +169,10 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
                <Input value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} placeholder="e.g. Engineering" />
              </div>
            </div>
+           <div className="space-y-2">
+             <Label>{t("employees.create.form.jobDescription")}</Label>
+             <Textarea rows={3} value={formData.jobDescription} onChange={e => setFormData({...formData, jobDescription: e.target.value})} placeholder={t("employees.create.form.jobDescriptionPlaceholder")} />
+           </div>
 
            <div className="grid grid-cols-2 gap-4">
              <div className="space-y-2">
@@ -265,6 +270,7 @@ export default function ContractorCreateDialog({ onSuccess }: { onSuccess?: () =
                if (!submitData.country) { toast.error("Country/Region is required"); return; }
                if (!submitData.startDate) { toast.error("Start Date is required"); return; }
                if (submitData.defaultApproverId === 0) delete submitData.defaultApproverId;
+               if (!submitData.jobDescription) delete submitData.jobDescription;
                createMutation.mutate(submitData);
              }} disabled={createMutation.isPending}>
                {createMutation.isPending ? "Creating..." : "Create Contractor"}

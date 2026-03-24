@@ -283,6 +283,7 @@ export default function PortalContractorDetail() {
               <CardContent className="pt-0">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
                   <InfoItem label={t("portal_contractor_detail.job_title")} value={contractor.jobTitle} icon={Briefcase} />
+                  {contractor.jobDescription && <InfoItem label={t("portal_contractor_detail.job_description")} value={contractor.jobDescription} icon={Briefcase} />}
                   <InfoItem label={t("portal_contractor_detail.department")} value={contractor.department} icon={Building2} />
                   <InfoItem label={t("portal_contractor_detail.start_date")} value={contractor.startDate ? formatDate(contractor.startDate) : null} icon={Calendar} />
                   <InfoItem label={t("portal_contractor_detail.end_date")} value={contractor.endDate ? formatDate(contractor.endDate) : null} icon={Calendar} />

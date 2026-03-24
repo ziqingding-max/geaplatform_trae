@@ -53,6 +53,7 @@ const PORTAL_EMPLOYEE_FIELDS = {
   postalCode: employees.postalCode,
   department: employees.department,
   jobTitle: employees.jobTitle,
+  jobDescription: employees.jobDescription,
   serviceType: employees.serviceType,
   employmentType: employees.employmentType,
   startDate: employees.startDate,
@@ -275,6 +276,7 @@ export const portalEmployeesRouter = portalRouter({
         postalCode: z.string().optional(),
         department: z.string().optional(),
         jobTitle: z.string().min(1),
+        jobDescription: z.string().optional(),
         serviceType: z.enum(["eor", "visa_eor"]).default("eor"),
         employmentType: z.enum(["fixed_term", "long_term"]).default("long_term"),
         startDate: z.string().min(1),
@@ -340,6 +342,7 @@ export const portalEmployeesRouter = portalRouter({
         postalCode: input.postalCode || null,
         department: input.department || null,
         jobTitle: input.jobTitle,
+        jobDescription: input.jobDescription || null,
         serviceType: serviceType,
         employmentType: input.employmentType,
         startDate: input.startDate as any,
@@ -480,6 +483,7 @@ export const portalEmployeesRouter = portalRouter({
         serviceType: z.enum(["eor", "visa_eor", "aor"]).default("eor"),
         country: z.string().optional(),
         jobTitle: z.string().optional(),
+        jobDescription: z.string().optional(),
         department: z.string().optional(),
         startDate: z.string().optional(),
         endDate: z.string().optional(),
@@ -557,6 +561,7 @@ export const portalEmployeesRouter = portalRouter({
         serviceType: input.serviceType,
         country: input.country || null,
         jobTitle: input.jobTitle || null,
+        jobDescription: input.jobDescription || null,
         department: input.department || null,
         startDate: input.startDate || null,
         endDate: input.endDate || null,
@@ -726,6 +731,7 @@ export const portalEmployeesRouter = portalRouter({
           serviceType: onboardingInvites.serviceType,
           country: onboardingInvites.country,
           jobTitle: onboardingInvites.jobTitle,
+          jobDescription: onboardingInvites.jobDescription,
           department: onboardingInvites.department,
           startDate: onboardingInvites.startDate,
           endDate: onboardingInvites.endDate,
@@ -761,6 +767,7 @@ export const portalEmployeesRouter = portalRouter({
         serviceType: invite.serviceType,
         country: invite.country,
         jobTitle: invite.jobTitle,
+        jobDescription: invite.jobDescription,
         department: invite.department,
         startDate: invite.startDate,
         endDate: invite.endDate,
@@ -796,6 +803,7 @@ export const portalEmployeesRouter = portalRouter({
         state: z.string().optional(),
         postalCode: z.string().optional(),
         jobTitle: z.string().min(1),
+        jobDescription: z.string().optional(),
         department: z.string().optional(),
         startDate: z.string().min(1),
         bankDetails: z.any().optional(),
@@ -847,6 +855,7 @@ export const portalEmployeesRouter = portalRouter({
       let serviceType = invite.serviceType || "eor";
       const country = invite.country || input.country;
       const jobTitle = invite.jobTitle || input.jobTitle;
+      const jobDescription = invite.jobDescription || input.jobDescription || null;
       const department = invite.department || input.department;
       const startDate = invite.startDate || input.startDate;
 
@@ -884,6 +893,7 @@ export const portalEmployeesRouter = portalRouter({
           postalCode: input.postalCode || null,
           department: department || null,
           jobTitle,
+          jobDescription,
           startDate: startDate as any,
           endDate: invite.endDate || null,
           currency: invite.contractorCurrency || "USD",
@@ -939,6 +949,7 @@ export const portalEmployeesRouter = portalRouter({
           postalCode: input.postalCode || null,
           department: department || null,
           jobTitle,
+          jobDescription,
           serviceType: serviceType as any,
           employmentType: (invite.employmentType as any) || "long_term",
           startDate: startDate as any,

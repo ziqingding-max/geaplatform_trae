@@ -74,6 +74,7 @@ export async function listEmployees(params: ListEmployeesParams = {}) {
       country: employees.country,
       status: employees.status,
       jobTitle: employees.jobTitle,
+      jobDescription: employees.jobDescription,
       startDate: employees.startDate,
       customerId: employees.customerId,
       customerName: customers.companyName,

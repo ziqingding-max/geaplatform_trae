@@ -69,6 +69,7 @@ interface SelfOnboardingForm {
   postalCode: string;
   country: string;
   jobTitle: string;
+  jobDescription: string;
   department: string;
   bankDetails: Partial<BankDetails>;
 }
@@ -105,6 +106,7 @@ export default function PortalSelfOnboarding() {
     postalCode: "",
     country: "",
     jobTitle: "",
+    jobDescription: "",
     department: "",
     bankDetails: {},
   });
@@ -127,6 +129,7 @@ export default function PortalSelfOnboarding() {
       const updates: Partial<SelfOnboardingForm> = {};
       if (invite.country) { updates.country = invite.country; }
       if (invite.jobTitle) { updates.jobTitle = invite.jobTitle; }
+      if (invite.jobDescription) { updates.jobDescription = invite.jobDescription; }
       if (invite.department) { updates.department = invite.department; }
       // Pre-fill email from invite (will be locked)
       if (invite.employeeEmail) { updates.email = invite.employeeEmail; }
@@ -232,6 +235,7 @@ export default function PortalSelfOnboarding() {
       postalCode: formData.postalCode || undefined,
       country: formData.country || invite?.country || "SG",
       jobTitle: formData.jobTitle || invite?.jobTitle || "TBD",
+      jobDescription: formData.jobDescription || undefined,
       department: formData.department || undefined,
       startDate: invite?.startDate || new Date().toISOString().split("T")[0],
       bankDetails: Object.keys(formData.bankDetails).length > 0 ? formData.bankDetails : undefined,
@@ -512,6 +516,14 @@ export default function PortalSelfOnboarding() {
                       <Input value={formData.department} onChange={(e) => updateField("department", e.target.value)} placeholder={t("portal_self_onboarding.placeholders.department")} />
                     )}
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>{t("portal_self_onboarding.form.employment.job_description")}</Label>
+                  {employerFieldsLocked && formData.jobDescription ? (
+                    <div className="min-h-[60px] px-3 py-2 bg-muted/30 rounded-md border text-sm whitespace-pre-wrap">{formData.jobDescription}</div>
+                  ) : (
+                    <Textarea rows={3} value={formData.jobDescription} onChange={(e) => updateField("jobDescription", e.target.value)} placeholder={t("employees.create.form.jobDescriptionPlaceholder")} />
+                  )}
                 </div>
 
               </div>

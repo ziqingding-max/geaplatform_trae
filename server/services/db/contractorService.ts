@@ -98,6 +98,7 @@ export async function listContractors(
       country: contractors.country,
       status: contractors.status,
       jobTitle: contractors.jobTitle,
+      jobDescription: contractors.jobDescription,
       startDate: contractors.startDate,
       customerId: contractors.customerId,
       customerName: customers.companyName,

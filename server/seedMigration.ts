@@ -70,6 +70,7 @@ interface SeedEmployee {
   postalCode?: string | null;
   department?: string | null;
   jobTitle: string;
+  jobDescription?: string | null;
   serviceType?: string;
   employmentType?: string;
   startDate: string;
@@ -515,6 +516,7 @@ async function seedBusinessMigrationData(db: any) {
         postalCode: e.postalCode || undefined,
         department: e.department || undefined,
         jobTitle: e.jobTitle,
+        jobDescription: e.jobDescription || undefined,
         serviceType: (e.serviceType || 'eor') as "eor" | "visa_eor",
         employmentType: (e.employmentType || 'long_term') as "fixed_term" | "long_term",
         startDate: e.startDate,
@@ -547,6 +549,7 @@ async function seedBusinessMigrationData(db: any) {
         postalCode: e.postalCode || undefined,
         department: e.department || undefined,
         jobTitle: e.jobTitle,
+        jobDescription: e.jobDescription || undefined,
         serviceType: (e.serviceType || 'eor') as "eor" | "visa_eor",
         employmentType: (e.employmentType || 'long_term') as "fixed_term" | "long_term",
         startDate: e.startDate,

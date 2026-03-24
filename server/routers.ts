@@ -12,6 +12,7 @@ import { leaveRouter } from "./routers/leave";
 import { adjustmentsRouter } from "./routers/adjustments";
 import { reimbursementsRouter } from "./routers/reimbursements";
 import { dashboardRouter } from "./routers/dashboard";
+import { adminDashboardRouter } from "./routers/adminDashboard";
 import { billingEntitiesRouter } from "./routers/billingEntities";
 import { userManagementRouter } from "./routers/userManagement";
 import { auditLogsRouter } from "./routers/auditLogs";
@@ -55,6 +56,7 @@ export const appRouter = router({
   adjustments: adjustmentsRouter,
   reimbursements: reimbursementsRouter,
   dashboard: dashboardRouter,
+  adminDashboard: adminDashboardRouter,
   billingEntities: billingEntitiesRouter,
   userManagement: userManagementRouter,
   auditLogs: auditLogsRouter,

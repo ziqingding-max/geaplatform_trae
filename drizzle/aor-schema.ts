@@ -33,6 +33,7 @@ export const contractors = sqliteTable(
     postalCode: text("postalCode", { length: 20 }),
     // Service details
     jobTitle: text("jobTitle", { length: 255 }).notNull(),
+    jobDescription: text("jobDescription"),
     department: text("department", { length: 100 }),
     startDate: text("startDate").notNull(),
     endDate: text("endDate"),
