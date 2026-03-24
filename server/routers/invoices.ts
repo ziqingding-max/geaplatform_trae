@@ -666,12 +666,15 @@ export const invoicesRouter = router({
               }
             }
 
+            // Convert followUpMonth to string format (YYYY-MM-DD) as invoiceMonth is a text column
+            const followUpMonthStr = followUpMonth.toISOString().slice(0, 10);
+
             const followUpResult = await createInvoice({
               customerId: invoice.customerId,
               billingEntityId: invoice.billingEntityId,
               invoiceNumber: followUpNumber,
               invoiceType: followUpInvoiceType,
-              invoiceMonth: followUpMonth,
+              invoiceMonth: followUpMonthStr,
               currency: invoice.currency || "USD",
               exchangeRate: "1",
               exchangeRateWithMarkup: "1",
@@ -1027,7 +1030,10 @@ export const invoicesRouter = router({
       const remainingDue = total - totalPaidSoFar;
       
       // Determine new status
-      let newStatus = invoice.status;
+      // Explicitly type as string to avoid TS narrowing issue:
+      // After the guard clause (line 988) excludes 'paid'/'cancelled'/'void',
+      // TS narrows invoice.status and would reject re-assigning 'paid' here.
+      let newStatus: string = invoice.status;
       if (remainingDue <= 0.01) { // Floating point tolerance
          newStatus = 'paid';
       } else {
