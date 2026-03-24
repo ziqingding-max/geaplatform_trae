@@ -184,7 +184,7 @@ export const portalInvoicesRouter = portalRouter({
         } else if (inv.status === "paid") {
           // Paid: check if partially paid (has follow-up invoice)
           const followUps = relatedInvoicesMap[inv.id] || [];
-          const hasFollowUp = followUps.some(f => f.invoiceType === "manual" || f.invoiceType === "monthly_eor");
+          const hasFollowUp = followUps.some(f => f.invoiceType === "manual" || f.invoiceType === "monthly_eor" || f.invoiceType === "deposit");
           if (hasFollowUp) {
             balanceDue = 0; // The follow-up invoice carries the remaining balance
           } else {
@@ -205,7 +205,7 @@ export const portalInvoicesRouter = portalRouter({
         if (inv.status === "paid") {
           const followUps = relatedInvoicesMap[inv.id] || [];
           const hasUnderpaymentFollowUp = followUps.some(f =>
-            f.invoiceType === "manual" && Number(f.total) > 0
+            (f.invoiceType === "manual" || f.invoiceType === "deposit") && Number(f.total) > 0
           );
           const hasOverpaymentCN = followUps.some(f =>
             f.invoiceType === "credit_note"
@@ -334,7 +334,7 @@ export const portalInvoicesRouter = portalRouter({
 
       if (invoice.status === "paid") {
         const hasUnderpaymentFollowUp = childDocuments.some(d =>
-          d.invoiceType === "manual" && Number(d.total) > 0
+          (d.invoiceType === "manual" || d.invoiceType === "deposit") && Number(d.total) > 0
         );
         const hasOverpaymentCN = childDocuments.some(d =>
           d.invoiceType === "credit_note"
