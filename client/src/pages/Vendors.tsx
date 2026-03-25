@@ -212,8 +212,8 @@ function VendorList() {
                   <Select value={formData.vendorType} onValueChange={(v: any) => setFormData({ ...formData, vendorType: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="client_related">{t("vendors.form.vendor_type.client_related")}</SelectItem>
-                      <SelectItem value="operational">{t("vendors.form.vendor_type.operational")}</SelectItem>
+                      <SelectItem value="client_related">{t("vendors.type.client_related")}</SelectItem>
+                      <SelectItem value="operational">{t("vendors.type.operational")}</SelectItem>
                       <SelectItem value="eor_vendor">{t("vendors.type.eor_vendor")}</SelectItem>
                       <SelectItem value="bank_financial">{t("vendors.type.bank_financial")}</SelectItem>
                       <SelectItem value="professional_service">{t("vendors.type.professional_service")}</SelectItem>
@@ -271,8 +271,8 @@ function VendorList() {
             <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t("vendors.list.filter.type.all")}</SelectItem>
-              <SelectItem value="client_related">{t("vendors.list.filter.type.client_related")}</SelectItem>
-              <SelectItem value="operational">{t("vendors.list.filter.type.operational")}</SelectItem>
+              <SelectItem value="client_related">{t("vendors.type.client_related")}</SelectItem>
+              <SelectItem value="operational">{t("vendors.type.operational")}</SelectItem>
               <SelectItem value="eor_vendor">{t("vendors.type.eor_vendor")}</SelectItem>
               <SelectItem value="bank_financial">{t("vendors.type.bank_financial")}</SelectItem>
               <SelectItem value="professional_service">{t("vendors.type.professional_service")}</SelectItem>
@@ -696,8 +696,8 @@ function VendorDetail({ id }: { id: number }) {
                 <Select value={editData.vendorType || "client_related"} onValueChange={(v) => setEditData({ ...editData, vendorType: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="client_related">{t("vendors.list.filter.type.client_related")}</SelectItem>
-                    <SelectItem value="operational">{t("vendors.list.filter.type.operational")}</SelectItem>
+                    <SelectItem value="client_related">{t("vendors.type.client_related")}</SelectItem>
+                    <SelectItem value="operational">{t("vendors.type.operational")}</SelectItem>
                     <SelectItem value="eor_vendor">{t("vendors.type.eor_vendor")}</SelectItem>
                     <SelectItem value="bank_financial">{t("vendors.type.bank_financial")}</SelectItem>
                     <SelectItem value="professional_service">{t("vendors.type.professional_service")}</SelectItem>
