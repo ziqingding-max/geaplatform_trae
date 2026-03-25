@@ -78,15 +78,20 @@ function ConfidenceBadge({ score }: { score: number | null | undefined }) {
   return <Badge variant="outline" className="bg-red-500/15 text-red-600 border-red-500/30 text-[10px] px-1.5 whitespace-nowrap">{s}%</Badge>;
 }
 
-function OverallConfidenceBanner({ cv, t }: { cv: any; t: (k: string) => string }) {
-  if (!cv) return null;
-  const score = typeof cv.overallConfidence === "number" ? cv.overallConfidence : 0;
-  const warnings = Array.isArray(cv.warnings) ? cv.warnings : [];
-  const bgClass = score >= 85 ? "bg-emerald-50 border-emerald-200" : score >= 50 ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200";
+function OverallConfidenceBanner({ parsedResult, t }: { parsedResult: any; t: (k: string) => string }) {
+  const parsed = parsedResult?.parsed;
+  const cv = parsed?.crossValidation;
+  // overallConfidence is at the top level of AI response, NOT inside crossValidation
+  const score = typeof parsed?.overallConfidence === "number" ? parsed.overallConfidence
+    : typeof cv?.overallConfidence === "number" ? cv.overallConfidence : null;
+  if (score === null && !cv) return null;
+  const warnings = Array.isArray(cv?.warnings) ? cv.warnings : [];
+  const displayScore = score ?? 0;
+  const bgClass = displayScore >= 85 ? "bg-emerald-50 border-emerald-200" : displayScore >= 50 ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200";
   return (
     <div className={`flex items-center gap-3 p-3 rounded-lg border ${bgClass}`}>
       <span className="text-sm font-medium">{t("vendorBills.review.overallConfidence")}</span>
-      <ConfidenceBadge score={score} />
+      <ConfidenceBadge score={displayScore} />
       {warnings.length > 0 && (
         <span className="text-xs text-amber-600 ml-auto flex items-center gap-1">
           <AlertTriangle className="w-3.5 h-3.5" />
@@ -465,7 +470,8 @@ function AllocationSuggestions({ allocations, onChange, t }: {
             <TableHeader>
               <TableRow className="bg-muted/30">
                 <TableHead className="text-xs w-10">{t("vendorBills.review.useHeader")}</TableHead>
-                <TableHead className="text-xs">Worker</TableHead>
+                <TableHead className="text-xs">{t("vendorBills.review.workerHeader")}</TableHead>
+                <TableHead className="text-xs">{t("vendorBills.review.customerHeader")}</TableHead>
                 <TableHead className="text-xs">{t("vendorBills.review.invoiceHeader")}</TableHead>
                 <TableHead className="text-xs text-right w-[140px]">{t("vendorBills.lineItems.amountHeader")}</TableHead>
                 <TableHead className="text-xs">{t("vendorBills.review.reasonHeader")}</TableHead>
@@ -484,11 +490,12 @@ function AllocationSuggestions({ allocations, onChange, t }: {
                       className="h-4 w-4 rounded border-gray-300" />
                   </TableCell>
                   <TableCell className="text-xs">
-                    {alloc.employeeId ? `Employee ID: ${alloc.employeeId}` : alloc.contractorId ? `Contractor ID: ${alloc.contractorId}` : "\u2014"}
-                    {alloc.employeeId && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-blue-50 text-blue-700 ml-1">EOR</Badge>}
-                    {alloc.contractorId && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-orange-50 text-orange-700 ml-1">AOR</Badge>}
+                    {alloc.workerName || (alloc.employeeId ? `EMP-${alloc.employeeId}` : alloc.contractorId ? `CTR-${alloc.contractorId}` : "\u2014")}
+                    {(alloc.workerType === "employee" || alloc.employeeId) && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-blue-50 text-blue-700 ml-1">EOR</Badge>}
+                    {(alloc.workerType === "contractor" || alloc.contractorId) && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-orange-50 text-orange-700 ml-1">AOR</Badge>}
                   </TableCell>
-                  <TableCell className="text-xs">ID: {alloc.invoiceId}</TableCell>
+                  <TableCell className="text-xs">{alloc.customerName || "\u2014"}</TableCell>
+                  <TableCell className="text-xs">{alloc.invoiceNumber || (alloc.invoiceId ? `#${alloc.invoiceId}` : "\u2014")}</TableCell>
                   <TableCell className="p-1.5">
                     <Input type="number" step="0.01" value={alloc.allocatedAmount} onChange={(e) => {
                       const n = [...allocations];
@@ -899,7 +906,7 @@ export default function AnalyzeBill() {
         {step === "form" && (
           <div className="space-y-5">
             {/* Overall confidence (AI only) */}
-            <OverallConfidenceBanner cv={cv} t={t} />
+            <OverallConfidenceBanner parsedResult={parsedResult} t={t} />
 
             {/* AI Notes (if any) */}
             {cv?.notes?.length > 0 && (
