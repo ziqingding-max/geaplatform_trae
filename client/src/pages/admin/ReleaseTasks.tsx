@@ -12,46 +12,67 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { CheckCircle, XCircle, AlertCircle, Building2, Wallet, Landmark, Eye, Clock, CheckCircle2, ExternalLink } from "lucide-react";
+import { CheckCircle, XCircle, AlertCircle, Building2, Wallet, Landmark, Eye, Clock, CheckCircle2, ExternalLink, Search, Download, Loader2, FilterX } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatCurrencyAmount } from "@/components/CurrencyAmount";
 import { formatDate } from "@/lib/format";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { exportToCsv } from "@/lib/csvExport";
 
 export default function ReleaseTasks() {
   const { t } = useI18n();
-  const { canReview } = usePermissions();
+  const { canReview, canExport } = usePermissions();
   const [, setLocation] = useLocation();
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [disposition, setDisposition] = useState<"to_wallet" | "to_bank">("to_wallet");
   
+  // Search and filter state
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [customerFilter, setCustomerFilter] = useState<string>("all");
+  const [isExporting, setIsExporting] = useState(false);
+
   const utils = trpc.useUtils();
 
   const [tab, setTab] = useState<"pending" | "history">("pending");
 
-  // Fetch pending credit notes and deposit refunds for approval
-  // Pending includes 'draft' (auto-generated deposit refund) and 'sent' (manually created credit note)
-  const pendingStatuses = tab === "pending" ? undefined : undefined; // We filter client side or fetch all?
-  // Better to fetch specific statuses based on tab to avoid over-fetching
-  
   const { data: creditNoteData, isLoading: isLoadingCN } = trpc.invoices.list.useQuery({
     invoiceType: "credit_note",
-    limit: 100,
+    limit: 10000,
   });
   const { data: depositRefundData, isLoading: isLoadingDR } = trpc.invoices.list.useQuery({
     invoiceType: "deposit_refund",
-    limit: 100,
+    limit: 10000,
   });
 
   const isLoading = isLoadingCN || isLoadingDR;
   
+  // Derive unique customers from data for filter
+  const availableCustomers = useMemo(() => {
+    const combined = [
+      ...((creditNoteData as any)?.data || []),
+      ...((depositRefundData as any)?.data || []),
+    ];
+    const map = new Map<number, string>();
+    combined.forEach((t: any) => {
+      if (t.customerId && t.customerName) {
+        map.set(t.customerId, t.customerName);
+      }
+    });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [creditNoteData, depositRefundData]);
+
   const allTasks = useMemo(() => {
     const combined = [
       ...((creditNoteData as any)?.data || []),
@@ -62,10 +83,95 @@ export default function ReleaseTasks() {
     const pending = ["draft", "sent", "pending_approval"];
     const history = ["paid", "applied", "cancelled"];
     
-    return combined.filter(t => 
+    let filtered = combined.filter(t => 
       tab === "pending" ? pending.includes(t.status) : history.includes(t.status)
-    ).sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [creditNoteData, depositRefundData, tab]);
+    );
+
+    // Apply type filter
+    if (typeFilter !== "all") {
+      filtered = filtered.filter(t => t.invoiceType === typeFilter);
+    }
+
+    // Apply customer filter
+    if (customerFilter !== "all") {
+      filtered = filtered.filter(t => String(t.customerId) === customerFilter);
+    }
+
+    // Apply search filter
+    if (search) {
+      const s = search.toLowerCase();
+      filtered = filtered.filter(t => 
+        (t.invoiceNumber || "").toLowerCase().includes(s) ||
+        (t.customerName || "").toLowerCase().includes(s) ||
+        (t.notes || "").toLowerCase().includes(s)
+      );
+    }
+
+    return filtered.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [creditNoteData, depositRefundData, tab, typeFilter, customerFilter, search]);
+
+  const hasActiveFilters = typeFilter !== "all" || customerFilter !== "all" || search !== "";
+
+  const clearAllFilters = () => {
+    setTypeFilter("all");
+    setCustomerFilter("all");
+    setSearch("");
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      // Fetch ALL data for export
+      const [cnResult, drResult] = await Promise.all([
+        utils.invoices.list.fetch({ invoiceType: "credit_note", limit: 10000, offset: 0 }),
+        utils.invoices.list.fetch({ invoiceType: "deposit_refund", limit: 10000, offset: 0 }),
+      ]);
+      const combined = [
+        ...((cnResult as any)?.data || []),
+        ...((drResult as any)?.data || []),
+      ];
+
+      // Apply same filters as display
+      const pending = ["draft", "sent", "pending_approval"];
+      const history = ["paid", "applied", "cancelled"];
+      
+      let exportData = combined.filter((t: any) => 
+        tab === "pending" ? pending.includes(t.status) : history.includes(t.status)
+      );
+
+      if (typeFilter !== "all") {
+        exportData = exportData.filter((t: any) => t.invoiceType === typeFilter);
+      }
+      if (customerFilter !== "all") {
+        exportData = exportData.filter((t: any) => String(t.customerId) === customerFilter);
+      }
+      if (search) {
+        const s = search.toLowerCase();
+        exportData = exportData.filter((t: any) => 
+          (t.invoiceNumber || "").toLowerCase().includes(s) ||
+          (t.customerName || "").toLowerCase().includes(s) ||
+          (t.notes || "").toLowerCase().includes(s)
+        );
+      }
+
+      exportToCsv(exportData, [
+        { header: "Invoice #", accessor: (r: any) => r.invoiceNumber },
+        { header: "Type", accessor: (r: any) => r.invoiceType === "deposit_refund" ? "Deposit Refund" : "Credit Note" },
+        { header: "Customer", accessor: (r: any) => r.customerName || "" },
+        { header: "Amount", accessor: (r: any) => formatCurrencyAmount(Math.abs(parseFloat(r.total)), r.currency) },
+        { header: "Currency", accessor: (r: any) => r.currency },
+        { header: "Reason/Notes", accessor: (r: any) => r.notes || "Deposit Release" },
+        { header: "Status", accessor: (r: any) => r.status },
+        { header: "Disposition", accessor: (r: any) => r.creditNoteDisposition || "" },
+        { header: "Date Created", accessor: (r: any) => r.createdAt ? formatDate(r.createdAt) : "" },
+      ], `release-tasks-${tab}-${new Date().toISOString().slice(0, 10)}.csv`);
+      toast.success(`CSV exported successfully - ${exportData.length} records`);
+    } catch (err) {
+      toast.error("Export failed");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const approveMut = trpc.invoices.approveCreditNote.useMutation({
     onSuccess: () => {
@@ -84,6 +190,13 @@ export default function ReleaseTasks() {
             <h1 className="text-2xl font-bold tracking-tight">Release Tasks</h1>
             <p className="text-sm text-muted-foreground mt-1">Approve deposit releases and credit note dispositions</p>
           </div>
+          <div className="flex gap-2">
+            {canExport && (
+              <Button variant="outline" size="sm" disabled={isExporting || allTasks.length === 0} onClick={handleExport}>
+                {isExporting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />} Export CSV
+              </Button>
+            )}
+          </div>
         </div>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="w-full">
@@ -96,11 +209,50 @@ export default function ReleaseTasks() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value={tab} className="mt-4">
+          <TabsContent value={tab} className="mt-4 space-y-4">
+            {/* Search and Filters */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by invoice #, customer, notes..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-[180px] h-9">
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="credit_note">Credit Note</SelectItem>
+                  <SelectItem value="deposit_refund">Deposit Refund</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={customerFilter} onValueChange={setCustomerFilter}>
+                <SelectTrigger className="w-[200px] h-9">
+                  <SelectValue placeholder="All Customers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Customers</SelectItem>
+                  {availableCustomers.map(([id, name]) => (
+                    <SelectItem key={id} value={String(id)}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-muted-foreground">
+                  <FilterX className="w-4 h-4 mr-1" /> Clear
+                </Button>
+              )}
+            </div>
+
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base font-medium">
-                  {tab === "pending" ? "Pending Approvals" : "Processed Tasks"}
+                  {tab === "pending" ? "Pending Approvals" : "Processed Tasks"} ({allTasks.length})
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
@@ -184,7 +336,7 @@ export default function ReleaseTasks() {
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-16 text-muted-foreground">
                           <CheckCircle className="w-8 h-8 mx-auto mb-2 text-muted-foreground/30" />
-                          <p>No {tab} release tasks found</p>
+                          <p>{hasActiveFilters ? "No matching release tasks found" : `No ${tab} release tasks found`}</p>
                         </TableCell>
                       </TableRow>
                     )}
