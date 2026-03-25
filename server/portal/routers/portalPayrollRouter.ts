@@ -56,7 +56,7 @@ export const portalPayrollRouter = portalRouter({
 
       if (input.year) {
         conditions.push(
-          sql`substr(${payrollRuns.payrollMonth}, 1, 4) = ${String(input.year)}`
+          sql`substring(${payrollRuns.payrollMonth} from 1 for 4) = ${String(input.year)}`
         );
       }
 
@@ -245,7 +245,7 @@ export const portalPayrollRouter = portalRouter({
           and(
             inArray(payrollRuns.id, runIds),
             eq(payrollRuns.status, "approved"),
-            sql`substr(${payrollRuns.payrollMonth}, 1, 4) = ${String(input.year)}`
+            sql`substring(${payrollRuns.payrollMonth} from 1 for 4) = ${String(input.year)}`
           )
         )
         .orderBy(sql`${payrollRuns.payrollMonth} DESC`);

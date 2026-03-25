@@ -6,7 +6,7 @@ import { eq, sql } from 'drizzle-orm';
 
 // Set test environment
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'file:server/sqlite.db';
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/gea_test';
 
 async function runTests() {
   console.log('Running AOR Contractor Billing Tests...');

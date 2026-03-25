@@ -561,7 +561,7 @@ export const salesRouter = router({
                 // Use raw SQL to avoid Drizzle passing null for autoIncrement id
                 const contractName = doc.title || `MSA-${lead.companyName}`;
                 const now = Date.now();
-                await db.run(sql`INSERT INTO customer_contracts ("customerId", "contractName", "contractType", "fileUrl", "fileKey", "status", "createdAt", "updatedAt") VALUES (${customerId}, ${contractName}, ${'MSA'}, ${doc.fileUrl}, ${doc.fileKey}, ${'signed'}, ${now}, ${now})`);
+                await db.execute(sql`INSERT INTO customer_contracts ("customerId", "contractName", "contractType", "fileUrl", "fileKey", "status", "createdAt", "updatedAt") VALUES (${customerId}, ${contractName}, ${'MSA'}, ${doc.fileUrl}, ${doc.fileKey}, ${'signed'}, ${now}, ${now})`);
             }
             // Also sync the document's customerId for future reference
             await db.update(salesDocuments)
@@ -875,8 +875,8 @@ export const salesRouter = router({
 
         // Create document record — use raw SQL to avoid Drizzle passing null for autoIncrement id
         const docNow = Date.now();
-        const insertResult = await db.run(sql`INSERT INTO sales_documents ("leadId", "docType", "title", "fileKey", "fileUrl", "generatedBy", "createdAt") VALUES (${input.leadId}, ${input.docType}, ${input.fileName}, ${fileKey}, ${url}, ${ctx.user.id}, ${docNow})`);
-        const docId = Number(insertResult.lastInsertRowid);
+        const insertResult = await db.execute(sql`INSERT INTO sales_documents ("leadId", "docType", "title", "fileKey", "fileUrl", "generatedBy", "createdAt") VALUES (${input.leadId}, ${input.docType}, ${input.fileName}, ${fileKey}, ${url}, ${ctx.user.id}, ${docNow}) RETURNING id`);
+        const docId = Number((insertResult as any)[0]?.id);
         const doc = { id: docId, leadId: input.leadId, docType: input.docType, title: input.fileName, fileKey, fileUrl: url, generatedBy: ctx.user.id, createdAt: new Date(docNow) };
 
         await logAuditAction({

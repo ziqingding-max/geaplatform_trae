@@ -311,7 +311,7 @@ export async function createLeadChangeLog(data: InsertLeadChangeLog) {
   // Drizzle's db.insert() always includes all table columns and passes null for autoIncrement id,
   // which fails on Turso remote databases that enforce NOT NULL on PRIMARY KEY.
   const now = Date.now();
-  await db.run(sql`INSERT INTO lead_change_logs ("leadId", "userId", "userName", "changeType", "fieldName", "oldValue", "newValue", "description", "createdAt") VALUES (${data.leadId}, ${data.userId ?? null}, ${data.userName ?? null}, ${data.changeType}, ${data.fieldName ?? null}, ${data.oldValue ?? null}, ${data.newValue ?? null}, ${data.description ?? null}, ${now})`);
+  await db.execute(sql`INSERT INTO lead_change_logs ("leadId", "userId", "userName", "changeType", "fieldName", "oldValue", "newValue", "description", "createdAt") VALUES (${data.leadId}, ${data.userId ?? null}, ${data.userName ?? null}, ${data.changeType}, ${data.fieldName ?? null}, ${data.oldValue ?? null}, ${data.newValue ?? null}, ${data.description ?? null}, ${now})`);
 }
 
 export async function listLeadChangeLogs(leadId: number) {

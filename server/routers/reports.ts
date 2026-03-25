@@ -209,7 +209,7 @@ export const reportsRouter = router({
         // ── 1. Service Fee Revenue (from invoice items) ──
         const [sfResult] = await db
           .select({
-            total: sql<string>`COALESCE(SUM(CAST(${invoiceItemsTable.amount} AS REAL)), 0)`,
+            total: sql<string>`COALESCE(SUM(CAST(${invoiceItemsTable.amount} AS numeric)), 0)`,
           })
           .from(invoiceItemsTable)
           .innerJoin(invoicesTable, eq(invoiceItemsTable.invoiceId, invoicesTable.id))
@@ -227,7 +227,7 @@ export const reportsRouter = router({
         // ── 2. Non-recurring Revenue (from invoice items) ──
         const [nrResult] = await db
           .select({
-            total: sql<string>`COALESCE(SUM(CAST(${invoiceItemsTable.amount} AS REAL)), 0)`,
+            total: sql<string>`COALESCE(SUM(CAST(${invoiceItemsTable.amount} AS numeric)), 0)`,
           })
           .from(invoiceItemsTable)
           .innerJoin(invoicesTable, eq(invoiceItemsTable.invoiceId, invoicesTable.id))
@@ -245,7 +245,7 @@ export const reportsRouter = router({
         // ── 3. Pass-through Collected (employment_cost from invoice items — USD collected from clients) ──
         const [ptcResult] = await db
           .select({
-            total: sql<string>`COALESCE(SUM(CAST(${invoiceItemsTable.amount} AS REAL)), 0)`,
+            total: sql<string>`COALESCE(SUM(CAST(${invoiceItemsTable.amount} AS numeric)), 0)`,
           })
           .from(invoiceItemsTable)
           .innerJoin(invoicesTable, eq(invoiceItemsTable.invoiceId, invoicesTable.id))
@@ -263,7 +263,7 @@ export const reportsRouter = router({
         // ── 4a. Pass-through Paid (vendor bills: pass_through billType only) ──
         const [ptpResult] = await db
           .select({
-            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS numeric)), 0)`,
           })
           .from(vendorBillsTable)
           .where(
@@ -279,7 +279,7 @@ export const reportsRouter = router({
         // ── 4b. Non-recurring Costs (vendor bills: non_recurring billType) ──
         const [nrCostResult] = await db
           .select({
-            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS numeric)), 0)`,
           })
           .from(vendorBillsTable)
           .where(
@@ -296,7 +296,7 @@ export const reportsRouter = router({
         // ── 5. Direct COGS (vendor_service_fee bills + all bank fees) ──
         const [vsResult] = await db
           .select({
-            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS numeric)), 0)`,
           })
           .from(vendorBillsTable)
           .where(
@@ -312,7 +312,7 @@ export const reportsRouter = router({
         // Bank fees from all paid bills in this month
         const [bfResult] = await db
           .select({
-            total: sql<string>`COALESCE(SUM(CAST(${bankFeeExpr} AS REAL)), 0)`,
+            total: sql<string>`COALESCE(SUM(CAST(${bankFeeExpr} AS numeric)), 0)`,
           })
           .from(vendorBillsTable)
           .where(
@@ -329,7 +329,7 @@ export const reportsRouter = router({
         // ── 6. Operational Expenses (operational billType) ──
         const [opResult] = await db
           .select({
-            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+            total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS numeric)), 0)`,
           })
           .from(vendorBillsTable)
           .where(
@@ -348,7 +348,7 @@ export const reportsRouter = router({
         const mixedItemResults = await db
           .select({
             itemType: vendorBillItemsTable.itemType,
-            total: sql<string>`COALESCE(SUM(CAST(${vendorBillItemsTable.amount} AS REAL)), 0)`,
+            total: sql<string>`COALESCE(SUM(CAST(${vendorBillItemsTable.amount} AS numeric)), 0)`,
           })
           .from(vendorBillItemsTable)
           .innerJoin(vendorBillsTable, eq(vendorBillItemsTable.vendorBillId, vendorBillsTable.id))
@@ -480,7 +480,7 @@ export const reportsRouter = router({
       const expensesByCategoryResult = await db
         .select({
           category: vendorBillsTable.category,
-          amount: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+          amount: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS numeric)), 0)`,
         })
         .from(vendorBillsTable)
         .where(
@@ -497,7 +497,7 @@ export const reportsRouter = router({
         .select({
           vendorId: vendorBillsTable.vendorId,
           vendorName: vendorsTable.name,
-          amount: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)`,
+          amount: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS numeric)), 0)`,
         })
         .from(vendorBillsTable)
         .innerJoin(vendorsTable, eq(vendorBillsTable.vendorId, vendorsTable.id))
@@ -553,7 +553,7 @@ export const reportsRouter = router({
       // ── Unallocated expenses (operational costs — kept as-is) ──
       const unallocatedResult = await db
         .select({
-          total: sql<string>`COALESCE(SUM(CAST(${sql`COALESCE(${vendorBillsTable.unallocatedAmount}, '0')`} AS REAL)), 0)`,
+          total: sql<string>`COALESCE(SUM(CAST(${sql`COALESCE(${vendorBillsTable.unallocatedAmount}, '0')`} AS numeric)), 0)`,
         })
         .from(vendorBillsTable)
         .where(
@@ -670,7 +670,7 @@ export const reportsRouter = router({
 
     // Current month expenses (using actual settlement amounts)
     const [curExpenses] = await db
-      .select({ total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS numeric)), 0)` })
       .from(vendorBillsTable)
       .where(
         and(
@@ -695,7 +695,7 @@ export const reportsRouter = router({
 
     // Previous month expenses (using actual settlement amounts)
     const [prevExpenses] = await db
-      .select({ total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS REAL)), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${actualCostExpr} AS numeric)), 0)` })
       .from(vendorBillsTable)
       .where(
         and(
@@ -707,7 +707,7 @@ export const reportsRouter = router({
 
     // Outstanding bills (pending_approval + approved + overdue)
     const [outstandingBills] = await db
-      .select({ total: sql<string>`COALESCE(SUM(CAST(${vendorBillsTable.totalAmount} AS REAL)), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${vendorBillsTable.totalAmount} AS numeric)), 0)` })
       .from(vendorBillsTable)
       .where(inArray(vendorBillsTable.status, ["pending_approval", "approved", "overdue"]));
 

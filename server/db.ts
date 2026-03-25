@@ -1,7 +1,4 @@
 
-import { drizzle } from "drizzle-orm/libsql";
-import { ENV } from './_core/env';
-
 // Re-export everything from the new modular services
 export * from "./services/db";
 

@@ -3,46 +3,39 @@ set -e
 
 echo "[Entrypoint] Running database migrations..."
 
-# Apply all migration SQL files in order
+# Apply all migration SQL files in order using PostgreSQL
 for sql_file in /app/drizzle/0*.sql; do
   if [ -f "$sql_file" ]; then
     echo "[Entrypoint] Applying migration: $(basename $sql_file)"
-    # Extract DATABASE_URL path (remove file: prefix)
-    DB_PATH=$(echo "$DATABASE_URL" | sed 's|^file:||')
     
-    # Ensure the directory exists
-    mkdir -p "$(dirname "$DB_PATH")" 2>/dev/null || true
-    
-    # Split SQL file by statement-breakpoint and execute each statement
-    # Use node to run the migration since we need libsql
+    # Use node with postgres.js to run the migration
     node -e "
+      const postgres = require('postgres');
       const fs = require('fs');
-      const { createClient } = require('@libsql/client');
       
       async function runMigration() {
-        const client = createClient({ url: process.env.DATABASE_URL });
-        const sql = fs.readFileSync('$sql_file', 'utf8');
+        const sql = postgres(process.env.DATABASE_URL, { max: 1 });
+        const content = fs.readFileSync('$sql_file', 'utf8');
         
         // Split by --> statement-breakpoint
-        const statements = sql.split('--> statement-breakpoint')
+        const statements = content.split('--> statement-breakpoint')
           .map(s => s.trim())
           .filter(s => s.length > 0);
         
         for (const stmt of statements) {
           try {
-            await client.execute(stmt);
+            await sql.unsafe(stmt);
           } catch (err) {
             // Ignore known idempotent migration errors:
-            // - 'already exists': table/index already created
-            // - 'duplicate column': column already added
-            // - 'no such table': table already renamed/dropped in prior run
-            const msg = err.message;
-            if (!msg.includes('already exists') && !msg.includes('duplicate column') && !msg.includes('no such table')) {
+            // - 'already exists': table/index/column already created
+            // - 'duplicate': duplicate key or column
+            const msg = err.message || '';
+            if (!msg.includes('already exists') && !msg.includes('duplicate')) {
               console.warn('[Migration] Warning:', msg.substring(0, 150));
             }
           }
         }
-        client.close();
+        await sql.end();
       }
       
       runMigration().catch(err => {

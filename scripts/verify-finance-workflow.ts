@@ -1,7 +1,7 @@
 
 import 'dotenv/config';
-import { drizzle } from 'drizzle-orm/libsql';
-import { createClient } from '@libsql/client';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import * as schema from '../drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { ContractorInvoiceGenerationService } from '../server/services/contractorInvoiceGenerationService';
@@ -10,13 +10,13 @@ import { walletService } from '../server/services/walletService';
 import { approveCreditNote } from '../server/services/creditNoteService';
 
 // Initialize DB
-const DATABASE_URL = process.env.DATABASE_URL || 'file:local.db';
-const client = createClient({ url: DATABASE_URL.includes("://") ? DATABASE_URL : `file:${DATABASE_URL}` });
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/gea_dev';
+const client = postgres(DATABASE_URL, { max: 1 });
 const db = drizzle(client, { schema });
 
-// Ensure getDb works by setting env if not set (though it should be passed to script)
+// Ensure getDb works by setting env if not set
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = 'file:local.db';
+  process.env.DATABASE_URL = DATABASE_URL;
 }
 
 async function main() {

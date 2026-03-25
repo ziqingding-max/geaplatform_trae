@@ -80,7 +80,7 @@ async function buildSystemContext(serviceMonth?: string) {
     // serviceMonth is YYYY-MM, invoiceMonth is stored as date YYYY-MM-DD
     invRows = await invQuery
       .where(
-        sql`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth} OR strftime('%Y-%m', ${invoices.createdAt}, 'unixepoch') = ${serviceMonth}`
+        sql`to_char(${invoices.invoiceMonth}::date, 'YYYY-MM') = ${serviceMonth} OR to_char(${invoices.createdAt}, 'YYYY-MM') = ${serviceMonth}`
       )
       .orderBy(desc(invoices.createdAt))
       .limit(200);

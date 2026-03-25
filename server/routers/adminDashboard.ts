@@ -888,7 +888,7 @@ export const adminDashboardRouter = router({
       })
       .from(customerWallets)
       .leftJoin(customers, eq(customerWallets.customerId, customers.id))
-      .where(sql`CAST(${customerWallets.balance} AS REAL) < 0`);
+      .where(sql`CAST(${customerWallets.balance} AS numeric) < 0`);
 
     // ── 9. Expired Onboarding Invites (still pending) ──
     const expiredInvites = await db

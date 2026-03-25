@@ -15,7 +15,7 @@ import { approveCreditNote } from '../../server/services/creditNoteService';
 
 // Set test environment
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'file:server/sqlite.db';
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/gea_test';
 
 async function runTests() {
   console.log('Running Deposit and Credit Note Lifecycle Tests...');
