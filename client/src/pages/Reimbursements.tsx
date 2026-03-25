@@ -72,6 +72,8 @@ export default function Reimbursements() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [viewItem, setViewItem] = useState<any>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const utils = trpc.useUtils();
 
   const monthOptions = useMemo(() => {
     const options = [];
@@ -349,20 +351,53 @@ export default function Reimbursements() {
           </div>
           <div className="flex gap-4">
               <PayrollCycleIndicator compact label="Reimbursements" />
-              {canExport && <Button variant="outline" disabled={items.length === 0} onClick={() => {
-                exportToCsv(items, [
-                  { header: "Employee", accessor: (r: any) => { const emp = employeeMap.get(r.employeeId); return emp ? `${emp.firstName} ${emp.lastName}` : `#${r.employeeId}`; } },
-                  { header: "Category", accessor: (r: any) => t(`reimbursements.category.${r.category}`) || r.category || "" },
-                  { header: "Amount", accessor: (r: any) => r.amount },
-                  { header: "Currency", accessor: (r: any) => r.currency },
-                  { header: "Effective Month", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth).toISOString().slice(0, 7) : "" },
-                  { header: "Description", accessor: (r: any) => r.description || "" },
-                  { header: "Status", accessor: (r: any) => t(`reimbursements.status.${r.status}`) || r.status },
-                  { header: "Created", accessor: (r: any) => r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : "" },
-                ], `reimbursements-export-${new Date().toISOString().slice(0, 10)}.csv`);
-                toast.success("CSV exported successfully");
+              {canExport && <Button variant="outline" disabled={isExporting || items.length === 0} onClick={async () => {
+                setIsExporting(true);
+                try {
+                  // Fetch ALL reimbursements with current filters (no pagination limit)
+                  const result = await utils.reimbursements.list.fetch({
+                    status: statusFilter !== "all" ? statusFilter : undefined,
+                    category: categoryFilter !== "all" ? categoryFilter : undefined,
+                    effectiveMonth: monthFilter !== "all" ? monthFilter : undefined,
+                    customerId: customerFilter !== "all" ? parseInt(customerFilter, 10) : undefined,
+                    limit: 10000,
+                    offset: 0,
+                  });
+                  let exportData = result?.data || [];
+                  // Apply frontend filters: viewTab, search
+                  const historyStatuses = ["locked", "admin_approved", "admin_rejected"];
+                  if (viewTab === "active") {
+                    exportData = exportData.filter((r: any) => !historyStatuses.includes(r.status));
+                  } else {
+                    exportData = exportData.filter((r: any) => historyStatuses.includes(r.status));
+                  }
+                  if (search) {
+                    const s = search.toLowerCase();
+                    exportData = exportData.filter((r: any) => {
+                      const emp = employeeMap.get(r.employeeId);
+                      const name = emp ? `${emp.firstName} ${emp.lastName}`.toLowerCase() : "";
+                      return name.includes(s) || (r.description || "").toLowerCase().includes(s);
+                    });
+                  }
+                  exportToCsv(exportData, [
+                    { header: "Employee", accessor: (r: any) => { const emp = employeeMap.get(r.employeeId); return emp ? `${emp.firstName} ${emp.lastName}` : `#${r.employeeId}`; } },
+                    { header: "Customer", accessor: (r: any) => { const emp = employeeMap.get(r.employeeId); if (!emp) return ""; const cust = customersList.find((c: any) => c.id === emp.customerId); return cust ? cust.companyName : ""; } },
+                    { header: "Category", accessor: (r: any) => t(`reimbursements.category.${r.category}`) || r.category || "" },
+                    { header: "Amount", accessor: (r: any) => r.amount },
+                    { header: "Currency", accessor: (r: any) => r.currency },
+                    { header: "Effective Month", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth).toISOString().slice(0, 7) : "" },
+                    { header: "Description", accessor: (r: any) => r.description || "" },
+                    { header: "Status", accessor: (r: any) => t(`reimbursements.status.${r.status}`) || r.status },
+                    { header: "Created", accessor: (r: any) => r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : "" },
+                  ], `reimbursements-export-${new Date().toISOString().slice(0, 10)}.csv`);
+                  toast.success(`CSV exported successfully - ${exportData.length} records`);
+                } catch (err) {
+                  toast.error("Export failed");
+                } finally {
+                  setIsExporting(false);
+                }
               }}>
-                <Download className="w-4 h-4 mr-2" />{t("common.export")}
+                {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}{t("common.export")}
               </Button>}
               {canEditOps && <Dialog open={showCreate} onOpenChange={(open) => { setShowCreate(open); if (!open) resetForm(); }}>
                 <DialogTrigger asChild>

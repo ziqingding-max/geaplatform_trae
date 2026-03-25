@@ -89,6 +89,9 @@ export default function Leave() {
     return options;
   }, [lang]);
 
+  const utils = trpc.useUtils();
+  const [isExporting, setIsExporting] = useState(false);
+
   const { data, isLoading, refetch } = trpc.leave.list.useQuery({
     status: statusFilter !== "all" ? statusFilter : undefined,
     month: monthFilter !== "all" ? monthFilter : undefined,
@@ -401,20 +404,56 @@ export default function Leave() {
                 </Tabs>
 
                 <div className="flex gap-2">
-                    {canExport && <Button variant="outline" disabled={leaves.length === 0} onClick={() => {
-                        exportToCsv(leaves, [
-                        { header: "Employee", accessor: (r: any) => { const emp = employeeMap[r.employeeId]; return emp ? emp.name : `#${r.employeeId}`; } },
-                        { header: "Leave Type", accessor: (r: any) => r.leaveTypeName || r.leaveTypeId },
-                        { header: "Start Date", accessor: (r: any) => r.startDate ? new Date(r.startDate).toISOString().slice(0, 10) : "" },
-                        { header: "End Date", accessor: (r: any) => r.endDate ? new Date(r.endDate).toISOString().slice(0, 10) : "" },
-                        { header: "Days", accessor: (r: any) => r.days },
-                        { header: "Reason", accessor: (r: any) => r.reason || "" },
-                        { header: "Status", accessor: (r: any) => t(`leave.status.${r.status}`) || r.status },
-                        { header: "Created", accessor: (r: any) => r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : "" },
-                        ], `leave-export-${new Date().toISOString().slice(0, 10)}.csv`);
-                        toast.success("CSV exported successfully");
+                    {canExport && <Button variant="outline" disabled={isExporting || leaves.length === 0} onClick={async () => {
+                        setIsExporting(true);
+                        try {
+                          // Fetch ALL leave records with current filters (no pagination limit)
+                          const result = await utils.leave.list.fetch({
+                            status: statusFilter !== "all" ? statusFilter : undefined,
+                            month: monthFilter !== "all" ? monthFilter : undefined,
+                            limit: 10000,
+                            offset: 0,
+                          });
+                          let exportData = result?.data || [];
+                          // Apply frontend filters: viewTab, customer, country
+                          const historyStatuses = ["locked", "admin_approved"];
+                          if (viewTab === "active") {
+                            exportData = exportData.filter((l: any) => !historyStatuses.includes(l.status));
+                          } else {
+                            exportData = exportData.filter((l: any) => historyStatuses.includes(l.status));
+                          }
+                          if (customerFilter !== "all") {
+                            exportData = exportData.filter((l: any) => {
+                              const emp = employeeMap[l.employeeId];
+                              return emp && String(emp.customerId) === customerFilter;
+                            });
+                          }
+                          if (countryFilter !== "all") {
+                            exportData = exportData.filter((l: any) => {
+                              const emp = employeeMap[l.employeeId];
+                              return emp && emp.country === countryFilter;
+                            });
+                          }
+                          exportToCsv(exportData, [
+                            { header: "Employee", accessor: (r: any) => { const emp = employeeMap[r.employeeId]; return emp ? emp.name : `#${r.employeeId}`; } },
+                            { header: "Customer", accessor: (r: any) => { const emp = employeeMap[r.employeeId]; if (!emp) return ""; const cust = customersList.find((c: any) => c.id === emp.customerId); return cust ? cust.companyName : ""; } },
+                            { header: "Country", accessor: (r: any) => { const emp = employeeMap[r.employeeId]; return emp ? emp.country : ""; } },
+                            { header: "Leave Type", accessor: (r: any) => r.leaveTypeName || r.leaveTypeId },
+                            { header: "Start Date", accessor: (r: any) => r.startDate ? new Date(r.startDate).toISOString().slice(0, 10) : "" },
+                            { header: "End Date", accessor: (r: any) => r.endDate ? new Date(r.endDate).toISOString().slice(0, 10) : "" },
+                            { header: "Days", accessor: (r: any) => r.days },
+                            { header: "Reason", accessor: (r: any) => r.reason || "" },
+                            { header: "Status", accessor: (r: any) => t(`leave.status.${r.status}`) || r.status },
+                            { header: "Created", accessor: (r: any) => r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : "" },
+                          ], `leave-export-${new Date().toISOString().slice(0, 10)}.csv`);
+                          toast.success(`CSV exported successfully - ${exportData.length} records`);
+                        } catch (err) {
+                          toast.error("Export failed");
+                        } finally {
+                          setIsExporting(false);
+                        }
                     }}>
-                        <Download className="w-4 h-4 mr-2" />{t("leave.actions.export")}
+                        {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}{t("leave.actions.export")}
                     </Button>}
                     {canEditOps && <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormData(defaultForm); }}>
                     <DialogTrigger asChild>

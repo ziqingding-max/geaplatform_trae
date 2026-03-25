@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   FileText, Plus, Download, BarChart3,
-  Send, CheckCircle2, CreditCard, AlertTriangle,
+  Send, CheckCircle2, CreditCard, AlertTriangle, Loader2,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
@@ -232,6 +232,7 @@ export default function Invoices() {
     batch
   } = useInvoices();
 
+  const [isExporting, setIsExporting] = useState(false);
   const [showManualCreate, setShowManualCreate] = useState(false);
   const [showBatchPaid, setShowBatchPaid] = useState(false);
   const [batchPaidAmount, setBatchPaidAmount] = useState("");
@@ -297,24 +298,48 @@ export default function Invoices() {
             {canExport && <Button
               variant="outline"
               size="sm"
-              disabled={activeInvoices.length === 0 && historyInvoices.length === 0}
-              onClick={() => exportToCsv(
-                [...activeInvoices, ...historyInvoices],
-                [
-                  { header: t("invoices.list.table.header.invoiceNumber"), accessor: (r) => r.invoiceNumber },
-                  { header: t("invoices.list.filter.typeLabel"), accessor: (r) => (typeLabelKeys[r.invoiceType] ? t(typeLabelKeys[r.invoiceType]) : r.invoiceType) },
-                  { header: t("invoices.list.table.header.customer"), accessor: (r) => (r as any).customerName || "" },
-                  { header: t("common.date"), accessor: (r) => r.createdAt ? formatDate(r.createdAt) : "" },
-                  { header: t("invoices.list.table.header.dueDate"), accessor: (r) => r.dueDate ? formatDate(r.dueDate) : "" },
-                  { header: t("invoices.list.table.header.total"), accessor: (r) => formatAmount(r.total) },
-                  { header: t("invoices.detail.summary.balanceDue"), accessor: (r) => formatAmount(r.amountDue) },
-                  { header: t("invoices.detail.info.currency"), accessor: (r) => r.currency },
-                  { header: t("invoices.list.filter.statusLabel"), accessor: (r) => (statusLabelKeys[r.status] ? t(statusLabelKeys[r.status]) : r.status) },
-                ],
-                `invoices-${new Date().toISOString().slice(0, 10)}`
-              )}
+              disabled={isExporting || (activeTotal === 0 && historyTotal === 0)}
+              onClick={async () => {
+                setIsExporting(true);
+                try {
+                  // Fetch ALL data with current filters (no pagination limit)
+                  const sharedFilters = {
+                    status: filters.status !== "all" ? filters.status : undefined,
+                    invoiceType: filters.type !== "all" ? filters.type : undefined,
+                    invoiceMonth: filters.month || undefined,
+                    search: filters.search || undefined,
+                    customerId: filters.customer !== "all" ? parseInt(filters.customer, 10) : undefined,
+                    excludeCreditNotes: true,
+                  };
+                  const [activeResult, historyResult] = await Promise.all([
+                    utils.invoices.list.fetch({ ...sharedFilters, tab: "active", limit: 10000, offset: 0 }),
+                    utils.invoices.list.fetch({ ...sharedFilters, tab: "history", limit: 10000, offset: 0 }),
+                  ]);
+                  const allData = [...(activeResult?.data || []), ...(historyResult?.data || [])];
+                  exportToCsv(
+                    allData,
+                    [
+                      { header: t("invoices.list.table.header.invoiceNumber"), accessor: (r: any) => r.invoiceNumber },
+                      { header: t("invoices.list.filter.typeLabel"), accessor: (r: any) => (typeLabelKeys[r.invoiceType] ? t(typeLabelKeys[r.invoiceType]) : r.invoiceType) },
+                      { header: t("invoices.list.table.header.customer"), accessor: (r: any) => (r as any).customerName || "" },
+                      { header: t("common.date"), accessor: (r: any) => r.createdAt ? formatDate(r.createdAt) : "" },
+                      { header: t("invoices.list.table.header.dueDate"), accessor: (r: any) => r.dueDate ? formatDate(r.dueDate) : "" },
+                      { header: t("invoices.list.table.header.total"), accessor: (r: any) => formatAmount(r.total) },
+                      { header: t("invoices.detail.summary.balanceDue"), accessor: (r: any) => formatAmount(r.amountDue) },
+                      { header: t("invoices.detail.info.currency"), accessor: (r: any) => r.currency },
+                      { header: t("invoices.list.filter.statusLabel"), accessor: (r: any) => (statusLabelKeys[r.status] ? t(statusLabelKeys[r.status]) : r.status) },
+                    ],
+                    `invoices-${new Date().toISOString().slice(0, 10)}`
+                  );
+                  toast.success(t("invoices.list.exportCsvButton") + " - " + allData.length + " records");
+                } catch (err) {
+                  toast.error("Export failed");
+                } finally {
+                  setIsExporting(false);
+                }
+              }}
             >
-              <Download className="w-4 h-4 mr-1" /> {t("invoices.list.exportCsvButton")}
+              {isExporting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Download className="w-4 h-4 mr-1" />} {t("invoices.list.exportCsvButton")}
             </Button>}
             {canEditFinanceOps && <Button variant="outline" onClick={() => {
               setCreditNoteForm({ customerId: 0, originalInvoiceId: 0, isFullCredit: true, amount: "", reason: "" });

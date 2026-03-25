@@ -98,6 +98,8 @@ export default function Adjustments() {
   const [countryFilter, setCountryFilter] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const utils = trpc.useUtils();
   const [editingAdj, setEditingAdj] = useState<any>(null);
   const [viewAdj, setViewAdj] = useState<any>(null);
 
@@ -573,19 +575,71 @@ export default function Adjustments() {
           </div>
           <div className="flex items-center gap-4">
             <PayrollCycleIndicator compact label="Adjustments" />
-            {canExport && <Button variant="outline" disabled={filteredAdjustments.length === 0} onClick={() => {
-               exportToCsv(filteredAdjustments, [
-                { header: "Worker Type", accessor: (r: any) => r.workerType },
-                { header: "Type", accessor: (r: any) => t(`adjustments.type.${r.adjustmentType}`) || r.adjustmentType },
-                { header: "Worker", accessor: (r: any) => { const w = workerMap.get(r.workerId); return w ? `${w.firstName} ${w.lastName}` : r.workerId; } },
-                { header: "Amount", accessor: (r: any) => r.amount },
-                { header: "Currency", accessor: (r: any) => r.currency },
-                { header: "Month/Date", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth).toISOString().slice(0, 7) : "" },
-                { header: "Status", accessor: (r: any) => r.status },
-              ], `adjustments-export-${new Date().toISOString().slice(0, 10)}.csv`);
-              toast.success("CSV exported successfully");
+            {canExport && <Button variant="outline" disabled={isExporting || filteredAdjustments.length === 0} onClick={async () => {
+              setIsExporting(true);
+              try {
+                // Fetch ALL employee adjustments with current filters
+                const [empResult, conResult] = await Promise.all([
+                  utils.adjustments.list.fetch({
+                    status: statusFilter !== "all" ? statusFilter : undefined,
+                    adjustmentType: typeFilter !== "all" ? typeFilter : undefined,
+                    effectiveMonth: monthFilter !== "all" ? monthFilter : undefined,
+                    limit: 10000,
+                    offset: 0,
+                  }),
+                  utils.contractors.adjustments.listAll.fetch({
+                    customerId: customerFilter !== "all" ? parseInt(customerFilter) : undefined,
+                    status: statusFilter !== "all" ? statusFilter : undefined,
+                    search: search || undefined,
+                  }),
+                ]);
+                // Combine and normalize
+                const empAdjs = (empResult?.data || []).map((a: any) => ({
+                  ...a, workerType: "employee", workerId: `emp-${a.employeeId}`,
+                }));
+                const conAdjs = (conResult || []).map((a: any) => ({
+                  ...a, workerType: "contractor", workerId: `con-${a.contractorId}`,
+                  adjustmentType: a.type, effectiveMonth: a.date, currency: a.currency || "USD",
+                }));
+                let allAdjs = [...empAdjs, ...conAdjs];
+                // Apply frontend filters: viewTab, customer, country, type, search
+                const activeStatuses = ["submitted", "client_approved", "pending"];
+                const historyStatuses = ["locked", "admin_approved", "admin_rejected", "approved", "rejected", "invoiced"];
+                allAdjs = allAdjs.filter((adj: any) => {
+                  const worker = workerMap.get(adj.workerId);
+                  if (viewTab === "active" && !activeStatuses.includes(adj.status)) return false;
+                  if (viewTab === "history" && !historyStatuses.includes(adj.status)) return false;
+                  if (customerFilter !== "all" && (!worker || String(worker.customerId) !== customerFilter)) return false;
+                  if (countryFilter !== "all" && (!worker || worker.country !== countryFilter)) return false;
+                  if (typeFilter !== "all" && adj.adjustmentType !== typeFilter) return false;
+                  if (search) {
+                    const s = search.toLowerCase();
+                    const workerName = worker ? `${worker.firstName} ${worker.lastName}`.toLowerCase() : "";
+                    const desc = (adj.description || "").toLowerCase();
+                    if (!workerName.includes(s) && !desc.includes(s) && !adj.adjustmentType.includes(s)) return false;
+                  }
+                  return true;
+                });
+                exportToCsv(allAdjs, [
+                  { header: "Worker Type", accessor: (r: any) => r.workerType },
+                  { header: "Type", accessor: (r: any) => t(`adjustments.type.${r.adjustmentType}`) || r.adjustmentType },
+                  { header: "Worker", accessor: (r: any) => { const w = workerMap.get(r.workerId); return w ? `${w.firstName} ${w.lastName}` : r.workerId; } },
+                  { header: "Customer", accessor: (r: any) => { const w = workerMap.get(r.workerId); if (!w) return ""; const cust = customersList.find((c: any) => c.id === w.customerId); return cust ? cust.companyName : ""; } },
+                  { header: "Country", accessor: (r: any) => { const w = workerMap.get(r.workerId); return w ? w.country : ""; } },
+                  { header: "Amount", accessor: (r: any) => r.amount },
+                  { header: "Currency", accessor: (r: any) => r.currency },
+                  { header: "Month/Date", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth).toISOString().slice(0, 7) : "" },
+                  { header: "Description", accessor: (r: any) => r.description || "" },
+                  { header: "Status", accessor: (r: any) => r.status },
+                ], `adjustments-export-${new Date().toISOString().slice(0, 10)}.csv`);
+                toast.success(`CSV exported successfully - ${allAdjs.length} records`);
+              } catch (err) {
+                toast.error("Export failed");
+              } finally {
+                setIsExporting(false);
+              }
             }}>
-              <Download className="w-4 h-4 mr-2" />{t("common.export")}
+              {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}{t("common.export")}
             </Button>}
             {canEditOps && <Dialog open={createOpen} onOpenChange={(open) => {
               setCreateOpen(open);
