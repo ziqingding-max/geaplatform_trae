@@ -474,16 +474,56 @@ GRACEFUL DEGRADATION: If a document is unreadable or partially parseable, still 
 
       // Build suggestedAllocations from lineItem allocationSuggestions for frontend.
       // Frontend expects p.suggestedAllocations as a top-level array.
+      // We enrich each allocation with human-readable names from systemContext
+      // so the frontend can display worker name, customer name, and invoice number
+      // instead of raw internal IDs.
       if (!parsed.suggestedAllocations && parsed.lineItems) {
         parsed.suggestedAllocations = parsed.lineItems
           .filter((item: any) => item.allocationSuggestion && item.allocationSuggestion.invoiceId)
-          .map((item: any) => ({
-            invoiceId: item.allocationSuggestion.invoiceId,
-            employeeId: item.allocationSuggestion.employeeId || null,
-            contractorId: item.allocationSuggestion.contractorId || null,
-            allocatedAmount: item.allocationSuggestion.allocatedAmount,
-            reason: item.allocationSuggestion.reason || item.description || "",
-          }));
+          .map((item: any) => {
+            const alloc = item.allocationSuggestion;
+            const empId = alloc.employeeId || null;
+            const ctrId = alloc.contractorId || null;
+            const invId = alloc.invoiceId;
+
+            // Resolve worker name and type from systemContext
+            let workerName: string | null = null;
+            let workerType: "employee" | "contractor" | null = null;
+            let customerName: string | null = null;
+            if (empId) {
+              const emp = systemContextData.employees.find((e: any) => e.id === empId);
+              workerName = emp?.name || item.employeeName || null;
+              workerType = "employee";
+              customerName = emp?.customerName || null;
+            } else if (ctrId) {
+              const ctr = systemContextData.contractors.find((c: any) => c.id === ctrId);
+              workerName = ctr?.name || null;
+              workerType = "contractor";
+              customerName = ctr?.customerName || null;
+            }
+
+            // Resolve invoice number from systemContext
+            const inv = systemContextData.invoices.find((i: any) => i.id === invId);
+            const invoiceNumber = inv?.number || null;
+
+            // If customerName not resolved from worker, try from invoice
+            if (!customerName && inv) {
+              const cust = systemContextData.customers.find((c: any) => c.id === inv.customerId);
+              customerName = cust?.name || null;
+            }
+
+            return {
+              invoiceId: invId,
+              invoiceNumber,
+              employeeId: empId,
+              contractorId: ctrId,
+              workerName,
+              workerType,
+              customerName,
+              allocatedAmount: alloc.allocatedAmount,
+              reason: alloc.reason || item.description || "",
+            };
+          });
       }
 
       // Ensure payment object has hasPaymentInfo flag for frontend compatibility
