@@ -232,15 +232,17 @@ async function calculateCostEstimations(costEstimations: V2CostEstimationInput[]
 
 function calculateV2TotalMonthly(
   serviceFees: V2ServiceFeeInput[],
-  _calculatedCosts: V2CalculatedCostEstimation[]
+  calculatedCosts: V2CalculatedCostEstimation[]
 ): number {
-  // Total = sum of all service fee unit prices only
-  // Service fee is a unit price (per person per month), no headcount or country count multiplier
-  // Employer cost estimations are independent and NOT included in the service fee total
+  // Total = sum of all service fees + sum of all employment costs (salary + employer contributions)
   let total = 0;
 
   for (const sf of serviceFees) {
     total += sf.serviceFee;
+  }
+
+  for (const ce of calculatedCosts) {
+    total += ce.monthlyTotal;
   }
 
   return total;
