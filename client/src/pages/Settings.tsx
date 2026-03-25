@@ -57,11 +57,12 @@ import AuditLogsSection from "./AuditLogs";
 import CountriesContent from "@/components/pages/CountriesContent";
 import NotificationSettingsSection from "@/components/pages/NotificationSettingsSection";
 import { useI18n } from "@/lib/i18n";
+import { isAdmin as checkIsAdmin } from "@shared/roles";
 
 export default function Settings() {
   const { t, lang } = useI18n();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = checkIsAdmin(user?.role || "");
 
   return (
     <Layout breadcrumb={["GEA", "Settings"]}>
@@ -149,8 +150,10 @@ export default function Settings() {
    ══════════════════════════════════════════════════════════════════════════════ */
 function PayrollConfigSection() {
   const { t } = useI18n();
+  const { user } = useAuth();
+  const adminUser = checkIsAdmin(user?.role || "");
   const { data: configs, isLoading, refetch } = trpc.systemSettings.list.useQuery();
-  const { data: cronJobs, isLoading: cronLoading, refetch: refetchCron } = trpc.systemSettings.listCronJobs.useQuery();
+  const { data: cronJobs, isLoading: cronLoading, refetch: refetchCron } = trpc.systemSettings.listCronJobs.useQuery(undefined, { enabled: adminUser });
 
   const updateMutation = trpc.systemSettings.update.useMutation({
     onSuccess: () => {
@@ -233,7 +236,7 @@ function PayrollConfigSection() {
     setEditTime(job.time);
   };
 
-  if (isLoading || cronLoading) {
+  if (isLoading || (adminUser && cronLoading)) {
     return (
       <div className="space-y-6 max-w-4xl animate-pulse-subtle p-6">
         <div className="space-y-2">
@@ -315,8 +318,8 @@ function PayrollConfigSection() {
         </CardContent>
       </Card>
 
-      {/* ── Section 2: Scheduled Jobs ── */}
-      <Card>
+      {/* ── Section 2: Scheduled Jobs (Admin only) ── */}
+      {adminUser && <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <CalendarClock className="w-4 h-4 text-primary" />
@@ -424,13 +427,12 @@ function PayrollConfigSection() {
             ))}
           </div>
         </CardContent>
-      </Card>
+      </Card>}
     </div>
   );
 }
-
 /* ══════════════════════════════════════════════════════════════════════════════
-   EXCHANGE RATES (moved from standalone page)
+   EXCHANGE RATESS (moved from standalone page)
    All rates are USD → XXX direction with global markup
    ══════════════════════════════════════════════════════════════════════════════ */
 function ExchangeRatesSection() {

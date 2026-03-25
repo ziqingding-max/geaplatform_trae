@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { adminProcedure, userProcedure } from "../procedures";
+import { operationsManagerProcedure, userProcedure } from "../procedures";
 import { listAllExchangeRates, deleteExchangeRate, logAuditAction } from "../db";
 import { upsertExchangeRate, getGlobalMarkup, getExchangeRate } from "../services/exchangeRateService";
 import { fetchAndStoreExchangeRates, setDefaultMarkup, getDefaultMarkup } from "../services/exchangeRateFetchService";
@@ -46,8 +46,8 @@ export const exchangeRatesRouter = router({
     return { markupPercentage: markup };
   }),
 
-  /** Update the global markup percentage (admin only) */
-  setMarkup: adminProcedure
+  /** Update the global markup percentage (admin or operations manager) */
+  setMarkup: operationsManagerProcedure
     .input(z.object({ markupPercentage: z.number().min(0).max(50) }))
     .mutation(async ({ input, ctx }) => {
       await setDefaultMarkup(input.markupPercentage);
@@ -60,7 +60,7 @@ export const exchangeRatesRouter = router({
       return { success: true };
     }),
 
-  upsert: adminProcedure
+  upsert: operationsManagerProcedure
     .input(
       z.object({
         fromCurrency: z.string().min(1).default("USD"),
@@ -91,7 +91,7 @@ export const exchangeRatesRouter = router({
       return { success: true };
     }),
 
-  delete: adminProcedure
+  delete: operationsManagerProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       await deleteExchangeRate(input.id);
@@ -144,7 +144,7 @@ export const exchangeRatesRouter = router({
    * Fallback: Frankfurter API (ECB data, 30 currencies)
    * Fetches latest USD→XXX rates and stores them with global markup applied
    */
-  fetchLive: adminProcedure.mutation(async ({ ctx }) => {
+  fetchLive: operationsManagerProcedure.mutation(async ({ ctx }) => {
     const result = await fetchAndStoreExchangeRates();
     await logAuditAction({
       userId: ctx.user.id, userName: ctx.user.name || null,
