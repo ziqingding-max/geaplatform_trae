@@ -26,6 +26,8 @@ import {
   lockSubmittedAdjustments,
   lockSubmittedLeaveRecords,
   lockSubmittedReimbursements,
+  deletePayrollRun,
+  deletePayrollItemsByRun,
 } from "../db";
 
 /**
@@ -913,5 +915,83 @@ export const payrollRouter = router({
         leaveRecordsLocked: lockedLeaveIds.length,
         reimbursementsLocked: lockedReimbursementIds.length,
       };
+    }),
+
+  /**
+   * Delete a draft payroll run and all its associated payroll items.
+   * Also unlocks any locked adjustments, leave records, and reimbursements
+   * that were linked to this payroll run.
+   * Only allowed when status is "draft".
+   */
+  deleteRun: operationsManagerProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const run = await getPayrollRunById(input.id);
+      if (!run) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Payroll run not found" });
+      }
+
+      if (run.status !== "draft") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Only draft payroll runs can be deleted",
+        });
+      }
+
+      // Get all items before deletion for audit logging
+      const items = await listPayrollItemsByRun(input.id);
+
+      // Unlock all locked adjustments, reimbursements, and leave records
+      // linked to this payroll run (across all employees)
+      const { getDb } = await import("../db");
+      const db = getDb();
+      if (db) {
+        const { adjustments, reimbursements, leaveRecords } = await import("../../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+
+        // Unlock adjustments linked to this payroll run
+        await db.update(adjustments)
+          .set({ status: "admin_approved", payrollRunId: null } as any)
+          .where(eq(adjustments.payrollRunId as any, input.id));
+
+        // Unlock reimbursements linked to this payroll run
+        await db.update(reimbursements)
+          .set({ status: "admin_approved", payrollRunId: null } as any)
+          .where(eq(reimbursements.payrollRunId as any, input.id));
+
+        // Unlock leave records linked to this payroll run
+        await db.update(leaveRecords)
+          .set({ status: "admin_approved", payrollRunId: null } as any)
+          .where(eq((leaveRecords as any).payrollRunId, input.id));
+      }
+
+      // Delete all payroll items first, then the payroll run
+      await deletePayrollItemsByRun(input.id);
+      await deletePayrollRun(input.id);
+
+      // Audit log
+      await logAuditAction({
+        userId: ctx.user.id,
+        userName: ctx.user.name || null,
+        action: "delete",
+        entityType: "payroll_run",
+        entityId: input.id,
+        changes: JSON.stringify({
+          deletedRun: {
+            id: run.id,
+            countryCode: run.countryCode,
+            payrollMonth: run.payrollMonth,
+            currency: run.currency,
+            status: run.status,
+            totalGross: run.totalGross,
+            totalNet: run.totalNet,
+            totalEmployerCost: run.totalEmployerCost,
+          },
+          deletedItemsCount: items.length,
+          deletedItemEmployeeIds: items.map((i: any) => i.employeeId),
+        }),
+      });
+
+      return { success: true, deletedItemsCount: items.length };
     }),
 });
