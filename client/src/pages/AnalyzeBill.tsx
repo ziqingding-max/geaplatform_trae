@@ -98,10 +98,13 @@ function OverallConfidenceBanner({ cv, t }: { cv: any; t: (k: string) => string 
 }
 
 /* ========== Bill Form Fields ========== */
-function BillFormFields({ bill, onChange, vendors, t }: {
-  bill: any; onChange: (b: any) => void; vendors: any[]; t: (k: string) => string;
+function BillFormFields({ bill, onChange, vendors, items, t }: {
+  bill: any; onChange: (b: any) => void; vendors: any[]; items?: LineItem[]; t: (k: string) => string;
 }) {
   const set = (key: string, val: any) => onChange({ ...bill, [key]: val });
+  const hasItems = Array.isArray(items) && items.length > 0;
+  const itemsSubtotal = hasItems ? items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0) : 0;
+  const autoTotal = hasItems ? (itemsSubtotal + (parseFloat(bill.tax) || 0)).toFixed(2) : "";
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -186,16 +189,28 @@ function BillFormFields({ bill, onChange, vendors, t }: {
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <Label className="text-xs">{t("vendorBills.details.subtotalLabel")}</Label>
-            <Input type="number" step="0.01" value={bill.subtotal || ""} onChange={(e) => set("subtotal", e.target.value)} className={`h-8 text-sm ${noSpin}`} />
+            <Label className="text-xs">{t("vendorBills.details.subtotalLabel")}{hasItems && " (auto)"}</Label>
+            {hasItems ? (
+              <div className={`h-8 text-sm flex items-center px-3 rounded-md border bg-muted/50 ${noSpin}`}>
+                {itemsSubtotal.toFixed(2)}
+              </div>
+            ) : (
+              <Input type="number" step="0.01" value={bill.subtotal || ""} onChange={(e) => set("subtotal", e.target.value)} className={`h-8 text-sm ${noSpin}`} />
+            )}
           </div>
           <div>
             <Label className="text-xs">{t("vendorBills.details.taxLabel")}</Label>
             <Input type="number" step="0.01" value={bill.tax || "0"} onChange={(e) => set("tax", e.target.value)} className={`h-8 text-sm ${noSpin}`} />
           </div>
           <div>
-            <Label className="text-xs">{t("vendorBills.details.totalAmountLabel")} *</Label>
-            <Input type="number" step="0.01" value={bill.totalAmount || ""} onChange={(e) => set("totalAmount", e.target.value)} className={`h-8 text-sm font-medium ${noSpin}`} />
+            <Label className="text-xs">{t("vendorBills.details.totalAmountLabel")} *{hasItems && " (auto)"}</Label>
+            {hasItems ? (
+              <div className={`h-8 text-sm font-medium flex items-center px-3 rounded-md border bg-muted/50 ${noSpin}`}>
+                {autoTotal}
+              </div>
+            ) : (
+              <Input type="number" step="0.01" value={bill.totalAmount || ""} onChange={(e) => set("totalAmount", e.target.value)} className={`h-8 text-sm font-medium ${noSpin}`} />
+            )}
           </div>
         </div>
         <div>
@@ -745,7 +760,15 @@ export default function AnalyzeBill() {
   async function handleSave() {
     if (!bill.vendorId) { toast.error(t("vendorBills.toast.selectVendor")); return; }
     if (!bill.billNumber) { toast.error(t("vendorBills.toast.billNumberRequired")); return; }
-    if (!bill.totalAmount) { toast.error(t("vendorBills.toast.totalRequired")); return; }
+
+    // Auto-calculate subtotal/total from line items when items exist
+    const hasItems = items.length > 0;
+    const computedSubtotal = hasItems ? items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0) : parseFloat(bill.subtotal || "0");
+    const computedTotal = hasItems ? (computedSubtotal + (parseFloat(bill.tax) || 0)) : parseFloat(bill.totalAmount || "0");
+    const finalSubtotal = computedSubtotal.toFixed(2);
+    const finalTotal = computedTotal.toFixed(2);
+
+    if (!hasItems && !bill.totalAmount) { toast.error(t("vendorBills.toast.totalRequired")); return; }
 
     try {
       if (parsedResult) {
@@ -759,9 +782,9 @@ export default function AnalyzeBill() {
           dueDate: bill.dueDate,
           billMonth: bill.billMonth,
           currency: bill.currency,
-          subtotal: bill.subtotal,
+          subtotal: finalSubtotal,
           tax: bill.tax || "0",
-          totalAmount: bill.totalAmount,
+          totalAmount: finalTotal,
           description: bill.description || "",
           items: items.map((item) => ({
             description: item.description,
@@ -800,9 +823,9 @@ export default function AnalyzeBill() {
           dueDate: bill.dueDate || undefined,
           billMonth: bill.billMonth || undefined,
           currency: bill.currency,
-          subtotal: bill.subtotal || bill.totalAmount,
+          subtotal: finalSubtotal || finalTotal,
           tax: bill.tax || "0",
-          totalAmount: bill.totalAmount,
+          totalAmount: finalTotal,
           description: bill.description || "",
           items: items.length > 0 ? items.map((item) => ({
             description: item.description,
@@ -889,7 +912,7 @@ export default function AnalyzeBill() {
             )}
 
             {/* Bill Details */}
-            <BillFormFields bill={bill} onChange={setBill} vendors={vendors} t={t} />
+            <BillFormFields bill={bill} onChange={setBill} vendors={vendors} items={items} t={t} />
 
             {/* Payment Info (AI detected) */}
             <PaymentInfoCard payment={payment} onChange={setPayment} onRemove={() => setPayment(null)} t={t} />
