@@ -237,10 +237,10 @@ else
 fi
 
 # 清理旧备份，保留最近 MAX_BACKUPS 个
-BACKUP_COUNT=$(ls -1 "$BACKUP_DIR"/pg_production_*.sql.gz "$BACKUP_DIR"/sqlite_production_*.db 2>/dev/null | wc -l)
+BACKUP_COUNT=$(( ls -1 "$BACKUP_DIR"/pg_production_*.sql.gz "$BACKUP_DIR"/sqlite_production_*.db 2>/dev/null || true ) | wc -l)
 if [ "$BACKUP_COUNT" -gt "$MAX_BACKUPS" ]; then
   REMOVE_COUNT=$((BACKUP_COUNT - MAX_BACKUPS))
-  ls -1t "$BACKUP_DIR"/pg_production_*.sql.gz "$BACKUP_DIR"/sqlite_production_*.db 2>/dev/null | tail -n "$REMOVE_COUNT" | xargs rm -f
+  ( ls -1t "$BACKUP_DIR"/pg_production_*.sql.gz "$BACKUP_DIR"/sqlite_production_*.db 2>/dev/null || true ) | tail -n "$REMOVE_COUNT" | xargs rm -f
   info "已清理 ${REMOVE_COUNT} 个旧备份，保留最近 ${MAX_BACKUPS} 个"
 fi
 
