@@ -306,16 +306,16 @@ export const pdfParsingRouter = router({
       // Step 4: Build Qwen-Long messages
       // Qwen-Long message format (per DashScope docs):
       //   - 1st system message: role definition + task instructions (compact, no large data)
-      //   - 2nd system message: fileid:// references (system context + document files)
-      //   - user message: the actual question (max 9,000 tokens when 2nd system msg exists)
-      const allFileIdRefs: string[] = [];
+      //   - Subsequent system messages: ONE fileid:// reference per message
+      //     (DashScope requires each document in a SEPARATE system message)
+      //   - user message: the actual question
+      const fileIdSystemMessages: Array<{ role: "system"; content: string }> = [];
       if (contextFileId) {
-        allFileIdRefs.push(`fileid://${contextFileId}`);
+        fileIdSystemMessages.push({ role: "system", content: `fileid://${contextFileId}` });
       }
       for (const id of fileIds) {
-        allFileIdRefs.push(`fileid://${id}`);
+        fileIdSystemMessages.push({ role: "system", content: `fileid://${id}` });
       }
-      const fileIdReferences = allFileIdRefs.join(",");
 
       // Build the system prompt — instructions only, no inline data.
       // When context upload fails, we fall back to a compact inline summary.
@@ -409,12 +409,9 @@ CONFIDENCE RULES:
 
 GRACEFUL DEGRADATION: If a document is unreadable or partially parseable, still return the best extraction possible with low confidence scores and detailed warnings. Never return an empty result.${inlineDataFallback}`,
           },
-          {
-            // 2nd system message: fileid:// references
-            // Contains: system context JSON (if uploaded) + vendor document files
-            role: "system",
-            content: fileIdReferences,
-          },
+          // Subsequent system messages: one fileid:// reference per message.
+          // Per DashScope docs: "place the content of each document in a separate system message."
+          ...fileIdSystemMessages,
           {
             role: "user",
             content: `Analyze ${input.files.length} document(s) for service month ${input.serviceMonth}: ${input.files.map((f) => `${f.fileName} (${f.fileType})`).join(", ")}. Cross-validate, extract structured data, match employees, and suggest allocations.`,
