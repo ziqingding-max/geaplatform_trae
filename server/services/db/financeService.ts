@@ -277,6 +277,18 @@ export async function updatePayrollRun(id: number, data: Partial<InsertPayrollRu
   await db.update(payrollRuns).set(data).where(eq(payrollRuns.id, id));
 }
 
+export async function deletePayrollRun(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(payrollRuns).where(eq(payrollRuns.id, id));
+}
+
+export async function deletePayrollItemsByRun(runId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(payrollItems).where(eq(payrollItems.payrollRunId, runId));
+}
+
 export async function findPayrollRunByCountryMonth(country: string, month: string) {
   const db = await getDb();
   if (!db) return null;

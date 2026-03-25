@@ -398,6 +398,9 @@ function PayrollDetail({ id }: { id: number }) {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
 
+  // Delete run dialog
+  const [deleteRunOpen, setDeleteRunOpen] = useState(false);
+
   // Mutations
   const updateMutation = trpc.payroll.update.useMutation({
     onSuccess: () => { refetch(); refetchItems(); },
@@ -433,6 +436,15 @@ function PayrollDetail({ id }: { id: number }) {
       toast.success("Payroll item deleted");
       refetchItems();
       refetch();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
+  const deleteRunMutation = trpc.payroll.deleteRun.useMutation({
+    onSuccess: (result) => {
+      toast.success(`Payroll run deleted (${result.deletedItemsCount} items removed)`);
+      setDeleteRunOpen(false);
+      setLocation("/payroll");
     },
     onError: (err: any) => toast.error(err.message),
   });
@@ -607,9 +619,14 @@ function PayrollDetail({ id }: { id: number }) {
           </div>
           <div className="flex gap-2">
             {canEditOps && isDraft && (
-              <Button onClick={handleSubmit} disabled={updateMutation.isPending}>
-                <Send className="w-4 h-4 mr-2" />Submit for Approval
-              </Button>
+              <>
+                <Button variant="destructive" onClick={() => setDeleteRunOpen(true)} disabled={deleteRunMutation.isPending}>
+                  <Trash2 className="w-4 h-4 mr-2" />{deleteRunMutation.isPending ? "Deleting..." : "Delete"}
+                </Button>
+                <Button onClick={handleSubmit} disabled={updateMutation.isPending}>
+                  <Send className="w-4 h-4 mr-2" />Submit for Approval
+                </Button>
+              </>
             )}
             {canEditOps && isPendingApproval && (
               <>
@@ -1015,6 +1032,41 @@ function PayrollDetail({ id }: { id: number }) {
             )}
           </DialogContent>
         </Dialog>
+      {/* Delete Draft Payroll Run Confirmation Dialog */}
+      <AlertDialog open={deleteRunOpen} onOpenChange={setDeleteRunOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              Delete Draft Payroll Run
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>Are you sure you want to delete this draft payroll run?</p>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1">
+                  <p className="text-sm text-red-800">Period: <strong>{run ? formatMonthLong(run.payrollMonth) : ""}</strong></p>
+                  <p className="text-sm text-red-800">Country: <strong>{run?.countryCode}</strong></p>
+                  <p className="text-sm text-red-800">Payroll Items: <strong>{items?.length || 0}</strong></p>
+                </div>
+                <p className="text-sm text-muted-foreground">This will permanently remove the payroll run and all associated payroll items. Any locked adjustments, leave records, and reimbursements will be unlocked. This action cannot be undone.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => {
+                if (run) deleteRunMutation.mutate({ id: run.id });
+              }}
+              disabled={deleteRunMutation.isPending}
+            >
+              {deleteRunMutation.isPending ? "Deleting..." : "Delete Payroll Run"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Auto-Fill Pending Review Warning Dialog */}
       <AlertDialog open={showAutoFillWarning} onOpenChange={setShowAutoFillWarning}>
         <AlertDialogContent>
