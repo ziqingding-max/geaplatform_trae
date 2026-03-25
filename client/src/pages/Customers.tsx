@@ -1709,9 +1709,9 @@ function CustomerDetail({ id }: { id: number }) {
                                   <ExternalLink className="w-3.5 h-3.5" />
                                 </Button>
                               )}
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm("Delete this contract?")) deleteContractMutation.mutate({ id: c.id }); }}>
+                              {canEditClient && <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm("Delete this contract?")) deleteContractMutation.mutate({ id: c.id }); }}>
                                 <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                              </Button>}
                             </div>
                           </TableCell>
                         </TableRow>
