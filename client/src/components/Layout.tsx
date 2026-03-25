@@ -44,7 +44,9 @@ import {
   Activity,
   Layers,
   PieChart,
-  KeyRound
+  KeyRound,
+  Calculator,
+  Wrench
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -74,7 +76,7 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 
 import { useMemo } from "react";
-import { isAdmin } from "../../../shared/roles";
+import { isAdmin, canEditOperations } from "../../../shared/roles";
 
 function useNavGroups(user: any) {
   const { t } = useI18n();
@@ -104,12 +106,13 @@ function useNavGroups(user: any) {
         { label: t("nav.quotations"), icon: FileText, href: "/quotations" },
       ],
     },
-    // ── Country/Region Guide: visible to ALL roles (standalone group) ──
+    // ── Toolkit: visible to ALL roles ──
     {
-      label: t("nav.countryGuide"),
-      icon: Globe,
+      label: t("nav.toolkit"),
+      icon: Wrench,
       items: [
         { label: t("nav.countryGuide"), icon: Globe, href: "/admin/country-guide" },
+        { label: t("nav.costSimulator"), icon: Calculator, href: "/admin/cost-simulator" },
       ],
     },
     // ── Client Management: visible to all roles ──
@@ -151,15 +154,17 @@ function useNavGroups(user: any) {
         { label: t("nav.vendor_bills"), icon: Receipt, href: "/vendor-bills" },
       ],
     },
-    // ── System: Admin only ──
+    // ── System: Admin + OM for Settings, Admin only for rest ──
     {
       label: t("nav.system"),
       icon: Settings,
       items: [
-        { label: t("nav.settings"), icon: Settings, href: "/settings" },
-        { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin" },
-        { label: t("nav.countryGuideAdmin"), icon: Globe, href: "/admin/knowledge/country-guides" },
-      ].filter(() => isAdmin(roleStr)),
+        ...(isAdmin(roleStr) || canEditOperations(roleStr) ? [{ label: t("nav.settings"), icon: Settings, href: "/settings" }] : []),
+        ...(isAdmin(roleStr) ? [
+          { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin" },
+          { label: t("nav.countryGuideAdmin"), icon: Globe, href: "/admin/knowledge/country-guides" },
+        ] : []),
+      ],
     },
   ].filter(group => group.items.length > 0), [t, roleStr]);
 }

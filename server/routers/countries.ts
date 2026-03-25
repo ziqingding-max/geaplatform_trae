@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { adminProcedure, userProcedure } from "../procedures";
+import { operationsManagerProcedure, userProcedure } from "../procedures";
 import {
   listCountriesConfig,
   getCountryConfig,
@@ -25,7 +25,7 @@ export const countriesRouter = router({
       return await getCountryConfig(input.countryCode);
     }),
 
-  create: adminProcedure
+  create: operationsManagerProcedure
     .input(
       z.object({
         countryCode: z.string().min(2).max(3),
@@ -64,7 +64,7 @@ export const countriesRouter = router({
       return result;
     }),
 
-  update: adminProcedure
+  update: operationsManagerProcedure
     .input(
       z.object({
         id: z.number(),
@@ -105,7 +105,7 @@ export const countriesRouter = router({
       return { success: true };
     }),
 
-  delete: adminProcedure
+  delete: operationsManagerProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       await deleteCountryConfig(input.id);
@@ -121,7 +121,7 @@ export const countriesRouter = router({
     }),
 
   // Batch create multiple countries at once
-  batchCreate: adminProcedure
+  batchCreate: operationsManagerProcedure
     .input(
       z.object({
         countries: z.array(
@@ -179,7 +179,7 @@ export const countriesRouter = router({
         return await listLeaveTypesByCountry(input.countryCode);
       }),
 
-    create: adminProcedure
+    create: operationsManagerProcedure
       .input(
         z.object({
           countryCode: z.string(),
@@ -204,7 +204,7 @@ export const countriesRouter = router({
         return result;
       }),
 
-    update: adminProcedure
+    update: operationsManagerProcedure
       .input(
         z.object({
           id: z.number(),
@@ -232,7 +232,7 @@ export const countriesRouter = router({
         return { success: true };
       }),
 
-    delete: adminProcedure
+    delete: operationsManagerProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
         await deleteLeaveType(input.id);

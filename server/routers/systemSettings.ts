@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { adminProcedure, userProcedure } from "../procedures";
+import { adminProcedure, operationsManagerProcedure, userProcedure } from "../procedures";
 import { listSystemConfigs, getSystemConfig, setSystemConfig } from "../db";
 import { runEmployeeAutoActivation, runAutoCreatePayrollRuns, rescheduleAllJobs, runJobByKey, CRON_JOB_DEFS } from "../cronJobs";
 import {
@@ -30,8 +30,8 @@ export const systemSettingsRouter = router({
       return { key: input.key, value };
     }),
 
-  // Update a system config (admin only)
-  update: adminProcedure
+  // Update a system config (admin or operations manager)
+  update: operationsManagerProcedure
     .input(z.object({
       key: z.string(),
       value: z.string(),
@@ -42,8 +42,8 @@ export const systemSettingsRouter = router({
       return { success: true };
     }),
 
-  // Bulk update multiple configs at once
-  bulkUpdate: adminProcedure
+  // Bulk update multiple configs at once (admin or operations manager)
+  bulkUpdate: operationsManagerProcedure
     .input(z.object({
       configs: z.array(z.object({
         key: z.string(),
