@@ -1372,7 +1372,7 @@ function LineItemDialog({ open, onOpenChange, item, invoiceId, invoiceCurrency, 
 }) {
   const isEdit = !!item;
   // Determine which worker types to show based on invoiceType
-  const showEmployees = invoiceType === "manual" || invoiceType === "monthly" || invoiceType === "deposit" || invoiceType === "visa_service";
+  const showEmployees = invoiceType === "manual" || invoiceType === "monthly_eor" || invoiceType === "monthly_visa_eor" || invoiceType === "deposit" || invoiceType === "visa_service";
   const showContractors = invoiceType === "manual" || invoiceType === "monthly_aor";
   const workerLabel = showEmployees && showContractors ? "Worker (optional)" : showContractors ? "Contractor (optional)" : "Employee (optional)";
 

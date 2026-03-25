@@ -188,6 +188,37 @@ const REQUIRED_COLUMNS: ColumnMigration[] = [
     column: "settlementNotes",
     type: "TEXT",
   },
+
+  // ── invoice_items: AOR contractor association (PR #117) ──
+  {
+    table: "invoice_items",
+    column: "contractorId",
+    type: "INTEGER",
+  },
+
+  // ── bill_invoice_allocations: AOR contractor association (PR #117) ──
+  {
+    table: "bill_invoice_allocations",
+    column: "contractorId",
+    type: "INTEGER",
+  },
+
+  // ── jobDescription fields (job description support) ──
+  {
+    table: "contractors",
+    column: "jobDescription",
+    type: "TEXT",
+  },
+  {
+    table: "employees",
+    column: "jobDescription",
+    type: "TEXT",
+  },
+  {
+    table: "onboarding_invites",
+    column: "jobDescription",
+    type: "TEXT",
+  },
 ];
 
 /**
@@ -275,6 +306,67 @@ export async function runAutoMigrations(): Promise<void> {
         console.warn(`[AutoMigrate] Backfill query skipped or failed:`, err?.message || err);
       }
     }
+  }
+
+  // ── Special migration: Make bill_invoice_allocations.employeeId nullable ──
+  // SQLite does not support ALTER COLUMN to drop NOT NULL. We must recreate the table.
+  // This is done here (not in SQL migration files) to ensure idempotency.
+  try {
+    const biaInfo = await client.execute(`PRAGMA table_info("bill_invoice_allocations")`);
+    const empCol = biaInfo.rows.find(
+      (row: any) => (row.name || row[1]) === "employeeId"
+    );
+    // Check if employeeId is NOT NULL (notnull flag = 1)
+    const isNotNull = empCol && (empCol.notnull === 1 || (empCol as any)[3] === 1);
+
+    if (isNotNull) {
+      console.log("[AutoMigrate] Recreating bill_invoice_allocations to make employeeId nullable...");
+
+      // Use a transaction to ensure atomicity
+      await client.execute(`CREATE TABLE IF NOT EXISTS "bill_invoice_allocations_rebuild" (
+        "id" integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+        "vendorBillId" integer NOT NULL,
+        "vendorBillItemId" integer,
+        "invoiceId" integer NOT NULL,
+        "employeeId" integer,
+        "contractorId" integer,
+        "allocatedAmount" text NOT NULL,
+        "description" text,
+        "allocatedBy" integer,
+        "createdAt" integer DEFAULT (cast((julianday('now') - 2440587.5)*86400000 as integer)) NOT NULL,
+        "updatedAt" integer DEFAULT (cast((julianday('now') - 2440587.5)*86400000 as integer)) NOT NULL
+      )`);
+
+      // Check if the rebuild table is empty (avoid duplicate inserts on re-run)
+      const rebuildCount = await client.execute(`SELECT COUNT(*) as cnt FROM "bill_invoice_allocations_rebuild"`);
+      const cnt = (rebuildCount.rows[0] as any)?.cnt ?? (rebuildCount.rows[0] as any)?.[0] ?? 0;
+
+      if (Number(cnt) === 0) {
+        // Copy data from original table.
+        // Note: contractorId column is guaranteed to exist at this point because
+        // REQUIRED_COLUMNS already added it via ALTER TABLE ADD COLUMN above.
+        await client.execute(`INSERT INTO "bill_invoice_allocations_rebuild" 
+          ("id", "vendorBillId", "vendorBillItemId", "invoiceId", "employeeId", "contractorId", "allocatedAmount", "description", "allocatedBy", "createdAt", "updatedAt")
+          SELECT "id", "vendorBillId", "vendorBillItemId", "invoiceId", "employeeId", "contractorId",
+            "allocatedAmount", "description", "allocatedBy", "createdAt", "updatedAt"
+          FROM "bill_invoice_allocations"`);
+      }
+
+      // Drop old table and rename
+      await client.execute(`DROP TABLE IF EXISTS "bill_invoice_allocations"`);
+      await client.execute(`ALTER TABLE "bill_invoice_allocations_rebuild" RENAME TO "bill_invoice_allocations"`);
+
+      // Recreate indexes
+      await client.execute(`CREATE INDEX IF NOT EXISTS "bia_vendor_bill_id_idx" ON "bill_invoice_allocations" ("vendorBillId")`);
+      await client.execute(`CREATE INDEX IF NOT EXISTS "bia_vendor_bill_item_id_idx" ON "bill_invoice_allocations" ("vendorBillItemId")`);
+      await client.execute(`CREATE INDEX IF NOT EXISTS "bia_invoice_id_idx" ON "bill_invoice_allocations" ("invoiceId")`);
+      await client.execute(`CREATE INDEX IF NOT EXISTS "bia_employee_id_idx" ON "bill_invoice_allocations" ("employeeId")`);
+      await client.execute(`CREATE INDEX IF NOT EXISTS "bia_contractor_id_idx" ON "bill_invoice_allocations" ("contractorId")`);
+
+      console.log("[AutoMigrate] bill_invoice_allocations recreated with nullable employeeId");
+    }
+  } catch (err: any) {
+    console.error("[AutoMigrate] Failed to recreate bill_invoice_allocations:", err?.message || err);
   }
 
   console.log("[AutoMigrate] Schema check complete");
