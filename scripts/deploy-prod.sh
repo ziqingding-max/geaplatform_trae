@@ -71,9 +71,9 @@ rollback() {
     git checkout "$PREV_COMMIT" 2>/dev/null || git reset --hard "$PREV_COMMIT"
 
     info "使用旧代码重新构建..."
-    docker compose -f "$COMPOSE_FILE" build 2>>"$DEPLOY_LOG"
-    docker compose -f "$COMPOSE_FILE" down 2>>"$DEPLOY_LOG"
-    docker compose -f "$COMPOSE_FILE" up -d 2>>"$DEPLOY_LOG"
+    docker compose -f "$COMPOSE_FILE" build 2>&1 | tee -a "$DEPLOY_LOG"
+    docker compose -f "$COMPOSE_FILE" down 2>&1 | tee -a "$DEPLOY_LOG"
+    docker compose -f "$COMPOSE_FILE" up -d 2>&1 | tee -a "$DEPLOY_LOG"
 
     warn "已回滚到版本: $PREV_COMMIT"
     warn "请检查问题后重新部署"
@@ -255,7 +255,7 @@ if [ -n "$NO_CACHE" ]; then
 fi
 
 BUILD_START=$(date +%s)
-if ! docker compose -f "$COMPOSE_FILE" build $NO_CACHE 2>>"$DEPLOY_LOG"; then
+if ! docker compose -f "$COMPOSE_FILE" build $NO_CACHE 2>&1 | tee -a "$DEPLOY_LOG"; then
   fail "镜像构建失败"
   warn "线上服务未受影响（尚未停止旧容器）"
   warn "请检查构建日志: $DEPLOY_LOG"
@@ -273,10 +273,10 @@ echo ""
 info "阶段 4/8: 重启服务（停机窗口开始）"
 DOWNTIME_START=$(date +%s)
 
-docker compose -f "$COMPOSE_FILE" down 2>>"$DEPLOY_LOG"
+docker compose -f "$COMPOSE_FILE" down 2>&1 | tee -a "$DEPLOY_LOG"
 info "旧容器已停止"
 
-docker compose -f "$COMPOSE_FILE" up -d 2>>"$DEPLOY_LOG"
+docker compose -f "$COMPOSE_FILE" up -d 2>&1 | tee -a "$DEPLOY_LOG"
 info "新容器已启动，等待健康检查..."
 
 echo ""
