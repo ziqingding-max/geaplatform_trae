@@ -286,7 +286,7 @@ export const adminDashboardRouter = router({
       .select({
         status: quotations.status,
         cnt: count(),
-        totalValue: sum(quotations.totalMonthly),
+        totalValue: sql<string>`COALESCE(SUM(CAST(${quotations.totalMonthly} AS numeric)), 0)`,
       })
       .from(quotations)
       .groupBy(quotations.status);
@@ -562,8 +562,8 @@ export const adminDashboardRouter = router({
       .select({
         status: invoices.status,
         cnt: count(),
-        totalAmount: sum(invoices.total),
-        totalPaid: sum(invoices.paidAmount),
+        totalAmount: sql<string>`COALESCE(SUM(CAST(${invoices.total} AS numeric)), 0)`,
+        totalPaid: sql<string>`COALESCE(SUM(CAST(${invoices.paidAmount} AS numeric)), 0)`,
       })
       .from(invoices)
       .where(inArray(invoices.status, ["sent", "overdue", "partially_paid"]))
@@ -582,7 +582,7 @@ export const adminDashboardRouter = router({
       .select({
         status: vendorBills.status,
         cnt: count(),
-        totalAmount: sum(vendorBills.totalAmount),
+        totalAmount: sql<string>`COALESCE(SUM(CAST(${vendorBills.totalAmount} AS numeric)), 0)`,
       })
       .from(vendorBills)
       .where(inArray(vendorBills.status, ["approved", "overdue", "partially_paid"]))
@@ -601,7 +601,7 @@ export const adminDashboardRouter = router({
     const settledThisMonth = await db
       .select({
         cnt: count(),
-        totalPaid: sum(invoices.paidAmount),
+        totalPaid: sql<string>`COALESCE(SUM(CAST(${invoices.paidAmount} AS numeric)), 0)`,
       })
       .from(invoices)
       .where(
@@ -615,8 +615,8 @@ export const adminDashboardRouter = router({
     const vendorPaidThisMonth = await db
       .select({
         cnt: count(),
-        totalSettled: sum(vendorBills.settlementAmount),
-        totalBankFees: sum(vendorBills.settlementBankFee),
+        totalSettled: sql<string>`COALESCE(SUM(CAST(${vendorBills.settlementAmount} AS numeric)), 0)`,
+        totalBankFees: sql<string>`COALESCE(SUM(CAST(${vendorBills.settlementBankFee} AS numeric)), 0)`,
       })
       .from(vendorBills)
       .where(
@@ -629,7 +629,7 @@ export const adminDashboardRouter = router({
     // Wallet balances summary
     const walletSummary = await db
       .select({
-        totalBalance: sum(customerWallets.balance),
+        totalBalance: sql<string>`COALESCE(SUM(CAST(${customerWallets.balance} AS numeric)), 0)`,
         cnt: count(),
       })
       .from(customerWallets);
@@ -637,7 +637,7 @@ export const adminDashboardRouter = router({
     // Frozen wallet summary
     const frozenSummary = await db
       .select({
-        totalBalance: sum(customerFrozenWallets.balance),
+        totalBalance: sql<string>`COALESCE(SUM(CAST(${customerFrozenWallets.balance} AS numeric)), 0)`,
         cnt: count(),
       })
       .from(customerFrozenWallets);
