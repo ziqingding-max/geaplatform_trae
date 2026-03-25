@@ -70,6 +70,15 @@ const statusKeys = [
   "draft", "pending_approval", "approved", "paid", "partially_paid", "overdue", "cancelled", "void",
 ];
 
+const billTypeColorMap: Record<string, string> = {
+  operational: "bg-gray-500/15 text-gray-600 border-gray-500/30",
+  pass_through: "bg-blue-500/15 text-blue-600 border-blue-500/30",
+  vendor_service_fee: "bg-violet-500/15 text-violet-600 border-violet-500/30",
+  non_recurring: "bg-orange-500/15 text-orange-600 border-orange-500/30",
+  mixed: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+};
+const billTypeKeys = ["operational", "pass_through", "vendor_service_fee", "non_recurring", "mixed"];
+
 /* ========== Vendor Bill List ========== */
 function VendorBillList() {
   const { t } = useI18n();
@@ -78,6 +87,7 @@ function VendorBillList() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [vendorFilter, setVendorFilter] = useState("all");
+  const [billTypeFilter, setBillTypeFilter] = useState("all");
 
   const { data, isLoading, refetch } = trpc.vendorBills.list.useQuery({
     search: search || undefined,
@@ -91,8 +101,10 @@ function VendorBillList() {
 
   const bills = useMemo(() => {
     const raw = (data as any)?.data || data || [];
-    return Array.isArray(raw) ? raw : [];
-  }, [data]);
+    const arr = Array.isArray(raw) ? raw : [];
+    if (billTypeFilter === "all") return arr;
+    return arr.filter((b: any) => (b.billType || "operational") === billTypeFilter);
+  }, [data, billTypeFilter]);
 
   const stats = useMemo(() => {
     let total = 0, pending = 0, overdue = 0, totalAmount = 0;
@@ -106,9 +118,9 @@ function VendorBillList() {
   }, [bills]);
 
   function handleExportCSV() {
-    const headers = ["Bill #", "Vendor", "Category", "Status", "Bill Date", "Due Date", "Currency", "Total", "Paid"];
+    const headers = ["Bill #", "Vendor", "Category", "Bill Type", "Status", "Bill Date", "Due Date", "Currency", "Total", "Paid"];
     const rows = bills.map((b: any) => [
-      b.billNumber, b.vendor?.name || "", b.category, b.status,
+      b.billNumber, b.vendor?.name || "", b.category, b.billType || "operational", b.status,
       safeDate(b.billDate), safeDate(b.dueDate), b.currency,
       b.totalAmount, b.paidAmount || "0",
     ]);
@@ -188,6 +200,13 @@ function VendorBillList() {
               {vendors.map((v: any) => <SelectItem key={v.id} value={v.id.toString()}>{v.name}</SelectItem>)}
             </SelectContent>
           </Select>
+          <Select value={billTypeFilter} onValueChange={setBillTypeFilter}>
+            <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder={t("vendorBills.filters.allBillTypes")} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("vendorBills.filters.allBillTypes")}</SelectItem>
+              {billTypeKeys.map((bt) => <SelectItem key={bt} value={bt}>{t(`vendorBills.billType.${bt}`)}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Table */}
@@ -207,6 +226,7 @@ function VendorBillList() {
                   <TableHead className="text-xs">{t("vendorBills.table.billNumberHeader")}</TableHead>
                   <TableHead className="text-xs">{t("vendorBills.table.vendorHeader")}</TableHead>
                   <TableHead className="text-xs">{t("vendorBills.table.statusHeader")}</TableHead>
+                  <TableHead className="text-xs">{t("vendorBills.createBill.billType")}</TableHead>
                   <TableHead className="text-xs">{t("vendorBills.table.billDateHeader")}</TableHead>
                   <TableHead className="text-xs">{t("vendorBills.table.dueDateHeader")}</TableHead>
                   <TableHead className="text-xs text-right">{t("vendorBills.table.totalHeader")}</TableHead>
@@ -229,6 +249,11 @@ function VendorBillList() {
                           {t(`vendorBills.status.${bill.status}`)}
                         </Badge>
                       </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-xs ${billTypeColorMap[bill.billType] || ""}`}>
+                          {t(`vendorBills.billType.${bill.billType || "operational"}`)}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{formatDate(bill.billDate)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{formatDate(bill.dueDate)}</TableCell>
                       <TableCell className="text-sm text-right font-medium">{bill.currency} {formatAmount(total)}</TableCell>
@@ -243,7 +268,7 @@ function VendorBillList() {
               </TableBody>
               <TableFooter>
                 <TableRow>
-                  <TableCell colSpan={5} className="text-xs font-medium">{t("common.total")}</TableCell>
+                  <TableCell colSpan={6} className="text-xs font-medium">{t("common.total")}</TableCell>
                   <TableCell className="text-right text-xs font-bold">{formatAmount(bills.reduce((s: number, b: any) => s + parseFloat(b.totalAmount || "0"), 0))}</TableCell>
                   <TableCell className="text-right text-xs font-bold">{formatAmount(bills.reduce((s: number, b: any) => s + parseFloat(b.paidAmount || "0"), 0))}</TableCell>
                   <TableCell className="text-right text-xs font-bold">{formatAmount(bills.reduce((s: number, b: any) => s + parseFloat(b.totalAmount || "0") - parseFloat(b.paidAmount || "0"), 0))}</TableCell>
@@ -566,7 +591,7 @@ function VendorBillDetail() {
         <Card>
           <CardHeader><CardTitle className="text-sm">{t("vendorBills.detail.dates")}</CardTitle></CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
               <div>
                 <p className="text-xs text-muted-foreground">{t("vendorBills.details.billDateLabel")}</p>
                 <p>{formatDate(bill.billDate) || "\u2014"}</p>
@@ -582,6 +607,12 @@ function VendorBillDetail() {
               <div>
                 <p className="text-xs text-muted-foreground">{t("vendorBills.filters.allCategories")}</p>
                 <p>{t(`vendorBills.category.${bill.category}`)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">{t("vendorBills.createBill.billType")}</p>
+                <Badge variant="outline" className={`text-xs ${billTypeColorMap[(bill as any).billType] || ""}`}>
+                  {t(`vendorBills.billType.${(bill as any).billType || "operational"}`)}
+                </Badge>
               </div>
             </div>
             {bill.description && (
@@ -713,6 +744,7 @@ function VendorBillDetail() {
                       vendor_service_fee: "consulting",
                       non_recurring: editBill.category || "other",
                       operational: editBill.category || "other",
+                      mixed: editBill.category || "other",
                     };
                     setEditBill({ ...editBill, billType: v, category: autoCategory[v] || "other" });
                   }}>
@@ -722,8 +754,12 @@ function VendorBillDetail() {
                       <SelectItem value="pass_through">{t("vendorBills.billType.pass_through")}</SelectItem>
                       <SelectItem value="vendor_service_fee">{t("vendorBills.billType.vendor_service_fee")}</SelectItem>
                       <SelectItem value="non_recurring">{t("vendorBills.billType.non_recurring")}</SelectItem>
+                      <SelectItem value="mixed">{t("vendorBills.billType.mixed")}</SelectItem>
                     </SelectContent>
                   </Select>
+                  {editBill.billType === "mixed" && (
+                    <p className="text-[10px] text-amber-500 mt-0.5">{t("vendorBills.billType.mixed_hint")}</p>
+                  )}
                 </div>
                 <div>
                   <Label className="text-xs">{t("vendorBills.filters.allCategories")}</Label>

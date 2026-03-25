@@ -5972,6 +5972,7 @@ const adminTranslations = {
     "vendorBills.details.totalAmountLabel": "Total Amount *",
     "vendorBills.empty.prompt": "Try adjusting your search or create a new bill.",
     "vendorBills.empty.title": "No vendor bills found for the selected period and filters.",
+    "vendorBills.filters.allBillTypes": "All Bill Types",
     "vendorBills.filters.allStatuses": "All Statuses",
     "vendorBills.filters.allVendors": "All Vendors",
     "vendorBills.filters.searchPlaceholder": "Search by bill #, vendor, or amount...",
@@ -6181,6 +6182,7 @@ const adminTranslations = {
     "vendorBills.billType.mixed_hint": "This bill contains multiple cost types. Please classify each line item's cost type individually.",
 
     // Vendor Types (new)
+    "vendors.type.client_related": "Client Related",
     "vendors.type.eor_vendor": "EOR Vendor",
     "vendors.type.bank_financial": "Bank / Financial Institution",
     "vendors.type.professional_service": "Professional Service",
@@ -9094,6 +9096,7 @@ const adminTranslations = {
     "vendorBills.details.totalAmountLabel": "总金额 *",
     "vendorBills.empty.prompt": "尝试调整您的搜索或创建新账单。",
     "vendorBills.empty.title": "未找到所选期间和筛选条件的供应商账单。",
+    "vendorBills.filters.allBillTypes": "所有账单类型",
     "vendorBills.filters.allStatuses": "所有状态",
     "vendorBills.filters.allVendors": "所有供应商",
     "vendorBills.filters.searchPlaceholder": "按账单号、供应商或金额搜索...",
@@ -9303,6 +9306,7 @@ const adminTranslations = {
     "vendorBills.billType.mixed_hint": "此账单包含多种成本类型，请在每个行项目上单独分类成本类型。",
 
     // 供应商类型（新增）
+    "vendors.type.client_related": "客户相关",
     "vendors.type.eor_vendor": "EOR 供应商",
     "vendors.type.bank_financial": "银行/金融机构",
     "vendors.type.professional_service": "专业服务",
