@@ -170,7 +170,7 @@ export const customers = pgTable(
   "customers",
   {
     id: serial("id").primaryKey(),
-    clientCode: varchar("clientCode", { length: 20 }).unique(), // Auto-generated: CUS-0001
+    clientCode: varchar("clientCode", { length: 50 }).unique(), // Auto-generated: CUS-0001
     companyName: varchar("companyName", { length: 255 }).notNull(),
     legalEntityName: varchar("legalEntityName", { length: 255 }),
     registrationNumber: varchar("registrationNumber", { length: 100 }),
@@ -179,10 +179,10 @@ export const customers = pgTable(
     city: varchar("city", { length: 100 }),
     state: varchar("state", { length: 100 }),
     country: varchar("country", { length: 100 }).notNull(),
-    postalCode: varchar("postalCode", { length: 20 }),
+    postalCode: varchar("postalCode", { length: 50 }),
     primaryContactName: varchar("primaryContactName", { length: 255 }),
     primaryContactEmail: varchar("primaryContactEmail", { length: 320 }),
-    primaryContactPhone: varchar("primaryContactPhone", { length: 20 }),
+    primaryContactPhone: varchar("primaryContactPhone", { length: 50 }),
     paymentTermDays: integer("paymentTermDays").default(30).notNull(), // Payment terms in days (Net 7/15/30 etc.)
     settlementCurrency: varchar("settlementCurrency", { length: 3 }).default("USD").notNull(),
     language: text("language", { enum: ["en", "zh"] }).default("en").notNull(), // Invoice language preference
@@ -211,7 +211,7 @@ export const customerContacts = pgTable(
     customerId: integer("customerId").notNull(),
     contactName: varchar("contactName", { length: 255 }).notNull(),
     email: varchar("email", { length: 320 }).notNull(),
-    phone: varchar("phone", { length: 20 }),
+    phone: varchar("phone", { length: 50 }),
     role: varchar("role", { length: 100 }), // Business role (e.g. "HR Director")
     isPrimary: boolean("isPrimary").default(false).notNull(),
     hasPortalAccess: boolean("hasPortalAccess").default(false).notNull(),
@@ -328,13 +328,13 @@ export const employees = pgTable(
   "employees",
   {
     id: serial("id").primaryKey(),
-    employeeCode: varchar("employeeCode", { length: 20 }).unique(), // Auto-generated: EMP-0001
+    employeeCode: varchar("employeeCode", { length: 50 }).unique(), // Auto-generated: EMP-0001
     customerId: integer("customerId").notNull(),
     // Personal info
     firstName: varchar("firstName", { length: 100 }).notNull(),
     lastName: varchar("lastName", { length: 100 }).notNull(),
     email: varchar("email", { length: 320 }).notNull(),
-    phone: varchar("phone", { length: 20 }),
+    phone: varchar("phone", { length: 50 }),
     dateOfBirth: text("dateOfBirth"),
     gender: text("gender", { enum: ["male", "female", "other", "prefer_not_to_say"] }),
     nationality: varchar("nationality", { length: 100 }),
@@ -345,7 +345,7 @@ export const employees = pgTable(
     city: varchar("city", { length: 100 }),
     state: varchar("state", { length: 100 }),
     country: varchar("country", { length: 100 }).notNull(), // Employment country
-    postalCode: varchar("postalCode", { length: 20 }),
+    postalCode: varchar("postalCode", { length: 50 }),
     // Employment details
     department: varchar("department", { length: 100 }),
     jobTitle: varchar("jobTitle", { length: 255 }).notNull(),
@@ -894,17 +894,17 @@ export const billingEntities = pgTable(
     address: text("address"),
     city: varchar("city", { length: 100 }),
     state: varchar("state", { length: 100 }),
-    postalCode: varchar("postalCode", { length: 20 }),
+    postalCode: varchar("postalCode", { length: 50 }),
     bankDetails: text("bankDetails"), // Free-text bank info (multiline, admin-configured per country)
     currency: varchar("currency", { length: 3 }).default("USD").notNull(),
     contactEmail: varchar("contactEmail", { length: 320 }),
-    contactPhone: varchar("contactPhone", { length: 20 }),
+    contactPhone: varchar("contactPhone", { length: 50 }),
     isDefault: boolean("isDefault").default(false).notNull(),
     isActive: boolean("isActive").default(true).notNull(),
     // Finance Phase 2 fields
     logoUrl: text("logoUrl"), // S3 URL for entity logo
     logoFileKey: varchar("logoFileKey", { length: 500 }), // S3 key for logo file
-    invoicePrefix: varchar("invoicePrefix", { length: 20 }), // e.g. "APAC-" for invoice numbering
+    invoicePrefix: varchar("invoicePrefix", { length: 50 }), // e.g. "APAC-" for invoice numbering
     paymentTermDays: integer("paymentTermDays").default(30).notNull(), // Payment terms in days
     invoiceSequence: integer("invoiceSequence").default(0).notNull(), // Last used invoice sequence number
     notes: text("notes"),
@@ -1076,7 +1076,7 @@ export const vendors = pgTable(
   "vendors",
   {
     id: serial("id").primaryKey(),
-    vendorCode: varchar("vendorCode", { length: 20 }).unique(), // Auto-generated: VND-0001
+    vendorCode: varchar("vendorCode", { length: 50 }).unique(), // Auto-generated: VND-0001
     name: varchar("name", { length: 255 }).notNull(),
     legalName: varchar("legalName", { length: 255 }),
     contactName: varchar("contactName", { length: 255 }),
@@ -1086,7 +1086,7 @@ export const vendors = pgTable(
     address: text("address"),
     city: varchar("city", { length: 100 }),
     state: varchar("state", { length: 100 }),
-    postalCode: varchar("postalCode", { length: 20 }),
+    postalCode: varchar("postalCode", { length: 50 }),
     serviceType: varchar("serviceType", { length: 100 }), // e.g. "Payroll Processing", "Legal", "IT"
     currency: varchar("currency", { length: 3 }).default("USD").notNull(), // Default payment currency
     bankDetails: text("bankDetails"), // Free-text bank info (multiline)
@@ -1303,7 +1303,7 @@ export const salesLeads = pgTable(
     companyName: varchar("companyName", { length: 255 }).notNull(),
     contactName: varchar("contactName", { length: 255 }),
     contactEmail: varchar("contactEmail", { length: 320 }),
-    contactPhone: varchar("contactPhone", { length: 20 }),
+    contactPhone: varchar("contactPhone", { length: 50 }),
     country: varchar("country", { length: 100 }),
     industry: varchar("industry", { length: 100 }),
     estimatedEmployees: integer("estimatedEmployees"), // Expected number of employees to onboard

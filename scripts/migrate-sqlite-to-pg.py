@@ -19,8 +19,8 @@ from datetime import datetime, timezone
 BOOLEAN_FIELDS = {
     "users": ["isActive", "mustChangePassword"],
     "countries_config": ["vatApplicable", "isActive"],
-    "leave_types": [],
-    "public_holidays": [],
+    "leave_types": ["isPaid", "requiresApproval"],
+    "public_holidays": ["isGlobal"],
     "customers": [],
     "customer_contacts": ["isPrimary", "hasPortalAccess", "isPortalActive"],
     "customer_pricing": ["isActive"],
