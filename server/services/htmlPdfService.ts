@@ -1426,7 +1426,9 @@ export async function generateQuotationPdfV2(data: QuotationDataV2): Promise<Buf
   // ── 2d. Combined Total Summary ──
   const totalServiceFees = data.serviceFees.reduce((sum, sf) => sum + sf.serviceFee, 0);
   const totalEmploymentCost = data.costEstimations.reduce((sum, ce) => sum + ce.monthlyTotal, 0);
-  const grandTotal = parseFloat(data.totalMonthly);
+  // Defensive: compute grand total from actual data instead of relying on data.totalMonthly
+  // which may be stale/incorrect for historical records
+  const grandTotal = totalServiceFees + totalEmploymentCost;
 
   pages += contentPage(headerTitle, 5, 0, `
     <h2>Total Monthly Investment Summary</h2>
