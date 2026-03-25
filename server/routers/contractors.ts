@@ -2,7 +2,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { adminProcedure, customerManagerProcedure, userProcedure } from "../procedures";
+import { adminProcedure, customerManagerProcedure, operationsManagerProcedure, userProcedure } from "../procedures";
 import {
   createContractor,
   getContractorById,
@@ -286,7 +286,7 @@ export const contractorsRouter = router({
         return await listAllContractorMilestones(input);
       }),
 
-    create: customerManagerProcedure
+    create: operationsManagerProcedure
       .input(z.object({
         contractorId: z.number(),
         title: z.string().min(1),
@@ -319,7 +319,7 @@ export const contractorsRouter = router({
         return result;
       }),
 
-    update: customerManagerProcedure
+    update: operationsManagerProcedure
       .input(z.object({
         id: z.number(),
         data: z.object({
@@ -340,7 +340,7 @@ export const contractorsRouter = router({
         return { success: true };
       }),
 
-    delete: customerManagerProcedure
+    delete: operationsManagerProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await deleteContractorMilestone(input.id);
@@ -367,7 +367,7 @@ export const contractorsRouter = router({
         return await listAllContractorAdjustments(input);
       }),
 
-    create: customerManagerProcedure
+    create: operationsManagerProcedure
       .input(z.object({
         contractorId: z.number(),
         type: z.enum(["bonus", "expense", "deduction"]),
@@ -399,7 +399,7 @@ export const contractorsRouter = router({
         return result;
       }),
 
-    update: customerManagerProcedure
+    update: operationsManagerProcedure
       .input(z.object({
         id: z.number(),
         data: z.object({
@@ -415,7 +415,7 @@ export const contractorsRouter = router({
         return { success: true };
       }),
 
-    delete: customerManagerProcedure
+    delete: operationsManagerProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await deleteContractorAdjustment(input.id);
@@ -457,7 +457,7 @@ export const contractorsRouter = router({
         return await getContractorInvoiceById(input.id);
       }),
 
-    generate: customerManagerProcedure
+    generate: operationsManagerProcedure
       .input(z.object({
         targetDate: z.string().optional(), // YYYY-MM-DD
       }))
@@ -467,7 +467,7 @@ export const contractorsRouter = router({
         return result;
       }),
 
-    approve: customerManagerProcedure
+    approve: operationsManagerProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -501,7 +501,7 @@ export const contractorsRouter = router({
         return { success: true };
       }),
 
-    reject: customerManagerProcedure
+    reject: operationsManagerProcedure
       .input(z.object({ id: z.number(), reason: z.string() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
