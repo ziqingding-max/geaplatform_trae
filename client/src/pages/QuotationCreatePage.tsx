@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/DatePicker";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { usePermissions } from "@/lib/usePermissions";
 import { toast } from "sonner";
 import { Plus, Trash2, Calculator, Info, ArrowLeft, DollarSign, Globe, BookOpen } from "lucide-react";
 import CountrySelect from "@/components/CountrySelect";
@@ -59,6 +60,7 @@ interface QuotationItemV1 {
 }
 
 export default function QuotationCreatePage({ params }: { params?: { id?: string } }) {
+  const { canEditSales } = usePermissions();
   const { t } = useI18n();
   const [, setLocation] = useLocation();
   const searchString = useSearch();
@@ -719,9 +721,9 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                   </div>
                   <div className="pt-4 flex gap-2">
                     <Button variant="outline" className="flex-1" onClick={() => setLocation("/quotations")}>{t("common.cancel")}</Button>
-                    <Button className="flex-1" onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
+                    {canEditSales && <Button className="flex-1" onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
                       {createMutation.isPending || updateMutation.isPending ? t("common.loading") : (isEditMode ? "Update" : t("common.create"))}
-                    </Button>
+                    </Button>}
                   </div>
                 </CardContent>
               </Card>
@@ -1075,9 +1077,9 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
 
                   <div className="pt-4 flex gap-2">
                     <Button variant="outline" className="flex-1" onClick={() => setLocation("/quotations")}>{t("common.cancel")}</Button>
-                    <Button className="flex-1" onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
+                    {canEditSales && <Button className="flex-1" onClick={handleSubmit} disabled={createMutation.isPending || updateMutation.isPending}>
                       {createMutation.isPending || updateMutation.isPending ? t("common.loading") : (isEditMode ? "Update" : t("common.create"))}
-                    </Button>
+                    </Button>}
                   </div>
                 </CardContent>
               </Card>

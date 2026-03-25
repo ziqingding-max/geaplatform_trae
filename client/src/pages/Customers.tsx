@@ -38,6 +38,7 @@ import { formatCurrency } from "@/lib/format";
 import { toast } from "sonner";
 
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/usePermissions";
 const statusColors: Record<string, string> = {
   active: "bg-emerald-50 text-emerald-700 border-emerald-200",
   suspended: "bg-amber-50 text-amber-700 border-amber-200",
@@ -47,6 +48,7 @@ const statusColors: Record<string, string> = {
 /* ========== Customer List ========== */
 function CustomerList() {
   const { t } = useI18n();
+  const { canEditClient } = usePermissions();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [, setLocation] = useLocation();
@@ -126,7 +128,7 @@ function CustomerList() {
             <h1 className="text-2xl font-bold tracking-tight">{t("customers.title")}</h1>
             <p className="text-sm text-muted-foreground mt-1">{t("customers.description")}</p>
           </div>
-          <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormErrors({}); }}>
+          {canEditClient && <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormErrors({}); }}>
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2" />{t("customers.button.add")}</Button>
             </DialogTrigger>
@@ -255,7 +257,7 @@ function CustomerList() {
                 </div>
               </div>
             </DialogContent>
-          </Dialog>
+          </Dialog>}
         </div>
 
         {/* Filters */}
@@ -351,6 +353,7 @@ function CustomerList() {
 /* ========== Customer Detail ========== */
 function CustomerDetail({ id }: { id: number }) {
   const { t } = useI18n();
+  const { canEditClient } = usePermissions();
   const [, setLocation] = useLocation();
   const searchString = useSearch();
   const fromPage = new URLSearchParams(searchString).get("from_page") || "1";
@@ -765,11 +768,11 @@ function CustomerDetail({ id }: { id: number }) {
         {/* ── Info Tab ── */}
         {activeTab === "info" && (
           <div className="space-y-4">
-            <div className="flex justify-end">
+            {canEditClient && <div className="flex justify-end">
               <Button variant="outline" size="sm" onClick={openEditDialog}>
                 <Pencil className="w-4 h-4 mr-2" />Edit Customer
               </Button>
-            </div>
+            </div>}
 
             {/* Edit Customer Dialog */}
             <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -963,7 +966,7 @@ function CustomerDetail({ id }: { id: number }) {
                     <CardTitle className="text-base">{t("customers.pricing.aorSectionTitle")}</CardTitle>
                     <p className="text-xs text-muted-foreground mt-1">{t("customers.pricing.aorSectionHint")}</p>
                   </div>
-                  <Dialog open={aorPricingOpen} onOpenChange={(open) => {
+                  {canEditClient && <Dialog open={aorPricingOpen} onOpenChange={(open) => {
                     setAorPricingOpen(open);
                     if (open) {
                       setAorForm({
@@ -1003,7 +1006,7 @@ function CustomerDetail({ id }: { id: number }) {
                         </div>
                       </div>
                     </DialogContent>
-                  </Dialog>
+                  </Dialog>}
                 </div>
               </CardHeader>
               <CardContent className="pt-0">
@@ -1015,9 +1018,9 @@ function CustomerDetail({ id }: { id: number }) {
                       <p className="text-xs text-muted-foreground">{t("customers.pricing.aorPerContractorMonth")} · {t("common.effectiveFrom")}: {formatDate(activeAorPricing.effectiveFrom)}</p>
                     </div>
                     <Badge variant="default" className="text-xs">Active</Badge>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm("Remove AOR pricing?")) deletePricingMutation.mutate({ id: activeAorPricing.id }); }}>
+                    {canEditClient && <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm("Remove AOR pricing?")) deletePricingMutation.mutate({ id: activeAorPricing.id }); }}>
                       <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                    </Button>}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground py-2">{t("customers.pricing.aorNotSet")}</p>
@@ -1036,7 +1039,7 @@ function CustomerDetail({ id }: { id: number }) {
             </Card>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium">{t("customers.pricing.eorSectionTitle")}</h3>
-              <Dialog open={pricingOpen} onOpenChange={(open) => { setPricingOpen(open); if (open) { setPricingMode("single"); setPricingForm({ pricingType: "country_specific", globalDiscountPercent: "", countryCode: "", selectedCountries: [], serviceType: "eor", fixedPrice: "", visaOneTimeFee: "", currency: "USD", effectiveFrom: formatDateISO(new Date()), effectiveTo: "" }); } }}>
+              {canEditClient && <Dialog open={pricingOpen} onOpenChange={(open) => { setPricingOpen(open); if (open) { setPricingMode("single"); setPricingForm({ pricingType: "country_specific", globalDiscountPercent: "", countryCode: "", selectedCountries: [], serviceType: "eor", fixedPrice: "", visaOneTimeFee: "", currency: "USD", effectiveFrom: formatDateISO(new Date()), effectiveTo: "" }); } }}>
                 <DialogTrigger asChild>
                   <Button size="sm"><Plus className="w-4 h-4 mr-2" />{t("customers.pricing.addPricing")}</Button>
                 </DialogTrigger>
@@ -1161,9 +1164,8 @@ function CustomerDetail({ id }: { id: number }) {
                     </div>
                   </div>
                 </DialogContent>
-              </Dialog>
+               </Dialog>}
             </div>
-
             {/* EOR/Visa EOR Pricing Table */}
             <Card>
               <CardContent className="p-0">
@@ -1230,9 +1232,9 @@ function CustomerDetail({ id }: { id: number }) {
                               <Badge variant={p.isActive ? "default" : "secondary"} className="text-xs">{p.isActive ? "Active" : "Inactive"}</Badge>
                             </TableCell>
                             <TableCell>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm("Delete this pricing rule?")) deletePricingMutation.mutate({ id: p.id }); }}>
+                              {canEditClient && <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { if (confirm("Delete this pricing rule?")) deletePricingMutation.mutate({ id: p.id }); }}>
                                 <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                              </Button>}
                             </TableCell>
                           </TableRow>
                         );
@@ -1255,7 +1257,7 @@ function CustomerDetail({ id }: { id: number }) {
         {activeTab === "contacts" && (
           <div className="space-y-4">
             <div className="flex justify-end">
-              <Dialog open={contactOpen} onOpenChange={setContactOpen}>
+              {canEditClient && <Dialog open={contactOpen} onOpenChange={setContactOpen}>
                 <DialogTrigger asChild>
                   <Button size="sm"><UserPlus className="w-4 h-4 mr-2" />{t("customers.button.add_contact")}</Button>
                 </DialogTrigger>
@@ -1309,7 +1311,7 @@ function CustomerDetail({ id }: { id: number }) {
                     </div>
                   </div>
                 </DialogContent>
-              </Dialog>
+              </Dialog>}
             </div>
             <Card>
               <CardContent className="p-0">
@@ -1363,16 +1365,16 @@ function CustomerDetail({ id }: { id: number }) {
                           <TableCell>
                             <div className="flex gap-1 justify-end items-center">
                               {/* Edit contact info */}
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditContactDialog(c)} title={t("common.edit") || "Edit"}>
+                              {canEditClient && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditContactDialog(c)} title={t("common.edit") || "Edit"}>
                                 <Pencil className="w-3.5 h-3.5" />
-                              </Button>
+                              </Button>}
                               {/* Invite (only when no portal access) */}
-                              {!(c as any).isPortalActive && !c.hasPortalAccess && (
+                              {canEditClient && !(c as any).isPortalActive && !c.hasPortalAccess && (
                                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openInviteDialog(c.id)}>
                                   <Send className="w-3 h-3 mr-1" />{t("customers.contacts.inviteToPortal") || "Invite"}
                                 </Button>
                               )}
-                              {c.hasPortalAccess && !(c as any).isPortalActive && (
+                              {canEditClient && c.hasPortalAccess && !(c as any).isPortalActive && (
                                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => openInviteDialog(c.id)}>
                                   <Send className="w-3 h-3 mr-1" />{t("customers.contacts.resendInvite") || "Resend"}
                                 </Button>
@@ -1384,7 +1386,7 @@ function CustomerDetail({ id }: { id: number }) {
                                 </Button>
                               )}
                               {/* More actions dropdown */}
-                              <DropdownMenu>
+                              {canEditClient && <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-7 w-7">
                                     <MoreHorizontal className="w-3.5 h-3.5" />
@@ -1417,7 +1419,7 @@ function CustomerDetail({ id }: { id: number }) {
                                     <Trash2 className="w-3.5 h-3.5 mr-2" />{t("common.delete") || "Delete"}
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
-                              </DropdownMenu>
+                              </DropdownMenu>}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1616,7 +1618,7 @@ function CustomerDetail({ id }: { id: number }) {
         {activeTab === "contracts" && (
           <div className="space-y-4">
             <div className="flex justify-end">
-              <Dialog open={contractOpen} onOpenChange={(open) => { setContractOpen(open); if (!open) { setSelectedFile(null); } }}>
+              {canEditClient && <Dialog open={contractOpen} onOpenChange={(open) => { setContractOpen(open); if (!open) { setSelectedFile(null); } }}>
                 <DialogTrigger asChild>
                   <Button size="sm"><Upload className="w-4 h-4 mr-2" />{t("customers.contracts.uploadContract")}</Button>
                 </DialogTrigger>
@@ -1672,7 +1674,7 @@ function CustomerDetail({ id }: { id: number }) {
                     </div>
                   </div>
                 </DialogContent>
-              </Dialog>
+              </Dialog>}
             </div>
             <Card>
               <CardContent className="p-0">
@@ -1750,6 +1752,7 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
   refetch: () => void;
 }) {
   const { t } = useI18n();
+  const { canEditClient } = usePermissions();
   const [initCountry, setInitCountry] = useState("");
   const [editingCountry, setEditingCountry] = useState<string | null>(null);
   const [editForms, setEditForms] = useState<Record<number, { annualEntitlement: number; expiryRule: "year_end" | "anniversary" | "no_expiry"; carryOverDays: number }>>({});
@@ -1826,7 +1829,7 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
   return (
     <div className="space-y-4">
       {/* Initialize for new country */}
-      <Card>
+      {canEditClient && <Card>
         <CardHeader>
           <CardTitle className="text-base">{t("employees.leave.initializePolicy")}</CardTitle>
         </CardHeader>
@@ -1855,7 +1858,7 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
             </Button>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Policies by country */}
       {Object.entries(policiesByCountry).map(([countryCode, policies]) => {
@@ -1867,7 +1870,7 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
                 <CardTitle className="text-base">{t("customers.leave.countryPolicies", { country: countryCode })}</CardTitle>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{t("customers.leave.typesCount", { count: policies.length })}</Badge>
-                  {isEditing ? (
+                  {canEditClient && (isEditing ? (
                     <div className="flex gap-1">
                       <Button size="sm" variant="default" className="h-7 text-xs" disabled={savingCountry} onClick={saveCountryPolicies}>
                         {savingCountry ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
@@ -1881,7 +1884,7 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
                     <Button size="sm" variant="ghost" className="h-7" onClick={() => startEditCountry(countryCode, policies)}>
                       <Pencil className="w-3.5 h-3.5 mr-1" /> {t("common.edit") || "Edit"}
                     </Button>
-                  )}
+                  ))}
                 </div>
               </div>
             </CardHeader>
@@ -1948,11 +1951,11 @@ function LeavePolicyTab({ customerId, customer, leavePolicies, refetch }: {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => {
+                          {canEditClient && <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive" onClick={() => {
                             if (confirm(t("leave.policy.deleteConfirm") || "Delete this leave policy?")) deleteMutation.mutate({ id: policy.id });
                           }}>
                             <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          </Button>}
                         </TableCell>
                       </TableRow>
                     );

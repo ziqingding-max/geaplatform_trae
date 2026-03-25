@@ -74,6 +74,7 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 
 import { useMemo } from "react";
+import { isAdmin } from "../../../shared/roles";
 
 function useNavGroups(user: any) {
   const { t } = useI18n();
@@ -85,31 +86,42 @@ function useNavGroups(user: any) {
   };
 
   return useMemo(() => [
+    // ── Overview: visible to all roles (read-only for non-privileged) ──
     {
       label: t("nav.overview"),
       icon: LayoutDashboard,
       items: [
         { label: t("nav.dashboard"), icon: LayoutDashboard, href: "/" },
         { label: t("nav.profit_loss"), icon: BarChart3, href: "/reports/profit-loss" },
-      ].filter(() => hasRole(["admin", "finance_manager", "operations_manager"])),
+      ],
     },
+    // ── Sales: visible to all roles ──
     {
       label: t("nav.sales"),
       icon: TrendingUp,
       items: [
         { label: t("nav.crm_pipeline"), icon: Briefcase, href: "/sales-crm" },
         { label: t("nav.quotations"), icon: FileText, href: "/quotations" },
-        { label: t("nav.countryGuide"), icon: Globe, href: "/admin/country-guide" },
-      ].filter(() => hasRole(["admin", "sales", "customer_manager"])),
+      ],
     },
+    // ── Country/Region Guide: visible to ALL roles (standalone group) ──
+    {
+      label: t("nav.countryGuide"),
+      icon: Globe,
+      items: [
+        { label: t("nav.countryGuide"), icon: Globe, href: "/admin/country-guide" },
+      ],
+    },
+    // ── Client Management: visible to all roles ──
     {
       label: t("nav.client_management"),
       icon: Users,
       items: [
         { label: t("nav.customers"), icon: Building2, href: "/customers" },
         { label: t("nav.people"), icon: Users, href: "/people" },
-      ].filter(() => hasRole(["admin", "customer_manager", "operations_manager"])),
+      ],
     },
+    // ── Operations: visible to all roles ──
     {
       label: t("nav.operations"),
       icon: Layers,
@@ -119,36 +131,38 @@ function useNavGroups(user: any) {
         { label: t("nav.adjustments"), icon: ArrowUpDown, href: "/adjustments" },
         { label: t("nav.reimbursements"), icon: Receipt, href: "/reimbursements" },
         { label: t("nav.leave"), icon: CalendarDays, href: "/leave" },
-      ].filter(() => hasRole(["admin", "operations_manager"])),
+      ],
     },
+    // ── Finance: visible to all roles ──
     {
       label: t("nav.finance"),
       icon: PieChart,
       items: [
         { label: t("nav.invoices"), icon: Receipt, href: "/invoices" },
         { label: t("nav.release_tasks"), icon: CheckCircle, href: "/admin/release-tasks" },
-      ].filter(() => hasRole(["admin", "finance_manager"])),
+      ],
     },
+    // ── Vendor: visible to all roles ──
     {
       label: t("nav.vendor"),
       icon: Truck,
       items: [
         { label: t("nav.vendors"), icon: Truck, href: "/vendors" },
         { label: t("nav.vendor_bills"), icon: Receipt, href: "/vendor-bills" },
-      ].filter(() => hasRole(["admin", "finance_manager"])),
+      ],
     },
+    // ── System: Admin only ──
     {
       label: t("nav.system"),
       icon: Settings,
       items: [
-        { label: t("nav.settings"), icon: Settings, href: "/settings", roles: ["admin"] },
-        { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin", roles: ["admin"] },
-        { label: t("nav.countryGuideAdmin"), icon: Globe, href: "/admin/knowledge/country-guides", roles: ["admin"] },
-      ].filter(item => !item.roles || hasRole(item.roles)),
+        { label: t("nav.settings"), icon: Settings, href: "/settings" },
+        { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin" },
+        { label: t("nav.countryGuideAdmin"), icon: Globe, href: "/admin/knowledge/country-guides" },
+      ].filter(() => isAdmin(roleStr)),
     },
   ].filter(group => group.items.length > 0), [t, roleStr]);
 }
-
 interface LayoutProps {
   children: React.ReactNode;
   title?: string;

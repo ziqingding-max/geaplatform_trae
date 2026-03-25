@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/usePermissions";
 import Layout from "@/components/Layout";
 import {
   Card, CardContent
@@ -29,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 
 export function ContractorInvoicesContent() {
   const { t } = useI18n();
+  const { canEditOps } = usePermissions();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [, setLocation] = useLocation();
@@ -167,7 +169,7 @@ export function ContractorInvoicesContent() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        {(inv.status === "draft" || inv.status === "pending_approval") && (
+                        {canEditOps && (inv.status === "draft" || inv.status === "pending_approval") && (
                           <>
                             <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
                               onClick={() => { setSelectedInvoice(inv); setShowApproveDialog(true); }}

@@ -37,6 +37,7 @@ import { exportToCsv } from "@/lib/csvExport";
 import PayrollCycleIndicator from "@/components/PayrollCycleIndicator";
 
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/usePermissions";
 
 const statusColors: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-700 border-amber-200",
@@ -61,6 +62,7 @@ const CATEGORIES = [
 
 export default function Reimbursements() {
   const { t, lang } = useI18n();
+  const { canEditOps, canExport } = usePermissions();
   const [viewTab, setViewTab] = useState<string>("active");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -347,7 +349,7 @@ export default function Reimbursements() {
           </div>
           <div className="flex gap-4">
               <PayrollCycleIndicator compact label="Reimbursements" />
-              <Button variant="outline" disabled={items.length === 0} onClick={() => {
+              {canExport && <Button variant="outline" disabled={items.length === 0} onClick={() => {
                 exportToCsv(items, [
                   { header: "Employee", accessor: (r: any) => { const emp = employeeMap.get(r.employeeId); return emp ? `${emp.firstName} ${emp.lastName}` : `#${r.employeeId}`; } },
                   { header: "Category", accessor: (r: any) => t(`reimbursements.category.${r.category}`) || r.category || "" },
@@ -361,8 +363,8 @@ export default function Reimbursements() {
                 toast.success("CSV exported successfully");
               }}>
                 <Download className="w-4 h-4 mr-2" />{t("common.export")}
-              </Button>
-              <Dialog open={showCreate} onOpenChange={(open) => { setShowCreate(open); if (!open) resetForm(); }}>
+              </Button>}
+              {canEditOps && <Dialog open={showCreate} onOpenChange={(open) => { setShowCreate(open); if (!open) resetForm(); }}>
                 <DialogTrigger asChild>
                   <Button>
                     <Plus className="w-4 h-4 mr-2" /> {t("reimbursements.actions.new")}
@@ -452,7 +454,7 @@ export default function Reimbursements() {
                     </Button>
                   </div>
                 </DialogContent>
-              </Dialog>
+              </Dialog>}
           </div>
         </div>
 
@@ -588,7 +590,7 @@ export default function Reimbursements() {
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              {item.status === "client_approved" && (
+                              {canEditOps && item.status === "client_approved" && (
                                 <>
                                   <Button
                                     variant="ghost" size="icon"
@@ -609,7 +611,7 @@ export default function Reimbursements() {
                                     <XCircle className="w-3.5 h-3.5" />
                                   </Button>
                                 </>)}
-                              {(item.status === "submitted" || item.status === "client_approved") && (
+                              {canEditOps && (item.status === "submitted" || item.status === "client_approved") && (
                                 <>
                                   <Button
                                     variant="ghost" size="icon"

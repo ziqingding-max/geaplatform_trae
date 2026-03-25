@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { financeManagerProcedure } from "../procedures";
+import { financeAndOpsProcedure } from "../procedures";
 import { executeTaskLLM, uploadFileToDashScope } from "../services/aiGatewayService";
 import { storagePut, storageGet, storageDownload } from "../storage";
 import {
@@ -242,7 +242,7 @@ async function uploadFileForAI(fileUrl: string, fileKey: string, fileName: strin
 
 export const pdfParsingRouter = router({
   // Multi-file AI parse: Upload multiple files for one vendor, cross-validate, and suggest allocations
-  parseMultiFile: financeManagerProcedure
+  parseMultiFile: financeAndOpsProcedure
     .input(
       z.object({
         files: z.array(
@@ -573,7 +573,7 @@ CONFIDENCE SCORING RULES:
     }),
 
   // Apply parsed multi-file result: create bill + items + optional allocations
-  applyMultiFileParse: financeManagerProcedure
+  applyMultiFileParse: financeAndOpsProcedure
     .input(
       z.object({
         vendorId: z.number(),
@@ -737,7 +737,7 @@ CONFIDENCE SCORING RULES:
     }),
 
   // Upload file to S3 (generic helper for file uploads)
-  uploadFile: financeManagerProcedure
+  uploadFile: financeAndOpsProcedure
     .input(
       z.object({
         fileName: z.string(),
@@ -755,7 +755,7 @@ CONFIDENCE SCORING RULES:
 
   // Legacy: Single file parse (kept for backward compatibility)
   // Now uses Qwen-Long with fileid:// for document understanding
-  parseVendorInvoice: financeManagerProcedure
+  parseVendorInvoice: financeAndOpsProcedure
     .input(
       z.object({
         fileUrl: z.string(),
@@ -838,7 +838,7 @@ Be precise with numbers. If a field is not found, use null.`,
     }),
 
   // Legacy: Apply single vendor invoice (kept for backward compatibility)
-  applyVendorInvoice: financeManagerProcedure
+  applyVendorInvoice: financeAndOpsProcedure
     .input(
       z.object({
         vendorId: z.number(),

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { financeManagerProcedure } from "../procedures";
+import { userProcedure } from "../procedures";
 import { getDb } from "../db";
 import {
   invoices as invoicesTable,
@@ -93,7 +93,7 @@ export const reportsRouter = router({
    *   - Gross Profit = Net Revenue - Direct COGS
    *   - Net Profit = Gross Profit - Operational Expenses
    */
-  profitAndLoss: financeManagerProcedure
+  profitAndLoss: userProcedure
     .input(
       z.object({
         startMonth: z.string().optional(), // YYYY-MM
@@ -586,7 +586,7 @@ export const reportsRouter = router({
    * Quick financial summary for dashboard integration
    * Uses COALESCE(settlementAmount, totalAmount) for backward compatibility
    */
-  financialSummary: financeManagerProcedure.query(async () => {
+  financialSummary: userProcedure.query(async () => {
     const db = await getDb();
     if (!db) {
       return {

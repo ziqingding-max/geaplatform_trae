@@ -7,6 +7,7 @@ import Layout from "@/components/Layout";
 import CountrySelect from "@/components/CountrySelect";
 import { formatMonthLong, formatStatusLabel } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
+import { usePermissions } from "@/lib/usePermissions";
 import { useState, useMemo, useEffect } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,6 +66,7 @@ function getYearOptions() {
 /* ========== Payroll List ========== */
 function PayrollList() {
   const { t, lang } = useI18n();
+  const { canEditOps, canExport } = usePermissions();
   const [viewTab, setViewTab] = useState<string>("active");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [countryFilter, setCountryFilter] = useState<string>("all");
@@ -168,7 +170,7 @@ function PayrollList() {
             <h1 className="text-2xl font-bold tracking-tight">{t("payroll.title")}</h1>
             <p className="text-sm text-muted-foreground mt-1">{t("payroll.description")}</p>
           </div>
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          {canEditOps && <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2" />{t("payroll.button.newRun")}</Button>
             </DialogTrigger>
@@ -218,9 +220,8 @@ function PayrollList() {
                 </div>
               </div>
             </DialogContent>
-          </Dialog>
+           </Dialog>}
         </div>
-
         {/* Active / History Tabs */}
         <Tabs value={viewTab} onValueChange={(v) => { setViewTab(v); setStatusFilter("all"); }} className="w-full">
           <TabsList>
@@ -341,6 +342,7 @@ function PayrollList() {
 /* ========== Payroll Detail ========== */
 function PayrollDetail({ id }: { id: number }) {
   const { t } = useI18n();
+  const { canEditOps, canExport } = usePermissions();
   const [, setLocation] = useLocation();
   const { data: run, isLoading, refetch } = trpc.payroll.get.useQuery({ id });
   const { data: items, isLoading: itemsLoading, refetch: refetchItems } = trpc.payroll.getItems.useQuery({ payrollRunId: id });
@@ -604,12 +606,12 @@ function PayrollDetail({ id }: { id: number }) {
             </p>
           </div>
           <div className="flex gap-2">
-            {isDraft && (
+            {canEditOps && isDraft && (
               <Button onClick={handleSubmit} disabled={updateMutation.isPending}>
                 <Send className="w-4 h-4 mr-2" />Submit for Approval
               </Button>
             )}
-            {isPendingApproval && (
+            {canEditOps && isPendingApproval && (
               <>
                 <Button onClick={handleApprove} disabled={updateMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700">
                   <CheckCircle className="w-4 h-4 mr-2" />Approve
@@ -634,7 +636,7 @@ function PayrollDetail({ id }: { id: number }) {
                 </Dialog>
               </>
             )}
-            {run.status === "rejected" && (
+            {canEditOps && run.status === "rejected" && (
               <Button variant="outline" onClick={handleRevertToDraft} disabled={updateMutation.isPending}>
                 Revert to Draft
               </Button>
@@ -689,7 +691,7 @@ function PayrollDetail({ id }: { id: number }) {
                 Payroll Items ({items?.length || 0})
               </CardTitle>
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" disabled={!items || items.length === 0} onClick={() => {
+                {canExport && <Button size="sm" variant="outline" disabled={!items || items.length === 0} onClick={() => {
                   exportToCsv(items || [], [
                     { header: "Employee", accessor: (r: any) => employeeMap[r.employeeId] || `#${r.employeeId}` },
                     { header: "Base Salary", accessor: (r: any) => r.baseSalary },
@@ -708,8 +710,8 @@ function PayrollDetail({ id }: { id: number }) {
                   toast.success("CSV exported successfully");
                 }}>
                   <Download className="w-4 h-4 mr-2" />Export CSV
-                </Button>
-              {isDraft && (
+                </Button>}
+              {canEditOps && isDraft && (
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" onClick={handleAutoFillClick} disabled={autoFillMutation.isPending}>
                     <Calculator className="w-4 h-4 mr-2" />{autoFillMutation.isPending ? "Filling..." : "Auto-Fill Employees"}
@@ -871,7 +873,7 @@ function PayrollDetail({ id }: { id: number }) {
                       <TableCell className="text-sm font-mono font-semibold text-primary">{formatCurrencyAmount(item.net, run?.currency)}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          {isDraft ? (
+                          {canEditOps && isDraft ? (
                             <>
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { startEditItem(item); setAddItemOpen(true); }}>
                                 <Pencil className="w-3.5 h-3.5" />

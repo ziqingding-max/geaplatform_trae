@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { financeManagerProcedure } from "../procedures";
+import { financeAndOpsProcedure } from "../procedures";
 import {
   generateInvoicesFromPayroll,
   getInvoiceGenerationStatus,
@@ -20,7 +20,7 @@ export const invoiceGenerationRouter = router({
    * Service fees are calculated from customer pricing configuration
    * VAT is calculated per country from countries_config
    */
-  generateFromPayroll: financeManagerProcedure
+  generateFromPayroll: financeAndOpsProcedure
     .input(
       z.object({
         payrollMonth: z.string(), // ISO date (first day of month)
@@ -50,7 +50,7 @@ export const invoiceGenerationRouter = router({
   /**
    * Get status of invoice generation for a specific payroll month
    */
-  getStatus: financeManagerProcedure
+  getStatus: financeAndOpsProcedure
     .input(z.object({ payrollMonth: z.string() }))
     .query(async ({ input }) => {
       const payrollDate = new Date(input.payrollMonth);
@@ -61,7 +61,7 @@ export const invoiceGenerationRouter = router({
    * Pre-check before generate/regenerate: returns existing invoice status breakdown
    * so the frontend can warn the user about non-draft invoices that won't be affected.
    */
-  preCheck: financeManagerProcedure
+  preCheck: financeAndOpsProcedure
     .input(z.object({ payrollMonth: z.string() }))
     .query(async ({ input }) => {
       const payrollDate = new Date(input.payrollMonth);
@@ -96,7 +96,7 @@ export const invoiceGenerationRouter = router({
   /**
    * Regenerate invoices for a month (deletes draft invoices and recreates)
    */
-  regenerate: financeManagerProcedure
+  regenerate: financeAndOpsProcedure
     .input(
       z.object({
         payrollMonth: z.string(),
@@ -125,7 +125,7 @@ export const invoiceGenerationRouter = router({
   /**
    * Regenerate a single invoice (delete and recreate from payroll data)
    */
-  regenerateSingle: financeManagerProcedure
+  regenerateSingle: financeAndOpsProcedure
     .input(
       z.object({
         invoiceId: z.number(),
@@ -158,7 +158,7 @@ export const invoiceGenerationRouter = router({
     /**
      * Get current exchange rate between two currencies
      */
-    get: financeManagerProcedure
+    get: financeAndOpsProcedure
       .input(
         z.object({
           fromCurrency: z.string(),
@@ -172,7 +172,7 @@ export const invoiceGenerationRouter = router({
     /**
      * Update exchange rate with configurable markup
      */
-    update: financeManagerProcedure
+    update: financeAndOpsProcedure
       .input(
         z.object({
           fromCurrency: z.string(),
@@ -222,7 +222,7 @@ export const invoiceGenerationRouter = router({
     /**
      * Initialize default exchange rates
      */
-    initializeDefaults: financeManagerProcedure.mutation(async ({ ctx }) => {
+    initializeDefaults: financeAndOpsProcedure.mutation(async ({ ctx }) => {
       try {
         await initializeDefaultRates();
 

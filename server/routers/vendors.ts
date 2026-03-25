@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { financeManagerProcedure, userProcedure } from "../procedures";
+import { financeAndOpsProcedure, userProcedure } from "../procedures";
 import {
   createVendor,
   getVendorById,
@@ -45,7 +45,7 @@ export const vendorsRouter = router({
       return vendor;
     }),
 
-  create: financeManagerProcedure
+  create: financeAndOpsProcedure
     .input(
       z.object({
         name: z.string().min(1, "Vendor name is required"),
@@ -84,7 +84,7 @@ export const vendorsRouter = router({
       return { id: insertId, message: "Vendor created successfully" };
     }),
 
-  update: financeManagerProcedure
+  update: financeAndOpsProcedure
     .input(
       z.object({
         id: z.number(),
@@ -129,7 +129,7 @@ export const vendorsRouter = router({
       return { success: true, message: "Vendor updated successfully" };
     }),
 
-  delete: financeManagerProcedure
+  delete: financeAndOpsProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const existing = await getVendorById(input.id);

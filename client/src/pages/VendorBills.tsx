@@ -12,6 +12,7 @@ import { DatePicker, MonthPicker } from "@/components/DatePicker";
 import { formatDate, formatAmount, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/usePermissions";
 import { useState, useMemo } from "react";
 import { useRoute, useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,6 +74,7 @@ const statusKeys = [
 /* ========== Vendor Bill List ========== */
 function VendorBillList() {
   const { t } = useI18n();
+  const { canEditFinanceOps, canExport, canMarkPaid } = usePermissions();
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -129,15 +131,15 @@ function VendorBillList() {
             <h1 className="text-2xl font-bold tracking-tight">{t("vendorBills.title")}</h1>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={bills.length === 0}>
+            {canExport && <Button variant="outline" size="sm" onClick={handleExportCSV} disabled={bills.length === 0}>
               <Download className="w-4 h-4 mr-1" /> {t("vendorBills.actions.export")}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setLocation("/vendor-bills/new?mode=manual")}>
+            </Button>}
+            {canEditFinanceOps && <Button variant="outline" size="sm" onClick={() => setLocation("/vendor-bills/new?mode=manual")}>
               <Plus className="w-4 h-4 mr-1" /> {t("vendorBills.actions.createBill")}
-            </Button>
-            <Button size="sm" onClick={() => setLocation("/vendor-bills/new?mode=ai")}>
+            </Button>}
+            {canEditFinanceOps && <Button size="sm" onClick={() => setLocation("/vendor-bills/new?mode=ai")}>
               <Upload className="w-4 h-4 mr-1" /> {t("vendorBills.actions.analyzeWithAI")}
-            </Button>
+            </Button>}
           </div>
         </div>
 
@@ -261,6 +263,7 @@ function VendorBillList() {
 /* ========== Vendor Bill Detail ========== */
 function VendorBillDetail() {
   const { t } = useI18n();
+  const { canEditFinanceOps, canMarkPaid, canExport } = usePermissions();
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/vendor-bills/:id");
   const billId = params?.id ? parseInt(params.id) : 0;
@@ -471,12 +474,12 @@ function VendorBillDetail() {
             </Badge>
           </div>
           <div className="flex gap-2">
-            {bill.status === "draft" && (
+            {canEditFinanceOps && bill.status === "draft" && (
               <Button size="sm" variant="outline" onClick={() => statusMutation.mutate({ id: billId, status: "pending_approval" })}>
                 {t("vendorBills.actions.submitApproval")}
               </Button>
             )}
-            {bill.status === "pending_approval" && (
+            {canEditFinanceOps && bill.status === "pending_approval" && (
               <>
                 <Button size="sm" variant="outline" className="text-red-600" onClick={() => statusMutation.mutate({ id: billId, status: "draft" })}>
                   {t("vendorBills.actions.reject")}
@@ -486,7 +489,7 @@ function VendorBillDetail() {
                 </Button>
               </>
             )}
-            {(bill.status === "approved" || bill.status === "partially_paid") && (
+            {canMarkPaid && (bill.status === "approved" || bill.status === "partially_paid") && (
               <Button size="sm" onClick={() => {
                 setSettlementAmount("");
                 setSettlementBankFee("");
@@ -498,9 +501,9 @@ function VendorBillDetail() {
                 <DollarSign className="w-4 h-4 mr-1" /> {t("vendorBills.actions.markPaid")}
               </Button>
             )}
-            <Button size="sm" variant="outline" onClick={openEdit}>
+            {canEditFinanceOps && <Button size="sm" variant="outline" onClick={openEdit}>
               <Pencil className="w-4 h-4 mr-1" /> {t("common.edit")}
-            </Button>
+            </Button>}
           </div>
         </div>
 
@@ -648,9 +651,9 @@ function VendorBillDetail() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-sm">{t("vendorBills.detail.costAllocations")}</CardTitle>
-            <Button size="sm" variant="outline" onClick={() => setAllocOpen(true)}>
+            {canEditFinanceOps && <Button size="sm" variant="outline" onClick={() => setAllocOpen(true)}>
               <Plus className="w-4 h-4 mr-1" /> {t("vendorBills.actions.newAllocation")}
-            </Button>
+            </Button>}
           </CardHeader>
           <CardContent>
             {allocs.length > 0 ? (
@@ -679,9 +682,9 @@ function VendorBillDetail() {
                         <TableCell className="text-sm text-right font-medium">{formatAmount(parseFloat(a.allocatedAmount || "0"))}</TableCell>
                         <TableCell className="text-sm text-muted-foreground truncate max-w-[200px]">{a.description || "\u2014"}</TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteAllocMutation.mutate({ id: a.id })}>
+                          {canEditFinanceOps && <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => deleteAllocMutation.mutate({ id: a.id })}>
                             <Trash2 className="w-3 h-3" />
-                          </Button>
+                          </Button>}
                         </TableCell>
                       </TableRow>
                     ))}

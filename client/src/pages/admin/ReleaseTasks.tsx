@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import Layout from "@/components/Layout";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/usePermissions";
 import {
   Card, CardContent, CardHeader, CardTitle,
 } from "@/components/ui/card";
@@ -25,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 export default function ReleaseTasks() {
   const { t } = useI18n();
+  const { canReview } = usePermissions();
   const [, setLocation] = useLocation();
   const [selectedTask, setSelectedTask] = useState<any>(null);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
@@ -162,7 +164,7 @@ export default function ReleaseTasks() {
                           </TableCell>
                           <TableCell className="text-right pr-6">
                             <div className="flex justify-end gap-2">
-                              {tab === "pending" && (
+                              {canReview && tab === "pending" && (
                                 <Button size="sm" onClick={() => {
                                   setSelectedTask(cn);
                                   setDisposition("to_wallet");

@@ -19,6 +19,7 @@ import { DatePicker, MonthPicker } from "@/components/DatePicker";
 import { formatDate, formatAmount } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/usePermissions";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -655,6 +656,7 @@ function AIUploadStep({ onParsed, t }: {
 /* ========== Main Page Component ========== */
 export default function AnalyzeBill() {
   const { t } = useI18n();
+  const { canEditFinanceOps } = usePermissions();
   const [, setLocation] = useLocation();
   const searchStr = useSearch();
   const params = new URLSearchParams(searchStr);
@@ -845,13 +847,13 @@ export default function AnalyzeBill() {
                   <Upload className="w-4 h-4 mr-2" />{t("vendorBills.actions.backToUpload")}
                 </Button>
               )}
-              <Button onClick={handleSave} disabled={isSaving}>
+              {canEditFinanceOps && <Button onClick={handleSave} disabled={isSaving}>
                 {isSaving ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("vendorBills.actions.creatingBill")}</>
                 ) : (
                   <><Check className="w-4 h-4 mr-2" />{t("vendorBills.actions.createBill")}</>
                 )}
-              </Button>
+              </Button>}
             </div>
           )}
         </div>
@@ -894,13 +896,13 @@ export default function AnalyzeBill() {
               <Button variant="outline" onClick={() => setLocation("/vendor-bills")}>
                 {t("common.cancel")}
               </Button>
-              <Button onClick={handleSave} disabled={isSaving} size="lg">
+              {canEditFinanceOps && <Button onClick={handleSave} disabled={isSaving} size="lg">
                 {isSaving ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("vendorBills.actions.creatingBill")}</>
                 ) : (
                   <><Check className="w-4 h-4 mr-2" />{t("vendorBills.actions.createBill")}</>
                 )}
-              </Button>
+              </Button>}
             </div>
           </div>
         )}

@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
 import { exportToCsv } from "@/lib/csvExport";
 import { formatDate, formatAmount } from "@/lib/format";
+import { usePermissions } from "@/lib/usePermissions";
 
 // Import new modular components
 import { InvoiceStats } from "@/components/invoices/InvoiceStats";
@@ -216,6 +217,7 @@ function InvoiceGenerationPanel() {
 /* ========== Main Page Component ========== */
 export default function Invoices() {
   const { t } = useI18n();
+  const { canEditFinance, canEditFinanceOps, canExport, canMarkPaid } = usePermissions();
   const {
     isLoading,
     activeInvoices,
@@ -292,7 +294,7 @@ export default function Invoices() {
             <p className="text-sm text-muted-foreground mt-1">{t("invoices.list.subtitle")}</p>
           </div>
           <div className="flex gap-2">
-            <Button
+            {canExport && <Button
               variant="outline"
               size="sm"
               disabled={activeInvoices.length === 0 && historyInvoices.length === 0}
@@ -313,23 +315,23 @@ export default function Invoices() {
               )}
             >
               <Download className="w-4 h-4 mr-1" /> {t("invoices.list.exportCsvButton")}
-            </Button>
-            <Button variant="outline" onClick={() => {
+            </Button>}
+            {canEditFinanceOps && <Button variant="outline" onClick={() => {
               setCreditNoteForm({ customerId: 0, originalInvoiceId: 0, isFullCredit: true, amount: "", reason: "" });
               setShowCreditNoteCreate(true);
             }}>
               <RefreshCw className="w-4 h-4 mr-2" /> Create Credit Note
-            </Button>
-            <Button onClick={() => {
+            </Button>}
+            {canEditFinanceOps && <Button onClick={() => {
               setManualForm({ customerId: 0, billingEntityId: undefined, invoiceType: "manual", invoiceMonth: "", currency: "USD", notes: "", dueDate: "" });
               setShowManualCreate(true);
             }}>
               <Plus className="w-4 h-4 mr-2" /> {t("invoices.list.createInvoiceButton")}
-            </Button>
+            </Button>}
           </div>
         </div>
 
-        <InvoiceGenerationPanel />
+        {canEditFinanceOps && <InvoiceGenerationPanel />}
 
         <Tabs value={tab.active} onValueChange={tab.setActive} className="w-full">
           <TabsList>
@@ -350,7 +352,7 @@ export default function Invoices() {
               onClearAll={filters.clearAll}
             />
 
-            {selection.selectedIds.size > 0 && (
+            {canEditFinanceOps && selection.selectedIds.size > 0 && (
               <Card className="border-primary/30 bg-primary/5">
                 <CardContent className="p-3 flex items-center gap-3">
                   <span className="text-sm font-medium">{t("invoices.list.batch.selectedCount").replace("{count}", String(selection.selectedIds.size))}</span>
@@ -361,9 +363,9 @@ export default function Invoices() {
                     <Button size="sm" variant="outline" onClick={() => batch.handleAction("sent")} disabled={batch.mutation.isPending}>
                       <Send className="w-3.5 h-3.5 mr-1.5" />{t("invoices.list.batch.markSentButton")}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setShowBatchPaid(true)} disabled={batch.mutation.isPending}>
+                    {canMarkPaid && <Button size="sm" variant="outline" onClick={() => setShowBatchPaid(true)} disabled={batch.mutation.isPending}>
                       <CreditCard className="w-3.5 h-3.5 mr-1.5" />{t("invoices.actions.markPaid")}
-                    </Button>
+                    </Button>}
                     <Button size="sm" variant="ghost" onClick={() => selection.setSelectedIds(new Set())}>
                       {t("common.clear")}
                     </Button>

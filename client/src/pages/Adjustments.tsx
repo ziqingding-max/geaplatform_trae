@@ -49,6 +49,7 @@ import { MonthPicker } from "@/components/DatePicker";
 import { exportToCsv } from "@/lib/csvExport";
 
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/usePermissions";
 
 const statusColors: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-700 border-amber-200",
@@ -87,6 +88,7 @@ const CATEGORIES = [
 
 export default function Adjustments() {
   const { t, lang } = useI18n();
+  const { canEditOps, canExport } = usePermissions();
   const [viewTab, setViewTab] = useState<string>("active");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -571,7 +573,7 @@ export default function Adjustments() {
           </div>
           <div className="flex items-center gap-4">
             <PayrollCycleIndicator compact label="Adjustments" />
-            <Button variant="outline" disabled={filteredAdjustments.length === 0} onClick={() => {
+            {canExport && <Button variant="outline" disabled={filteredAdjustments.length === 0} onClick={() => {
                exportToCsv(filteredAdjustments, [
                 { header: "Worker Type", accessor: (r: any) => r.workerType },
                 { header: "Type", accessor: (r: any) => t(`adjustments.type.${r.adjustmentType}`) || r.adjustmentType },
@@ -584,8 +586,8 @@ export default function Adjustments() {
               toast.success("CSV exported successfully");
             }}>
               <Download className="w-4 h-4 mr-2" />{t("common.export")}
-            </Button>
-            <Dialog open={createOpen} onOpenChange={(open) => {
+            </Button>}
+            {canEditOps && <Dialog open={createOpen} onOpenChange={(open) => {
               setCreateOpen(open);
               if (!open) { setReceiptFile(null); }
             }}>
@@ -696,7 +698,7 @@ export default function Adjustments() {
                 </div>
               </div>
             </DialogContent>
-          </Dialog>
+          </Dialog>}
           </div>
         </div>
 
@@ -775,7 +777,7 @@ export default function Adjustments() {
                 <CheckCircle2 className="w-4 h-4 inline mr-1" />
                 {pendingApproval.length} adjustment(s) pending GEA approval
               </span>
-              <Button
+              {canEditOps && <Button
                 size="sm"
                 variant="outline"
                 className="border-emerald-300 text-emerald-700 hover:bg-emerald-100"
@@ -784,7 +786,7 @@ export default function Adjustments() {
               >
                 {bulkApproveEmployeeMutation.isPending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
                 Approve All ({pendingApproval.length})
-              </Button>
+              </Button>}
             </div>
           ) : null;
         })()}
@@ -866,7 +868,7 @@ export default function Adjustments() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            {["client_approved", "pending"].includes(adj.status) && (
+                            {canEditOps && ["client_approved", "pending"].includes(adj.status) && (
                               <>
                                 <Button
                                   variant="ghost" size="icon" className="h-7 w-7 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
@@ -883,7 +885,7 @@ export default function Adjustments() {
                                   <XCircle className="w-3.5 h-3.5" />
                                 </Button>
                               </>)}
-                            {["submitted", "client_approved", "pending"].includes(adj.status) && (
+                            {canEditOps && ["submitted", "client_approved", "pending"].includes(adj.status) && (
                               <>
                                 <Button
                                   variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"

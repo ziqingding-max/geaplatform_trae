@@ -47,6 +47,7 @@ import ContractorCreateDialog from "@/components/pages/ContractorCreateDialog";
 import { BankDetailsForm, BankDetails } from "@/components/forms/BankDetailsForm";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { isAdmin } from "@shared/roles";
+import { usePermissions } from "@/lib/usePermissions";
 
 import { useI18n } from "@/lib/i18n";
 const statusColors: Record<string, string> = {
@@ -98,6 +99,7 @@ const visaStatusColors: Record<string, string> = {
 /* ========== Employee List ========== */
 function EmployeeList() {
   const { t } = useI18n();
+  const { canEditClient, canEditOps } = usePermissions();
   const [location, setLocation] = useLocation();
   const searchString = useSearch();
   
@@ -338,7 +340,7 @@ function EmployeeList() {
                 <TabsTrigger value="contractors">Contractors</TabsTrigger>
               </TabsList>
             </div>
-            {activeTab === "employees" && (
+            {activeTab === "employees" && canEditClient && (
             <Dialog open={createOpen} onOpenChange={(o) => { setCreateOpen(o); if (!o) setErrors({}); }}>
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2" />{t("employees.actions.addEmployee")}</Button>
@@ -630,7 +632,7 @@ function EmployeeList() {
             </DialogContent>
           </Dialog>
           )}
-          {activeTab === "contractors" && <ContractorCreateDialog />}
+          {activeTab === "contractors" && canEditClient && <ContractorCreateDialog />}
         </div>
 
         <TabsContent value="employees" className="mt-0 space-y-6">
@@ -888,6 +890,7 @@ function EmployeeDetail({ id }: { id: number }) {
   // Auth for admin-only actions
   const { user } = useAuth();
   const userIsAdmin = isAdmin(user?.role);
+  const { canEditClient, canEditOps } = usePermissions();
 
   // Delete employee dialog state (admin only, terminated only)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -1220,10 +1223,10 @@ function EmployeeDetail({ id }: { id: number }) {
                 Worker Portal Active
               </Badge>
             )}
-            <Button variant="outline" size="sm" onClick={openEditDialog}>
+            {canEditClient && <Button variant="outline" size="sm" onClick={openEditDialog}>
               <Pencil className="w-4 h-4 mr-2" />Edit
-            </Button>
-            {transitions.map((t) => (
+            </Button>}
+            {canEditClient && transitions.map((t) => (
               <Button key={t.value}
                 variant={t.variant === "destructive" ? "destructive" : t.variant === "outline" ? "outline" : "default"}
                 size="sm"
@@ -1590,7 +1593,7 @@ function EmployeeDetail({ id }: { id: number }) {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <p className="text-sm text-muted-foreground">{t("employees.documents.allFilesHint")}</p>
-              <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+              {canEditClient && <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
                 <DialogTrigger asChild>
                   <Button size="sm"><Upload className="w-4 h-4 mr-2" />{t("employees.detail.actions.uploadDocument")}</Button>
                 </DialogTrigger>
@@ -1635,9 +1638,8 @@ function EmployeeDetail({ id }: { id: number }) {
                     </Button>
                   </DialogFooter>
                 </DialogContent>
-              </Dialog>
+               </Dialog>}
             </div>
-
             <Card>
               <CardContent className="p-0">
                 {allDocuments.length > 0 ? (
@@ -1687,14 +1689,14 @@ function EmployeeDetail({ id }: { id: number }) {
                                   <FileCheck className="w-3 h-3 mr-1" /> {t("employees.documents.sign")}
                                 </Button>
                               )}
-                              {doc.docId && (
+                              {canEditClient && doc.docId && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => {
                                   if (confirm(t("employees.documents.confirmDeleteDoc"))) deleteMutation.mutate({ id: doc.docId });
                                 }} title="Delete">
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
                               )}
-                              {doc.contractId && (
+                              {canEditClient && doc.contractId && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-700" onClick={() => {
                                   if (confirm(t("employees.documents.confirmDeleteContract"))) contractDeleteMut.mutate({ id: doc.contractId });
                                 }} title="Delete">

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { adminProcedure, financeManagerProcedure, userProcedure } from "../procedures";
+import { adminProcedure, financeAndOpsProcedure, userProcedure } from "../procedures";
 import {
   listBillingEntities,
   getBillingEntityById,
@@ -45,7 +45,7 @@ export const billingEntitiesRouter = router({
       return await resolveLogoUrl(entity);
     }),
 
-  create: financeManagerProcedure
+  create: financeAndOpsProcedure
     .input(
       z.object({
         entityName: z.string().min(1),
@@ -100,7 +100,7 @@ export const billingEntitiesRouter = router({
       return result;
     }),
 
-  update: financeManagerProcedure
+  update: financeAndOpsProcedure
     .input(
       z.object({
         id: z.number(),
@@ -153,7 +153,7 @@ export const billingEntitiesRouter = router({
     }),
 
   /** Upload logo image to S3 and update billing entity */
-  uploadLogo: financeManagerProcedure
+  uploadLogo: financeAndOpsProcedure
     .input(
       z.object({
         id: z.number(),

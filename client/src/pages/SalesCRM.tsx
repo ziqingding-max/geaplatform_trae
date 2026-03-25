@@ -18,6 +18,7 @@ import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { isAdmin } from "@shared/roles";
+import { usePermissions } from "@/lib/usePermissions";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -305,6 +306,7 @@ export default function SalesCRM() {
 
 function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
   const { t } = useI18n();
+  const { canEditSales } = usePermissions();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("active");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
@@ -396,7 +398,7 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
             <h1 className="text-2xl font-bold tracking-tight">{t("sales.title")}</h1>
             <p className="text-sm text-muted-foreground mt-1">{t("sales.subtitle")}</p>
           </div>
-          <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormErrors({}); }}>
+          {canEditSales && <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormErrors({}); }}>
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2" />{t("sales.newLead")}</Button>
             </DialogTrigger>
@@ -494,7 +496,7 @@ function LeadList({ onSelect }: { onSelect: (id: number) => void }) {
                 </div>
               </div>
             </DialogContent>
-          </Dialog>
+          </Dialog>}
         </div>
 
         {/* Pipeline Summary Cards */}
@@ -621,6 +623,7 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
   const { t } = useI18n();
   const { user } = useAuth();
   const userIsAdmin = isAdmin(user?.role);
+  const { canEditSales } = usePermissions();
   const [, setLocation] = useLocation();
   const [editOpen, setEditOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
@@ -757,18 +760,18 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
               </Button>
             )}
             {/* Create Customer button — only at MSA Signed and no customer yet */}
-            {isMsaSigned && !hasCustomer && (
+            {canEditSales && isMsaSigned && !hasCustomer && (
               <Button onClick={() => setConvertOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
                 <ArrowRightLeft className="w-4 h-4 mr-2" />{t("sales.convertToCustomer")}
               </Button>
             )}
             {/* Close Won button — at MSA Signed with customer created + has onboarding employee */}
-            {isMsaSigned && hasCustomer && onboardingStatus?.hasOnboardingEmployee && (
+            {canEditSales && isMsaSigned && hasCustomer && onboardingStatus?.hasOnboardingEmployee && (
               <Button onClick={() => setCloseWonOpen(true)} className="bg-green-600 hover:bg-green-700">
                 <CheckCircle2 className="w-4 h-4 mr-2" />{t("sales.closeWon")}
               </Button>
             )}
-            {!isClosedWon && (
+            {canEditSales && !isClosedWon && (
               <>
                 {!isClosed && (
                   <Button variant="outline" onClick={() => setEditOpen(true)}>
@@ -817,7 +820,7 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                 <p className="text-sm font-medium text-muted-foreground">{t("sales.pipelineProgress")}</p>
                 <div className="flex items-center gap-2">
                   {/* B2: Revert to previous stage button */}
-                  {(() => {
+                  {canEditSales && (() => {
                     const currentIdx = PIPELINE_STATUSES.indexOf(lead.status as any);
                     if (currentIdx > 0 && !isMsaSigned) {
                       const prevStatus = PIPELINE_STATUSES[currentIdx - 1];
@@ -834,7 +837,7 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                     }
                     return null;
                   })()}
-                  {!isMsaSigned && (
+                  {canEditSales && !isMsaSigned && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -867,9 +870,9 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                                 ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 cursor-pointer"
                                 : "bg-muted/50 text-muted-foreground border-muted"
                             }`}
-                            disabled={!isNext}
+                            disabled={!isNext || !canEditSales}
                             onClick={() => {
-                              if (isNext) {
+                              if (isNext && canEditSales) {
                                 setStatusConfirm({ targetStatus: status, isLost: false });
                               }
                             }}
@@ -929,13 +932,13 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                       </div>
                     )}
                     {/* B2: Reopen from Closed Lost */}
-                    <Button
+                    {canEditSales && <Button
                       size="sm"
                       variant="outline"
                       onClick={() => setStatusConfirm({ targetStatus: "discovery", isLost: false, isReopen: true })}
                     >
                       <RotateCcw className="w-3.5 h-3.5 mr-1" />{t("sales.reopenLead")}
-                    </Button>
+                    </Button>}
                   </div>
                 )}
               </CardContent>
@@ -945,9 +948,9 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle className="text-base">Documents</CardTitle>
-                    <Button variant="outline" size="sm" onClick={() => setDocumentOpen(true)}>
+                    {canEditSales && <Button variant="outline" size="sm" onClick={() => setDocumentOpen(true)}>
                         <Upload className="w-3.5 h-3.5 mr-1" />Upload
-                    </Button>
+                    </Button>}
                 </CardHeader>
                 <CardContent>
                     {!documents || documents.length === 0 ? (
@@ -976,7 +979,7 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                                                 </a>
                                             </Button>
                                         )}
-                                        <Button
+                                        {canEditSales && <Button
                                           variant="ghost"
                                           size="icon"
                                           className="text-red-500 hover:text-red-700"
@@ -988,7 +991,7 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                                           }}
                                         >
                                           <Trash2 className="w-4 h-4" />
-                                        </Button>
+                                        </Button>}
                                     </div>
                                 </div>
                             ))}
@@ -1069,7 +1072,7 @@ function LeadDetail({ leadId, onBack }: { leadId: number; onBack: () => void }) 
                         <History className="w-3 h-3 mr-1" />{t("sales.changeLogs")}
                       </TabsTrigger>
                     </TabsList>
-                    {!isClosed && (
+                    {canEditSales && !isClosed && (
                       <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setActivityOpen(true)}>
                         <Plus className="w-3.5 h-3.5 mr-1" />{t("sales.addActivity")}
                       </Button>

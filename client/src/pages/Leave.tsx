@@ -35,6 +35,7 @@ import PayrollCycleIndicator, { CrossMonthLeaveWarning } from "@/components/Payr
 import { exportToCsv } from "@/lib/csvExport";
 
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/usePermissions";
 
 const statusColors: Record<string, string> = {
   submitted: "bg-amber-50 text-amber-700 border-amber-200",
@@ -65,6 +66,7 @@ function calcBusinessDays(start: string, end: string): number {
 
 export default function Leave() {
   const { t, lang } = useI18n();
+  const { canEditOps, canExport } = usePermissions();
   const [viewTab, setViewTab] = useState<string>("active");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [monthFilter, setMonthFilter] = useState<string>("all");
@@ -399,7 +401,7 @@ export default function Leave() {
                 </Tabs>
 
                 <div className="flex gap-2">
-                    <Button variant="outline" disabled={leaves.length === 0} onClick={() => {
+                    {canExport && <Button variant="outline" disabled={leaves.length === 0} onClick={() => {
                         exportToCsv(leaves, [
                         { header: "Employee", accessor: (r: any) => { const emp = employeeMap[r.employeeId]; return emp ? emp.name : `#${r.employeeId}`; } },
                         { header: "Leave Type", accessor: (r: any) => r.leaveTypeName || r.leaveTypeId },
@@ -413,8 +415,8 @@ export default function Leave() {
                         toast.success("CSV exported successfully");
                     }}>
                         <Download className="w-4 h-4 mr-2" />{t("leave.actions.export")}
-                    </Button>
-                    <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormData(defaultForm); }}>
+                    </Button>}
+                    {canEditOps && <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormData(defaultForm); }}>
                     <DialogTrigger asChild>
                         <Button><Plus className="w-4 h-4 mr-2" />{t("leave.button.new")}</Button>
                     </DialogTrigger>
@@ -565,10 +567,9 @@ export default function Leave() {
                         </div>
                     </div>
                     </DialogContent>
-                </Dialog>
+                </Dialog>}
                 </div>
             </div>
-
             {/* Filters */}
             <div className="flex items-center gap-3 flex-wrap">
               <Select value={customerFilter} onValueChange={setCustomerFilter}>
@@ -621,7 +622,7 @@ export default function Leave() {
                     <CheckCircle2 className="w-4 h-4 inline mr-1" />
                     {pendingApproval.length} leave record(s) pending GEA approval
                   </span>
-                  <Button
+                  {canEditOps && <Button
                     size="sm"
                     variant="outline"
                     className="border-emerald-300 text-emerald-700 hover:bg-emerald-100"
@@ -630,7 +631,7 @@ export default function Leave() {
                   >
                     {bulkApproveMutation.isPending && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
                     Approve All ({pendingApproval.length})
-                  </Button>
+                  </Button>}
                 </div>
               ) : null;
             })()}
@@ -681,7 +682,7 @@ export default function Leave() {
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-1">
-                                {leave.status === "client_approved" && (
+                                {canEditOps && leave.status === "client_approved" && (
                                   <>
                                     <Button
                                       variant="ghost" size="icon"
@@ -703,7 +704,7 @@ export default function Leave() {
                                     </Button>
                                   </>
                                 )}
-                                {["submitted", "client_approved"].includes(leave.status) && (
+                                {canEditOps && ["submitted", "client_approved"].includes(leave.status) && (
                                   <>
                                     <Button
                                       variant="ghost" size="icon"

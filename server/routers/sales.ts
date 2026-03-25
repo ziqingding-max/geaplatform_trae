@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { customerManagerProcedure, userProcedure, crmProcedure, adminProcedure } from "../procedures";
+import { userProcedure, crmProcedure, adminProcedure } from "../procedures";
 import {
   createSalesLead,
   getSalesLeadById,
