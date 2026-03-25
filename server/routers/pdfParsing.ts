@@ -284,149 +284,144 @@ export const pdfParsingRouter = router({
         });
       }
 
-      // Step 3: Build Qwen-Long messages
-      // Qwen-Long message format:
-      //   - 1st system message: role definition + task instructions + system data
-      //   - 2nd system message: fileid:// references (document content)
+      // Step 3: Upload system context data as a JSON file to DashScope
+      // This avoids the "Single round file-content exceeds token limit" error
+      // by moving large structured data out of the system message into a fileid reference.
+      const systemContextData = {
+        serviceMonth: input.serviceMonth,
+        employees: systemContext.employees.slice(0, 200),
+        contractors: (systemContext as any).contractors?.slice(0, 100) || [],
+        customers: systemContext.customers,
+        invoices: systemContext.invoices.slice(0, 100),
+      };
+      const contextJsonBuffer = Buffer.from(JSON.stringify(systemContextData), "utf-8");
+
+      let contextFileId: string | null = null;
+      try {
+        contextFileId = await uploadFileToDashScope(contextJsonBuffer, `system_context_${input.serviceMonth}.json`);
+      } catch (e: any) {
+        console.warn("Failed to upload system context to DashScope, will inline data:", e?.message);
+      }
+
+      // Step 4: Build Qwen-Long messages
+      // Qwen-Long message format (per DashScope docs):
+      //   - 1st system message: role definition + task instructions (compact, no large data)
+      //   - 2nd system message: fileid:// references (system context + document files)
       //   - user message: the actual question (max 9,000 tokens when 2nd system msg exists)
-      const fileIdReferences = fileIds.map((id) => `fileid://${id}`).join(",");
+      const allFileIdRefs: string[] = [];
+      if (contextFileId) {
+        allFileIdRefs.push(`fileid://${contextFileId}`);
+      }
+      for (const id of fileIds) {
+        allFileIdRefs.push(`fileid://${id}`);
+      }
+      const fileIdReferences = allFileIdRefs.join(",");
+
+      // Build the system prompt — instructions only, no inline data.
+      // When context upload fails, we fall back to a compact inline summary.
+      const inlineDataFallback = contextFileId ? "" : `
+
+FALLBACK — SYSTEM DATA (context file upload failed, providing compact inline data):
+Employees (${systemContextData.employees.length}): ${JSON.stringify(systemContextData.employees.map((e: any) => ({id:e.id,code:e.code,name:e.name,country:e.country,custId:e.customerId})))}
+Contractors (${systemContextData.contractors.length}): ${JSON.stringify(systemContextData.contractors.map((c: any) => ({id:c.id,code:c.code,name:c.name,country:c.country,custId:c.customerId})))}
+Customers (${systemContextData.customers.length}): ${JSON.stringify(systemContextData.customers.map((c: any) => ({id:c.id,code:c.code,name:c.name,country:c.country})))}
+Invoices (${systemContextData.invoices.length}): ${JSON.stringify(systemContextData.invoices.map((i: any) => ({id:i.id,num:i.number,custId:i.customerId,total:i.total,currency:i.currency})))}`;
 
       const response = await executeTaskLLM("vendor_bill_parse", {
         messages: [
           {
             role: "system",
-            content: `You are a senior financial analyst for an EOR (Employer of Record) company called Best GEA.
-You are analyzing multiple documents from a SINGLE vendor for the service month ${input.serviceMonth}.
-The documents may include invoices, payment receipts (POP), bank statements, or other supporting documents.
+            content: `You are a senior financial analyst for Best GEA, an EOR (Employer of Record) company.
+Analyze the uploaded vendor documents for service month ${input.serviceMonth}.
 
-YOUR TASK:
-1. Cross-reference ALL uploaded documents to extract and verify vendor bill information
-2. Match line items to employees and customers in our system
-3. Classify each line item's cost type (employment_cost, service_fee, visa_fee, equipment_purchase, or other)
-4. Suggest cost allocations (link vendor costs to our customer invoices)
-5. Report confidence levels and any discrepancies between documents
+DOCUMENTS: The uploaded files may include invoices, payment receipts (POP), bank statements, or supporting documents — all from a SINGLE vendor.
 
-SYSTEM DATA (our active employees, contractors, customers, and invoices):
-Each employee has: id, type ("employee"), code (unique identifier like EMP-0001), name, country, customerId, customerName, salary, linkedInvoices.
-${JSON.stringify(systemContext.employees.slice(0, 200), null, 1)}
+SYSTEM DATA: ${contextFileId ? "The file \"system_context_" + input.serviceMonth + ".json\" contains" : "See FALLBACK section below for"} our active employees, contractors, customers, and invoices for matching. Each employee/contractor has: id, code (e.g. EMP-0001/CTR-0001), name, country, customerId, customerName, linkedInvoices.
 
-CONTRACTORS (AOR workers):
-Each contractor has: id, type ("contractor"), code (unique identifier like CTR-0001), name, country, customerId, customerName, linkedInvoices.
-${JSON.stringify((systemContext as any).contractors?.slice(0, 100) || [], null, 1)}
+TASKS:
+1. Extract and cross-validate vendor bill information from ALL documents
+2. Match line items to employees/contractors in our system data
+3. Classify each line item type and suggest cost allocations
+4. Report confidence levels and discrepancies
 
-CUSTOMERS:
-${JSON.stringify(systemContext.customers, null, 1)}
+OUTPUT FORMAT — Return a single JSON object:
+{
+  "overallConfidence": number (0-100),
+  "vendor": {
+    "name": string, "legalName": string|null, "country": string,
+    "address": string|null, "city": string|null,
+    "contactName": string|null, "contactEmail": string|null, "contactPhone": string|null,
+    "taxId": string|null, "serviceType": string|null,
+    "vendorType": "eor_vendor"|"bank_financial"|"recruitment_agency"|"equipment_provider"|"professional_service"|"client_related"|"operational",
+    "confidence": number
+  },
+  "bill": {
+    "invoiceNumber": string, "invoiceDate": "YYYY-MM-DD", "dueDate": "YYYY-MM-DD"|null,
+    "serviceMonth": "YYYY-MM", "currency": "XXX",
+    "subtotal": number, "tax": number, "totalAmount": number,
+    "category": "payroll_processing"|"social_contributions"|"visa_immigration"|"consulting"|"equipment"|"insurance"|"other",
+    "billType": "pass_through"|"vendor_service_fee"|"non_recurring"|"operational"|"mixed",
+    "description": string, "confidence": number
+  },
+  "payment": null | {
+    "bankName": string, "transactionReference": string, "paymentDate": "YYYY-MM-DD",
+    "localCurrency": string, "localAmount": number, "usdAmount": number,
+    "exchangeRate": number|null, "bankFee": number, "confidence": number
+  },
+  "lineItems": [{
+    "description": string, "employeeName": string|null,
+    "matchedEmployeeId": number|null, "matchedEmployeeCode": string|null,
+    "matchedCustomerId": number|null, "matchedInvoiceId": number|null,
+    "itemType": "employment_cost"|"service_fee"|"visa_fee"|"equipment_purchase"|"other",
+    "quantity": number, "unitPrice": number, "amount": number,
+    "countryCode": string|null, "confidence": number,
+    "matchConfidence": number, "matchReason": string|null,
+    "allocationSuggestion": null | {
+      "invoiceId": number, "employeeId": number|null, "contractorId": number|null,
+      "allocatedAmount": number, "reason": string
+    }
+  }],
+  "crossValidation": {
+    "invoiceVsPaymentMatch": boolean|null, "invoiceVsPaymentDifference": number|null,
+    "lineItemsSumMatchesTotal": boolean, "lineItemsSumDifference": number,
+    "documentsAnalyzed": number,
+    "warnings": [string], "notes": [string]
+  }
+}
 
-INVOICES FOR ${input.serviceMonth}:
-${JSON.stringify(systemContext.invoices.slice(0, 100), null, 1)}
+CLASSIFICATION RULES:
+- category: "payroll_processing" for payroll/tax filing, "social_contributions" for social security/pension, "consulting" for HR advisory/legal, "other" for everything else.
+- billType: "pass_through" for salary/social/tax paid on behalf of employees, "vendor_service_fee" for vendor's own fee, "non_recurring" for one-off costs (visa, equipment), "operational" for internal costs, "mixed" when a bill contains BOTH pass-through AND vendor fees.
+- itemType (REQUIRED per line item): "employment_cost" for salary/wages/social/tax/pension, "service_fee" for vendor processing/management fee, "visa_fee" for visa/immigration, "equipment_purchase" for hardware, "other" otherwise. If bundled, classify as "employment_cost" and add warning.
 
-Return a JSON object with these fields:
-- overallConfidence: number (0-100, how confident you are in the overall extraction)
-- vendor: object with:
-  - name: string (vendor company name)
-  - legalName: string | null
-  - country: string (vendor's country)
-  - address: string | null
-  - city: string | null
-  - contactName: string | null
-  - contactEmail: string | null
-  - contactPhone: string | null
-  - taxId: string | null
-  - serviceType: string | null (e.g. "Payroll Processing", "Legal", "IT Services")
-  - vendorType: string ("eor_vendor" for EOR/PEO service providers, "bank_financial" for banks/payment gateways, "recruitment_agency" for headhunters, "equipment_provider" for equipment suppliers, "professional_service" for law firms/accountants, "client_related" for other client-related vendors, "operational" for general business costs)
-  - confidence: number (0-100)
-- bill: object with:
-  - invoiceNumber: string
-  - invoiceDate: string (YYYY-MM-DD)
-  - dueDate: string | null (YYYY-MM-DD)
-  - serviceMonth: string (YYYY-MM)
-  - currency: string (3-letter code)
-  - subtotal: number
-  - tax: number
-  - totalAmount: number
-  - category: string (one of: payroll_processing, social_contributions, visa_immigration, consulting, equipment, insurance, other). Use "payroll_processing" for payroll and tax filing. Use "social_contributions" for social security/pension. Use "consulting" for consulting, HR advisory, or legal services. Use "other" for IT, office rent, bank charges, travel, marketing, or anything else.
-  - billType: string (one of: "pass_through", "vendor_service_fee", "non_recurring", "operational", "mixed"). Use "pass_through" for payroll/salary/social contributions/tax paid on behalf of employees (the bulk cost that GEA collects from clients and pays to vendor). Use "vendor_service_fee" for the vendor's own management/processing/service fee charged to GEA. Use "non_recurring" for one-off costs like visa processing, equipment procurement, onboarding/offboarding. Use "operational" for internal business costs (office rent, SaaS, etc.). Use "mixed" when a single bill contains BOTH pass-through employment costs AND vendor service fees (or other cost types) — in this case, the itemType on each line item determines the P&L classification.
-  - description: string
-  - confidence: number (0-100)
-- payment: object | null (if POP/receipt is included):
-  - bankName: string
-  - transactionReference: string
-  - paymentDate: string (YYYY-MM-DD)
-  - localCurrency: string
-  - localAmount: number
-  - usdAmount: number
-  - exchangeRate: number | null
-  - bankFee: number
-  - confidence: number (0-100)
-- lineItems: array of objects, each with:
-  - description: string
-  - employeeName: string | null (employee name as shown in document)
-  - matchedEmployeeId: number | null (ID from our system if matched, from the SYSTEM DATA above)
-  - matchedEmployeeCode: string | null (employee code like EMP-0001 if matched)
-  - matchedCustomerId: number | null (customer ID from our system if matched via employee)
-  - matchedInvoiceId: number | null (invoice ID from our system if matched)
-  - itemType: string (REQUIRED - classify each line item as one of: "employment_cost" for salary/wages/social contributions/tax/pension/insurance paid on behalf of employee, "service_fee" for the vendor's own processing/management/service fee, "visa_fee" for visa/immigration/work permit related costs, "equipment_purchase" for equipment/hardware procurement, "other" for anything that doesn't fit above categories)
-  - quantity: number
-  - unitPrice: number
-  - amount: number
-  - countryCode: string | null (2-3 letter country code)
-  - confidence: number (0-100)
-  - matchConfidence: number (0-100, how confident you are specifically about the employee matching. Use 90+ ONLY when employee name/code is explicitly written in the document and clearly matches one employee in SYSTEM DATA. Use 50-89 when matching is based on partial name, country, or inference. Use 0-49 when you are guessing or cannot determine the employee.)
-  - matchReason: string | null (explain WHY you matched or didn't match this line item to an employee, e.g. "Name 'John Zhang' exactly matches employee EMP-0012 John Zhang" or "Line item mentions 'China payroll' but cannot determine specific employee" or "No employee information found in this line item")
-  - allocationSuggestion: object | null (only for client_related vendor type):
-    - invoiceId: number (from our system)
-    - employeeId: number | null (from our system, for EOR employees)
-    - contractorId: number | null (from our system, for AOR contractors)
-    - allocatedAmount: number
-    - reason: string (why this allocation is suggested)
-- crossValidation: object with:
-  - invoiceVsPaymentMatch: boolean | null (do invoice total and payment amount match?)
-  - invoiceVsPaymentDifference: number | null (difference if any)
-  - lineItemsSumMatchesTotal: boolean (do line items sum to the total?)
-  - lineItemsSumDifference: number (difference if any)
-  - documentsAnalyzed: number (how many files were successfully parsed)
-  - warnings: array of strings (any discrepancies or issues found)
-  - notes: array of strings (any helpful observations)
+MATCHING RULES:
+- Employee/Contractor code (EMP-xxxx / CTR-xxxx) is the MOST RELIABLE identifier.
+- Match by name if no code found. Names may appear in different orders or local scripts.
+- NEVER guess. If matchConfidence < 50, set matchedEmployeeId/matchedContractorId to null.
+- Only use IDs from system data. Derive matchedCustomerId from matched employee/contractor.
+- In allocationSuggestion, set employeeId for EOR workers OR contractorId for AOR contractors, never both.
 
-CRITICAL RULES FOR EMPLOYEE/CONTRACTOR MATCHING:
-- Employee code (e.g. EMP-0001) or Contractor code (e.g. CTR-0001) is the MOST RELIABLE identifier. If you see such a code in the document, use it as the primary matching key.
-- If no code is found, match by name. Names may appear in different orders (e.g. "John Smith" vs "Smith, John"), in local scripts (Chinese, Japanese, Korean), or with slight variations.
-- NEVER guess a match. If you are not confident (matchConfidence < 50), set matchedEmployeeId/matchedContractorId to null and explain in matchReason.
-- For matchedEmployeeId, ONLY use IDs from the SYSTEM DATA employees list. For matchedContractorId, ONLY use IDs from the SYSTEM DATA contractors list. If no match, use null.
-- For matchedCustomerId, derive from the matched employee's or contractor's customerId in SYSTEM DATA.
-- For matchedInvoiceId, find the invoice linked to the matched employee/contractor for this service month.
-- In allocationSuggestion, set employeeId for EOR workers and contractorId for AOR contractors. Do NOT set both.
+CONFIDENCE RULES:
+- 90+: clearly readable, unambiguous, cross-validated across documents.
+- 70-89: readable but minor ambiguity or not cross-validated.
+- 50-69: requires inference or interpretation.
+- <50: uncertain — set field to null and explain in matchReason or warnings.
 
-CRITICAL RULES FOR ITEM TYPE CLASSIFICATION:
-- itemType is REQUIRED for every line item. You MUST classify each line item.
-- "employment_cost": Any cost that is the actual compensation or statutory cost of employing someone (salary, wages, social security, pension, health insurance, tax withholding, etc.)
-- "service_fee": The vendor's own fee for providing their service (processing fee, management fee, admin fee, platform fee, etc.)
-- "visa_fee": Government fees, legal fees, or processing fees specifically for visa/work permit/immigration
-- "equipment_purchase": Hardware, laptops, office equipment purchased for employees
-- If a line item contains BOTH employment cost and service fee bundled together, classify it as "employment_cost" and add a warning in crossValidation.warnings
-
-CONFIDENCE SCORING RULES:
-- Be VERY conservative. Use 90+ only when data is clearly readable, unambiguous, and cross-validated across documents.
-- Use 70-89 when data is readable but has minor ambiguity or cannot be cross-validated.
-- Use 50-69 when data requires inference or interpretation.
-- Use below 50 when you are uncertain. In this case, set the field to null and explain in matchReason or crossValidation.warnings.
-- For operational costs (bank fees, office rent, etc.), set vendorType to "operational" and skip allocation suggestions.
-- For EOR vendor bills, the billType is critical for P&L accuracy: use "pass_through" for the employment cost portion and "vendor_service_fee" for the vendor's own fee. If the bill clearly mixes both employment costs AND vendor service fees in the same invoice, use "mixed" as the billType and ensure each line item has the correct itemType ("employment_cost" vs "service_fee" etc.) for accurate P&L attribution.`,
+GRACEFUL DEGRADATION: If a document is unreadable or partially parseable, still return the best extraction possible with low confidence scores and detailed warnings. Never return an empty result.${inlineDataFallback}`,
           },
           {
-            // 2nd system message: document content via fileid:// references
-            // Qwen-Long will parse and understand all referenced files (PDF, Excel, images, etc.)
+            // 2nd system message: fileid:// references
+            // Contains: system context JSON (if uploaded) + vendor document files
             role: "system",
             content: fileIdReferences,
           },
           {
             role: "user",
-            content: `I'm uploading ${input.files.length} document(s) from a single vendor for service month ${input.serviceMonth}. File types: ${input.files.map((f) => `${f.fileName} (${f.fileType})`).join(", ")}. Please analyze all documents together, cross-validate the information, and provide structured extraction with confidence scores and allocation suggestions.`,
+            content: `Analyze ${input.files.length} document(s) for service month ${input.serviceMonth}: ${input.files.map((f) => `${f.fileName} (${f.fileType})`).join(", ")}. Cross-validate, extract structured data, match employees, and suggest allocations.`,
           },
         ],
         // IMPORTANT: qwen-long-latest only supports json_object mode, NOT json_schema.
         // Per DashScope docs (2026-02-24), json_schema is only supported by qwen-max/plus/flash series.
-        // The detailed JSON structure is already described in the system prompt above.
         response_format: {
           type: "json_object",
         },
@@ -450,6 +445,48 @@ CONFIDENCE SCORING RULES:
           code: "INTERNAL_SERVER_ERROR",
           message: "AI response is missing required fields (vendor, bill, or lineItems). Please try again.",
         });
+      }
+
+      // Flatten bill fields to top level for frontend compatibility.
+      // Frontend accesses p.billNumber, p.category, p.currency etc. at the top level,
+      // while AI returns them nested under bill.invoiceNumber, bill.category, etc.
+      if (parsed.bill) {
+        parsed.billNumber = parsed.billNumber || parsed.bill.invoiceNumber;
+        parsed.billDate = parsed.billDate || parsed.bill.invoiceDate;
+        parsed.dueDate = parsed.dueDate || parsed.bill.dueDate;
+        parsed.category = parsed.category || parsed.bill.category;
+        parsed.billType = parsed.billType || parsed.bill.billType;
+        parsed.currency = parsed.currency || parsed.bill.currency;
+        parsed.subtotal = parsed.subtotal ?? parsed.bill.subtotal;
+        parsed.tax = parsed.tax ?? parsed.bill.tax;
+        parsed.totalAmount = parsed.totalAmount ?? parsed.bill.totalAmount;
+        parsed.description = parsed.description || parsed.bill.description;
+      }
+
+      // Flatten lineItem fields for frontend compatibility.
+      // Frontend expects relatedEmployeeId/relatedContractorId/relatedCountryCode,
+      // while AI returns matchedEmployeeId/matchedContractorId/countryCode.
+      if (parsed.lineItems) {
+        parsed.lineItems = parsed.lineItems.map((item: any) => ({
+          ...item,
+          relatedEmployeeId: item.relatedEmployeeId ?? item.matchedEmployeeId ?? null,
+          relatedContractorId: item.relatedContractorId ?? item.matchedContractorId ?? null,
+          relatedCountryCode: item.relatedCountryCode || item.countryCode || null,
+        }));
+      }
+
+      // Build suggestedAllocations from lineItem allocationSuggestions for frontend.
+      // Frontend expects p.suggestedAllocations as a top-level array.
+      if (!parsed.suggestedAllocations && parsed.lineItems) {
+        parsed.suggestedAllocations = parsed.lineItems
+          .filter((item: any) => item.allocationSuggestion && item.allocationSuggestion.invoiceId)
+          .map((item: any) => ({
+            invoiceId: item.allocationSuggestion.invoiceId,
+            employeeId: item.allocationSuggestion.employeeId || null,
+            contractorId: item.allocationSuggestion.contractorId || null,
+            allocatedAmount: item.allocationSuggestion.allocatedAmount,
+            reason: item.allocationSuggestion.reason || item.description || "",
+          }));
       }
 
       // Ensure payment object has hasPaymentInfo flag for frontend compatibility
@@ -563,6 +600,12 @@ CONFIDENCE SCORING RULES:
             };
           }
         }
+      }
+
+      // Flatten matchedVendorId for frontend compatibility.
+      // Frontend accesses p.matchedVendorId at the top level.
+      if (parsed.vendorMatch?.vendor?.id) {
+        parsed.matchedVendorId = parsed.vendorMatch.vendor.id;
       }
 
       return {
