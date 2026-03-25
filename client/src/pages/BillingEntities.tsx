@@ -5,6 +5,7 @@
 import { useState, useRef } from "react";
 import Layout from "@/components/Layout";
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/usePermissions";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +43,7 @@ const emptyForm: FormState = {
 
 export default function BillingEntities({ embedded }: { embedded?: boolean } = {}) {
   const { t } = useI18n();
+  const { canEditFinanceOps } = usePermissions();
   const [showCreate, setShowCreate] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
@@ -133,9 +135,9 @@ export default function BillingEntities({ embedded }: { embedded?: boolean } = {
               {t("billing.subtitle")}
             </p>
           </div>
-          <Button onClick={() => { resetForm(); setShowCreate(true); }}>
+          {canEditFinanceOps && <Button onClick={() => { resetForm(); setShowCreate(true); }}>
             <Plus className="w-4 h-4 mr-2" /> Add Entity
-          </Button>
+          </Button>}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -144,10 +146,10 @@ export default function BillingEntities({ embedded }: { embedded?: boolean } = {
               key={entity.id}
               entity={entity}
               countriesList={countriesList}
-              onEdit={() => openEdit(entity)}
-              onDelete={() => {
+              onEdit={canEditFinanceOps ? () => openEdit(entity) : undefined}
+              onDelete={canEditFinanceOps ? () => {
                 if (confirm("Delete this billing entity?")) deleteMut.mutate({ id: entity.id });
-              }}
+              } : undefined}
               onLogoUpload={(file) => handleLogoUpload(entity.id, file)}
               isUploadingLogo={uploadLogoMut.isPending}
             />
@@ -157,9 +159,9 @@ export default function BillingEntities({ embedded }: { embedded?: boolean } = {
               <CardContent className="py-12 text-center text-muted-foreground">
                 <Landmark className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p>No billing entities configured yet</p>
-                <Button variant="outline" className="mt-3" onClick={() => { resetForm(); setShowCreate(true); }}>
+                {canEditFinanceOps && <Button variant="outline" className="mt-3" onClick={() => { resetForm(); setShowCreate(true); }}>
                   <Plus className="w-4 h-4 mr-2" /> Add Your First Entity
-                </Button>
+                </Button>}
               </CardContent>
             </Card>
           )}
@@ -321,8 +323,8 @@ function EntityCard({
 }: {
   entity: any;
   countriesList?: any[];
-  onEdit: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
   onLogoUpload: (file: File) => void;
   isUploadingLogo: boolean;
 }) {
@@ -375,9 +377,9 @@ function EntityCard({
         )}
 
         <div className="flex gap-2 pt-2">
-          <Button variant="outline" size="sm" onClick={onEdit}>
+          {onEdit && <Button variant="outline" size="sm" onClick={onEdit}>
             <Pencil className="w-3 h-3 mr-1" /> Edit
-          </Button>
+          </Button>}
           <Button
             variant="outline"
             size="sm"
@@ -397,14 +399,14 @@ function EntityCard({
               e.target.value = "";
             }}
           />
-          <Button
+          {onDelete && <Button
             variant="outline"
             size="sm"
             className="text-destructive"
             onClick={onDelete}
           >
             <Trash2 className="w-3 h-3 mr-1" /> Delete
-          </Button>
+          </Button>}
         </div>
       </CardContent>
     </Card>

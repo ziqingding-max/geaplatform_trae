@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../../_core/trpc";
-import { financeManagerProcedure, userProcedure } from "../../procedures";
+import { financeManagerProcedure, financeAndOpsProcedure, userProcedure } from "../../procedures";
 import { TRPCError } from "@trpc/server";
 import { walletService } from "../../services/walletService";
 import { getDb } from "../../db";
@@ -62,8 +62,8 @@ export const walletRouter = router({
       });
     }),
 
-  // Admin manual adjustment
-  manualAdjustment: financeManagerProcedure
+  // Admin manual adjustment (finance_manager + operations_manager)
+  manualAdjustment: financeAndOpsProcedure
     .input(z.object({
       customerId: z.number(),
       currency: z.string(),
@@ -88,8 +88,8 @@ export const walletRouter = router({
       });
     }),
 
-  // Admin manual frozen adjustment
-  manualFrozenAdjustment: financeManagerProcedure
+  // Admin manual frozen adjustment (finance_manager + operations_manager)
+  manualFrozenAdjustment: financeAndOpsProcedure
     .input(z.object({
       customerId: z.number(),
       currency: z.string(),

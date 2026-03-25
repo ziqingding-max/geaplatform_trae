@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { financeManagerProcedure, userProcedure } from "../procedures";
+import { financeManagerProcedure, financeAndOpsProcedure, userProcedure } from "../procedures";
+import { hasAnyRole } from "../../shared/roles";
 import {
   createInvoice,
   getInvoiceById,
@@ -203,7 +204,7 @@ export const invoicesRouter = router({
    * Fetches live rate and compares with invoice markup rate
    * For finance manager reference only - not shown on PDF or client-facing pages
    */
-  getRealTimeRateReference: financeManagerProcedure
+  getRealTimeRateReference: financeAndOpsProcedure
     .input(z.object({ invoiceId: z.number() }))
     .query(async ({ input }) => {
       const invoice = await getInvoiceById(input.invoiceId);
@@ -320,7 +321,7 @@ export const invoicesRouter = router({
       return await getRelatedInvoices(input.invoiceId);
     }),
 
-  create: financeManagerProcedure
+  create: financeAndOpsProcedure
     .input(
       z.object({
         customerId: z.number(),
@@ -394,7 +395,7 @@ export const invoicesRouter = router({
   /**
    * Update invoice metadata (only draft invoices can be fully edited)
    */
-  update: financeManagerProcedure
+  update: financeAndOpsProcedure
     .input(
       z.object({
         id: z.number(),
@@ -489,7 +490,7 @@ export const invoicesRouter = router({
       return { success: true };
     }),
 
-  updateStatus: financeManagerProcedure
+  updateStatus: financeAndOpsProcedure
     .input(
       z.object({
         id: z.number(),
@@ -498,6 +499,16 @@ export const invoicesRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      // ── RBAC guard: only admin/finance_manager can mark as paid ──
+      if (input.status === "paid") {
+        if (!hasAnyRole(ctx.user.role, ["admin", "finance_manager"])) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only Admin or Finance Manager can mark invoices as paid",
+          });
+        }
+      }
+
       // Guard: credit_note and deposit_refund cannot be marked as paid
       // NOTE: With the new wallet system, credit_note invoices are marked as paid automatically
       // when approved via approveCreditNote service. Manual status update for CNs is restricted.
@@ -808,7 +819,7 @@ export const invoicesRouter = router({
 
   // ── Line Item CRUD ──────────────────────────────────────────────────
 
-  addItem: financeManagerProcedure
+  addItem: financeAndOpsProcedure
     .input(
       z.object({
         invoiceId: z.number(),
@@ -883,7 +894,7 @@ export const invoicesRouter = router({
       return result;
     }),
 
-  updateItem: financeManagerProcedure
+  updateItem: financeAndOpsProcedure
     .input(
       z.object({
         id: z.number(),
@@ -945,7 +956,7 @@ export const invoicesRouter = router({
       return { success: true };
     }),
 
-  deleteItem: financeManagerProcedure
+  deleteItem: financeAndOpsProcedure
     .input(
       z.object({
         id: z.number(),
@@ -1088,7 +1099,7 @@ export const invoicesRouter = router({
    * Delete invoice — any draft or cancelled invoice can be deleted
    * Auto-generated invoices can be recreated via Regenerate if needed
    */
-  delete: financeManagerProcedure
+  delete: financeAndOpsProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const invoice = await getInvoiceById(input.id);
@@ -1294,7 +1305,7 @@ export const invoicesRouter = router({
    * Create a credit note for an existing invoice
    * Can be full credit (negate entire invoice) or partial (specific line items)
    */
-  createCreditNote: financeManagerProcedure
+  createCreditNote: financeAndOpsProcedure
     .input(
       z.object({
         originalInvoiceId: z.number(),
@@ -1428,7 +1439,7 @@ export const invoicesRouter = router({
    * Batch update invoice status
    * Supports batch send, batch mark as paid, batch cancel
    */
-  batchUpdateStatus: financeManagerProcedure
+  batchUpdateStatus: financeAndOpsProcedure
     .input(
       z.object({
         invoiceIds: z.array(z.number()).min(1),
@@ -1437,6 +1448,16 @@ export const invoicesRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      // ── RBAC guard: only admin/finance_manager can batch mark as paid ──
+      if (input.status === "paid") {
+        if (!hasAnyRole(ctx.user.role, ["admin", "finance_manager"])) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only Admin or Finance Manager can mark invoices as paid",
+          });
+        }
+      }
+
       const results: { id: number; success: boolean; message: string }[] = [];
 
       // Define valid status transitions

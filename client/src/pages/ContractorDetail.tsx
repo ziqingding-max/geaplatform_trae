@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { isAdmin } from "@shared/roles";
+import { usePermissions } from "@/lib/usePermissions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate, countryName } from "@/lib/format";
 import { BankDetailsForm, type BankDetails } from "@/components/forms/BankDetailsForm";
@@ -428,6 +429,7 @@ export default function ContractorDetail() {
   // Auth for admin-only actions
   const { user } = useAuth();
   const userIsAdmin = isAdmin(user?.role);
+  const { canEditClient } = usePermissions();
 
   // Delete contractor dialog state (admin only, terminated only)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -589,11 +591,11 @@ export default function ContractorDetail() {
                 Worker Portal Active
               </Badge>
             )}
-            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            {canEditClient && <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
               <Pencil className="w-4 h-4 mr-2" />
               Edit
-            </Button>
-            {(contractorTransitions[contractor.status] || []).map((tr) => (
+            </Button>}
+            {canEditClient && (contractorTransitions[contractor.status] || []).map((tr) => (
               <Button key={tr.value}
                 variant={tr.variant === "destructive" ? "destructive" : tr.variant === "outline" ? "outline" : "default"}
                 size="sm"

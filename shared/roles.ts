@@ -99,3 +99,45 @@ export function formatRoles(roleStr: string | null | undefined): string {
   const roles = parseRoles(roleStr);
   return roles.map((r) => ROLE_LABELS[r] || r).join(", ");
 }
+
+/* ─── Fine-grained permission helpers for RBAC ─── */
+
+/**
+ * Permission matrix:
+ *   admin              → everything
+ *   sales              → Sales module write only
+ *   customer_manager   → Client Management module write only
+ *   operations_manager → Operations write + Finance/Vendor write (except mark-paid, review, export)
+ *   finance_manager    → Finance + Vendor full access (including mark-paid, review, export)
+ *   user               → read-only everywhere
+ */
+
+/** Can the user edit Sales module content (CRM, Quotations)? */
+export function canEditSales(roleStr: string | null | undefined): boolean {
+  return hasAnyRole(roleStr, ["admin", "sales"]);
+}
+
+/** Can the user edit Client Management content (Customers, Employees, Contractors)? */
+export function canEditClientManagement(roleStr: string | null | undefined): boolean {
+  return hasAnyRole(roleStr, ["admin", "customer_manager"]);
+}
+
+/** Can the user edit Operations content (Payroll, Leave, Adjustments, Reimbursements)? */
+export function canEditOperations(roleStr: string | null | undefined): boolean {
+  return hasAnyRole(roleStr, ["admin", "operations_manager"]);
+}
+
+/** Can the user edit Finance/Vendor content (general create/update/delete, NOT mark-paid/review)? */
+export function canEditFinance(roleStr: string | null | undefined): boolean {
+  return hasAnyRole(roleStr, ["admin", "finance_manager", "operations_manager"]);
+}
+
+/** Can the user perform sensitive finance operations (mark invoice/bill as Paid, review release tasks)? */
+export function canMarkPaidAndReview(roleStr: string | null | undefined): boolean {
+  return hasAnyRole(roleStr, ["admin", "finance_manager"]);
+}
+
+/** Can the user export data (CSV, reports)? */
+export function canExportData(roleStr: string | null | undefined): boolean {
+  return hasAnyRole(roleStr, ["admin", "finance_manager"]);
+}

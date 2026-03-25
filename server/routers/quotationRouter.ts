@@ -1,5 +1,5 @@
 import { router } from "../_core/trpc";
-import { crmProcedure, adminProcedure } from "../procedures";
+import { crmProcedure, adminProcedure, userProcedure } from "../procedures";
 import { z } from "zod";
 import { quotationService } from "../services/quotationService";
 import { storageGet, storageDownload } from "../storage";
@@ -147,7 +147,7 @@ export const quotationRouter = router({
       }
     }),
 
-  list: crmProcedure
+  list: userProcedure
     .input(
       z.object({
         limit: z.number().default(20),
@@ -183,7 +183,7 @@ export const quotationRouter = router({
       return { items, total: items.length };
     }),
 
-  get: crmProcedure
+  get: userProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = getDb();
@@ -294,7 +294,7 @@ export const quotationRouter = router({
       return await quotationService.deleteQuotation(input.id);
     }),
 
-  downloadPdf: crmProcedure
+  downloadPdf: userProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = getDb();

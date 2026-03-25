@@ -1,6 +1,7 @@
 import { useParams, useLocation, useSearch } from "wouter";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { usePermissions } from "@/lib/usePermissions";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -125,6 +126,7 @@ function parseBankDetails(bankDetailsStr: string | null | undefined): Record<str
 export default function InvoiceDetail() {
   const { t } = useI18n();
   const { user } = useAuth();
+  const { canEditFinanceOps, canMarkPaid, canExport } = usePermissions();
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const searchString = useSearch();
@@ -395,12 +397,12 @@ export default function InvoiceDetail() {
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf/preview`, "_blank")}>
                   <Eye className="w-4 h-4" /> Preview PDF
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5 text-red-600 hover:text-red-700" onClick={handleDelete}>
+                {canEditFinanceOps && <Button variant="outline" size="sm" className="gap-1.5 text-red-600 hover:text-red-700" onClick={handleDelete}>
                   <Trash2 className="w-4 h-4" /> Delete
-                </Button>
-                <Button size="sm" className="gap-1.5" onClick={() => updateStatusMutation.mutate({ id: invoiceId, status: "pending_review" })}>
+                </Button>}
+                {canEditFinanceOps && <Button size="sm" className="gap-1.5" onClick={() => updateStatusMutation.mutate({ id: invoiceId, status: "pending_review" })}>
                   <Send className="w-4 h-4" /> Send for Review
-                </Button>
+                </Button>}
               </>
             )}
             {isPendingReview && (
@@ -408,16 +410,16 @@ export default function InvoiceDetail() {
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf/preview`, "_blank")}>
                   <Eye className="w-4 h-4" /> Preview PDF
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5 text-red-600 hover:text-red-700" onClick={() => {
+                {canEditFinanceOps && <Button variant="outline" size="sm" className="gap-1.5 text-red-600 hover:text-red-700" onClick={() => {
                   if (confirm("Reject this invoice and return to draft? Any wallet deductions will be refunded.")) {
                     updateStatusMutation.mutate({ id: invoiceId, status: "draft" });
                   }
                 }}>
                   <XCircle className="w-4 h-4" /> Reject to Draft
-                </Button>
-                <Button size="sm" className="gap-1.5" onClick={() => updateStatusMutation.mutate({ id: invoiceId, status: "sent" })}>
+                </Button>}
+                {canEditFinanceOps && <Button size="sm" className="gap-1.5" onClick={() => updateStatusMutation.mutate({ id: invoiceId, status: "sent" })}>
                   <CheckCircle2 className="w-4 h-4" /> Approve & Send
-                </Button>
+                </Button>}
               </>
             )}
             {(isSent || isOverdue) && !isCreditNote && invoice.invoiceType !== 'deposit_refund' && (
@@ -425,12 +427,12 @@ export default function InvoiceDetail() {
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf`, "_blank")}>
                   <Download className="w-4 h-4" /> Download PDF
                 </Button>
-                <Button size="sm" className="gap-1.5" onClick={() => { setMarkPaidOpen(true); setPaidAmount(amountDueNum.toFixed(2)); }}>
+                {canMarkPaid && <Button size="sm" className="gap-1.5" onClick={() => { setMarkPaidOpen(true); setPaidAmount(amountDueNum.toFixed(2)); }}>
                   <CreditCard className="w-4 h-4" /> Mark as Paid
-                </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => updateStatusMutation.mutate({ id: invoiceId, status: "cancelled" })}>
+                </Button>}
+                {canEditFinanceOps && <Button variant="outline" size="sm" className="gap-1.5" onClick={() => updateStatusMutation.mutate({ id: invoiceId, status: "cancelled" })}>
                   <Ban className="w-4 h-4" /> Cancel
-                </Button>
+                </Button>}
               </>
             )}
             {/* Credit Note / Deposit Refund: only show Download PDF and Cancel (when still in sent status) */}
@@ -439,9 +441,9 @@ export default function InvoiceDetail() {
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf`, "_blank")}>
                   <Download className="w-4 h-4" /> Download PDF
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => updateStatusMutation.mutate({ id: invoiceId, status: "cancelled" })}>
+                {canEditFinanceOps && <Button variant="outline" size="sm" className="gap-1.5" onClick={() => updateStatusMutation.mutate({ id: invoiceId, status: "cancelled" })}>
                   <Ban className="w-4 h-4" /> Cancel
-                </Button>
+                </Button>}
               </>
             )}
             {isPaid && !isCreditNote && invoice.invoiceType !== 'deposit_refund' && (
@@ -449,7 +451,7 @@ export default function InvoiceDetail() {
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.open(`/api/invoices/${invoiceId}/pdf`, "_blank")}>
                   <Download className="w-4 h-4" /> Download PDF
                 </Button>
-                {canCreateCreditNote ? (
+                {canEditFinanceOps && canCreateCreditNote ? (
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreditNoteOpen(true)}>
                     <FileText className="w-4 h-4" /> Create Credit Note
                   </Button>
@@ -523,7 +525,7 @@ export default function InvoiceDetail() {
                 <CardTitle className="text-base flex items-center gap-2">
                   <FileText className="w-4 h-4 text-muted-foreground" /> Invoice Details
                 </CardTitle>
-                {isEditable && (
+                {isEditable && canEditFinanceOps && (
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditDetailsOpen(true)}>
                     <Edit className="w-4 h-4" /> Edit
                   </Button>
@@ -552,7 +554,7 @@ export default function InvoiceDetail() {
                   <Receipt className="w-4 h-4 text-muted-foreground" /> Line Items
                   <Badge variant="secondary" className="text-xs ml-1">{(items || []).length}</Badge>
                 </CardTitle>
-                {isEditable && (
+                {isEditable && canEditFinanceOps && (
                   <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setEditingItem(null); setLineItemDialogOpen(true); }}>
                     <Plus className="w-4 h-4" /> Add Item
                   </Button>
@@ -633,7 +635,7 @@ export default function InvoiceDetail() {
                               <TableCell className="text-right font-mono text-sm font-medium pr-6">
                                 {fmtAmt(item.localAmount || item.amount || (parseFloat(item.quantity || "1") * parseFloat(item.unitPrice || "0")))}
                               </TableCell>
-                              {isEditable && (
+                              {isEditable && canEditFinanceOps && (
                                 <TableCell>
                                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditingItem(item); setLineItemDialogOpen(true); }}>
@@ -796,7 +798,7 @@ export default function InvoiceDetail() {
                 <CardTitle className="text-base flex items-center gap-2">
                   <Info className="w-4 h-4 text-muted-foreground" /> Notes
                 </CardTitle>
-                {(canEditExternalNotes || canEditInternalNotes) && (
+                {canEditFinanceOps && (canEditExternalNotes || canEditInternalNotes) && (
                   <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setEditNotesOpen(true)}>
                     <Edit className="w-4 h-4" /> Edit
                   </Button>

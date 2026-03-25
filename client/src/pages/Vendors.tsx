@@ -32,6 +32,7 @@ import {
 import { toast } from "sonner";
 
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/usePermissions";
 const statusColors: Record<string, string> = {
   active: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   inactive: "bg-gray-500/15 text-gray-400 border-gray-500/30",
@@ -89,6 +90,7 @@ function formatServiceType(raw: string | null | undefined): string {
 /* ========== Vendor List ========== */
 function VendorList() {
   const { t } = useI18n();
+  const { canEditFinanceOps } = usePermissions();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -145,7 +147,7 @@ function VendorList() {
             <h1 className="text-2xl font-bold tracking-tight">{t("vendors.title")}</h1>
             <p className="text-sm text-muted-foreground mt-1">{t("vendors.description")}</p>
           </div>
-          <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormErrors({}); }}>
+          {canEditFinanceOps && <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setFormErrors({}); }}>
             <DialogTrigger asChild>
               <Button><Plus className="w-4 h-4 mr-2" />{t("vendors.list.add_button")}</Button>
             </DialogTrigger>
@@ -249,10 +251,9 @@ function VendorList() {
                   {createMutation.isPending ? "Creating..." : "Create Vendor"}
                 </Button>
               </DialogFooter>
-            </DialogContent>
-          </Dialog>
+             </DialogContent>
+          </Dialog>}
         </div>
-
         {/* Filters */}
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-sm">
@@ -442,6 +443,7 @@ function VendorBillsSection({ vendorId, vendorName, t }: { vendorId: number; ven
 /* ========== Vendor Detail ========== */
 function VendorDetail({ id }: { id: number }) {
   const { t } = useI18n();
+  const { canEditFinanceOps } = usePermissions();
   const [, setLocation] = useLocation();
   const [editOpen, setEditOpen] = useState(false);
 
@@ -529,9 +531,9 @@ function VendorDetail({ id }: { id: number }) {
             </div>
             <p className="text-sm text-muted-foreground mt-0.5">{vendor.vendorCode} {vendor.legalName ? `· ${vendor.legalName}` : ""}</p>
           </div>
-          <Button variant="outline" onClick={openEdit}>
+          {canEditFinanceOps && <Button variant="outline" onClick={openEdit}>
             <Pencil className="w-4 h-4 mr-2" />{t("common.edit")}
-          </Button>
+          </Button>}
         </div>
 
         {/* Info Cards */}

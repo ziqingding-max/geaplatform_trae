@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { financeManagerProcedure, userProcedure } from "../procedures";
+import { financeManagerProcedure, financeAndOpsProcedure, userProcedure } from "../procedures";
+import { hasAnyRole } from "../../shared/roles";
 import {
   createVendorBill,
   getVendorBillById,
@@ -65,7 +66,7 @@ export const vendorBillsRouter = router({
       return { ...bill, items, vendor };
     }),
 
-  create: financeManagerProcedure
+  create: financeAndOpsProcedure
     .input(
       z.object({
         vendorId: z.number(),
@@ -150,7 +151,7 @@ export const vendorBillsRouter = router({
       return { id: insertId, message: "Vendor bill created successfully" };
     }),
 
-  update: financeManagerProcedure
+  update: financeAndOpsProcedure
     .input(
       z.object({
         id: z.number(),
@@ -211,6 +212,16 @@ export const vendorBillsRouter = router({
       if (data.settlementDate) updateValues.settlementDate = data.settlementDate;
       if (data.settlementDate === null) updateValues.settlementDate = null;
 
+      // ── RBAC guard: only admin/finance_manager can mark as paid ──
+      if (data.status === "paid" || data.status === "partially_paid") {
+        if (!hasAnyRole(ctx.user.role, ["admin", "finance_manager"])) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Only Admin or Finance Manager can mark vendor bills as paid",
+          });
+        }
+      }
+
       // If marking as approved, record approver
       if (data.status === "approved") {
         updateValues.approvedBy = ctx.user.id;
@@ -247,7 +258,7 @@ export const vendorBillsRouter = router({
       return { success: true, message: "Vendor bill updated successfully" };
     }),
 
-  delete: financeManagerProcedure
+  delete: financeAndOpsProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const existing = await getVendorBillById(input.id);
@@ -284,7 +295,7 @@ export const vendorBillsRouter = router({
 
   // ── Bill Items CRUD ──
 
-  addItem: financeManagerProcedure
+  addItem: financeAndOpsProcedure
     .input(
       z.object({
         vendorBillId: z.number(),
@@ -307,7 +318,7 @@ export const vendorBillsRouter = router({
       return { id: insertId, message: "Item added successfully" };
     }),
 
-  updateItem: financeManagerProcedure
+  updateItem: financeAndOpsProcedure
     .input(
       z.object({
         id: z.number(),
@@ -327,7 +338,7 @@ export const vendorBillsRouter = router({
       return { success: true, message: "Item updated successfully" };
     }),
 
-  deleteItem: financeManagerProcedure
+  deleteItem: financeAndOpsProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       await deleteVendorBillItem(input.id);

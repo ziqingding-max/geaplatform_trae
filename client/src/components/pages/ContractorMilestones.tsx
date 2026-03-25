@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
+import { usePermissions } from "@/lib/usePermissions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ const statusColors: Record<string, string> = {
 
 export default function ContractorMilestones() {
   const { t } = useI18n();
+  const { canEditOps, canExport } = usePermissions();
   const [selectedContractorId, setSelectedContractorId] = useState<string>("all");
   const [customerFilter, setCustomerFilter] = useState<string>("all");
   const [viewTab, setViewTab] = useState<string>("active");
@@ -198,7 +200,7 @@ export default function ContractorMilestones() {
          </Tabs>
 
         <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => {
+            {canExport && <Button variant="outline" onClick={() => {
                 exportToCsv(filteredMilestones, [
                   { header: "Contractor", accessor: (r: any) => `${r.contractorFirstName} ${r.contractorLastName}` },
                   { header: "Title", accessor: (r: any) => r.title },
@@ -209,10 +211,10 @@ export default function ContractorMilestones() {
                 ], `milestones-export-${new Date().toISOString().slice(0, 10)}.csv`);
             }}>
                 <Download className="w-4 h-4 mr-2" /> Export
-            </Button>
-          <Button onClick={() => { resetForm(); setCreateOpen(true); }}>
+            </Button>}
+          {canEditOps && <Button onClick={() => { resetForm(); setCreateOpen(true); }}>
             <Plus className="w-4 h-4 mr-2" /> {t("milestones.button.new")}
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -289,7 +291,7 @@ export default function ContractorMilestones() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {m.status === "pending" && (
+                        {canEditOps && m.status === "pending" && (
                           <div className="flex items-center gap-1">
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(m)}>
                               <Pencil className="w-3.5 h-3.5 text-blue-500" />

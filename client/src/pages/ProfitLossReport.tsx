@@ -6,6 +6,7 @@
 import Layout from "@/components/Layout";
 import { formatAmount, formatMonth } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
+import { usePermissions } from "@/lib/usePermissions";
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,7 @@ function getMonthOptions() {
 }
 
 export default function ProfitLossReport() {
+  const { canExport } = usePermissions();
   const { t } = useI18n();
   const monthOptions = useMemo(() => getMonthOptions(), []);
   const now = new Date();
@@ -178,9 +180,9 @@ export default function ProfitLossReport() {
                 </SelectContent>
               </Select>
             </div>
-            <Button variant="outline" onClick={handleExport} disabled={!data}>
+            {canExport && <Button variant="outline" onClick={handleExport} disabled={!data}>
               <Download className="w-4 h-4 mr-2" />Export CSV
-            </Button>
+            </Button>}
           </div>
         </div>
 

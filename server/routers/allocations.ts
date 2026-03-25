@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { router } from "../_core/trpc";
-import { financeManagerProcedure, userProcedure } from "../procedures";
+import { financeAndOpsProcedure, userProcedure } from "../procedures";
 import {
   createBillInvoiceAllocation,
   getBillInvoiceAllocationById,
@@ -77,7 +77,7 @@ export const allocationsRouter = router({
     }),
 
   // Create a new allocation (link bill item to invoice via employee or contractor)
-  create: financeManagerProcedure
+  create: financeAndOpsProcedure
     .input(
       z.object({
         vendorBillId: z.number(),
@@ -209,7 +209,7 @@ export const allocationsRouter = router({
     }),
 
   // Batch create allocations (for AI-parsed results)
-  batchCreate: financeManagerProcedure
+  batchCreate: financeAndOpsProcedure
     .input(
       z.object({
         allocations: z.array(
@@ -254,7 +254,7 @@ export const allocationsRouter = router({
     }),
 
   // Update an allocation
-  update: financeManagerProcedure
+  update: financeAndOpsProcedure
     .input(
       z.object({
         id: z.number(),
@@ -293,7 +293,7 @@ export const allocationsRouter = router({
     }),
 
   // Delete an allocation
-  delete: financeManagerProcedure
+  delete: financeAndOpsProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
       const existing = await getBillInvoiceAllocationById(input.id);
@@ -318,7 +318,7 @@ export const allocationsRouter = router({
     }),
 
   // Delete all allocations for a bill
-  deleteAllForBill: financeManagerProcedure
+  deleteAllForBill: financeAndOpsProcedure
     .input(z.object({ vendorBillId: z.number() }))
     .mutation(async ({ input, ctx }) => {
       // Get affected invoices before deletion

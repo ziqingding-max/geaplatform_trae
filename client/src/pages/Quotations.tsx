@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { isAdmin } from "@shared/roles";
+import { usePermissions } from "@/lib/usePermissions";
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ export default function Quotations() {
   const { t } = useI18n();
   const { user } = useAuth();
   const userIsAdmin = isAdmin(user?.role);
+  const { canEditSales } = usePermissions();
   const [page, setPage] = useState(1);
   const limit = 20;
   const [search, setSearch] = useState("");
@@ -143,11 +145,11 @@ export default function Quotations() {
                     onChange={(e) => setSearch(e.target.value)}
                 />
             </div>
-            <Link href="/quotations/new">
+            {canEditSales && <Link href="/quotations/new">
                 <Button>
                 <Plus className="w-4 h-4 mr-2" />{t("quotations.createButton")}
                 </Button>
-            </Link>
+            </Link>}
           </div>
         </div>
 
@@ -217,7 +219,7 @@ export default function Quotations() {
                             nextActions.push({ value: "expired", label: t("quotations.status.expired") });
                           }
                           // accepted, rejected, expired are all terminal states
-                          if (isTerminal || q.status === "rejected" || q.status === "expired" || nextActions.length === 0) {
+                          if (!canEditSales || isTerminal || q.status === "rejected" || q.status === "expired" || nextActions.length === 0) {
                             return (
                               <Badge variant="outline" className={`text-xs ${statusColorMap[q.status] || ""}`}>
                                 {t(`quotations.status.${q.status}`)}
@@ -248,7 +250,7 @@ export default function Quotations() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {q.status === 'draft' && (
+                          {canEditSales && q.status === 'draft' && (
                               <Link href={`/quotations/edit/${q.id}`}>
                                 <Button variant="ghost" size="icon" title={t("common.edit") || "Edit"}>
                                     <Edit className="w-4 h-4" />
@@ -263,7 +265,7 @@ export default function Quotations() {
                             )}
                           </Button>
                           {/* B3c: Draft quotations can be deleted by anyone with CRM access; non-draft only by admin */}
-                          {(q.status === 'draft' || userIsAdmin) && (
+                          {canEditSales && (q.status === 'draft' || userIsAdmin) && (
                               <Button
                                 variant="ghost"
                                 size="icon"
