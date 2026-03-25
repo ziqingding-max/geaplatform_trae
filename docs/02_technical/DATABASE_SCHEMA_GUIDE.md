@@ -1,7 +1,7 @@
 # 数据库设计指南 (Database Schema Guide)
 
 ## 1. 概述 (Overview)
-本项目使用 **SQLite (LibSQL)** 作为数据库，通过 **Drizzle ORM** 进行管理。
+本项目使用 **PostgreSQL** 作为核心关系型数据库，通过 **Drizzle ORM** 进行管理。系统已从最初的 SQLite MVP 成功迁移至 PostgreSQL，以支持更高的并发和复杂的财务事务处理。
 *   **Schema File**: `drizzle/schema.ts` 是数据库结构的唯一事实来源 (SSOT)。
 *   **Migrations**: 所有的 Schema 变更必须通过 `pnpm db:push` 或生成 migration file 进行。
 
@@ -53,7 +53,7 @@
 *   **多币种**: 所有的金额字段旁通常关联 `currency` 字段。
 
 ### 3.2 JSON 字段的使用
-SQLite 对 JSON 支持良好，我们在以下场景大量使用 JSON 字段：
+PostgreSQL 对 JSONB 支持极佳，我们在以下场景大量使用 JSON 字段：
 *   `bank_details`: 不同国家的银行字段差异巨大，使用 JSON 动态存储。
 *   `snapshotData`: 存储报价时的汇率、费率等快照信息。
 

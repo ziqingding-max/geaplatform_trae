@@ -107,7 +107,7 @@
 
 | 分类 | 技术/服务 | 详情 |
 |:---|:---|:---|
-| **数据库** | **SQLite** | 通过 `@libsql/client` 和 `drizzle-orm/libsql` 访问。生产环境数据库文件位于 Docker Volume (`/app/data/production.db`)。总计 **48 张表**。 |
+| **数据库** | **PostgreSQL** | 通过 `postgres` 和 `drizzle-orm/pg-core` 访问。生产环境运行于独立的 Docker 容器中。总计 **61 张表**。 |
 | **部署** | **Docker Compose** | 部署于 **Alibaba Cloud Malaysia (ap-southeast-3)** 服务器，使用 Nginx 作为反向代理，并通过 Certbot 实现 SSL 证书自动续期。 |
 | **文件存储** | **Alibaba Cloud OSS** | S3 兼容 API，通过 `@aws-sdk/client-s3` SDK 进行交互。 |
 | **AI 服务** | **Alibaba Cloud DashScope** | 替代 OpenAI/Gemini/Claude。通过 `aiGatewayService.ts` 路由到 `qwen-turbo`、`qwen-max` 等模型。 |
@@ -134,7 +134,7 @@
 
 **必需环境变量:**
 
-- `DATABASE_URL`: 数据库连接字符串 (e.g., `file:/app/data/production.db`)
+- `DATABASE_URL`: 数据库连接字符串 (e.g., `postgresql://gea:password@postgres:5432/gea_production`)
 - `JWT_SECRET`: JWT 签名密钥
 - `ADMIN_BOOTSTRAP_EMAIL`: 初始管理员邮箱
 - `ADMIN_BOOTSTRAP_NAME`: 初始管理员姓名

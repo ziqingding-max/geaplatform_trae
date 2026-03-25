@@ -73,7 +73,7 @@ graph TD
 | 环境变量 | 来源 | 用途 |
 | :--- | :--- | :--- |
 | `PORT` | `.env` | 指定 Express 服务器监听的端口。 |
-| `DATABASE_URL` | `.env` | SQLite 数据库的文件路径。 |
+| `DATABASE_URL` | `.env` | PostgreSQL 数据库的连接字符串。 |
 | `JWT_SECRET` | `.env` (Secrets) | 用于签署所有 JWT 的密钥 (内部别名为 `cookieSecret`)。 |
 | `ADMIN_BOOTSTRAP_EMAIL` | `.env` (Secrets) | 用于首次启动时创建初始管理员账号的邮箱。 |
 | `ADMIN_BOOTSTRAP_PASSWORD`| `.env` (Secrets) | 初始管理员的密码。 |
@@ -105,7 +105,7 @@ graph TD
 
 ### 5.2 数据库 (Database)
 
-项目使用 **Drizzle ORM** 与 **SQLite** 数据库进行交互，通过 `@libsql/client` 驱动连接。`drizzle.config.ts` 中配置的 `dialect` 为 `"sqlite"`。生产环境中，数据库文件通过 Docker Volume 持久化在 `file:/app/data/production.db`。Drizzle Kit 用于管理数据库模式的迁移。
+项目使用 **Drizzle ORM** 与 **PostgreSQL** 数据库进行交互，通过 `postgres` 驱动连接。`drizzle.config.ts` 中配置的 `dialect` 为 `"postgresql"`。生产环境中，数据库运行在独立的 `postgres:16-alpine` 容器中。Drizzle Kit 用于管理数据库模式的迁移。
 
 ### 5.3 文件存储 (File Storage)
 
