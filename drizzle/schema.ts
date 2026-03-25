@@ -1612,7 +1612,7 @@ export const countrySocialInsuranceItems = pgTable(
     countryCode: varchar("countryCode", { length: 3 }).notNull(),
     
     // Item details
-    itemKey: varchar("itemKey", { length: 50 }).notNull(),     // e.g. "bhxh", "bhyt", "cpf_ordinary"
+    itemKey: varchar("itemKey", { length: 100 }).notNull(),     // e.g. "bhxh", "bhyt", "cpf_ordinary"
     itemNameEn: varchar("itemNameEn", { length: 200 }).notNull(),
     itemNameZh: varchar("itemNameZh", { length: 200 }).notNull(),
     category: text("category", { enum: [

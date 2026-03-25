@@ -1,0 +1,1 @@
+ALTER TABLE "country_social_insurance_items" ALTER COLUMN "itemKey" SET DATA TYPE varchar(100);
