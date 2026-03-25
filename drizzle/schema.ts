@@ -1159,6 +1159,7 @@ export const vendorBills = sqliteTable(
       "pass_through",       // Pass-through payroll/social costs (deducted before Net Revenue)
       "vendor_service_fee", // Vendor's own management/processing fee (Direct COGS)
       "non_recurring",      // One-off costs: visa, equipment, relocation, etc.
+      "mixed",              // Bill contains multiple cost types — classified at item level via itemType
     ] }).default("operational").notNull(),
     description: text("description"),
     internalNotes: text("internalNotes"),

@@ -345,7 +345,7 @@ Return a JSON object with these fields:
   - tax: number
   - totalAmount: number
   - category: string (one of: payroll_processing, social_contributions, visa_immigration, consulting, equipment, insurance, other). Use "payroll_processing" for payroll and tax filing. Use "social_contributions" for social security/pension. Use "consulting" for consulting, HR advisory, or legal services. Use "other" for IT, office rent, bank charges, travel, marketing, or anything else.
-  - billType: string (one of: "pass_through", "vendor_service_fee", "non_recurring", "operational"). Use "pass_through" for payroll/salary/social contributions/tax paid on behalf of employees (the bulk cost that GEA collects from clients and pays to vendor). Use "vendor_service_fee" for the vendor's own management/processing/service fee charged to GEA. Use "non_recurring" for one-off costs like visa processing, equipment procurement, onboarding/offboarding. Use "operational" for internal business costs (office rent, SaaS, etc.).
+  - billType: string (one of: "pass_through", "vendor_service_fee", "non_recurring", "operational", "mixed"). Use "pass_through" for payroll/salary/social contributions/tax paid on behalf of employees (the bulk cost that GEA collects from clients and pays to vendor). Use "vendor_service_fee" for the vendor's own management/processing/service fee charged to GEA. Use "non_recurring" for one-off costs like visa processing, equipment procurement, onboarding/offboarding. Use "operational" for internal business costs (office rent, SaaS, etc.). Use "mixed" when a single bill contains BOTH pass-through employment costs AND vendor service fees (or other cost types) — in this case, the itemType on each line item determines the P&L classification.
   - description: string
   - confidence: number (0-100)
 - payment: object | null (if POP/receipt is included):
@@ -411,7 +411,7 @@ CONFIDENCE SCORING RULES:
 - Use 50-69 when data requires inference or interpretation.
 - Use below 50 when you are uncertain. In this case, set the field to null and explain in matchReason or crossValidation.warnings.
 - For operational costs (bank fees, office rent, etc.), set vendorType to "operational" and skip allocation suggestions.
-- For EOR vendor bills, the billType is critical for P&L accuracy: use "pass_through" for the employment cost portion and "vendor_service_fee" for the vendor's own fee. If the bill mixes both, classify the overall bill as "pass_through" (the larger portion) and use itemType on line items to distinguish.`,
+- For EOR vendor bills, the billType is critical for P&L accuracy: use "pass_through" for the employment cost portion and "vendor_service_fee" for the vendor's own fee. If the bill clearly mixes both employment costs AND vendor service fees in the same invoice, use "mixed" as the billType and ensure each line item has the correct itemType ("employment_cost" vs "service_fee" etc.) for accurate P&L attribution.`,
           },
           {
             // 2nd system message: document content via fileid:// references
@@ -589,7 +589,7 @@ CONFIDENCE SCORING RULES:
           "payroll_processing", "social_contributions", "visa_immigration",
           "consulting", "equipment", "insurance", "other",
         ]).default("other"),
-        billType: z.enum(["operational", "pass_through", "vendor_service_fee", "non_recurring"]).default("operational"),
+        billType: z.enum(["operational", "pass_through", "vendor_service_fee", "non_recurring", "mixed"]).default("operational"),
         description: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
@@ -794,7 +794,7 @@ Return a JSON object with these fields:
 - tax: number
 - totalAmount: number
 - category: string (one of: payroll_processing, social_contributions, visa_immigration, consulting, equipment, insurance, other). Use "payroll_processing" for payroll and tax filing. Use "social_contributions" for social security/pension. Use "consulting" for consulting, HR advisory, or legal services. Use "other" for IT, office rent, bank charges, travel, marketing, or anything else.
-- billType: string (one of: "pass_through", "vendor_service_fee", "non_recurring", "operational"). Use "pass_through" for payroll/salary/social contributions/tax paid on behalf of employees. Use "vendor_service_fee" for the vendor's own management/processing fee. Use "non_recurring" for one-off costs like visa, equipment. Use "operational" for internal business costs.
+- billType: string (one of: "pass_through", "vendor_service_fee", "non_recurring", "operational", "mixed"). Use "pass_through" for payroll/salary/social contributions/tax paid on behalf of employees. Use "vendor_service_fee" for the vendor's own management/processing fee. Use "non_recurring" for one-off costs like visa, equipment. Use "operational" for internal business costs. Use "mixed" when a single bill contains BOTH pass-through employment costs AND vendor service fees in the same invoice.
 - description: string
 - lineItems: array of { description: string, employeeName: string | null, quantity: number, unitPrice: number, amount: number, countryCode: string | null }
 
@@ -854,7 +854,7 @@ Be precise with numbers. If a field is not found, use null.`,
           "payroll_processing", "social_contributions", "visa_immigration",
           "consulting", "equipment", "insurance", "other",
         ]).default("other"),
-        billType: z.enum(["operational", "pass_through", "vendor_service_fee", "non_recurring"]).default("operational"),
+        billType: z.enum(["operational", "pass_through", "vendor_service_fee", "non_recurring", "mixed"]).default("operational"),
         description: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),

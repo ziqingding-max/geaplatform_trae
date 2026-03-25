@@ -132,6 +132,7 @@ function BillFormFields({ bill, onChange, vendors, t }: {
                 vendor_service_fee: "consulting",
                 non_recurring: bill.category || "other",
                 operational: bill.category || "other",
+                mixed: bill.category || "other",
               };
               onChange({ ...bill, billType: v, category: autoCategory[v] || "other" });
             }}>
@@ -141,8 +142,16 @@ function BillFormFields({ bill, onChange, vendors, t }: {
                 <SelectItem value="pass_through">{t("vendorBills.billType.pass_through")}</SelectItem>
                 <SelectItem value="vendor_service_fee">{t("vendorBills.billType.vendor_service_fee")}</SelectItem>
                 <SelectItem value="non_recurring">{t("vendorBills.billType.non_recurring")}</SelectItem>
+                <SelectItem value="mixed">
+                  <span className="flex items-center gap-1">
+                    {t("vendorBills.billType.mixed")}
+                  </span>
+                </SelectItem>
               </SelectContent>
             </Select>
+            {bill.billType === "mixed" && (
+              <p className="text-[10px] text-amber-500 mt-0.5">{t("vendorBills.billType.mixed_hint")}</p>
+            )}
           </div>
           <div className="col-span-1">
             <Label className="text-xs">{t("vendorBills.filters.allCategories")}</Label>

@@ -92,7 +92,7 @@ export const vendorBillsRouter = router({
             "other",
           ])
           .default("other"),
-        billType: z.enum(["operational", "pass_through", "vendor_service_fee", "non_recurring"]).default("operational"),
+        billType: z.enum(["operational", "pass_through", "vendor_service_fee", "non_recurring", "mixed"]).default("operational"),
         description: z.string().optional(),
         internalNotes: z.string().optional(),
         receiptFileUrl: z.string().optional(),
@@ -179,7 +179,7 @@ export const vendorBillsRouter = router({
             "other",
           ])
           .optional(),
-        billType: z.enum(["operational", "pass_through", "vendor_service_fee", "non_recurring"]).optional(),
+        billType: z.enum(["operational", "pass_through", "vendor_service_fee", "non_recurring", "mixed"]).optional(),
         description: z.string().optional(),
         internalNotes: z.string().optional(),
         receiptFileUrl: z.string().optional().nullable(),
@@ -292,6 +292,7 @@ export const vendorBillsRouter = router({
         quantity: z.string().default("1"),
         unitPrice: z.string(),
         amount: z.string(),
+        itemType: z.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "other"]).default("other"),
         relatedCustomerId: z.number().optional(),
         relatedEmployeeId: z.number().optional(),
         relatedCountryCode: z.string().optional(),
@@ -314,6 +315,7 @@ export const vendorBillsRouter = router({
         quantity: z.string().optional(),
         unitPrice: z.string().optional(),
         amount: z.string().optional(),
+        itemType: z.enum(["employment_cost", "service_fee", "visa_fee", "equipment_purchase", "other"]).optional(),
         relatedCustomerId: z.number().optional().nullable(),
         relatedEmployeeId: z.number().optional().nullable(),
         relatedCountryCode: z.string().optional().nullable(),

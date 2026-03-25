@@ -6,6 +6,7 @@ import {
   invoices as invoicesTable,
   invoiceItems as invoiceItemsTable,
   vendorBills as vendorBillsTable,
+  vendorBillItems as vendorBillItemsTable,
   vendors as vendorsTable,
   customers as customersTable,
   billInvoiceAllocations,
@@ -341,6 +342,42 @@ export const reportsRouter = router({
           );
         const operationalExpenses = parseFloat(opResult?.total ?? "0");
 
+        // ── 7. Mixed Bills: aggregate by itemType at line-item level ──
+        // For bills with billType='mixed', we distribute costs to the correct P&L bucket
+        // based on each line item's itemType classification.
+        const mixedItemResults = await db
+          .select({
+            itemType: vendorBillItemsTable.itemType,
+            total: sql<string>`COALESCE(SUM(CAST(${vendorBillItemsTable.amount} AS REAL)), 0)`,
+          })
+          .from(vendorBillItemsTable)
+          .innerJoin(vendorBillsTable, eq(vendorBillItemsTable.vendorBillId, vendorBillsTable.id))
+          .where(
+            and(
+              inArray(vendorBillsTable.status, ["paid", "partially_paid"]),
+              sql`${vendorBillsTable.billMonth} >= ${monthStart}`,
+              sql`${vendorBillsTable.billMonth} < ${nextMonth}`,
+              sql`${vendorBillsTable.billType} = 'mixed'`
+            )
+          )
+          .groupBy(vendorBillItemsTable.itemType);
+
+        // Distribute mixed bill items into P&L buckets
+        let mixedPassThrough = 0;
+        let mixedServiceFee = 0;
+        let mixedOther = 0;
+        for (const row of mixedItemResults) {
+          const amt = parseFloat(row.total ?? "0");
+          if (row.itemType === "employment_cost") {
+            mixedPassThrough += amt;
+          } else if (row.itemType === "service_fee") {
+            mixedServiceFee += amt;
+          } else {
+            // visa_fee, equipment_purchase, other → treat as non-recurring costs
+            mixedOther += amt;
+          }
+        }
+
         // ── Invoice & bill counts ──
         const [invCount] = await db
           .select({ cnt: count() })
@@ -364,30 +401,36 @@ export const reportsRouter = router({
             )
           );
 
-        // ── Derived metrics ──
-        const fxMarkupProfit = (passThroughCollected + nonRecurring) - passThroughPaid;
+        // ── Derived metrics (including mixed bill distribution) ──
+        // Add mixed bill amounts to their respective buckets
+        const adjPassThroughPaid = passThroughPaid + mixedPassThrough;
+        const adjDirectCOGS = directCOGS + mixedServiceFee;
+        const adjNonRecurringCosts = nonRecurringCosts + mixedOther;
+
+        const fxMarkupProfit = (passThroughCollected + nonRecurring) - adjPassThroughPaid;
         const netRevenue = serviceFee + fxMarkupProfit;
-        const grossProfit = netRevenue - directCOGS;
+        const grossProfit = netRevenue - adjDirectCOGS;
         const netProfit = grossProfit - operationalExpenses;
 
         // Legacy compatible: totalRevenue = all invoice revenue, totalExpenses = all vendor bill costs
         const monthRevenue = serviceFee + nonRecurring + passThroughCollected;
-        const monthExpenses = passThroughPaid + directCOGS + operationalExpenses;
+        const mixedTotal = mixedPassThrough + mixedServiceFee + mixedOther;
+        const monthExpenses = adjPassThroughPaid + adjDirectCOGS + operationalExpenses - mixedPassThrough - mixedServiceFee + mixedTotal;
 
         monthlyBreakdown.push({
           month: m,
           revenue: r2(monthRevenue),
-          expenses: r2(monthExpenses),
+          expenses: r2(passThroughPaid + directCOGS + operationalExpenses + mixedTotal),
           netProfit: r2(netProfit),
           invoiceCount: invCount?.cnt ?? 0,
           billCount: billCount?.cnt ?? 0,
           serviceFeeRevenue: r2(serviceFee),
           nonRecurringRevenue: r2(nonRecurring),
           passThroughCollected: r2(passThroughCollected),
-          passThroughPaid: r2(passThroughPaid),
+          passThroughPaid: r2(adjPassThroughPaid),
           fxMarkupProfit: r2(fxMarkupProfit),
           netRevenue: r2(netRevenue),
-          directCOGS: r2(directCOGS),
+          directCOGS: r2(adjDirectCOGS),
           grossProfit: r2(grossProfit),
           operationalExpenses: r2(operationalExpenses),
         });
@@ -395,13 +438,13 @@ export const reportsRouter = router({
         totalServiceFee += serviceFee;
         totalNonRecurring += nonRecurring;
         totalPassThroughCollected += passThroughCollected;
-        totalPassThroughPaid += passThroughPaid;
-        totalDirectCOGS += directCOGS;
+        totalPassThroughPaid += adjPassThroughPaid;
+        totalDirectCOGS += adjDirectCOGS;
         totalOperational += operationalExpenses;
         totalRevenue += monthRevenue;
-        totalExpenses += monthExpenses;
+        totalExpenses += passThroughPaid + directCOGS + operationalExpenses + mixedTotal;
         totalBankFees += totalBankFees_month;
-        totalNonRecurringCosts += nonRecurringCosts;
+        totalNonRecurringCosts += adjNonRecurringCosts;
       }
 
       const totalFxProfit = (totalPassThroughCollected + totalNonRecurring) - totalPassThroughPaid;
