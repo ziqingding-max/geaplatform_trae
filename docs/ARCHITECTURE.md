@@ -38,7 +38,7 @@
 │            ▼                             ▼                        ▼         │
 │  ┌──────────────────────────────────────────────────────────────────┐  │
 │  │                    Shared Data Layer                              │  │
-│  │  Drizzle ORM → SQLite via @libsql/client (48 tables)            │  │
+│  │  Drizzle ORM → PostgreSQL via postgres (61 tables)              │  │
 │  │  Alibaba Cloud OSS → S3-compatible file uploads                  │  │
 │  │  ECB API → Exchange rates (daily fetch)                          │  │
 │  │  AI Gateway → Alibaba Cloud DashScope (qwen-turbo, qwen-max)     │  │
@@ -185,7 +185,7 @@ Worker authentication (`server/worker/workerAuth.ts`) follows the same pattern a
 
 ## 7. Data Model Overview
 
-The 48 database tables are defined in `drizzle/schema.ts` with relationships in `drizzle/relations.ts`. The database is **SQLite**, accessed via `@libsql/client` and `drizzle-orm/libsql`. The `drizzle.config.ts` specifies `dialect: "sqlite"`. In production, the database file is at `file:/app/data/production.db`.
+The 61 database tables are defined in `drizzle/schema.ts` with relationships in `drizzle/relations.ts`. The database is **PostgreSQL**, accessed via `postgres` and `drizzle-orm/pg-core`. The `drizzle.config.ts` specifies `dialect: "postgresql"`. In production, the database is hosted in a Docker container and accessed via a connection string.
 
 ### Core Entities
 
@@ -248,7 +248,7 @@ The entire system is self-hosted on **Alibaba Cloud Malaysia (ap-southeast-3)** 
 
 Key environment variables include:
 
-- `DATABASE_URL`: SQLite connection string.
+- `DATABASE_URL`: PostgreSQL connection string.
 - `JWT_SECRET`: Secret for signing admin JWTs.
 - `ADMIN_BOOTSTRAP_EMAIL`, `ADMIN_BOOTSTRAP_PASSWORD`: For initial admin user creation.
 - `ADMIN_APP_URL`, `PORTAL_APP_URL`, `WORKER_APP_URL`: Base URLs for each portal.

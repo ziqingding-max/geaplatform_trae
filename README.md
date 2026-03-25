@@ -36,7 +36,7 @@
 ### 环境要求
 *   Node.js 18+ (推荐 22.x LTS)
 *   pnpm 9.x
-*   SQLite (无需安装服务，使用 LibSQL 客户端)
+*   PostgreSQL 16+ (生产环境推荐使用 Docker 部署)
 
 ### 安装与启动
 ```bash
@@ -65,7 +65,7 @@ pnpm dev
 |------|------|------|
 | **前端** | React 19, Vite, Tailwind v4, Shadcn/UI | SPA 架构，响应式设计 |
 | **后端** | Node.js, Express, tRPC | 类型安全的 API 层 |
-| **数据库** | SQLite (LibSQL), Drizzle ORM | 轻量高效，Schema-First |
+| **数据库** | PostgreSQL, Drizzle ORM | 高并发，事务安全，Schema-First |
 | **测试** | Vitest, Custom E2E Scripts | 全链路质量保证 |
 | **AI** | 阿里云 DashScope | 智能路由与任务处理 |
 

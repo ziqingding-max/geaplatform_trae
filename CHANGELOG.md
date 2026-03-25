@@ -4,6 +4,24 @@
 
 ---
 
+## [4.0.0] — 2026-03-26
+
+### Added
+
+- **PostgreSQL Migration**: 核心数据库从 SQLite 全量迁移至 PostgreSQL，大幅提升系统的并发处理能力和事务稳定性，为生产环境的高可用部署奠定基础。
+    - **Schema 改造**: 61 张表全部从 `sqliteTable` 迁移为 `pgTable`。
+    - **ORM 升级**: Drizzle ORM 驱动从 `@libsql/client` 切换为 `postgres`。
+    - **部署架构升级**: Docker Compose 新增 `postgres:16-alpine` 容器服务，完全替代原有的文件型数据库。
+    - **数据迁移脚本**: 新增 `scripts/migrate-sqlite-to-pg.py`，实现生产环境数据的无缝迁移，支持 dry-run 和数据校验。
+
+### Changed
+
+- **SQL 语法重构**: 重构了所有强依赖 SQLite 特有语法的查询，包括 `CAST(... AS REAL)` 转换为 `CAST(... AS numeric)`，`strftime` 转换为 PostgreSQL 时间函数，确保复杂财务和薪资报表的准确性。
+- **自动迁移脚本重写**: `server/autoMigrate.ts` 已针对 PostgreSQL 进行了重写，支持自动增量更新表结构。
+- **数据类型优化**: 将可能导致长度溢出的 `varchar(20)` 字段（如 `employeeCode`, `phone`, `clientCode` 等）统一扩大至 `varchar(50)` 或 `varchar(100)`。
+
+---
+
 ## [3.9.0] — 2026-03-06
 
 ### Added

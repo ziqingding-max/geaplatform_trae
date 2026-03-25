@@ -8,7 +8,7 @@
 ## 1. System Identity
 **GEA EOR SaaS Admin** is a global Employment Record (EOR) and Agency of Record (AOR) platform.
 *   **Three Portals**: Admin Portal (Ops), Client Portal (Customers), Worker Portal (Employees/Contractors).
-*   **One Database**: Shared SQLite (LibSQL) database with strict role-based access.
+*   **One Database**: Shared PostgreSQL database with strict role-based access.
 *   **Stack**: React 19, Node.js (Express + tRPC), Drizzle ORM.
 
 ---

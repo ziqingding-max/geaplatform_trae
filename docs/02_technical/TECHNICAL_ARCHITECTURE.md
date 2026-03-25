@@ -18,7 +18,7 @@
 *   **Scheduled Tasks**: `node-cron` (Invoicing, Payroll cycles)
 
 ### 1.3 数据库 (Database)
-*   **Database**: SQLite (via LibSQL/Turso)
+*   **Database**: PostgreSQL (via `postgres`)
 *   **ORM**: Drizzle ORM
 *   **Migration**: Drizzle Kit
 
