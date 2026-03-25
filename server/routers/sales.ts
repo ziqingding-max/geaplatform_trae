@@ -560,8 +560,8 @@ export const salesRouter = router({
             if (doc.docType === 'contract') {
                 // Use raw SQL to avoid Drizzle passing null for autoIncrement id
                 const contractName = doc.title || `MSA-${lead.companyName}`;
-                const now = Date.now();
-                await db.run(sql`INSERT INTO customer_contracts ("customerId", "contractName", "contractType", "fileUrl", "fileKey", "status", "createdAt", "updatedAt") VALUES (${customerId}, ${contractName}, ${'MSA'}, ${doc.fileUrl}, ${doc.fileKey}, ${'signed'}, ${now}, ${now})`);
+                const now = new Date();
+                await db.execute(sql`INSERT INTO customer_contracts ("customerId", "contractName", "contractType", "fileUrl", "fileKey", "status", "createdAt", "updatedAt") VALUES (${customerId}, ${contractName}, ${'MSA'}, ${doc.fileUrl}, ${doc.fileKey}, ${'signed'}, ${now}, ${now})`);
             }
             // Also sync the document's customerId for future reference
             await db.update(salesDocuments)
@@ -874,10 +874,10 @@ export const salesRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Create document record — use raw SQL to avoid Drizzle passing null for autoIncrement id
-        const docNow = Date.now();
-        const insertResult = await db.run(sql`INSERT INTO sales_documents ("leadId", "docType", "title", "fileKey", "fileUrl", "generatedBy", "createdAt") VALUES (${input.leadId}, ${input.docType}, ${input.fileName}, ${fileKey}, ${url}, ${ctx.user.id}, ${docNow})`);
-        const docId = Number(insertResult.lastInsertRowid);
-        const doc = { id: docId, leadId: input.leadId, docType: input.docType, title: input.fileName, fileKey, fileUrl: url, generatedBy: ctx.user.id, createdAt: new Date(docNow) };
+        const docNow = new Date();
+        const insertResult = await db.execute(sql`INSERT INTO sales_documents ("leadId", "docType", "title", "fileKey", "fileUrl", "generatedBy", "createdAt") VALUES (${input.leadId}, ${input.docType}, ${input.fileName}, ${fileKey}, ${url}, ${ctx.user.id}, ${docNow}) RETURNING id`);
+        const docId = Number((insertResult as any)[0]?.id);
+        const doc = { id: docId, leadId: input.leadId, docType: input.docType, title: input.fileName, fileKey, fileUrl: url, generatedBy: ctx.user.id, createdAt: docNow };
 
         await logAuditAction({
           userId: ctx.user.id, userName: ctx.user.name || null,

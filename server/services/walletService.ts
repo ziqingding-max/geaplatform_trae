@@ -132,7 +132,7 @@ export class WalletService {
 
   /**
    * Execute a wallet transaction with optimistic locking.
-   * Accepts an optional external transaction object to avoid nested transactions (SQLITE_BUSY).
+   * Accepts an optional external transaction object to reuse the same DB transaction context.
    */
   async transact(params: {
     walletId: number;
@@ -340,7 +340,7 @@ export class WalletService {
 
   /**
    * Execute a frozen wallet transaction with optimistic locking.
-   * Accepts an optional external transaction object to avoid nested transactions (SQLITE_BUSY).
+   * Accepts an optional external transaction object to reuse the same DB transaction context.
    */
   async frozenTransact(params: {
     walletId: number;

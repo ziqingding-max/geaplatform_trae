@@ -6,7 +6,7 @@ import { eq, sql } from 'drizzle-orm';
 
 // Set test environment
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'file:server/sqlite.db';
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/gea_test';
 
 async function runTests() {
   console.log('Running AOR Contractor Billing Tests...');
@@ -49,7 +49,7 @@ async function runTests() {
     
     // Mock the logic in processMonthlyFromLocked (Job 3)
     const targetMonth = '2026-02';
-    const monthlyContractors = await db.run(sql`
+    const monthlyContractors = await db.execute(sql`
       SELECT id FROM contractors 
       WHERE status = 'active' 
       AND paymentFrequency = 'monthly'
@@ -68,7 +68,7 @@ async function runTests() {
     await db.update(contractors).set({ status: 'terminated', endDate: '2026-02-28' }).where(eq(contractors.id, contractorId));
     
     const nextMonth = '2026-03';
-    const terminatedContractors = await db.run(sql`
+    const terminatedContractors = await db.execute(sql`
       SELECT id FROM contractors 
       WHERE status = 'active' 
       AND paymentFrequency = 'monthly'

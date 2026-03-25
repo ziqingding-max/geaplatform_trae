@@ -1,7 +1,7 @@
 
 import 'dotenv/config';
-import { drizzle } from 'drizzle-orm/libsql';
-import { createClient } from '@libsql/client';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 import * as schema from '../drizzle/schema';
 import { eq, and } from 'drizzle-orm';
 import { readFile } from 'fs/promises';
@@ -16,11 +16,7 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
-const url = DATABASE_URL.includes("://") 
-  ? DATABASE_URL 
-  : `file:${DATABASE_URL}`;
-
-const client = createClient({ url });
+const client = postgres(DATABASE_URL, { max: 1 });
 const db = drizzle(client, { schema });
 
 // Helper to read JSON data

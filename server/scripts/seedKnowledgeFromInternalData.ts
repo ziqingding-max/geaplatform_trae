@@ -14,9 +14,9 @@
  * - public holidays and leave types must be seeded (via seed-production.ts)
  *
  * Usage:
- *   DATABASE_URL=file:server/sqlite.db npx tsx server/scripts/seedKnowledgeFromInternalData.ts
- *   DATABASE_URL=file:server/sqlite.db npx tsx server/scripts/seedKnowledgeFromInternalData.ts --dry-run
- *   DATABASE_URL=file:server/sqlite.db npx tsx server/scripts/seedKnowledgeFromInternalData.ts --countries=AU,SG,VN
+ *   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/gea_dev npx tsx server/scripts/seedKnowledgeFromInternalData.ts
+ *   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/gea_dev npx tsx server/scripts/seedKnowledgeFromInternalData.ts --dry-run
+ *   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/gea_dev npx tsx server/scripts/seedKnowledgeFromInternalData.ts --countries=AU,SG,VN
  */
 
 import "dotenv/config";

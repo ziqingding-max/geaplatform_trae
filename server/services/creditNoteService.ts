@@ -55,7 +55,7 @@ export async function approveCreditNote(creditNoteId: number, approvedBy?: numbe
             creditNote.id,
             "Deposit Release Approved",
             approvedBy,
-            tx  // Pass outer transaction to avoid nested db.transaction() (SQLITE_BUSY)
+            tx  // Pass outer transaction to reuse the same DB transaction context
          );
       }
     }
@@ -65,7 +65,7 @@ export async function approveCreditNote(creditNoteId: number, approvedBy?: numbe
       // Calculate credit amount (absolute value)
       const creditAmount = Math.abs(parseFloat(creditNote.total));
 
-      // Credit to wallet — pass tx to avoid nested transaction (SQLITE_BUSY)
+      // Credit to wallet — pass tx to reuse the same DB transaction context
       const wallet = await walletService.getWallet(creditNote.customerId, creditNote.currency, tx);
       await walletService.transact({
         walletId: wallet.id,

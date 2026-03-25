@@ -1,38 +1,43 @@
 import {
+  serial,
   integer,
+  boolean,
+  timestamp,
   text,
-  sqliteTable,
+  varchar,
+  jsonb,
+  doublePrecision,
+  pgTable,
   uniqueIndex,
   index,
-  real,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
 // ============================================================================
 // 1. AUTHENTICATION & AUTHORIZATION
 // ============================================================================
 
-export const users = sqliteTable(
+export const users = pgTable(
   "users",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    openId: text("openId", { length: 64 }).notNull().unique(),
+    id: serial("id").primaryKey(),
+    openId: varchar("openId", { length: 64 }).notNull().unique(),
     name: text("name"),
-    email: text("email", { length: 320 }).unique(),
-    passwordHash: text("passwordHash", { length: 255 }),
-    loginMethod: text("loginMethod", { length: 64 }),
-    role: text("role", { length: 200 })
+    email: varchar("email", { length: 320 }).unique(),
+    passwordHash: varchar("passwordHash", { length: 255 }),
+    loginMethod: varchar("loginMethod", { length: 64 }),
+    role: varchar("role", { length: 200 })
       .default("user")
       .notNull(),
-    language: text("language", { length: 10 }).default("en").notNull(),
-    isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
-    inviteToken: text("inviteToken", { length: 255 }),
-    inviteExpiresAt: integer("inviteExpiresAt", { mode: "timestamp_ms" }),
-    resetToken: text("resetToken", { length: 255 }),
-    resetExpiresAt: integer("resetExpiresAt", { mode: "timestamp_ms" }),
-    mustChangePassword: integer("mustChangePassword", { mode: "boolean" }).default(false).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
-    lastSignedIn: integer("lastSignedIn", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    language: varchar("language", { length: 10 }).default("en").notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
+    inviteToken: varchar("inviteToken", { length: 255 }),
+    inviteExpiresAt: timestamp("inviteExpiresAt", { withTimezone: true, mode: "date" }),
+    resetToken: varchar("resetToken", { length: 255 }),
+    resetExpiresAt: timestamp("resetExpiresAt", { withTimezone: true, mode: "date" }),
+    mustChangePassword: boolean("mustChangePassword").default(false).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    lastSignedIn: timestamp("lastSignedIn", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     emailIdx: index("email_idx").on(table.email),
@@ -48,13 +53,13 @@ export type InsertUser = typeof users.$inferInsert;
 // 2. COUNTRY CONFIGURATION
 // ============================================================================
 
-export const countriesConfig = sqliteTable(
+export const countriesConfig = pgTable(
   "countries_config",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    countryCode: text("countryCode", { length: 3 }).notNull().unique(), // ISO 3166-1 alpha-2
-    countryName: text("countryName", { length: 100 }).notNull(),
-    localCurrency: text("localCurrency", { length: 3 }).notNull(), // ISO 4217
+    id: serial("id").primaryKey(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull().unique(), // ISO 3166-1 alpha-2
+    countryName: varchar("countryName", { length: 100 }).notNull(),
+    localCurrency: varchar("localCurrency", { length: 3 }).notNull(), // ISO 4217
     payrollCycle: text("payrollCycle", { enum: ["monthly", "semi_monthly"] }).default("monthly").notNull(),
     // payrollCutoffDay and payDayOfMonth moved to system_config (global settings)
     // Tax rates removed - not fixed values, handled per payroll run
@@ -68,16 +73,16 @@ export const countriesConfig = sqliteTable(
     standardAorRate: text("standardAorRate"),
     // Visa EOR one-time setup fee (charged once per employee visa application)
     visaEorSetupFee: text("visaEorSetupFee"),
-    standardRateCurrency: text("standardRateCurrency", { length: 3 }).default("USD"),
+    standardRateCurrency: varchar("standardRateCurrency", { length: 3 }).default("USD"),
     // VAT configuration — some countries require VAT on employment cost remittances
-    vatApplicable: integer("vatApplicable", { mode: "boolean" }).default(false).notNull(),
+    vatApplicable: boolean("vatApplicable").default(false).notNull(),
     vatRate: text("vatRate").default("0"), // e.g. 6.00 = 6%
     // isActive is determined by whether service fees are configured
     // A country with any non-null service rate (EOR/AOR/Visa) is considered active
-    isActive: integer("isActive", { mode: "boolean" }).default(false).notNull(),
+    isActive: boolean("isActive").default(false).notNull(),
     notes: text("notes"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     countryCodeIdx: uniqueIndex("country_code_idx").on(table.countryCode),
@@ -91,15 +96,15 @@ export type InsertCountryConfig = typeof countriesConfig.$inferInsert;
 // SYSTEM CONFIGURATION (Global Settings)
 // ============================================================================
 
-export const systemConfig = sqliteTable(
+export const systemConfig = pgTable(
   "system_config",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    configKey: text("configKey", { length: 100 }).notNull().unique(),
+    id: serial("id").primaryKey(),
+    configKey: varchar("configKey", { length: 100 }).notNull().unique(),
     configValue: text("configValue").notNull(),
     description: text("description"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     configKeyIdx: uniqueIndex("config_key_idx").on(table.configKey),
@@ -110,19 +115,19 @@ export type SystemConfig = typeof systemConfig.$inferSelect;
 export type InsertSystemConfig = typeof systemConfig.$inferInsert;
 
 // Leave types per country
-export const leaveTypes = sqliteTable(
+export const leaveTypes = pgTable(
   "leave_types",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    countryCode: text("countryCode", { length: 3 }).notNull(),
-    leaveTypeName: text("leaveTypeName", { length: 100 }).notNull(), // Annual, Sick, Unpaid, Maternity, Paternity, Bereavement, Marriage
+    id: serial("id").primaryKey(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull(),
+    leaveTypeName: varchar("leaveTypeName", { length: 100 }).notNull(), // Annual, Sick, Unpaid, Maternity, Paternity, Bereavement, Marriage
     annualEntitlement: integer("annualEntitlement").default(0), // Days per year
-    isPaid: integer("isPaid", { mode: "boolean" }).default(true).notNull(),
-    requiresApproval: integer("requiresApproval", { mode: "boolean" }).default(true).notNull(),
+    isPaid: boolean("isPaid").default(true).notNull(),
+    requiresApproval: boolean("requiresApproval").default(true).notNull(),
     applicableGender: text("applicableGender", { enum: ["male", "female", "all"] }).default("all").notNull(), // Which gender this leave type applies to
     description: text("description"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     countryCodeIdx: index("lt_country_code_idx").on(table.countryCode),
@@ -133,19 +138,19 @@ export type LeaveType = typeof leaveTypes.$inferSelect;
 export type InsertLeaveType = typeof leaveTypes.$inferInsert;
 
 // Public Holidays per country per year (separate from leave types)
-export const publicHolidays = sqliteTable(
+export const publicHolidays = pgTable(
   "public_holidays",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    countryCode: text("countryCode", { length: 3 }).notNull(),
+    id: serial("id").primaryKey(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull(),
     year: integer("year").notNull(), // e.g. 2026
     holidayDate: text("holidayDate").notNull(),
-    holidayName: text("holidayName", { length: 255 }).notNull(),
-    localName: text("localName", { length: 255 }), // Name in local language
-    isGlobal: integer("isGlobal", { mode: "boolean" }).default(true).notNull(), // true = nationwide
-    source: text("source", { length: 50 }).default("nager_api"), // nager_api | manual
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    holidayName: varchar("holidayName", { length: 255 }).notNull(),
+    localName: varchar("localName", { length: 255 }), // Name in local language
+    isGlobal: boolean("isGlobal").default(true).notNull(), // true = nationwide
+    source: varchar("source", { length: 50 }).default("nager_api"), // nager_api | manual
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     phCountryCodeIdx: index("ph_country_code_idx").on(table.countryCode),
@@ -161,32 +166,32 @@ export type InsertPublicHoliday = typeof publicHolidays.$inferInsert;
 // 3. CUSTOMER MANAGEMENT
 // ============================================================================
 
-export const customers = sqliteTable(
+export const customers = pgTable(
   "customers",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    clientCode: text("clientCode", { length: 20 }).unique(), // Auto-generated: CUS-0001
-    companyName: text("companyName", { length: 255 }).notNull(),
-    legalEntityName: text("legalEntityName", { length: 255 }),
-    registrationNumber: text("registrationNumber", { length: 100 }),
-    industry: text("industry", { length: 100 }),
+    id: serial("id").primaryKey(),
+    clientCode: varchar("clientCode", { length: 20 }).unique(), // Auto-generated: CUS-0001
+    companyName: varchar("companyName", { length: 255 }).notNull(),
+    legalEntityName: varchar("legalEntityName", { length: 255 }),
+    registrationNumber: varchar("registrationNumber", { length: 100 }),
+    industry: varchar("industry", { length: 100 }),
     address: text("address"),
-    city: text("city", { length: 100 }),
-    state: text("state", { length: 100 }),
-    country: text("country", { length: 100 }).notNull(),
-    postalCode: text("postalCode", { length: 20 }),
-    primaryContactName: text("primaryContactName", { length: 255 }),
-    primaryContactEmail: text("primaryContactEmail", { length: 320 }),
-    primaryContactPhone: text("primaryContactPhone", { length: 20 }),
+    city: varchar("city", { length: 100 }),
+    state: varchar("state", { length: 100 }),
+    country: varchar("country", { length: 100 }).notNull(),
+    postalCode: varchar("postalCode", { length: 20 }),
+    primaryContactName: varchar("primaryContactName", { length: 255 }),
+    primaryContactEmail: varchar("primaryContactEmail", { length: 320 }),
+    primaryContactPhone: varchar("primaryContactPhone", { length: 20 }),
     paymentTermDays: integer("paymentTermDays").default(30).notNull(), // Payment terms in days (Net 7/15/30 etc.)
-    settlementCurrency: text("settlementCurrency", { length: 3 }).default("USD").notNull(),
+    settlementCurrency: varchar("settlementCurrency", { length: 3 }).default("USD").notNull(),
     language: text("language", { enum: ["en", "zh"] }).default("en").notNull(), // Invoice language preference
     billingEntityId: integer("billingEntityId"), // Associated billing entity (1:1)
     depositMultiplier: integer("depositMultiplier").default(2).notNull(), // Deposit = (baseSalary + estEmployerCost) × multiplier
     status: text("status", { enum: ["active", "suspended", "terminated"] }).default("active").notNull(),
     notes: text("notes"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     companyNameIdx: index("company_name_idx").on(table.companyName),
@@ -199,28 +204,28 @@ export type Customer = typeof customers.$inferSelect;
 export type InsertCustomer = typeof customers.$inferInsert;
 
 // Customer Contacts
-export const customerContacts = sqliteTable(
+export const customerContacts = pgTable(
   "customer_contacts",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     customerId: integer("customerId").notNull(),
-    contactName: text("contactName", { length: 255 }).notNull(),
-    email: text("email", { length: 320 }).notNull(),
-    phone: text("phone", { length: 20 }),
-    role: text("role", { length: 100 }), // Business role (e.g. "HR Director")
-    isPrimary: integer("isPrimary", { mode: "boolean" }).default(false).notNull(),
-    hasPortalAccess: integer("hasPortalAccess", { mode: "boolean" }).default(false).notNull(),
+    contactName: varchar("contactName", { length: 255 }).notNull(),
+    email: varchar("email", { length: 320 }).notNull(),
+    phone: varchar("phone", { length: 20 }),
+    role: varchar("role", { length: 100 }), // Business role (e.g. "HR Director")
+    isPrimary: boolean("isPrimary").default(false).notNull(),
+    hasPortalAccess: boolean("hasPortalAccess").default(false).notNull(),
     // ── Portal Authentication Fields ──
-    passwordHash: text("passwordHash", { length: 255 }), // bcrypt hash
+    passwordHash: varchar("passwordHash", { length: 255 }), // bcrypt hash
     portalRole: text("portalRole", { enum: ["admin", "hr_manager", "finance", "viewer"] }).default("viewer"),
-    inviteToken: text("inviteToken", { length: 255 }),
-    inviteExpiresAt: integer("inviteExpiresAt", { mode: "timestamp_ms" }),
-    resetToken: text("resetToken", { length: 255 }),
-    resetExpiresAt: integer("resetExpiresAt", { mode: "timestamp_ms" }),
-    isPortalActive: integer("isPortalActive", { mode: "boolean" }).default(false).notNull(), // true after invite accepted
-    lastLoginAt: integer("lastLoginAt", { mode: "timestamp_ms" }),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    inviteToken: varchar("inviteToken", { length: 255 }),
+    inviteExpiresAt: timestamp("inviteExpiresAt", { withTimezone: true, mode: "date" }),
+    resetToken: varchar("resetToken", { length: 255 }),
+    resetExpiresAt: timestamp("resetExpiresAt", { withTimezone: true, mode: "date" }),
+    isPortalActive: boolean("isPortalActive").default(false).notNull(), // true after invite accepted
+    lastLoginAt: timestamp("lastLoginAt", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     customerIdIdx: index("cc_customer_id_idx").on(table.customerId),
@@ -233,28 +238,28 @@ export type CustomerContact = typeof customerContacts.$inferSelect;
 export type InsertCustomerContact = typeof customerContacts.$inferInsert;
 
 // Customer Pricing — global discount OR country-specific fixed prices
-export const customerPricing = sqliteTable(
+export const customerPricing = pgTable(
   "customer_pricing",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     customerId: integer("customerId").notNull(),
     pricingType: text("pricingType", { enum: ["global_discount", "country_specific", "client_aor_fixed"] }).notNull(),
     // For global_discount: discount percentage (e.g. 10 = 10% off standard price)
     globalDiscountPercent: text("globalDiscountPercent"),
     // For country_specific: fixed price per employee per month
     // For client_aor_fixed: fixed price for AOR globally (ignores countryCode)
-    countryCode: text("countryCode", { length: 3 }),
+    countryCode: varchar("countryCode", { length: 3 }),
     serviceType: text("serviceType", { enum: ["eor", "visa_eor", "aor"] }),
     fixedPrice: text("fixedPrice"),
     visaOneTimeFee: text("visaOneTimeFee"),
-    currency: text("currency", { length: 3 }).default("USD"),
+    currency: varchar("currency", { length: 3 }).default("USD"),
     effectiveFrom: text("effectiveFrom").notNull(),
     effectiveTo: text("effectiveTo"),
     // Traceability to source quotation
     sourceQuotationId: integer("sourceQuotationId"), 
-    isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     customerIdIdx: index("cp_customer_id_idx").on(table.customerId),
@@ -266,21 +271,21 @@ export type CustomerPricing = typeof customerPricing.$inferSelect;
 export type InsertCustomerPricing = typeof customerPricing.$inferInsert;
 
 // Customer Contracts
-export const customerContracts = sqliteTable(
+export const customerContracts = pgTable(
   "customer_contracts",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     customerId: integer("customerId").notNull(),
-    contractName: text("contractName", { length: 255 }).notNull(),
-    contractType: text("contractType", { length: 100 }),
+    contractName: varchar("contractName", { length: 255 }).notNull(),
+    contractType: varchar("contractType", { length: 100 }),
     fileUrl: text("fileUrl"),
-    fileKey: text("fileKey", { length: 500 }),
+    fileKey: varchar("fileKey", { length: 500 }),
     signedDate: text("signedDate"),
     effectiveDate: text("effectiveDate"),
     expiryDate: text("expiryDate"),
     status: text("status", { enum: ["draft", "signed", "expired", "terminated"] }).default("draft").notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     cctrCustomerIdIdx: index("cctr_customer_id_idx").on(table.customerId),
@@ -291,19 +296,19 @@ export type CustomerContract = typeof customerContracts.$inferSelect;
 export type InsertCustomerContract = typeof customerContracts.$inferInsert;
 
 // Customer Leave Policies — company-level leave configuration per country
-export const customerLeavePolicies = sqliteTable(
+export const customerLeavePolicies = pgTable(
   "customer_leave_policies",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     customerId: integer("customerId").notNull(),
-    countryCode: text("countryCode", { length: 3 }).notNull(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull(),
     leaveTypeId: integer("leaveTypeId").notNull(),
     annualEntitlement: integer("annualEntitlement").notNull(), // Days per year (must be >= statutory minimum)
     expiryRule: text("expiryRule", { enum: ["year_end", "anniversary", "no_expiry"] }).default("year_end").notNull(),
     carryOverDays: integer("carryOverDays").default(0).notNull(), // Max days that can carry over to next year (0 = no carry over)
-    clientConfirmed: integer("clientConfirmed", { mode: "boolean" }).default(false).notNull(), // Whether client has reviewed and confirmed this policy
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    clientConfirmed: boolean("clientConfirmed").default(false).notNull(), // Whether client has reviewed and confirmed this policy
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     clpCustomerIdIdx: index("clp_customer_id_idx").on(table.customerId),
@@ -319,31 +324,31 @@ export type InsertCustomerLeavePolicy = typeof customerLeavePolicies.$inferInser
 // 4. EMPLOYEE MANAGEMENT
 // ============================================================================
 
-export const employees = sqliteTable(
+export const employees = pgTable(
   "employees",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    employeeCode: text("employeeCode", { length: 20 }).unique(), // Auto-generated: EMP-0001
+    id: serial("id").primaryKey(),
+    employeeCode: varchar("employeeCode", { length: 20 }).unique(), // Auto-generated: EMP-0001
     customerId: integer("customerId").notNull(),
     // Personal info
-    firstName: text("firstName", { length: 100 }).notNull(),
-    lastName: text("lastName", { length: 100 }).notNull(),
-    email: text("email", { length: 320 }).notNull(),
-    phone: text("phone", { length: 20 }),
+    firstName: varchar("firstName", { length: 100 }).notNull(),
+    lastName: varchar("lastName", { length: 100 }).notNull(),
+    email: varchar("email", { length: 320 }).notNull(),
+    phone: varchar("phone", { length: 20 }),
     dateOfBirth: text("dateOfBirth"),
     gender: text("gender", { enum: ["male", "female", "other", "prefer_not_to_say"] }),
-    nationality: text("nationality", { length: 100 }),
-    idNumber: text("idNumber", { length: 100 }),
-    idType: text("idType", { length: 50 }),
+    nationality: varchar("nationality", { length: 100 }),
+    idNumber: varchar("idNumber", { length: 100 }),
+    idType: varchar("idType", { length: 50 }),
     // Address
     address: text("address"),
-    city: text("city", { length: 100 }),
-    state: text("state", { length: 100 }),
-    country: text("country", { length: 100 }).notNull(), // Employment country
-    postalCode: text("postalCode", { length: 20 }),
+    city: varchar("city", { length: 100 }),
+    state: varchar("state", { length: 100 }),
+    country: varchar("country", { length: 100 }).notNull(), // Employment country
+    postalCode: varchar("postalCode", { length: 20 }),
     // Employment details
-    department: text("department", { length: 100 }),
-    jobTitle: text("jobTitle", { length: 255 }).notNull(),
+    department: varchar("department", { length: 100 }),
+    jobTitle: varchar("jobTitle", { length: 255 }).notNull(),
     jobDescription: text("jobDescription"),
     serviceType: text("serviceType", { enum: ["eor", "visa_eor", "aor"] }).default("eor").notNull(),
     employmentType: text("employmentType", { enum: ["fixed_term", "long_term"] }).default("long_term").notNull(),
@@ -362,10 +367,10 @@ export const employees = sqliteTable(
     ] }).default("pending_review").notNull(),
     // Compensation
     baseSalary: text("baseSalary").notNull(),
-    salaryCurrency: text("salaryCurrency", { length: 3 }).default("USD").notNull(),
+    salaryCurrency: varchar("salaryCurrency", { length: 3 }).default("USD").notNull(),
     estimatedEmployerCost: text("estimatedEmployerCost").default("0"), // Pre-employment estimate for deposit calculation
     // Visa tracking
-    requiresVisa: integer("requiresVisa", { mode: "boolean" }).default(false).notNull(),
+    requiresVisa: boolean("requiresVisa").default(false).notNull(),
     visaStatus: text("visaStatus", { enum: [
       "not_required",
       "pending_application",
@@ -377,10 +382,10 @@ export const employees = sqliteTable(
     visaExpiryDate: text("visaExpiryDate"),
     visaNotes: text("visaNotes"),
     // Bank Details (Dynamic JSON based on country requirements)
-    bankDetails: text("bankDetails", { mode: "json" }),
+    bankDetails: jsonb("bankDetails"),
     // Metadata
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     empCustomerIdIdx: index("emp_customer_id_idx").on(table.customerId),
@@ -395,20 +400,20 @@ export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = typeof employees.$inferInsert;
 
 // Employee Contracts
-export const employeeContracts = sqliteTable(
+export const employeeContracts = pgTable(
   "employee_contracts",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     employeeId: integer("employeeId").notNull(),
-    contractType: text("contractType", { length: 100 }),
+    contractType: varchar("contractType", { length: 100 }),
     fileUrl: text("fileUrl"),
-    fileKey: text("fileKey", { length: 500 }),
+    fileKey: varchar("fileKey", { length: 500 }),
     signedDate: text("signedDate"),
     effectiveDate: text("effectiveDate"),
     expiryDate: text("expiryDate"),
     status: text("status", { enum: ["draft", "signed", "expired", "terminated"] }).default("draft").notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     ecEmployeeIdIdx: index("ec_employee_id_idx").on(table.employeeId),
@@ -422,10 +427,10 @@ export type InsertEmployeeContract = typeof employeeContracts.$inferInsert;
 // 5. LEAVE MANAGEMENT
 // ============================================================================
 
-export const leaveBalances = sqliteTable(
+export const leaveBalances = pgTable(
   "leave_balances",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     employeeId: integer("employeeId").notNull(),
     leaveTypeId: integer("leaveTypeId").notNull(),
     year: integer("year").notNull(),
@@ -433,8 +438,8 @@ export const leaveBalances = sqliteTable(
     used: integer("used").default(0).notNull(),
     remaining: integer("remaining").notNull(),
     expiryDate: text("expiryDate"), // When this leave balance expires (null = no expiry, carries over)
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     lbEmployeeIdIdx: index("lb_employee_id_idx").on(table.employeeId),
@@ -446,10 +451,10 @@ export const leaveBalances = sqliteTable(
 export type LeaveBalance = typeof leaveBalances.$inferSelect;
 export type InsertLeaveBalance = typeof leaveBalances.$inferInsert;
 
-export const leaveRecords = sqliteTable(
+export const leaveRecords = pgTable(
   "leave_records",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     employeeId: integer("employeeId").notNull(),
     leaveTypeId: integer("leaveTypeId").notNull(),
     startDate: text("startDate").notNull(),
@@ -468,14 +473,14 @@ export const leaveRecords = sqliteTable(
     submittedBy: integer("submittedBy"), // User ID who created this
     // Approval tracking
     clientApprovedBy: integer("clientApprovedBy"), // Portal contact ID who approved/rejected
-    clientApprovedAt: integer("clientApprovedAt", { mode: "timestamp_ms" }),
+    clientApprovedAt: timestamp("clientApprovedAt", { withTimezone: true, mode: "date" }),
     clientRejectionReason: text("clientRejectionReason"),
     adminApprovedBy: integer("adminApprovedBy"), // Admin user ID who confirmed
-    adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp_ms" }),
+    adminApprovedAt: timestamp("adminApprovedAt", { withTimezone: true, mode: "date" }),
     adminRejectionReason: text("adminRejectionReason"),
     payrollRunId: integer("payrollRunId"), // Linked to payroll when locked
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     lrEmployeeIdIdx: index("lr_employee_id_idx").on(table.employeeId),
@@ -492,10 +497,10 @@ export type InsertLeaveRecord = typeof leaveRecords.$inferInsert;
 // 6. ADJUSTMENTS (异动薪酬) — Bonuses, Allowances, Reimbursements
 // ============================================================================
 
-export const adjustments = sqliteTable(
+export const adjustments = pgTable(
   "adjustments",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     employeeId: integer("employeeId").notNull(),
     customerId: integer("customerId").notNull(), // Auto-filled from employee
     payrollRunId: integer("payrollRunId"), // Linked to payroll when locked
@@ -520,10 +525,10 @@ export const adjustments = sqliteTable(
     ] }),
     description: text("description"),
     amount: text("amount").notNull(),
-    currency: text("currency", { length: 3 }).default("USD").notNull(), // Auto-filled from employee's country
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(), // Auto-filled from employee's country
     // For reimbursements: receipt
     receiptFileUrl: text("receiptFileUrl"),
-    receiptFileKey: text("receiptFileKey", { length: 500 }),
+    receiptFileKey: varchar("receiptFileKey", { length: 500 }),
     // Status workflow: submitted → client_approved/client_rejected → admin_approved/admin_rejected → locked
     status: text("status", { enum: [
       "submitted",
@@ -536,15 +541,15 @@ export const adjustments = sqliteTable(
     submittedBy: integer("submittedBy"), // User ID who created this
     // Approval tracking
     clientApprovedBy: integer("clientApprovedBy"),
-    clientApprovedAt: integer("clientApprovedAt", { mode: "timestamp_ms" }),
+    clientApprovedAt: timestamp("clientApprovedAt", { withTimezone: true, mode: "date" }),
     clientRejectionReason: text("clientRejectionReason"),
     adminApprovedBy: integer("adminApprovedBy"),
-    adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp_ms" }),
+    adminApprovedAt: timestamp("adminApprovedAt", { withTimezone: true, mode: "date" }),
     adminRejectionReason: text("adminRejectionReason"),
     // Target month
     effectiveMonth: text("effectiveMonth").notNull(), // Which payroll month this applies to (YYYY-MM-01)
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     adjEmployeeIdIdx: index("adj_employee_id_idx").on(table.employeeId),
@@ -562,15 +567,15 @@ export type InsertAdjustment = typeof adjustments.$inferInsert;
 // 7. PAYROLL MANAGEMENT
 // ============================================================================
 
-export const payrollRuns = sqliteTable(
+export const payrollRuns = pgTable(
   "payroll_runs",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     // Payroll runs are organized by country + period (not by customer)
     // All active employees in this country are included regardless of customer
-    countryCode: text("countryCode", { length: 3 }).notNull(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull(),
     payrollMonth: text("payrollMonth").notNull(), // First day of the month
-    currency: text("currency", { length: 3 }).notNull(), // = country's legal currency
+    currency: varchar("currency", { length: 3 }).notNull(), // = country's legal currency
     status: text("status", { enum: [
       "draft",
       "pending_approval",
@@ -583,15 +588,15 @@ export const payrollRuns = sqliteTable(
     totalEmployerCost: text("totalEmployerCost").default("0"),
     // Cross-approval: operations manager submits, another ops manager approves
     submittedBy: integer("submittedBy"),
-    submittedAt: integer("submittedAt", { mode: "timestamp_ms" }),
+    submittedAt: timestamp("submittedAt", { withTimezone: true, mode: "date" }),
     approvedBy: integer("approvedBy"),
-    approvedAt: integer("approvedAt", { mode: "timestamp_ms" }),
+    approvedAt: timestamp("approvedAt", { withTimezone: true, mode: "date" }),
     rejectedBy: integer("rejectedBy"),
-    rejectedAt: integer("rejectedAt", { mode: "timestamp_ms" }),
+    rejectedAt: timestamp("rejectedAt", { withTimezone: true, mode: "date" }),
     rejectionReason: text("rejectionReason"),
     notes: text("notes"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     prPayrollMonthIdx: index("pr_payroll_month_idx").on(table.payrollMonth),
@@ -604,10 +609,10 @@ export const payrollRuns = sqliteTable(
 export type PayrollRun = typeof payrollRuns.$inferSelect;
 export type InsertPayrollRun = typeof payrollRuns.$inferInsert;
 
-export const payrollItems = sqliteTable(
+export const payrollItems = pgTable(
   "payroll_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     payrollRunId: integer("payrollRunId").notNull(),
     employeeId: integer("employeeId").notNull(),
     baseSalary: text("baseSalary").notNull(),
@@ -623,12 +628,12 @@ export const payrollItems = sqliteTable(
     net: text("net").notNull(),
     employerSocialContribution: text("employerSocialContribution").default("0"),
     totalEmploymentCost: text("totalEmploymentCost").notNull(), // gross + employer contributions
-    currency: text("currency", { length: 3 }).default("USD").notNull(),
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
     notes: text("notes"),
     // JSON breakdown of adjustments included
-    adjustmentsBreakdown: text("adjustmentsBreakdown", { mode: "json" }),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    adjustmentsBreakdown: jsonb("adjustmentsBreakdown"),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     piPayrollRunIdIdx: index("pi_payroll_run_id_idx").on(table.payrollRunId),
@@ -644,13 +649,13 @@ export type InsertPayrollItem = typeof payrollItems.$inferInsert;
 // 8. INVOICE MANAGEMENT
 // ============================================================================
 
-export const invoices = sqliteTable(
+export const invoices = pgTable(
   "invoices",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     customerId: integer("customerId").notNull(),
     billingEntityId: integer("billingEntityId"), // Which billing entity issues this invoice
-    invoiceNumber: text("invoiceNumber", { length: 100 }).notNull().unique(),
+    invoiceNumber: varchar("invoiceNumber", { length: 100 }).notNull().unique(),
     invoiceType: text("invoiceType", { enum: [
       "deposit",
       "monthly_eor",
@@ -667,7 +672,7 @@ export const invoices = sqliteTable(
     // Invoice aggregates from multiple country-based payroll runs for this customer
     // The link is: invoice -> invoiceItems -> employeeId -> payrollItems
     // No single payrollRunId since invoice spans multiple countries
-    currency: text("currency", { length: 3 }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
     exchangeRate: text("exchangeRate").default("1"),
     exchangeRateWithMarkup: text("exchangeRateWithMarkup").default("1"),
     subtotal: text("subtotal").notNull(),
@@ -686,8 +691,8 @@ export const invoices = sqliteTable(
       "applied",
     ] }).default("draft").notNull(),
     dueDate: text("dueDate"),
-    sentDate: integer("sentDate", { mode: "timestamp_ms" }),
-    paidDate: integer("paidDate", { mode: "timestamp_ms" }),
+    sentDate: timestamp("sentDate", { withTimezone: true, mode: "date" }),
+    paidDate: timestamp("paidDate", { withTimezone: true, mode: "date" }),
     paidAmount: text("paidAmount"),
     // Credit note application tracking
     creditApplied: text("creditApplied").default("0"), // Total credit applied to this invoice
@@ -699,8 +704,8 @@ export const invoices = sqliteTable(
     relatedInvoiceId: integer("relatedInvoiceId"),
     notes: text("notes"),
     internalNotes: text("internalNotes"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     invCustomerIdIdx: index("inv_customer_id_idx").on(table.customerId),
@@ -713,14 +718,14 @@ export const invoices = sqliteTable(
 export type Invoice = typeof invoices.$inferSelect;
 export type InsertInvoice = typeof invoices.$inferInsert;
 
-export const invoiceItems = sqliteTable(
+export const invoiceItems = pgTable(
   "invoice_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     invoiceId: integer("invoiceId").notNull(),
     employeeId: integer("employeeId"),
     contractorId: integer("contractorId"), // FK → contractors.id (for AOR line items)
-    description: text("description", { length: 500 }).notNull(),
+    description: varchar("description", { length: 500 }).notNull(),
     quantity: text("quantity").default("1").notNull(),
     unitPrice: text("unitPrice").notNull(),
     amount: text("amount").notNull(),
@@ -747,13 +752,13 @@ export const invoiceItems = sqliteTable(
       "management_consulting_fee",
     ] }).notNull(),
     vatRate: text("vatRate").default("0"), // Tax rate percentage (e.g. 10.00 = 10%)
-    countryCode: text("countryCode", { length: 3 }), // Which country this line item relates to
-    localCurrency: text("localCurrency", { length: 3 }), // Original currency before conversion
+    countryCode: varchar("countryCode", { length: 3 }), // Which country this line item relates to
+    localCurrency: varchar("localCurrency", { length: 3 }), // Original currency before conversion
     localAmount: text("localAmount"), // Amount in local currency
     exchangeRate: text("exchangeRate"), // Rate used for conversion
     exchangeRateWithMarkup: text("exchangeRateWithMarkup"), // Rate with markup
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     iiInvoiceIdIdx: index("ii_invoice_id_idx").on(table.invoiceId),
@@ -769,19 +774,19 @@ export type InsertInvoiceItem = typeof invoiceItems.$inferInsert;
 // 9. SYSTEM MANAGEMENT
 // ============================================================================
 
-export const exchangeRates = sqliteTable(
+export const exchangeRates = pgTable(
   "exchange_rates",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    fromCurrency: text("fromCurrency", { length: 3 }).notNull(),
-    toCurrency: text("toCurrency", { length: 3 }).notNull(),
+    id: serial("id").primaryKey(),
+    fromCurrency: varchar("fromCurrency", { length: 3 }).notNull(),
+    toCurrency: varchar("toCurrency", { length: 3 }).notNull(),
     rate: text("rate").notNull(),
     rateWithMarkup: text("rateWithMarkup").notNull(), // rate * (1 + markupPercentage)
     markupPercentage: text("markupPercentage").default("5.00").notNull(), // e.g. 5.00 = 5%
-    source: text("source", { length: 100 }),
+    source: varchar("source", { length: 100 }),
     effectiveDate: text("effectiveDate").notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     erCurrencyPairIdx: uniqueIndex("er_currency_pair_idx").on(
@@ -795,19 +800,19 @@ export const exchangeRates = sqliteTable(
 export type ExchangeRate = typeof exchangeRates.$inferSelect;
 export type InsertExchangeRate = typeof exchangeRates.$inferInsert;
 
-export const auditLogs = sqliteTable(
+export const auditLogs = pgTable(
   "audit_logs",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     userId: integer("userId"),
-    userName: text("userName", { length: 255 }),
-    action: text("action", { length: 100 }).notNull(),
-    entityType: text("entityType", { length: 100 }).notNull(),
+    userName: varchar("userName", { length: 255 }),
+    action: varchar("action", { length: 100 }).notNull(),
+    entityType: varchar("entityType", { length: 100 }).notNull(),
     entityId: integer("entityId"),
-    changes: text("changes", { mode: "json" }),
-    ipAddress: text("ipAddress", { length: 50 }),
+    changes: jsonb("changes"),
+    ipAddress: varchar("ipAddress", { length: 50 }),
     userAgent: text("userAgent"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     alUserIdIdx: index("al_user_id_idx").on(table.userId),
@@ -819,15 +824,15 @@ export const auditLogs = sqliteTable(
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = typeof auditLogs.$inferInsert;
 
-export const systemSettings = sqliteTable(
+export const systemSettings = pgTable(
   "system_settings",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    key: text("key", { length: 100 }).notNull().unique(),
+    id: serial("id").primaryKey(),
+    key: varchar("key", { length: 100 }).notNull().unique(),
     value: text("value").notNull(),
     description: text("description"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     ssKeyIdx: uniqueIndex("ss_key_idx").on(table.key),
@@ -838,10 +843,10 @@ export type SystemSetting = typeof systemSettings.$inferSelect;
 export type InsertSystemSetting = typeof systemSettings.$inferInsert;
 
 // ── Employee Documents ──────────────────────────────────────────────
-export const employeeDocuments = sqliteTable(
+export const employeeDocuments = pgTable(
   "employee_documents",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     employeeId: integer("employeeId").notNull(),
     documentType: text("documentType", { enum: [
       "resume",
@@ -855,15 +860,15 @@ export const employeeDocuments = sqliteTable(
       "reimbursement_receipt",
       "other",
     ] }).notNull(),
-    documentName: text("documentName", { length: 255 }).notNull(),
+    documentName: varchar("documentName", { length: 255 }).notNull(),
     fileUrl: text("fileUrl").notNull(),
-    fileKey: text("fileKey", { length: 500 }).notNull(),
-    mimeType: text("mimeType", { length: 100 }),
+    fileKey: varchar("fileKey", { length: 500 }).notNull(),
+    mimeType: varchar("mimeType", { length: 100 }),
     fileSize: integer("fileSize"),
     notes: text("notes"),
-    uploadedAt: integer("uploadedAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    uploadedAt: timestamp("uploadedAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     edEmployeeIdIdx: index("ed_employee_id_idx").on(table.employeeId),
@@ -877,34 +882,34 @@ export type InsertEmployeeDocument = typeof employeeDocuments.$inferInsert;
 // 10. BILLING ENTITIES
 // ============================================================================
 
-export const billingEntities = sqliteTable(
+export const billingEntities = pgTable(
   "billing_entities",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    entityName: text("entityName", { length: 255 }).notNull(),
-    legalName: text("legalName", { length: 255 }).notNull(),
-    registrationNumber: text("registrationNumber", { length: 100 }),
-    taxId: text("taxId", { length: 100 }),
-    country: text("country", { length: 100 }).notNull(),
+    id: serial("id").primaryKey(),
+    entityName: varchar("entityName", { length: 255 }).notNull(),
+    legalName: varchar("legalName", { length: 255 }).notNull(),
+    registrationNumber: varchar("registrationNumber", { length: 100 }),
+    taxId: varchar("taxId", { length: 100 }),
+    country: varchar("country", { length: 100 }).notNull(),
     address: text("address"),
-    city: text("city", { length: 100 }),
-    state: text("state", { length: 100 }),
-    postalCode: text("postalCode", { length: 20 }),
+    city: varchar("city", { length: 100 }),
+    state: varchar("state", { length: 100 }),
+    postalCode: varchar("postalCode", { length: 20 }),
     bankDetails: text("bankDetails"), // Free-text bank info (multiline, admin-configured per country)
-    currency: text("currency", { length: 3 }).default("USD").notNull(),
-    contactEmail: text("contactEmail", { length: 320 }),
-    contactPhone: text("contactPhone", { length: 20 }),
-    isDefault: integer("isDefault", { mode: "boolean" }).default(false).notNull(),
-    isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+    contactEmail: varchar("contactEmail", { length: 320 }),
+    contactPhone: varchar("contactPhone", { length: 20 }),
+    isDefault: boolean("isDefault").default(false).notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
     // Finance Phase 2 fields
     logoUrl: text("logoUrl"), // S3 URL for entity logo
-    logoFileKey: text("logoFileKey", { length: 500 }), // S3 key for logo file
-    invoicePrefix: text("invoicePrefix", { length: 20 }), // e.g. "APAC-" for invoice numbering
+    logoFileKey: varchar("logoFileKey", { length: 500 }), // S3 key for logo file
+    invoicePrefix: varchar("invoicePrefix", { length: 20 }), // e.g. "APAC-" for invoice numbering
     paymentTermDays: integer("paymentTermDays").default(30).notNull(), // Payment terms in days
     invoiceSequence: integer("invoiceSequence").default(0).notNull(), // Last used invoice sequence number
     notes: text("notes"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     beCountryIdx: index("be_country_idx").on(table.country),
@@ -924,18 +929,18 @@ export type InsertBillingEntity = typeof billingEntities.$inferInsert;
  * Tracks how credit notes are applied (offset) against regular invoices.
  * A single credit note can be applied across multiple invoices until its balance is zero.
  */
-export const creditNoteApplications = sqliteTable(
+export const creditNoteApplications = pgTable(
   "credit_note_applications",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     creditNoteId: integer("creditNoteId").notNull(), // The credit_note invoice being applied
     appliedToInvoiceId: integer("appliedToInvoiceId").notNull(), // The regular invoice receiving the credit
     appliedAmount: text("appliedAmount").notNull(), // Positive value representing the credit applied
     notes: text("notes"),
-    appliedAt: integer("appliedAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    appliedAt: timestamp("appliedAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
     appliedBy: integer("appliedBy"), // User who applied the credit
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     cnaCreditNoteIdx: index("cna_credit_note_idx").on(table.creditNoteId),
@@ -949,14 +954,14 @@ export type InsertCreditNoteApplication = typeof creditNoteApplications.$inferIn
 // ============================================================================
 // 11. EMPLOYEE SELF-SERVICE ONBOARDING INVITES
 // ============================================================================
-export const onboardingInvites = sqliteTable(
+export const onboardingInvites = pgTable(
   "onboarding_invites",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     customerId: integer("customerId").notNull(),
-    employeeName: text("employeeName", { length: 200 }).notNull(),
-    employeeEmail: text("employeeEmail", { length: 320 }).notNull(),
-    token: text("token", { length: 64 }).notNull().unique(),
+    employeeName: varchar("employeeName", { length: 200 }).notNull(),
+    employeeEmail: varchar("employeeEmail", { length: 320 }).notNull(),
+    token: varchar("token", { length: 64 }).notNull().unique(),
     status: text("status", { enum: [
       "pending",
       "completed",
@@ -965,28 +970,28 @@ export const onboardingInvites = sqliteTable(
     ] }).default("pending").notNull(),
     // Employer-provided fields (filled during invite flow step 2)
     serviceType: text("serviceType", { enum: ["eor", "visa_eor", "aor"] }).default("eor"),
-    country: text("country", { length: 100 }),
-    jobTitle: text("jobTitle", { length: 255 }),
+    country: varchar("country", { length: 100 }),
+    jobTitle: varchar("jobTitle", { length: 255 }),
     jobDescription: text("jobDescription"),
-    department: text("department", { length: 100 }),
+    department: varchar("department", { length: 100 }),
     startDate: text("startDate"),
     endDate: text("endDate"),
-    employmentType: text("employmentType", { length: 50 }),
+    employmentType: varchar("employmentType", { length: 50 }),
     // EOR compensation
     baseSalary: text("baseSalary"),
-    salaryCurrency: text("salaryCurrency", { length: 3 }),
+    salaryCurrency: varchar("salaryCurrency", { length: 3 }),
     // AOR compensation
-    paymentFrequency: text("paymentFrequency", { length: 50 }),
+    paymentFrequency: varchar("paymentFrequency", { length: 50 }),
     rateAmount: text("rateAmount"),
-    contractorCurrency: text("contractorCurrency", { length: 3 }),
+    contractorCurrency: varchar("contractorCurrency", { length: 3 }),
     // Completion links
     employeeId: integer("employeeId"),
     contractorId: integer("contractorId"),
-    expiresAt: integer("expiresAt", { mode: "timestamp_ms" }).notNull(),
-    completedAt: integer("completedAt", { mode: "timestamp_ms" }),
+    expiresAt: timestamp("expiresAt", { withTimezone: true, mode: "date" }).notNull(),
+    completedAt: timestamp("completedAt", { withTimezone: true, mode: "date" }),
     createdBy: integer("createdBy"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     oiTokenIdx: uniqueIndex("oi_token_idx").on(table.token),
@@ -1002,10 +1007,10 @@ export type InsertOnboardingInvite = typeof onboardingInvites.$inferInsert;
 // 12. REIMBURSEMENTS (报销) — Split from Adjustments
 // ============================================================================
 
-export const reimbursements = sqliteTable(
+export const reimbursements = pgTable(
   "reimbursements",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     employeeId: integer("employeeId").notNull(),
     customerId: integer("customerId").notNull(), // Auto-filled from employee
     payrollRunId: integer("payrollRunId"), // Linked to payroll when locked
@@ -1022,10 +1027,10 @@ export const reimbursements = sqliteTable(
     ] }).notNull(),
     description: text("description"),
     amount: text("amount").notNull(),
-    currency: text("currency", { length: 3 }).default("USD").notNull(),
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
     // Receipt / supporting document
     receiptFileUrl: text("receiptFileUrl"),
-    receiptFileKey: text("receiptFileKey", { length: 500 }),
+    receiptFileKey: varchar("receiptFileKey", { length: 500 }),
     // Status workflow: submitted → client_approved/client_rejected → admin_approved/admin_rejected → locked
     status: text("status", { enum: [
       "submitted",
@@ -1038,15 +1043,15 @@ export const reimbursements = sqliteTable(
     submittedBy: integer("submittedBy"), // User/contact ID who created this
     // Approval tracking
     clientApprovedBy: integer("clientApprovedBy"),
-    clientApprovedAt: integer("clientApprovedAt", { mode: "timestamp_ms" }),
+    clientApprovedAt: timestamp("clientApprovedAt", { withTimezone: true, mode: "date" }),
     clientRejectionReason: text("clientRejectionReason"),
     adminApprovedBy: integer("adminApprovedBy"),
-    adminApprovedAt: integer("adminApprovedAt", { mode: "timestamp_ms" }),
+    adminApprovedAt: timestamp("adminApprovedAt", { withTimezone: true, mode: "date" }),
     adminRejectionReason: text("adminRejectionReason"),
     // Target month
     effectiveMonth: text("effectiveMonth").notNull(), // Which payroll month this applies to (YYYY-MM-01)
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     reimbEmployeeIdIdx: index("reimb_employee_id_idx").on(table.employeeId),
@@ -1067,25 +1072,25 @@ export type InsertReimbursement = typeof reimbursements.$inferInsert;
  * Vendors — external service providers used globally.
  * Tracks company info, contacts, bank details, and service type.
  */
-export const vendors = sqliteTable(
+export const vendors = pgTable(
   "vendors",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    vendorCode: text("vendorCode", { length: 20 }).unique(), // Auto-generated: VND-0001
-    name: text("name", { length: 255 }).notNull(),
-    legalName: text("legalName", { length: 255 }),
-    contactName: text("contactName", { length: 255 }),
-    contactEmail: text("contactEmail", { length: 320 }),
-    contactPhone: text("contactPhone", { length: 50 }),
-    country: text("country", { length: 100 }).notNull(),
+    id: serial("id").primaryKey(),
+    vendorCode: varchar("vendorCode", { length: 20 }).unique(), // Auto-generated: VND-0001
+    name: varchar("name", { length: 255 }).notNull(),
+    legalName: varchar("legalName", { length: 255 }),
+    contactName: varchar("contactName", { length: 255 }),
+    contactEmail: varchar("contactEmail", { length: 320 }),
+    contactPhone: varchar("contactPhone", { length: 50 }),
+    country: varchar("country", { length: 100 }).notNull(),
     address: text("address"),
-    city: text("city", { length: 100 }),
-    state: text("state", { length: 100 }),
-    postalCode: text("postalCode", { length: 20 }),
-    serviceType: text("serviceType", { length: 100 }), // e.g. "Payroll Processing", "Legal", "IT"
-    currency: text("currency", { length: 3 }).default("USD").notNull(), // Default payment currency
+    city: varchar("city", { length: 100 }),
+    state: varchar("state", { length: 100 }),
+    postalCode: varchar("postalCode", { length: 20 }),
+    serviceType: varchar("serviceType", { length: 100 }), // e.g. "Payroll Processing", "Legal", "IT"
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(), // Default payment currency
     bankDetails: text("bankDetails"), // Free-text bank info (multiline)
-    taxId: text("taxId", { length: 100 }),
+    taxId: varchar("taxId", { length: 100 }),
     paymentTermDays: integer("paymentTermDays").default(30).notNull(),
     vendorType: text("vendorType", { enum: [
       "client_related",
@@ -1098,8 +1103,8 @@ export const vendors = sqliteTable(
     ] }).default("client_related").notNull(),
     status: text("status", { enum: ["active", "inactive"] }).default("active").notNull(),
     notes: text("notes"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     vdrNameIdx: index("vdr_name_idx").on(table.name),
@@ -1119,17 +1124,17 @@ export type InsertVendor = typeof vendors.$inferInsert;
  * Vendor Bills — tracks payments owed/made to vendors.
  * This is the "expense" counterpart to the "revenue" invoices table.
  */
-export const vendorBills = sqliteTable(
+export const vendorBills = pgTable(
   "vendor_bills",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     vendorId: integer("vendorId").notNull(),
-    billNumber: text("billNumber", { length: 100 }).notNull(), // Vendor's invoice/bill number
+    billNumber: varchar("billNumber", { length: 100 }).notNull(), // Vendor's invoice/bill number
     billDate: text("billDate").notNull(),
     dueDate: text("dueDate"),
     paidDate: text("paidDate"),
     billMonth: text("billMonth"), // Which service month this bill covers (YYYY-MM-01)
-    currency: text("currency", { length: 3 }).default("USD").notNull(),
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
     subtotal: text("subtotal").notNull(),
     tax: text("tax").default("0"),
     totalAmount: text("totalAmount").notNull(),
@@ -1165,14 +1170,14 @@ export const vendorBills = sqliteTable(
     internalNotes: text("internalNotes"),
     // File attachment (vendor's original invoice/receipt)
     receiptFileUrl: text("receiptFileUrl"),
-    receiptFileKey: text("receiptFileKey", { length: 500 }),
+    receiptFileKey: varchar("receiptFileKey", { length: 500 }),
     // Bank settlement fields (from POP - Proof of Payment)
-    bankReference: text("bankReference", { length: 200 }), // Bank transaction reference number
-    bankName: text("bankName", { length: 255 }),
+    bankReference: varchar("bankReference", { length: 200 }), // Bank transaction reference number
+    bankName: varchar("bankName", { length: 255 }),
     bankFee: text("bankFee").default("0"), // Bank wire fee (USD)
     // ── Settlement (Actual Payment) fields ──
     // Populated when bill is marked as "paid"; represents the REAL USD cost
-    settlementCurrency: text("settlementCurrency", { length: 3 }).default("USD"), // Currency actually used for bank transfer
+    settlementCurrency: varchar("settlementCurrency", { length: 3 }).default("USD"), // Currency actually used for bank transfer
     settlementAmount: text("settlementAmount"),   // Actual USD principal paid to vendor via bank
     settlementBankFee: text("settlementBankFee"), // Bank wire/transfer fee incurred during this payment
     settlementDate: text("settlementDate"),       // Date the bank transfer was executed
@@ -1182,11 +1187,11 @@ export const vendorBills = sqliteTable(
     unallocatedAmount: text("unallocatedAmount").default("0"), // totalAmount - allocatedAmount (operational cost)
     // Approval workflow
     submittedBy: integer("submittedBy"),
-    submittedAt: integer("submittedAt", { mode: "timestamp_ms" }),
+    submittedAt: timestamp("submittedAt", { withTimezone: true, mode: "date" }),
     approvedBy: integer("approvedBy"),
-    approvedAt: integer("approvedAt", { mode: "timestamp_ms" }),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    approvedAt: timestamp("approvedAt", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     vbVendorIdIdx: index("vb_vendor_id_idx").on(table.vendorId),
@@ -1209,12 +1214,12 @@ export type InsertVendorBill = typeof vendorBills.$inferInsert;
  * Vendor Bill Items — detailed line items within a vendor bill.
  * Allows cost allocation to specific customers, employees, or countries.
  */
-export const vendorBillItems = sqliteTable(
+export const vendorBillItems = pgTable(
   "vendor_bill_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     vendorBillId: integer("vendorBillId").notNull(),
-    description: text("description", { length: 500 }).notNull(),
+    description: varchar("description", { length: 500 }).notNull(),
     quantity: text("quantity").default("1").notNull(),
     unitPrice: text("unitPrice").notNull(),
     amount: text("amount").notNull(),
@@ -1229,9 +1234,9 @@ export const vendorBillItems = sqliteTable(
     // Cost allocation fields (optional — for linking expenses to revenue)
     relatedCustomerId: integer("relatedCustomerId"),
     relatedEmployeeId: integer("relatedEmployeeId"),
-    relatedCountryCode: text("relatedCountryCode", { length: 3 }),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    relatedCountryCode: varchar("relatedCountryCode", { length: 3 }),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     vbiVendorBillIdIdx: index("vbi_vendor_bill_id_idx").on(table.vendorBillId),
@@ -1260,10 +1265,10 @@ export type InsertVendorBillItem = typeof vendorBillItems.$inferInsert;
  * - Loss scenario: If allocations exceed Invoice total, system warns but allows (records loss)
  * - Unallocated Bill amounts are treated as operational costs in P&L
  */
-export const billInvoiceAllocations = sqliteTable(
+export const billInvoiceAllocations = pgTable(
   "bill_invoice_allocations",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     vendorBillId: integer("vendorBillId").notNull(), // FK → vendor_bills.id
     vendorBillItemId: integer("vendorBillItemId"), // FK → vendor_bill_items.id (optional, for item-level allocation)
     invoiceId: integer("invoiceId").notNull(), // FK → invoices.id
@@ -1272,8 +1277,8 @@ export const billInvoiceAllocations = sqliteTable(
     allocatedAmount: text("allocatedAmount").notNull(), // USD amount allocated
     description: text("description"), // Optional note about this allocation
     allocatedBy: integer("allocatedBy"), // User who created this allocation
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     biaVendorBillIdIdx: index("bia_vendor_bill_id_idx").on(table.vendorBillId),
@@ -1291,20 +1296,20 @@ export type InsertBillInvoiceAllocation = typeof billInvoiceAllocations.$inferIn
 // 13. SALES CRM — Lightweight Sales Pipeline
 // ============================================================================
 
-export const salesLeads = sqliteTable(
+export const salesLeads = pgTable(
   "sales_leads",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    companyName: text("companyName", { length: 255 }).notNull(),
-    contactName: text("contactName", { length: 255 }),
-    contactEmail: text("contactEmail", { length: 320 }),
-    contactPhone: text("contactPhone", { length: 20 }),
-    country: text("country", { length: 100 }),
-    industry: text("industry", { length: 100 }),
+    id: serial("id").primaryKey(),
+    companyName: varchar("companyName", { length: 255 }).notNull(),
+    contactName: varchar("contactName", { length: 255 }),
+    contactEmail: varchar("contactEmail", { length: 320 }),
+    contactPhone: varchar("contactPhone", { length: 20 }),
+    country: varchar("country", { length: 100 }),
+    industry: varchar("industry", { length: 100 }),
     estimatedEmployees: integer("estimatedEmployees"), // Expected number of employees to onboard
     estimatedRevenue: text("estimatedRevenue"), // Expected monthly revenue
-    currency: text("currency", { length: 3 }).default("USD"),
-    source: text("source", { length: 100 }), // Website, Referral, Cold Call, LinkedIn, Conference, etc.
+    currency: varchar("currency", { length: 3 }).default("USD"),
+    source: varchar("source", { length: 100 }), // Website, Referral, Cold Call, LinkedIn, Conference, etc.
     // Services the client intends to use (e.g. EOR, PEO, Payroll, etc.)
     intendedServices: text("intendedServices"),
     // Countries where employees are expected to onboard
@@ -1324,8 +1329,8 @@ export const salesLeads = sqliteTable(
     convertedCustomerId: integer("convertedCustomerId"), // Link to customers table after MSA signed
     notes: text("notes"), // General notes / follow-up log
     expectedCloseDate: text("expectedCloseDate"), // When the deal is expected to close
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     slStatusIdx: index("sl_status_idx").on(table.status),
@@ -1338,10 +1343,10 @@ export type SalesLead = typeof salesLeads.$inferSelect;
 export type InsertSalesLead = typeof salesLeads.$inferInsert;
 
 // Sales Activities — lightweight follow-up log per lead
-export const salesActivities = sqliteTable(
+export const salesActivities = pgTable(
   "sales_activities",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     leadId: integer("leadId").notNull(),
     activityType: text("activityType", { enum: [
       "call",
@@ -1353,9 +1358,9 @@ export const salesActivities = sqliteTable(
       "other",
     ] }).notNull(),
     description: text("description").notNull(),
-    activityDate: integer("activityDate", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    activityDate: timestamp("activityDate", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
     createdBy: integer("createdBy"), // User ID who logged this activity
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     saLeadIdIdx: index("sa_lead_id_idx").on(table.leadId),
@@ -1370,26 +1375,26 @@ export type InsertSalesActivity = typeof salesActivities.$inferInsert;
 // 14. KNOWLEDGE BASE
 // ============================================================================
 
-export const knowledgeSources = sqliteTable(
+export const knowledgeSources = pgTable(
   "knowledge_sources",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    name: text("name", { length: 255 }).notNull(),
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
     url: text("url").notNull(),
     sourceType: text("sourceType", { enum: ["rss", "api", "web"] }).default("web").notNull(),
     language: text("language", { enum: ["en", "zh", "multi"] }).default("multi").notNull(),
     topic: text("topic", { enum: ["payroll", "compliance", "leave", "invoice", "onboarding", "general"] })
       .default("general")
       .notNull(),
-    isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
     authorityScore: integer("authorityScore").default(0).notNull(),
     authorityLevel: text("authorityLevel", { enum: ["high", "medium", "low"] }).default("low").notNull(),
     authorityReason: text("authorityReason"),
-    aiReviewedAt: integer("aiReviewedAt", { mode: "timestamp_ms" }),
-    lastFetchedAt: integer("lastFetchedAt", { mode: "timestamp_ms" }),
+    aiReviewedAt: timestamp("aiReviewedAt", { withTimezone: true, mode: "date" }),
+    lastFetchedAt: timestamp("lastFetchedAt", { withTimezone: true, mode: "date" }),
     updatedBy: integer("updatedBy"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     kbSourceActiveIdx: index("kb_source_active_idx").on(table.isActive),
@@ -1400,13 +1405,13 @@ export const knowledgeSources = sqliteTable(
 export type KnowledgeSource = typeof knowledgeSources.$inferSelect;
 export type InsertKnowledgeSource = typeof knowledgeSources.$inferInsert;
 
-export const knowledgeItems = sqliteTable(
+export const knowledgeItems = pgTable(
   "knowledge_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     customerId: integer("customerId"), // null = global item, otherwise customer-specific
     sourceId: integer("sourceId"),
-    title: text("title", { length: 500 }).notNull(),
+    title: varchar("title", { length: 500 }).notNull(),
     summary: text("summary"),
     content: text("content"),
     status: text("status", { enum: ["draft", "pending_review", "published", "rejected"] }).default("pending_review").notNull(),
@@ -1415,15 +1420,15 @@ export const knowledgeItems = sqliteTable(
       .default("general")
       .notNull(),
     language: text("language", { enum: ["en", "zh"] }).default("en").notNull(),
-    metadata: text("metadata", { mode: "json" }),
+    metadata: jsonb("metadata"),
     aiConfidence: integer("aiConfidence").default(0).notNull(),
     aiSummary: text("aiSummary"),
-    publishedAt: integer("publishedAt", { mode: "timestamp_ms" }),
+    publishedAt: timestamp("publishedAt", { withTimezone: true, mode: "date" }),
     reviewedBy: integer("reviewedBy"),
-    reviewedAt: integer("reviewedAt", { mode: "timestamp_ms" }),
+    reviewedAt: timestamp("reviewedAt", { withTimezone: true, mode: "date" }),
     reviewNote: text("reviewNote"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     kbItemCustomerIdx: index("kb_item_customer_idx").on(table.customerId),
@@ -1436,17 +1441,17 @@ export const knowledgeItems = sqliteTable(
 export type KnowledgeItem = typeof knowledgeItems.$inferSelect;
 export type InsertKnowledgeItem = typeof knowledgeItems.$inferInsert;
 
-export const knowledgeMarketingEvents = sqliteTable(
+export const knowledgeMarketingEvents = pgTable(
   "knowledge_marketing_events",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     customerId: integer("customerId").notNull(),
     contactId: integer("contactId"),
     channel: text("channel", { enum: ["email"] }).default("email").notNull(),
     cadence: text("cadence", { enum: ["daily", "weekly", "monthly"] }).default("weekly").notNull(),
-    topics: text("topics", { mode: "json" }).notNull(),
-    payload: text("payload", { mode: "json" }).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    topics: jsonb("topics").notNull(),
+    payload: jsonb("payload").notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     kbEventCustomerIdx: index("kb_event_customer_idx").on(table.customerId),
@@ -1456,19 +1461,19 @@ export const knowledgeMarketingEvents = sqliteTable(
 export type KnowledgeMarketingEvent = typeof knowledgeMarketingEvents.$inferSelect;
 export type InsertKnowledgeMarketingEvent = typeof knowledgeMarketingEvents.$inferInsert;
 
-export const knowledgeFeedbackEvents = sqliteTable(
+export const knowledgeFeedbackEvents = pgTable(
   "knowledge_feedback_events",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     customerId: integer("customerId").notNull(),
     contactId: integer("contactId"),
     locale: text("locale", { enum: ["en", "zh"] }).default("en").notNull(),
-    query: text("query", { length: 500 }),
-    topics: text("topics", { mode: "json" }).notNull(),
+    query: varchar("query", { length: 500 }),
+    topics: jsonb("topics").notNull(),
     feedbackType: text("feedbackType", { enum: ["no_results", "not_helpful"] }).default("not_helpful").notNull(),
     note: text("note"),
-    metadata: text("metadata", { mode: "json" }),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     kbFeedbackCustomerIdx: index("kb_feedback_customer_idx").on(table.customerId),
@@ -1485,19 +1490,19 @@ export type InsertKnowledgeFeedbackEvent = typeof knowledgeFeedbackEvents.$infer
 // 15. AI PROVIDER CONFIG
 // ============================================================================
 
-export const aiProviderConfigs = sqliteTable(
+export const aiProviderConfigs = pgTable(
   "ai_provider_configs",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     provider: text("provider", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
-    displayName: text("displayName", { length: 100 }).notNull(),
+    displayName: varchar("displayName", { length: 100 }).notNull(),
     baseUrl: text("baseUrl"),
-    model: text("model", { length: 100 }).notNull(),
-    apiKeyEnv: text("apiKeyEnv", { length: 100 }).notNull(),
-    isEnabled: integer("isEnabled", { mode: "boolean" }).default(true).notNull(),
+    model: varchar("model", { length: 100 }).notNull(),
+    apiKeyEnv: varchar("apiKeyEnv", { length: 100 }).notNull(),
+    isEnabled: boolean("isEnabled").default(true).notNull(),
     priority: integer("priority").default(100).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     aiProviderIdx: uniqueIndex("ai_provider_idx").on(table.provider),
@@ -1508,20 +1513,20 @@ export const aiProviderConfigs = sqliteTable(
 export type AIProviderConfig = typeof aiProviderConfigs.$inferSelect;
 export type InsertAIProviderConfig = typeof aiProviderConfigs.$inferInsert;
 
-export const aiTaskPolicies = sqliteTable(
+export const aiTaskPolicies = pgTable(
   "ai_task_policies",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     task: text("task", { enum: ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit"] })
       .notNull(),
     primaryProvider: text("primaryProvider", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).default("volcengine").notNull(),
     fallbackProvider: text("fallbackProvider", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }),
-    modelOverride: text("modelOverride", { length: 100 }),
+    modelOverride: varchar("modelOverride", { length: 100 }),
     temperature: text("temperature").default("0.30"),
     maxTokens: integer("maxTokens").default(4096),
-    isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     aiTaskIdx: uniqueIndex("ai_task_idx").on(table.task),
@@ -1532,21 +1537,21 @@ export const aiTaskPolicies = sqliteTable(
 export type AITaskPolicy = typeof aiTaskPolicies.$inferSelect;
 export type InsertAITaskPolicy = typeof aiTaskPolicies.$inferInsert;
 
-export const aiTaskExecutions = sqliteTable(
+export const aiTaskExecutions = pgTable(
   "ai_task_executions",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     taskType: text("taskType", { enum: ["knowledge_summarize", "source_authority_review", "vendor_bill_parse", "invoice_audit", "knowledge_generate_guide"] }).notNull(),
     providerPrimary: text("providerPrimary", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
     providerActual: text("providerActual", { enum: ["manus_forge", "openai", "qwen", "google", "volcengine"] }).notNull(),
-    fallbackTriggered: integer("fallbackTriggered", { mode: "boolean" }).default(false).notNull(),
+    fallbackTriggered: boolean("fallbackTriggered").default(false).notNull(),
     latencyMs: integer("latencyMs").default(0).notNull(),
     tokenUsageIn: integer("tokenUsageIn").default(0).notNull(),
     tokenUsageOut: integer("tokenUsageOut").default(0).notNull(),
     costEstimate: text("costEstimate").default("0.0000").notNull(),
-    success: integer("success", { mode: "boolean" }).default(true).notNull(),
-    errorClass: text("errorClass", { length: 120 }),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    success: boolean("success").default(true).notNull(),
+    errorClass: varchar("errorClass", { length: 120 }),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     aiExecTaskIdx: index("ai_exec_task_idx").on(table.taskType),
@@ -1562,10 +1567,10 @@ export type InsertAITaskExecution = typeof aiTaskExecutions.$inferInsert;
 // 16. NOTIFICATIONS
 // ============================================================================
 
-export const notifications = sqliteTable(
+export const notifications = pgTable(
   "notifications",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     
     // Target definition
     targetPortal: text("targetPortal", { enum: ["admin", "client", "worker"] }).notNull(),
@@ -1576,13 +1581,13 @@ export const notifications = sqliteTable(
     // Content definition
     type: text("type").notNull(), // e.g. 'invoice_sent', 'invoice_overdue'
     title: text("title").notNull(), // Pre-rendered title for quick display
-    data: text("data", { mode: "json" }), // Dynamic data for template rendering
+    data: jsonb("data"), // Dynamic data for template rendering
     
     // Status
-    isRead: integer("isRead", { mode: "boolean" }).default(false).notNull(),
-    readAt: integer("readAt", { mode: "timestamp_ms" }),
+    isRead: boolean("isRead").default(false).notNull(),
+    readAt: timestamp("readAt", { withTimezone: true, mode: "date" }),
     
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     notifTargetIdx: index("notif_target_idx").on(table.targetPortal, table.targetUserId, table.targetRole),
@@ -1600,16 +1605,16 @@ export type InsertNotification = typeof notifications.$inferInsert;
 // 17. TOOLKIT & SALES ENGINE
 // ============================================================================
 
-export const countrySocialInsuranceItems = sqliteTable(
+export const countrySocialInsuranceItems = pgTable(
   "country_social_insurance_items",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    countryCode: text("countryCode", { length: 3 }).notNull(),
+    id: serial("id").primaryKey(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull(),
     
     // Item details
-    itemKey: text("itemKey", { length: 50 }).notNull(),     // e.g. "bhxh", "bhyt", "cpf_ordinary"
-    itemNameEn: text("itemNameEn", { length: 200 }).notNull(),
-    itemNameZh: text("itemNameZh", { length: 200 }).notNull(),
+    itemKey: varchar("itemKey", { length: 50 }).notNull(),     // e.g. "bhxh", "bhyt", "cpf_ordinary"
+    itemNameEn: varchar("itemNameEn", { length: 200 }).notNull(),
+    itemNameZh: varchar("itemNameZh", { length: 200 }).notNull(),
     category: text("category", { enum: [
       "social_insurance",    // Social Insurance
       "health_insurance",    // Health Insurance
@@ -1654,9 +1659,9 @@ export const countrySocialInsuranceItems = sqliteTable(
     notes: text("notes"),                    // Notes
     
     sortOrder: integer("sortOrder").default(0).notNull(),
-    isActive: integer("isActive", { mode: "boolean" }).default(true).notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     csiCountryYearIdx: index("csi_country_year_idx").on(table.countryCode, table.effectiveYear),
@@ -1668,26 +1673,26 @@ export const countrySocialInsuranceItems = sqliteTable(
 export type CountrySocialInsuranceItem = typeof countrySocialInsuranceItems.$inferSelect;
 export type InsertCountrySocialInsuranceItem = typeof countrySocialInsuranceItems.$inferInsert;
 
-export const countryGuideChapters = sqliteTable(
+export const countryGuideChapters = pgTable(
   "country_guide_chapters",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    countryCode: text("countryCode", { length: 3 }).notNull(),
+    id: serial("id").primaryKey(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull(),
     part: integer("part").notNull(),           // 1=Employment Guide, 2=Business Guide
-    chapterKey: text("chapterKey", { length: 50 }).notNull(),
-    titleEn: text("titleEn", { length: 300 }).notNull(),
-    titleZh: text("titleZh", { length: 300 }).notNull(),
+    chapterKey: varchar("chapterKey", { length: 50 }).notNull(),
+    titleEn: varchar("titleEn", { length: 300 }).notNull(),
+    titleZh: varchar("titleZh", { length: 300 }).notNull(),
     contentEn: text("contentEn").notNull(),    // Markdown content
     contentZh: text("contentZh").notNull(),
     sortOrder: integer("sortOrder").default(0).notNull(),
-    version: text("version", { length: 20 }).notNull(),  // e.g. "2026-Q1"
+    version: varchar("version", { length: 20 }).notNull(),  // e.g. "2026-Q1"
     status: text("status", { enum: ["draft", "review", "published", "archived"] })
       .default("draft").notNull(),
-    metadata: text("metadata", { mode: "json" }),  // Extra structured data
+    metadata: jsonb("metadata"),  // Extra structured data
     effectiveFrom: text("effectiveFrom"),
     effectiveTo: text("effectiveTo"),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     cgcCountryIdx: index("cgc_country_idx").on(table.countryCode),
@@ -1698,21 +1703,21 @@ export const countryGuideChapters = sqliteTable(
 export type CountryGuideChapter = typeof countryGuideChapters.$inferSelect;
 export type InsertCountryGuideChapter = typeof countryGuideChapters.$inferInsert;
 
-export const salaryBenchmarks = sqliteTable(
+export const salaryBenchmarks = pgTable(
   "salary_benchmarks",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    countryCode: text("countryCode", { length: 3 }).notNull(),
-    jobCategory: text("jobCategory", { length: 100 }).notNull(),
-    jobTitle: text("jobTitle", { length: 200 }).notNull(),
+    id: serial("id").primaryKey(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull(),
+    jobCategory: varchar("jobCategory", { length: 100 }).notNull(),
+    jobTitle: varchar("jobTitle", { length: 200 }).notNull(),
     seniorityLevel: text("seniorityLevel", { enum: ["junior", "mid", "senior", "lead", "director"] }).notNull(),
     salaryP25: text("salaryP25").notNull(),   // 25th percentile
     salaryP50: text("salaryP50").notNull(),   // Median
     salaryP75: text("salaryP75").notNull(),   // 75th percentile
-    currency: text("currency", { length: 3 }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
     dataYear: integer("dataYear").notNull(),
     source: text("source"),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     sbCountryIdx: index("sb_country_idx").on(table.countryCode),
@@ -1723,23 +1728,23 @@ export const salaryBenchmarks = sqliteTable(
 export type SalaryBenchmark = typeof salaryBenchmarks.$inferSelect;
 export type InsertSalaryBenchmark = typeof salaryBenchmarks.$inferInsert;
 
-export const quotations = sqliteTable(
+export const quotations = pgTable(
   "quotations",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    quotationNumber: text("quotationNumber", { length: 50 }).notNull().unique(),
+    id: serial("id").primaryKey(),
+    quotationNumber: varchar("quotationNumber", { length: 50 }).notNull().unique(),
     leadId: integer("leadId"),
     customerId: integer("customerId"),
     
     // Quotation content (JSON snapshot of inputs)
-    countries: text("countries", { mode: "json" }),  // [{countryCode, tier, headcount, unitPrice, serviceType}]
+    countries: jsonb("countries"),  // [{countryCode, tier, headcount, unitPrice, serviceType}]
     
     // Financials
     totalMonthly: text("totalMonthly").notNull(),
-    currency: text("currency", { length: 3 }).default("USD").notNull(),
+    currency: varchar("currency", { length: 3 }).default("USD").notNull(),
     
     // Snapshot Data (Critical for audit)
-    snapshotData: text("snapshotData", { mode: "json" }), // Stores exchange rates, fee versions, salary inputs at time of creation
+    snapshotData: jsonb("snapshotData"), // Stores exchange rates, fee versions, salary inputs at time of creation
     
     validUntil: text("validUntil"),
     
@@ -1752,13 +1757,13 @@ export const quotations = sqliteTable(
     pdfKey: text("pdfKey"),
     
     // Tracking
-    sentAt: integer("sentAt", { mode: "timestamp_ms" }),
+    sentAt: timestamp("sentAt", { withTimezone: true, mode: "date" }),
     sentTo: text("sentTo"),
     sentBy: integer("sentBy"),
     
     createdBy: integer("createdBy").notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     qtNumberIdx: uniqueIndex("qt_number_idx").on(table.quotationNumber),
@@ -1771,22 +1776,22 @@ export const quotations = sqliteTable(
 export type Quotation = typeof quotations.$inferSelect;
 export type InsertQuotation = typeof quotations.$inferInsert;
 
-export const salesDocuments = sqliteTable(
+export const salesDocuments = pgTable(
   "sales_documents",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     leadId: integer("leadId"),
     customerId: integer("customerId"),
     quotationId: integer("quotationId"), // Optional link to quotation
     
     docType: text("docType", { enum: ["quotation", "cost_simulation", "proposal", "contract", "other"] }).notNull(),
-    title: text("title", { length: 255 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
     
     fileUrl: text("fileUrl").notNull(),
-    fileKey: text("fileKey", { length: 500 }).notNull(),
+    fileKey: varchar("fileKey", { length: 500 }).notNull(),
     
     generatedBy: integer("generatedBy").notNull(),
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     sdLeadIdx: index("sd_lead_idx").on(table.leadId),
@@ -1806,15 +1811,15 @@ export type InsertSalesDocument = typeof salesDocuments.$inferInsert;
  * Customer Wallets — stores current balance per currency.
  * Optimistic locking (version) is used to prevent concurrent balance updates.
  */
-export const customerWallets = sqliteTable(
+export const customerWallets = pgTable(
   "customer_wallets",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     customerId: integer("customerId").notNull(),
-    currency: text("currency", { length: 3 }).notNull(), // USD, EUR, CNY...
+    currency: varchar("currency", { length: 3 }).notNull(), // USD, EUR, CNY...
     balance: text("balance").default("0").notNull(), // Decimal string
     version: integer("version").default(0).notNull(), // Optimistic lock
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     cwCustomerCurrencyIdx: uniqueIndex("cw_customer_currency_idx").on(table.customerId, table.currency),
@@ -1828,10 +1833,10 @@ export type InsertCustomerWallet = typeof customerWallets.$inferInsert;
  * Wallet Transactions — immutable ledger of all fund movements.
  * Source of truth for audit and accounting.
  */
-export const walletTransactions = sqliteTable(
+export const walletTransactions = pgTable(
   "wallet_transactions",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     walletId: integer("walletId").notNull(),
     
     type: text("type", { enum: [
@@ -1858,7 +1863,7 @@ export const walletTransactions = sqliteTable(
     description: text("description"),
     internalNote: text("internalNote"),
     createdBy: integer("createdBy"), // User ID
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     wtWalletIdIdx: index("wt_wallet_id_idx").on(table.walletId),
@@ -1874,15 +1879,15 @@ export type InsertWalletTransaction = typeof walletTransactions.$inferInsert;
  * Customer Frozen Wallets — stores deposit/security funds.
  * Physically isolated from main wallets to prevent accidental usage.
  */
-export const customerFrozenWallets = sqliteTable(
+export const customerFrozenWallets = pgTable(
   "customer_frozen_wallets",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     customerId: integer("customerId").notNull(),
-    currency: text("currency", { length: 3 }).notNull(), // USD, EUR, CNY...
+    currency: varchar("currency", { length: 3 }).notNull(), // USD, EUR, CNY...
     balance: text("balance").default("0").notNull(), // Decimal string
     version: integer("version").default(0).notNull(), // Optimistic lock
-    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
     cfwCustomerCurrencyIdx: uniqueIndex("cfw_customer_currency_idx").on(table.customerId, table.currency),
@@ -1895,10 +1900,10 @@ export type InsertCustomerFrozenWallet = typeof customerFrozenWallets.$inferInse
 /**
  * Frozen Wallet Transactions — immutable ledger of deposit funds.
  */
-export const frozenWalletTransactions = sqliteTable(
+export const frozenWalletTransactions = pgTable(
   "frozen_wallet_transactions",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     walletId: integer("walletId").notNull(),
     
     type: text("type", { enum: [
@@ -1922,7 +1927,7 @@ export const frozenWalletTransactions = sqliteTable(
     description: text("description"),
     internalNote: text("internalNote"),
     createdBy: integer("createdBy"), // User ID
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     fwtWalletIdIdx: index("fwt_wallet_id_idx").on(table.walletId),
@@ -1938,19 +1943,19 @@ export type InsertFrozenWalletTransaction = typeof frozenWalletTransactions.$inf
 // 20. LEAD CHANGE LOGS
 // ============================================================================
 
-export const leadChangeLogs = sqliteTable(
+export const leadChangeLogs = pgTable(
   "lead_change_logs",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: serial("id").primaryKey(),
     leadId: integer("leadId").notNull(),
     userId: integer("userId"),
-    userName: text("userName", { length: 255 }),
-    changeType: text("changeType", { length: 50 }).notNull(), // 'field_update' | 'status_change' | 'created' | 'converted' | 'deleted'
-    fieldName: text("fieldName", { length: 100 }), // which field changed
+    userName: varchar("userName", { length: 255 }),
+    changeType: varchar("changeType", { length: 50 }).notNull(), // 'field_update' | 'status_change' | 'created' | 'converted' | 'deleted'
+    fieldName: varchar("fieldName", { length: 100 }), // which field changed
     oldValue: text("oldValue"),
     newValue: text("newValue"),
     description: text("description"), // human-readable summary
-    createdAt: integer("createdAt", { mode: "timestamp_ms" }).defaultNow().notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
   },
   (table) => ({
     lclLeadIdIdx: index("lcl_lead_id_idx").on(table.leadId),

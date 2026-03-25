@@ -11,7 +11,7 @@ import { splitLeaveByMonth } from '../../server/utils/cutoff';
 
 // Set test environment
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'file:server/sqlite.db';
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/gea_test';
 
 async function runTests() {
   console.log('Running Employee Lifecycle & Leave Tests...');
@@ -99,7 +99,7 @@ async function runTests() {
     const activeStatuses = ['active', 'on_leave', 'offboarding'];
     const payrollMonth = '2026-12';
     
-    const eligibleEmployees = await db.run(sql`
+    const eligibleEmployees = await db.execute(sql`
       SELECT id FROM employees 
       WHERE customerId = ${customerId} 
       AND status IN ('active', 'on_leave', 'offboarding')

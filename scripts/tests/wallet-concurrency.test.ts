@@ -6,7 +6,7 @@ import { eq, sql } from 'drizzle-orm';
 
 async function runTests() {
   console.log('Running Wallet Service Concurrency Tests...');
-  process.env.DATABASE_URL = 'file:./server/sqlite.db';
+  process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/gea_test';
   const db = await getDb();
   
   let testCustomerId: number;
@@ -22,11 +22,11 @@ async function runTests() {
     }).returning();
     testCustomerId = customer.id;
 
-    const invoiceResult = await db.run(
+    const invoiceResult = await db.execute(
       sql`INSERT INTO invoices (customerId, status, dueDate, currency, subtotal, total, invoiceType, invoiceNumber, createdAt, updatedAt) 
        VALUES (${testCustomerId}, 'draft', ${new Date().toISOString().split('T')[0]}, 'USD', '10.00', '10.00', 'eor', ${`TEST-INV-${Date.now()}`}, ${Date.now()}, ${Date.now()}) RETURNING id`
     );
-    testInvoiceId = Number(invoiceResult.lastInsertRowid || 1);
+    testInvoiceId = Number(invoiceResult[0]?.id || 1);
 
     const wallet = await walletService.getWallet(testCustomerId, 'USD');
     await db.update(customerWallets)

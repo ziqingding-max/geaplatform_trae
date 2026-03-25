@@ -7,6 +7,33 @@
 
 services:
   # ─────────────────────────────────────────────────────────────────────────
+  # PostgreSQL 数据库
+  # ─────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: gea-saas-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gea_production}
+      POSTGRES_USER: ${POSTGRES_USER:-gea}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - gea_pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gea} -d ${POSTGRES_DB:-gea_production}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ─────────────────────────────────────────────────────────────────────────
   # 应用服务 (Node.js)
   # ─────────────────────────────────────────────────────────────────────────
   app:
@@ -19,10 +46,13 @@ services:
     shm_size: '256m'
     ports:
       - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=file:/app/data/production.db
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-gea}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-gea_production}
       - JWT_SECRET=${JWT_SECRET}
       - ADMIN_BOOTSTRAP_EMAIL=${ADMIN_BOOTSTRAP_EMAIL:-simon.ding@geahr.com}
       - ADMIN_BOOTSTRAP_NAME=${ADMIN_BOOTSTRAP_NAME:-Simon Ding}
@@ -45,9 +75,6 @@ services:
       - EMAIL_ADMIN=${EMAIL_ADMIN:-admin@geahr.com}
       # AI (可选)
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
-    volumes:
-      # 持久化 SQLite 数据库文件
-      - gea_data:/app/data
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
       interval: 30s
@@ -96,5 +123,5 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 volumes:
-  gea_data:
+  gea_pgdata:
     driver: local

@@ -964,7 +964,7 @@ export async function getEmployeeMonthlyRevenue(employeeId: number, serviceMonth
     .from(invoices)
     .where(
       and(
-        sql`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth}`,
+        sql`to_char(${invoices.invoiceMonth}::date, 'YYYY-MM') = ${serviceMonth}`,
         ne(invoices.invoiceType, "credit_note"),
         ne(invoices.invoiceType, "deposit_refund"),
       )
@@ -1031,7 +1031,7 @@ export async function getAllEmployeesMonthlyRevenue(serviceMonth: string) {
     .from(invoices)
     .where(
       and(
-        sql`strftime('%Y-%m', ${invoices.invoiceMonth}) = ${serviceMonth}`,
+        sql`to_char(${invoices.invoiceMonth}::date, 'YYYY-MM') = ${serviceMonth}`,
         ne(invoices.invoiceType, "credit_note"),
         ne(invoices.invoiceType, "deposit_refund"),
       )

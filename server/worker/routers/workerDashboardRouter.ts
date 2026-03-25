@@ -52,7 +52,7 @@ export const workerDashboardRouter = workerRouter({
         );
 
       const [totalPaid] = await db
-        .select({ total: sql<string>`COALESCE(SUM(CAST(${contractorInvoices.totalAmount} AS REAL)), 0)` })
+        .select({ total: sql<string>`COALESCE(SUM(CAST(${contractorInvoices.totalAmount} AS numeric)), 0)` })
         .from(contractorInvoices)
         .where(
           and(

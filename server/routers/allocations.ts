@@ -158,7 +158,7 @@ export const allocationsRouter = router({
           .where(
             and(
               eq(billInvoiceAllocations.employeeId, input.employeeId),
-              sql`strftime('%Y-%m', ${vendorBills.billMonth}) = ${monthStr}`
+              sql`to_char(${vendorBills.billMonth}::date, 'YYYY-MM') = ${monthStr}`
             )
           );
         workerAllocatedTotal = existingAllocations.reduce((sum, a) => sum + parseFloat(String(a.allocatedAmount || '0')), 0);
