@@ -1068,10 +1068,10 @@ export default function QuotationCreatePage({ params }: { params?: { id?: string
                       </div>
                     )}
 
-                    {/* Grand Total - Service Fees Only */}
+                    {/* Grand Total - Service Fees + Employment Costs */}
                     <div className="flex justify-between items-end pt-3 border-t-2 border-primary/20">
                       <span className="font-medium">{t("quotations.v2.grand_total")}</span>
-                      <span className="text-xl font-bold text-primary">{formatCurrency("USD", totalServiceFeesMonthly)}/person/mo</span>
+                      <span className="text-xl font-bold text-primary">{formatCurrency("USD", totalServiceFeesMonthly + totalEmploymentCostsUsd)}/mo</span>
                     </div>
                   </div>
 
