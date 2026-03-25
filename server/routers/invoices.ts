@@ -385,7 +385,7 @@ export const invoicesRouter = router({
         userId: ctx.user.id, userName: ctx.user.name || null,
         action: "create",
         entityType: "invoice",
-        changes: JSON.stringify(input),
+        changes: JSON.stringify({ invoiceNumber, ...input }),
       });
 
       return result;
@@ -476,12 +476,14 @@ export const invoicesRouter = router({
         }
       }
 
+      // Fetch current invoiceNumber for audit log display
+      const invoiceForAudit = await getInvoiceById(input.id);
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
         action: "update",
         entityType: "invoice",
         entityId: input.id,
-        changes: JSON.stringify(input.data),
+        changes: JSON.stringify({ invoiceNumber: invoiceForAudit?.invoiceNumber, ...input.data }),
       });
 
       return { success: true };
@@ -632,7 +634,7 @@ export const invoicesRouter = router({
         action: "update_status",
         entityType: "invoice",
         entityId: input.id,
-        changes: JSON.stringify({ status: input.status, paidAmount: input.paidAmount }),
+        changes: JSON.stringify({ invoiceNumber: invoice.invoiceNumber, status: input.status, paidAmount: input.paidAmount }),
       });
 
       // Auto follow-up actions for payment discrepancies
@@ -718,6 +720,7 @@ export const invoicesRouter = router({
                 entityType: "invoice",
                 entityId: followUpInvoiceId,
                 changes: JSON.stringify({
+                  invoiceNumber: followUpNumber,
                   type: "underpayment_followup",
                   originalInvoiceId: input.id,
                   originalInvoiceType: invoice.invoiceType,
@@ -786,6 +789,7 @@ export const invoicesRouter = router({
                 entityType: "invoice",
                 entityId: input.id,
                 changes: JSON.stringify({
+                  invoiceNumber: paidInvoice.invoiceNumber,
                   type: "contractor_invoices_paid",
                   clientInvoiceId: input.id,
                   contractorInvoicesSynced: syncedCount,
@@ -1069,6 +1073,7 @@ export const invoicesRouter = router({
          entityType: "invoice",
          entityId: invoice.id,
          changes: JSON.stringify({ 
+            invoiceNumber: invoice.invoiceNumber,
             walletAmount: walletAmt, 
             externalAmount: externalAmt, 
             newStatus, 
@@ -1328,12 +1333,15 @@ export const invoicesRouter = router({
       });
 
       if (result.invoiceId) {
+        // Fetch the generated credit note's invoiceNumber for audit log display
+        const generatedCreditNote = await getInvoiceById(result.invoiceId);
         await logAuditAction({
           userId: ctx.user.id, userName: ctx.user.name || null,
           action: "generate",
           entityType: "invoice",
           entityId: result.invoiceId,
           changes: JSON.stringify({
+            invoiceNumber: generatedCreditNote?.invoiceNumber,
             type: "credit_note",
             originalInvoiceId: input.originalInvoiceId,
             reason: input.reason,
@@ -1366,12 +1374,14 @@ export const invoicesRouter = router({
     .mutation(async ({ input, ctx }) => {
       await approveCreditNote(input.creditNoteId, ctx.user.id, input.disposition);
       
+      // Fetch credit note invoiceNumber for audit log display
+      const creditNoteInvoice = await getInvoiceById(input.creditNoteId);
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
         action: "approve",
         entityType: "invoice",
         entityId: input.creditNoteId,
-        changes: JSON.stringify({ disposition: input.disposition }),
+        changes: JSON.stringify({ invoiceNumber: creditNoteInvoice?.invoiceNumber, disposition: input.disposition }),
       });
 
       return { success: true };
@@ -1393,12 +1403,15 @@ export const invoicesRouter = router({
       const result = await generateDepositRefund(input.employeeId);
 
       if (result.invoiceId) {
+        // Fetch the generated deposit refund's invoiceNumber for audit log display
+        const depositRefundInvoice = await getInvoiceById(result.invoiceId);
         await logAuditAction({
           userId: ctx.user.id, userName: ctx.user.name || null,
           action: "generate",
           entityType: "invoice",
           entityId: result.invoiceId,
           changes: JSON.stringify({
+            invoiceNumber: depositRefundInvoice?.invoiceNumber,
             type: "deposit_refund",
             employeeId: input.employeeId,
             trigger: "manual",

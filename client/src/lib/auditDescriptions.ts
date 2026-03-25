@@ -67,7 +67,47 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 /**
- * Parse the changes JSON field to extract meaningful details
+ * Extract invoiceNumber from changes JSON if available.
+ * Returns the invoiceNumber string or null if not found.
+ */
+function extractInvoiceNumber(changes: any): string | null {
+  if (!changes) return null;
+  try {
+    const parsed = typeof changes === "string" ? JSON.parse(changes) : changes;
+    if (parsed && typeof parsed === "object" && parsed.invoiceNumber) {
+      return parsed.invoiceNumber;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build the entity identifier string for display.
+ * For invoice entities, prefer invoiceNumber from changes over raw entityId.
+ */
+function formatEntityIdentifier(
+  entityType: string,
+  entityId: number | null | undefined,
+  changes: any
+): string {
+  if (entityType === "invoice" || entityType === "invoices") {
+    const invoiceNumber = extractInvoiceNumber(changes);
+    if (invoiceNumber) {
+      return invoiceNumber;
+    }
+  }
+  // Fallback to #entityId for non-invoice entities or when invoiceNumber is not available
+  if (entityId) {
+    return `#${entityId}`;
+  }
+  return "";
+}
+
+/**
+ * Parse the changes JSON field to extract meaningful details.
+ * Excludes invoiceNumber from the detail string since it is handled separately.
  */
 function parseChanges(changes: any): string {
   if (!changes) return "";
@@ -92,8 +132,16 @@ function parseChanges(changes: any): string {
     if (parsed.firstName && parsed.lastName) return `${parsed.firstName} ${parsed.lastName}`;
     if (parsed.employeeName) return parsed.employeeName;
     
-    // If it has invoiceNumber
-    if (parsed.invoiceNumber) return `#${parsed.invoiceNumber}`;
+    // If it has invoiceNumber, skip it (handled separately by formatEntityIdentifier)
+    // and show remaining fields as details instead
+    if (parsed.invoiceNumber) {
+      const remainingKeys = Object.keys(parsed).filter(k => k !== "invoiceNumber");
+      if (remainingKeys.length === 0) return "";
+      if (remainingKeys.length <= 3) {
+        return remainingKeys.map(k => `${k}: ${parsed[k]}`).join(", ");
+      }
+      // Fall through to other checks below with remaining fields
+    }
     
     // If it has status changes
     if (parsed.from && parsed.to) return `${parsed.from} → ${parsed.to}`;
@@ -108,9 +156,9 @@ function parseChanges(changes: any): string {
     // If it has currency pair info
     if (parsed.fromCurrency && parsed.toCurrency) return `${parsed.fromCurrency} → ${parsed.toCurrency}`;
     
-    // For objects with a few key fields, show them
-    const keys = Object.keys(parsed);
-    if (keys.length <= 3) {
+    // For objects with a few key fields, show them (exclude invoiceNumber as it's handled by identifier)
+    const keys = Object.keys(parsed).filter(k => k !== "invoiceNumber");
+    if (keys.length <= 3 && keys.length > 0) {
       return keys.map(k => `${k}: ${parsed[k]}`).join(", ");
     }
     
@@ -134,6 +182,7 @@ export function formatAuditDescription(log: {
   const actionLabel = ACTION_LABELS[log.action] || log.action;
   const entityLabel = ENTITY_LABELS[log.entityType] || log.entityType;
   const details = parseChanges(log.changes);
+  const entityIdentifier = formatEntityIdentifier(log.entityType, log.entityId, log.changes);
   
   // Special cases for system actions
   if (log.action === "auto_lock_monthly") {
@@ -182,7 +231,7 @@ export function formatAuditDescription(log: {
   }
 
   if (log.action === "invoice_auto_overdue") {
-    return `System auto-marked invoice #${log.entityId} as overdue${details ? ` — ${details}` : ""}`;
+    return `System auto-marked invoice ${entityIdentifier} as overdue${details ? ` — ${details}` : ""}`;
   }
 
   if (log.action === "monthly_leave_accrual") {
@@ -205,17 +254,23 @@ export function formatAuditDescription(log: {
     return `Converted sales lead to customer${details ? ` — ${details}` : ""}`;
   }
   
-  // Standard pattern: "Action EntityType #ID — details"
+  // Standard pattern: "Action EntityType identifier — details"
   const parts: string[] = [actionLabel, entityLabel.toLowerCase()];
   
-  if (log.entityId) {
-    parts.push(`#${log.entityId}`);
+  if (entityIdentifier) {
+    parts.push(entityIdentifier);
   }
   
   let result = parts.join(" ");
   
   if (details) {
-    result += ` — ${details}`;
+    // Avoid repeating the invoiceNumber in details if it's already shown as the identifier
+    const invoiceNum = extractInvoiceNumber(log.changes);
+    if (invoiceNum && details === invoiceNum) {
+      // Details only contained the invoiceNumber, which is already displayed as identifier — skip
+    } else {
+      result += ` — ${details}`;
+    }
   }
   
   return result;
