@@ -47,7 +47,9 @@ const vendorTypeColors: Record<string, string> = {
   equipment_provider: "bg-orange-500/15 text-orange-600 border-orange-500/30",
 };
 
-const vendorTypeLabels: Record<string, string> = {
+// vendorTypeLabels: use i18n keys vendors.type.{key} for translation
+// Fallback map only used when i18n key is missing
+const vendorTypeFallback: Record<string, string> = {
   client_related: "Client Related",
   operational: "Operational",
   eor_vendor: "EOR Vendor",
@@ -56,6 +58,12 @@ const vendorTypeLabels: Record<string, string> = {
   recruitment_agency: "Recruitment Agency",
   equipment_provider: "Equipment Provider",
 };
+function vendorTypeLabel(t: (k: string) => string, type: string): string {
+  const key = `vendors.type.${type}`;
+  const translated = t(key);
+  // If t() returns the key itself, fall back to hardcoded
+  return translated === key ? (vendorTypeFallback[type] || type) : translated;
+}
 
 const serviceTypeOptions = [
   "Payroll Processing",
@@ -310,7 +318,7 @@ function VendorList() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={vendorTypeColors[vendor.vendorType] || ""}>
-                          {vendorTypeLabels[vendor.vendorType] || vendor.vendorType}
+                          {vendorTypeLabel(t, vendor.vendorType)}
                         </Badge>
                       </TableCell>
                       <TableCell>{countryName(vendor.country)}</TableCell>
@@ -367,6 +375,13 @@ function VendorBillsSection({ vendorId, vendorName, t }: { vendorId: number; ven
     cancelled: "bg-gray-500/15 text-gray-400 border-gray-500/30",
     void: "bg-gray-500/15 text-gray-400 border-gray-500/30",
   };
+  const billTypeColorMap: Record<string, string> = {
+    operational: "bg-gray-500/15 text-gray-600 border-gray-500/30",
+    pass_through: "bg-blue-500/15 text-blue-600 border-blue-500/30",
+    vendor_service_fee: "bg-violet-500/15 text-violet-600 border-violet-500/30",
+    non_recurring: "bg-orange-500/15 text-orange-600 border-orange-500/30",
+    mixed: "bg-amber-500/15 text-amber-600 border-amber-500/30",
+  };
 
   return (
     <Card>
@@ -390,6 +405,7 @@ function VendorBillsSection({ vendorId, vendorName, t }: { vendorId: number; ven
                 <TableRow>
                   <TableHead className="text-xs">{t("vendorBills.table.billNumberHeader")}</TableHead>
                   <TableHead className="text-xs">{t("vendorBills.table.statusHeader")}</TableHead>
+                  <TableHead className="text-xs">{t("vendorBills.createBill.billType")}</TableHead>
                   <TableHead className="text-xs">{t("vendorBills.table.billDateHeader")}</TableHead>
                   <TableHead className="text-xs text-right">{t("vendorBills.table.totalHeader")}</TableHead>
                   <TableHead className="w-8"></TableHead>
@@ -402,6 +418,11 @@ function VendorBillsSection({ vendorId, vendorName, t }: { vendorId: number; ven
                     <TableCell>
                       <Badge variant="outline" className={`text-xs ${statusColorMap[bill.status] || ""}`}>
                         {t(`vendorBills.status.${bill.status}`)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-xs ${billTypeColorMap[bill.billType] || ""}`}>
+                        {t(`vendorBills.billType.${bill.billType || "operational"}`)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{formatDate(bill.billDate)}</TableCell>
@@ -500,7 +521,7 @@ function VendorDetail({ id }: { id: number }) {
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold tracking-tight">{vendor.name}</h1>
               <Badge variant="outline" className={vendorTypeColors[vendor.vendorType] || ""}>
-                {vendorTypeLabels[vendor.vendorType] || vendor.vendorType}
+                {vendorTypeLabel(t, vendor.vendorType)}
               </Badge>
               <Badge variant="outline" className={statusColors[vendor.status] || ""}>
                 {vendor.status === "active" ? t("vendors.list.filter.status.active") : t("vendors.list.filter.status.inactive")}
@@ -562,7 +583,7 @@ function VendorDetail({ id }: { id: number }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div><div className="text-xs text-muted-foreground">{t("vendors.detail.field.vendor_type")}</div><div className="font-medium"><Badge variant="outline" className={vendorTypeColors[vendor.vendorType] || ""}>{vendorTypeLabels[vendor.vendorType] || vendor.vendorType}</Badge></div></div>
+              <div><div className="text-xs text-muted-foreground">{t("vendors.detail.field.vendor_type")}</div><div className="font-medium"><Badge variant="outline" className={vendorTypeColors[vendor.vendorType] || ""}>{vendorTypeLabel(t, vendor.vendorType)}</Badge></div></div>
               <div><div className="text-xs text-muted-foreground">{t("vendors.form.service_type.label")}</div><div className="font-medium">{formatServiceType(vendor.serviceType)}</div></div>
               <div><div className="text-xs text-muted-foreground">{t("vendors.form.default_currency.label")}</div><div className="font-medium">{vendor.currency}</div></div>
               <div><div className="text-xs text-muted-foreground">{t("vendors.detail.field.payment_terms")}</div><div className="font-medium">{vendor.paymentTermDays} {t("employees.detail.field.days")}</div></div>

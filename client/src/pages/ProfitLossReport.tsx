@@ -143,7 +143,8 @@ export default function ProfitLossReport() {
   const summary = data?.summary || { totalRevenue: 0, totalExpenses: 0, netProfit: 0, profitMargin: 0, totalUnallocated: 0,
     serviceFeeRevenue: 0, fxMarkupProfit: 0, nonRecurringRevenue: 0,
     passThroughCollected: 0, passThroughPaid: 0,
-    netRevenue: 0, directCOGS: 0, grossProfit: 0, operationalExpenses: 0 };
+    netRevenue: 0, directCOGS: 0, grossProfit: 0, operationalExpenses: 0,
+    bankFees: 0, nonRecurringCosts: 0 };
   const monthly = data?.monthlyBreakdown || [];
   const revenueByType = data?.revenueByType || [];
   const expensesByCategory = data?.expensesByCategory || [];
@@ -189,8 +190,9 @@ export default function ProfitLossReport() {
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{t("profit_loss_report.summary.total_revenue")}</div>
+                  <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{t("profit_loss_report.summary.gross_revenue")}</div>
                   <div className="text-2xl font-bold mt-1 text-emerald-400">USD {formatAmount(summary.totalRevenue)}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{t("profit_loss_report.summary.gross_revenue_desc")}</div>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-emerald-500/15 flex items-center justify-center">
                   <TrendingUp className="w-5 h-5 text-emerald-400" />
@@ -232,9 +234,10 @@ export default function ProfitLossReport() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{t("profit_loss_report.summary.profit_margin")}</div>
-                  <div className={`text-2xl font-bold mt-1 ${summary.profitMargin >= 0 ? "text-blue-400" : "text-red-400"}`}>
-                    {summary.profitMargin.toFixed(1)}%
+                  <div className={`text-2xl font-bold mt-1 ${summary.totalRevenue > 0 ? (summary.netProfit / summary.totalRevenue * 100) >= 0 ? "text-blue-400" : "text-red-400" : "text-slate-400"}`}>
+                    {summary.totalRevenue > 0 ? (summary.netProfit / summary.totalRevenue * 100).toFixed(1) : "0.0"}%
                   </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{t("profit_loss_report.summary.profit_margin_desc")}</div>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-slate-500/15 flex items-center justify-center">
                   <BarChart3 className="w-5 h-5 text-slate-400" />
@@ -244,7 +247,7 @@ export default function ProfitLossReport() {
           </Card>
         </div>
 
-        {/* Net Revenue Breakdown (Waterfall) */}
+        {/* P&L Waterfall Breakdown */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{t("profit_loss_report.waterfall.title")}</CardTitle>
@@ -260,9 +263,9 @@ export default function ProfitLossReport() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {/* Revenue Section */}
+                {/* Gross Revenue Section */}
                 <TableRow className="bg-emerald-50/50 font-semibold">
-                  <TableCell>{t("profit_loss_report.waterfall.net_revenue")}</TableCell>
+                  <TableCell>{t("profit_loss_report.waterfall.gross_revenue")}</TableCell>
                   <TableCell className="text-right text-emerald-600">USD {formatAmount(summary.totalRevenue)}</TableCell>
                   <TableCell className="text-right">100%</TableCell>
                 </TableRow>
@@ -272,9 +275,9 @@ export default function ProfitLossReport() {
                   <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.serviceFeeRevenue || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.fx_profit")}</TableCell>
-                  <TableCell className="text-right text-sm">USD {formatAmount(summary.fxMarkupProfit || 0)}</TableCell>
-                  <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.fxMarkupProfit || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.pass_through_collected")}</TableCell>
+                  <TableCell className="text-right text-sm">USD {formatAmount(summary.passThroughCollected || 0)}</TableCell>
+                  <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.passThroughCollected || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.non_recurring_rev")}</TableCell>
@@ -288,19 +291,24 @@ export default function ProfitLossReport() {
                   <TableCell className="text-right">{summary.totalRevenue ? (summary.totalExpenses / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
                 </TableRow>
                 <TableRow>
+                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.pass_through_paid")}</TableCell>
+                  <TableCell className="text-right text-sm">USD ({formatAmount(summary.passThroughPaid || 0)})</TableCell>
+                  <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.passThroughPaid || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                </TableRow>
+                <TableRow>
                   <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.vendor_service_fee")}</TableCell>
                   <TableCell className="text-right text-sm">USD ({formatAmount(summary.directCOGS || 0)})</TableCell>
                   <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.directCOGS || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.bank_fees")}</TableCell>
-                  <TableCell className="text-right text-sm">USD ({formatAmount((summary as any).bankFees || 0)})</TableCell>
-                  <TableCell className="text-right text-sm">{summary.totalRevenue ? (((summary as any).bankFees || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.non_recurring_cost")}</TableCell>
+                  <TableCell className="text-right text-sm">USD ({formatAmount(summary.nonRecurringCosts || 0)})</TableCell>
+                  <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.nonRecurringCosts || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.non_recurring_cost")}</TableCell>
-                  <TableCell className="text-right text-sm">USD ({formatAmount((summary as any).nonRecurringCosts || 0)})</TableCell>
-                  <TableCell className="text-right text-sm">{summary.totalRevenue ? (((summary as any).nonRecurringCosts || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
+                  <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.bank_fees")}</TableCell>
+                  <TableCell className="text-right text-sm">USD ({formatAmount(summary.bankFees || 0)})</TableCell>
+                  <TableCell className="text-right text-sm">{summary.totalRevenue ? ((summary.bankFees || 0) / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell className="pl-8 text-sm">{t("profit_loss_report.waterfall.operational_costs")}</TableCell>
@@ -311,10 +319,102 @@ export default function ProfitLossReport() {
                 <TableRow className="bg-blue-50/50 font-bold border-t-2">
                   <TableCell>{t("profit_loss_report.waterfall.net_profit")}</TableCell>
                   <TableCell className={`text-right ${isProfit ? "text-blue-600" : "text-red-600"}`}>USD {isProfit ? "" : "("}{ formatAmount(Math.abs(summary.netProfit))}{isProfit ? "" : ")"}</TableCell>
-                  <TableCell className="text-right">{summary.profitMargin.toFixed(1)}%</TableCell>
+                  <TableCell className="text-right">{summary.totalRevenue > 0 ? (summary.netProfit / summary.totalRevenue * 100).toFixed(1) : "0.0"}%</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
+          </CardContent>
+        </Card>
+
+        {/* Profit Breakdown by Source */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">{t("profit_loss_report.profit_breakdown.title")}</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">{t("profit_loss_report.profit_breakdown.description")}</p>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const grossRev = summary.totalRevenue || 0;
+              const pctOf = (v: number) => grossRev > 0 ? (v / grossRev * 100).toFixed(1) : "0.0";
+              // Pass-through margin = collected - paid (includes non-recurring netting)
+              const ptMargin = (summary.passThroughCollected || 0) - (summary.passThroughPaid || 0);
+              // FX Markup is the total FX profit minus the pass-through margin component
+              // fxMarkupProfit = (passThroughCollected + nonRecurringRevenue) - passThroughPaid
+              // So: fxMarkupProfit = ptMargin + nonRecurringRevenue
+              // Pure FX component = fxMarkupProfit - nonRecurringRevenue - ptMargin? No.
+              // Actually fxMarkupProfit already IS the combined FX+margin figure.
+              // Let's break it down as: Service Fee profit, Pass-through Margin, Non-recurring net, Bank/Ops costs
+              const rows = [
+                {
+                  key: "service_fee",
+                  revenue: summary.serviceFeeRevenue || 0,
+                  cost: summary.directCOGS || 0,
+                },
+                {
+                  key: "pass_through_margin",
+                  revenue: summary.passThroughCollected || 0,
+                  cost: (summary.passThroughPaid || 0) - (summary.nonRecurringCosts || 0),
+                },
+                {
+                  key: "non_recurring",
+                  revenue: summary.nonRecurringRevenue || 0,
+                  cost: summary.nonRecurringCosts || 0,
+                },
+                {
+                  key: "bank_fees",
+                  revenue: 0,
+                  cost: summary.bankFees || 0,
+                },
+                {
+                  key: "operational",
+                  revenue: 0,
+                  cost: summary.operationalExpenses || 0,
+                },
+              ];
+              const totalProfit = rows.reduce((s, r) => s + (r.revenue - r.cost), 0);
+              return (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[200px]">{t("profit_loss_report.profit_breakdown.source")}</TableHead>
+                      <TableHead className="text-right">{t("profit_loss_report.profit_breakdown.revenue")}</TableHead>
+                      <TableHead className="text-right">{t("profit_loss_report.profit_breakdown.cost")}</TableHead>
+                      <TableHead className="text-right">{t("profit_loss_report.profit_breakdown.profit")}</TableHead>
+                      <TableHead className="text-right">{t("profit_loss_report.profit_breakdown.margin")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((row) => {
+                      const profit = row.revenue - row.cost;
+                      return (
+                        <TableRow key={row.key}>
+                          <TableCell className="font-medium text-sm">{t(`profit_loss_report.profit_breakdown.row_${row.key}`)}</TableCell>
+                          <TableCell className="text-right text-sm font-mono text-emerald-500">
+                            {row.revenue > 0 ? `USD ${formatAmount(row.revenue)}` : "—"}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-mono text-red-400">
+                            {row.cost > 0 ? `USD ${formatAmount(row.cost)}` : "—"}
+                          </TableCell>
+                          <TableCell className={`text-right text-sm font-mono ${profit >= 0 ? "text-blue-400" : "text-red-400"}`}>
+                            USD {formatAmount(profit)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">{pctOf(profit)}%</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                    <TableRow className="font-semibold bg-muted/50 border-t-2">
+                      <TableCell>{t("profit_loss_report.profit_breakdown.total")}</TableCell>
+                      <TableCell className="text-right font-mono text-emerald-500">USD {formatAmount(summary.totalRevenue)}</TableCell>
+                      <TableCell className="text-right font-mono text-red-400">USD {formatAmount(summary.totalExpenses)}</TableCell>
+                      <TableCell className={`text-right font-mono ${totalProfit >= 0 ? "text-blue-400" : "text-red-400"}`}>
+                        USD {formatAmount(totalProfit)}
+                      </TableCell>
+                      <TableCell className="text-right">{pctOf(totalProfit)}%</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              );
+            })()}
           </CardContent>
         </Card>
 
