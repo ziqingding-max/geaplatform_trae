@@ -884,8 +884,7 @@ export async function runOverdueInvoiceDetection(): Promise<{ overdueCount: numb
       action: "invoice_auto_overdue",
       entityType: "invoice",
       entityId: inv.id,
-      changes: { detail: `Auto-transitioned sent → overdue (dueDate: ${inv.dueDate})` },
-
+      changes: { invoiceNumber: inv.invoiceNumber, detail: `Auto-transitioned sent → overdue (dueDate: ${inv.dueDate})` },
     });
   }
 

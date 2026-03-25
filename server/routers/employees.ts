@@ -30,6 +30,7 @@ import {
   hasDepositBeenProcessed,
   deleteEmployee,
   getDb,
+  getInvoiceById,
 } from "../db";
 import { storagePut, storageGet, storageDownload } from "../storage";
 import { generateDepositInvoice } from "../services/depositInvoiceService";
@@ -335,12 +336,13 @@ export const employeesRouter = router({
       if (isTransitioningToOnboarding && previousStatus !== "onboarding") {
         depositInvoiceResult = await generateDepositInvoice(input.id);
         if (depositInvoiceResult.invoiceId) {
+          const depInv = await getInvoiceById(depositInvoiceResult.invoiceId);
           await logAuditAction({
             userId: ctx.user.id, userName: ctx.user.name || null,
             action: "generate",
             entityType: "invoice",
             entityId: depositInvoiceResult.invoiceId,
-            changes: JSON.stringify({ type: "deposit", employeeId: input.id, trigger: "onboarding_transition" }),
+            changes: JSON.stringify({ invoiceNumber: depInv?.invoiceNumber, type: "deposit", employeeId: input.id, trigger: "onboarding_transition" }),
           });
         }
       }
@@ -350,12 +352,13 @@ export const employeesRouter = router({
       if (isTransitioningToTerminated && previousStatus !== "terminated") {
         depositRefundResult = await generateDepositRefund(input.id);
         if (depositRefundResult.invoiceId) {
+          const depRefundInv = await getInvoiceById(depositRefundResult.invoiceId);
           await logAuditAction({
             userId: ctx.user.id, userName: ctx.user.name || null,
             action: "generate",
             entityType: "invoice",
             entityId: depositRefundResult.invoiceId,
-            changes: JSON.stringify({ type: "deposit_refund", employeeId: input.id, trigger: "termination" }),
+            changes: JSON.stringify({ invoiceNumber: depRefundInv?.invoiceNumber, type: "deposit_refund", employeeId: input.id, trigger: "termination" }),
           });
         }
       }
@@ -372,12 +375,14 @@ export const employeesRouter = router({
         if (depositStatus.processed) {
           reactivationDepositResult = await generateDepositInvoice(input.id);
           if (reactivationDepositResult.invoiceId) {
+            const reactivationInv = await getInvoiceById(reactivationDepositResult.invoiceId);
             await logAuditAction({
               userId: ctx.user.id, userName: ctx.user.name || null,
               action: "generate",
               entityType: "invoice",
               entityId: reactivationDepositResult.invoiceId,
               changes: JSON.stringify({
+                invoiceNumber: reactivationInv?.invoiceNumber,
                 type: "deposit",
                 employeeId: input.id,
                 trigger: "reactivation_from_terminated",
@@ -444,12 +449,13 @@ export const employeesRouter = router({
             if (!hasActiveBilledInvoice) {
               visaServiceResult = await generateVisaServiceInvoice(input.id);
               if (visaServiceResult.invoiceId) {
+                const visaInv = await getInvoiceById(visaServiceResult.invoiceId);
                 await logAuditAction({
                   userId: ctx.user.id, userName: ctx.user.name || null,
                   action: "generate",
                   entityType: "invoice",
                   entityId: visaServiceResult.invoiceId,
-                  changes: JSON.stringify({ type: "visa_service", employeeId: input.id, trigger: "visa_application_submitted" }),
+                  changes: JSON.stringify({ invoiceNumber: visaInv?.invoiceNumber, type: "visa_service", employeeId: input.id, trigger: "visa_application_submitted" }),
                 });
               }
             }
