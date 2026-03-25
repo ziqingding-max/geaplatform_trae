@@ -99,7 +99,7 @@ async function runTests() {
     const activeStatuses = ['active', 'on_leave', 'offboarding'];
     const payrollMonth = '2026-12';
     
-    const eligibleEmployees = await db.run(sql`
+    const eligibleEmployees = await db.execute(sql`
       SELECT id FROM employees 
       WHERE customerId = ${customerId} 
       AND status IN ('active', 'on_leave', 'offboarding')

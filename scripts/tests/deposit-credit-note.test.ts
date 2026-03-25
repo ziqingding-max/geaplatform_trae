@@ -68,16 +68,16 @@ async function runTests() {
     // Create a deposit invoice using raw SQL to avoid Drizzle schema mismatch
     const invoiceNumber = `DEP-TEST-${Date.now()}`;
     const invoiceMonth = new Date().toISOString().slice(0, 10);
-    const insertResult = await db.run(sql`
+    const insertResult = await db.execute(sql`
       INSERT INTO invoices (
         customerId, invoiceNumber, invoiceType, status, amountDue, currency, invoiceMonth, 
         subtotal, tax, total, serviceFeeTotal, costAllocated, createdAt, updatedAt
       ) VALUES (
         ${customerId}, ${invoiceNumber}, 'deposit', 'draft', '6000.00', 'USD', ${invoiceMonth},
-        '6000.00', '0', '6000.00', '0', '0', strftime('%s','now')*1000, strftime('%s','now')*1000
+        '6000.00', '0', '6000.00', '0', '0', NOW(), NOW()
       ) RETURNING id
     `);
-    const rawInvoices = await db.run(sql`SELECT id FROM invoices WHERE invoiceNumber = ${invoiceNumber}`);
+    const rawInvoices = await db.execute(sql`SELECT id FROM invoices WHERE invoiceNumber = ${invoiceNumber}`);
     depositInvoiceId = Number(rawInvoices.rows[0][0]);
 
     await db.insert(invoiceItems).values({
@@ -112,21 +112,21 @@ async function runTests() {
     // Mocking generateDepositRefund to bypass Drizzle schema mismatch in internal services
     // const result = await generateDepositRefund(employeeId);
     const refundInvoiceNumber = `REF-TEST-${Date.now()}`;
-    const refundInsertResult = await db.run(sql`
+    const refundInsertResult = await db.execute(sql`
       INSERT INTO invoices (
         customerId, invoiceNumber, invoiceType, status, amountDue, currency, invoiceMonth, 
         subtotal, tax, total, serviceFeeTotal, costAllocated, createdAt, updatedAt
       ) VALUES (
         ${customerId}, ${refundInvoiceNumber}, 'deposit_refund', 'draft', '-6000.00', 'USD', ${new Date().toISOString().slice(0, 10)},
-        '-6000.00', '0', '-6000.00', '0', '0', strftime('%s','now')*1000, strftime('%s','now')*1000
+        '-6000.00', '0', '-6000.00', '0', '0', NOW(), NOW()
       ) RETURNING id
     `);
-    const rawRefundInvoices = await db.run(sql`SELECT id FROM invoices WHERE invoiceNumber = ${refundInvoiceNumber}`);
+    const rawRefundInvoices = await db.execute(sql`SELECT id FROM invoices WHERE invoiceNumber = ${refundInvoiceNumber}`);
     refundInvoiceId = Number(rawRefundInvoices.rows[0][0]);
     assert.ok(refundInvoiceId, 'Deposit refund invoice should be generated');
 
     // Verify refund invoice status is 'draft' (pending review)
-    const refundInvoiceResult = await db.run(sql`SELECT invoiceType, status, total FROM invoices WHERE id = ${refundInvoiceId}`);
+    const refundInvoiceResult = await db.execute(sql`SELECT invoiceType, status, total FROM invoices WHERE id = ${refundInvoiceId}`);
     const refundInvoice = refundInvoiceResult.rows[0];
     assert.strictEqual(refundInvoice[0], 'deposit_refund', 'Invoice type should be deposit_refund');
     assert.strictEqual(refundInvoice[1], 'draft', 'Deposit refund should be in draft/pending state initially');
@@ -148,11 +148,11 @@ async function runTests() {
     // Simulate Finance clicking "Approve" in Release Tasks UI
     // await approveCreditNote(refundInvoiceId, undefined, 'to_wallet');
     // Mocking the approval logic
-    await db.run(sql`UPDATE invoices SET status = 'paid' WHERE id = ${refundInvoiceId}`);
+    await db.execute(sql`UPDATE invoices SET status = 'paid' WHERE id = ${refundInvoiceId}`);
     await walletService.releaseFrozenToMain(customerId, 'USD', '6000.00', 'Deposit release approved');
 
     // Verify Invoice status is now 'paid'
-    const approvedRefundResult = await db.run(sql`SELECT status FROM invoices WHERE id = ${refundInvoiceId}`);
+    const approvedRefundResult = await db.execute(sql`SELECT status FROM invoices WHERE id = ${refundInvoiceId}`);
     assert.strictEqual(approvedRefundResult.rows[0][0], 'paid', 'Deposit refund should be marked as paid after approval');
 
     // Verify Wallets

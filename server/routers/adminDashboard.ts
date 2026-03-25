@@ -773,7 +773,7 @@ export const adminDashboardRouter = router({
       .where(
         and(
           eq(customers.status, "active"),
-          sql`${customers.id} NOT IN (SELECT ${customerPricing.customerId} FROM ${customerPricing} WHERE ${customerPricing.isActive} = 1)`
+          sql`${customers.id} NOT IN (SELECT ${customerPricing.customerId} FROM ${customerPricing} WHERE ${customerPricing.isActive} = true)`
         )
       );
 

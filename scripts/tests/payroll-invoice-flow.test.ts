@@ -92,7 +92,7 @@ async function runTests() {
     const payrollMonth = '2026-02';
     const cutoffDay = 15;
     
-    const eligibleEmployees = await db.run(sql`
+    const eligibleEmployees = await db.execute(sql`
       SELECT id FROM employees 
       WHERE customerId = ${customerId} 
       AND status IN ('active', 'on_leave', 'offboarding')
