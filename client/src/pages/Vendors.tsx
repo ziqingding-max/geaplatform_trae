@@ -4,6 +4,7 @@
  */
 import Layout from "@/components/Layout";
 import CurrencySelect from "@/components/CurrencySelect";
+import CountrySelect from "@/components/CountrySelect";
 import { BankDetailsForm, BankDetails } from "@/components/forms/BankDetailsForm";
 import { formatDate, formatAmount, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
@@ -182,7 +183,13 @@ function VendorList() {
                 </div>
                 <div>
                   <Label className={formErrors.country ? "text-destructive" : ""}>{t("vendors.form.country.label")}</Label>
-                  <Input value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value })} placeholder="e.g. USA, UK, Singapore" className={formErrors.country ? "border-destructive" : ""} />
+                  <CountrySelect
+                    value={formData.country}
+                    onValueChange={(v) => setFormData({ ...formData, country: v })}
+                    scope="all"
+                    showCode
+                    className={formErrors.country ? "border-destructive" : ""}
+                  />
                 </div>
                 <div className="col-span-2">
                   <Label>{t("vendors.form.address.label")}</Label>
@@ -661,7 +668,12 @@ function VendorDetail({ id }: { id: number }) {
               </div>
               <div>
                 <Label>{t("vendors.form.country.label")}</Label>
-                <Input value={editData.country || ""} onChange={(e) => setEditData({ ...editData, country: e.target.value })} />
+                <CountrySelect
+                  value={editData.country || ""}
+                  onValueChange={(v) => setEditData({ ...editData, country: v })}
+                  scope="all"
+                  showCode
+                />
               </div>
               <div className="col-span-2">
                 <Label>{t("vendors.form.address.label")}</Label>
