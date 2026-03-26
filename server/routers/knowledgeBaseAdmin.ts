@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { desc, eq, gte, inArray, count, and, sql } from "drizzle-orm";
+import { desc, eq, gte, inArray, count, and, sql, or, isNull } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, userProcedure } from "../procedures";
 import { router } from "../_core/trpc";
@@ -723,4 +723,122 @@ export const knowledgeBaseAdminRouter = router({
 
     return { success: true, cleaned: idsToReject.length };
   }),
+
+  /**
+   * Browse published knowledge items — Admin-side view of the knowledge base.
+   * Similar to Portal dashboard but without customer-specific filtering.
+   */
+  browsePublished: userProcedure
+    .input(
+      z.object({
+        locale: z.enum(["en", "zh"]).default("en"),
+        topics: z.array(z.enum(["payroll", "compliance", "leave", "invoice", "onboarding", "general"])).optional(),
+        countryCodes: z.array(z.string()).optional(),
+        search: z.string().max(200).optional(),
+        page: z.number().int().min(1).default(1),
+        pageSize: z.number().int().min(1).max(100).default(20),
+      })
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      }
+
+      const locale = input.locale;
+      const topics: ("payroll" | "compliance" | "leave" | "invoice" | "onboarding" | "general")[] = input.topics?.length ? input.topics : ["payroll", "compliance", "leave", "invoice", "onboarding", "general"];
+      const page = input.page;
+      const pageSize = input.pageSize;
+
+      // Language: include current locale + English fallback
+      const langCondition =
+        locale === "en"
+          ? eq(knowledgeItems.language, "en")
+          : or(eq(knowledgeItems.language, locale), eq(knowledgeItems.language, "en"));
+
+      const conditions: any[] = [
+        inArray(knowledgeItems.topic, topics),
+        langCondition!,
+        eq(knowledgeItems.status, "published"),
+      ];
+
+      // Country filter
+      if (input.countryCodes && input.countryCodes.length > 0) {
+        const upperCodes = input.countryCodes.map((c) => c.toUpperCase());
+        conditions.push(
+          or(
+            inArray(sql`(metadata->>'countryCode')`, upperCodes),
+            sql`(metadata->>'countryCode') IS NULL`
+          )!
+        );
+      }
+
+      // Search filter
+      if (input.search && input.search.trim()) {
+        const searchTerm = `%${input.search.trim().toLowerCase()}%`;
+        conditions.push(
+          or(
+            sql`LOWER(title) LIKE ${searchTerm}`,
+            sql`LOWER(summary) LIKE ${searchTerm}`
+          )!
+        );
+      }
+
+      // Fetch all matching items (up to 5000 for dedup + sort)
+      const allItems = await db
+        .select()
+        .from(knowledgeItems)
+        .where(and(...conditions))
+        .orderBy(desc(knowledgeItems.publishedAt), desc(knowledgeItems.createdAt))
+        .limit(5000);
+
+      // Deduplicate: if both zh and en versions exist for same title, keep only locale version
+      let deduped = allItems;
+      if (locale !== "en") {
+        const localeTitles = new Set(
+          allItems.filter((i) => i.language === locale).map((i) => i.title)
+        );
+        deduped = allItems.filter(
+          (i) => i.language === locale || !localeTitles.has(i.title)
+        );
+      }
+
+      // Paginate
+      const startIdx = (page - 1) * pageSize;
+      const paginatedItems = deduped.slice(startIdx, startIdx + pageSize);
+
+      // Mark English fallback articles
+      const itemsWithFallback = paginatedItems.map((item) => ({
+        ...item,
+        isFallback: locale !== "en" && item.language === "en",
+      }));
+
+      // Topic counts
+      const topicCounts: Record<string, number> = {};
+      for (const topic of topics) {
+        topicCounts[topic] = deduped.filter((item) => item.topic === topic).length;
+      }
+
+      // Available countries
+      const availableCountries: Record<string, number> = {};
+      for (const item of deduped) {
+        const meta = (item.metadata || {}) as Record<string, any>;
+        const cc = meta.countryCode ? String(meta.countryCode).toUpperCase() : null;
+        if (cc) {
+          availableCountries[cc] = (availableCountries[cc] || 0) + 1;
+        }
+      }
+
+      return {
+        topicCounts,
+        items: itemsWithFallback,
+        pagination: {
+          page,
+          pageSize,
+          total: deduped.length,
+          totalPages: Math.ceil(deduped.length / pageSize),
+        },
+        availableCountries,
+      };
+    }),
 });
