@@ -64,6 +64,18 @@ function computeRiskScore(input: {
   return Math.max(0, Math.min(100, Math.round((100 - authority) * 0.45 + (100 - freshness) * 0.25 + duplication * 0.3)));
 }
 
+function computeNextFetchAt(frequency: "daily" | "weekly" | "monthly"): Date {
+  const now = new Date();
+  switch (frequency) {
+    case "daily":
+      return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    case "weekly":
+      return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    case "monthly":
+      return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  }
+}
+
 export const knowledgeBaseAdminRouter = router({
   listReviewQueue: userProcedure
     .input(
@@ -177,6 +189,7 @@ export const knowledgeBaseAdminRouter = router({
           .enum(["payroll", "compliance", "leave", "invoice", "onboarding", "general"])
           .default("general"),
         isActive: z.boolean().default(true),
+        fetchFrequency: z.enum(["manual", "daily", "weekly", "monthly"]).default("manual"),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -189,6 +202,9 @@ export const knowledgeBaseAdminRouter = router({
         sourceType: input.sourceType,
       });
 
+      // Calculate next fetch time based on frequency
+      const nextFetchAt = input.fetchFrequency !== "manual" ? computeNextFetchAt(input.fetchFrequency) : null;
+
       if (input.id) {
         await db
           .update(knowledgeSources)
@@ -199,6 +215,8 @@ export const knowledgeBaseAdminRouter = router({
             language: input.language,
             topic: input.topic,
             isActive: input.isActive,
+            fetchFrequency: input.fetchFrequency,
+            nextFetchAt,
             authorityScore: authority.score,
             authorityLevel: authority.level,
             authorityReason: authority.reason,
@@ -216,6 +234,8 @@ export const knowledgeBaseAdminRouter = router({
         language: input.language,
         topic: input.topic,
         isActive: input.isActive,
+        fetchFrequency: input.fetchFrequency,
+        nextFetchAt,
         authorityScore: authority.score,
         authorityLevel: authority.level,
         authorityReason: authority.reason,
@@ -338,6 +358,9 @@ export const knowledgeBaseAdminRouter = router({
             "compensationGuide",
             "terminationGuide",
             "workingConditions",
+            "salaryBenchmark",
+            "contractorGuide",
+            "exchangeRateImpact",
           ])
         ).optional(),
         countryCodes: z.array(z.string()).optional(),
@@ -375,5 +398,70 @@ export const knowledgeBaseAdminRouter = router({
         .where(eq(knowledgeItems.id, input.id));
 
       return { success: true };
+    }),
+
+  // Batch review: publish or reject multiple items at once
+  batchReview: adminProcedure
+    .input(
+      z.object({
+        ids: z.array(z.number()).min(1).max(100),
+        action: z.enum(["publish", "reject"]),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const now = new Date();
+      await db
+        .update(knowledgeItems)
+        .set({
+          status: input.action === "publish" ? "published" : "rejected",
+          reviewedBy: ctx.user.id,
+          reviewedAt: now,
+          publishedAt: input.action === "publish" ? now : undefined,
+          reviewNote: input.note || null,
+        })
+        .where(inArray(knowledgeItems.id, input.ids));
+
+      return { success: true, count: input.ids.length };
+    }),
+
+  // List expired or soon-to-expire articles
+  listExpiredContent: adminProcedure
+    .input(
+      z.object({
+        includeExpiringSoon: z.boolean().default(true), // within 30 days
+      }).optional()
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const now = new Date();
+      const soonThreshold = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      // Get articles that have expiresAt set
+      const rows = await db
+        .select()
+        .from(knowledgeItems)
+        .where(eq(knowledgeItems.status, "published"))
+        .orderBy(desc(knowledgeItems.publishedAt))
+        .limit(500);
+
+      return rows
+        .filter((row) => {
+          if (!row.expiresAt) return false;
+          const expiresAt = new Date(row.expiresAt);
+          if (expiresAt <= now) return true; // already expired
+          if (input?.includeExpiringSoon && expiresAt <= soonThreshold) return true; // expiring soon
+          return false;
+        })
+        .map((row) => ({
+          ...row,
+          isExpired: row.expiresAt ? new Date(row.expiresAt) <= now : false,
+          isExpiringSoon: row.expiresAt ? new Date(row.expiresAt) <= soonThreshold && new Date(row.expiresAt) > now : false,
+        }));
     }),
 });
