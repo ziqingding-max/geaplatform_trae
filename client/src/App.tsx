@@ -42,6 +42,7 @@ import CountryGuideList from "@/pages/admin/CountryGuideList";
 import CountryGuideEditor from "@/pages/admin/CountryGuideEditor";
 import AdminCountryGuide from "@/pages/admin/AdminCountryGuide";
 import AdminCostSimulator from "@/pages/admin/AdminCostSimulator";
+import AdminKnowledgeBaseBrowse from "@/pages/admin/AdminKnowledgeBase";
 
 // Portal pages (lazy loaded to keep admin bundle separate)
 import { lazy, Suspense } from "react";
@@ -263,6 +264,7 @@ function AdminRouter() {
       <Route path="/admin/knowledge/country-guides" component={CountryGuideList} />
       <Route path="/admin/country-guide" component={AdminCountryGuide} />
       <Route path="/admin/cost-simulator" component={AdminCostSimulator} />
+      <Route path="/admin/knowledge-base" component={AdminKnowledgeBaseBrowse} />
       <Route path="/settings" component={Settings} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

@@ -113,6 +113,7 @@ function useNavGroups(user: any) {
       items: [
         { label: t("nav.countryGuide"), icon: Globe, href: "/admin/country-guide" },
         { label: t("nav.costSimulator"), icon: Calculator, href: "/admin/cost-simulator" },
+        { label: t("nav.knowledgeBase"), icon: BookOpen, href: "/admin/knowledge-base" },
       ],
     },
     // ── Client Management: visible to all roles ──
