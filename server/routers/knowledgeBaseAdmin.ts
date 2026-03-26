@@ -731,7 +731,6 @@ export const knowledgeBaseAdminRouter = router({
   browsePublished: userProcedure
     .input(
       z.object({
-        locale: z.enum(["en", "zh"]).default("en"),
         topics: z.array(z.enum(["payroll", "compliance", "leave", "invoice", "onboarding", "general"])).optional(),
         countryCodes: z.array(z.string()).optional(),
         search: z.string().max(200).optional(),
@@ -745,20 +744,12 @@ export const knowledgeBaseAdminRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       }
 
-      const locale = input.locale;
       const topics: ("payroll" | "compliance" | "leave" | "invoice" | "onboarding" | "general")[] = input.topics?.length ? input.topics : ["payroll", "compliance", "leave", "invoice", "onboarding", "general"];
       const page = input.page;
       const pageSize = input.pageSize;
 
-      // Language: include current locale + English fallback
-      const langCondition =
-        locale === "en"
-          ? eq(knowledgeItems.language, "en")
-          : or(eq(knowledgeItems.language, locale), eq(knowledgeItems.language, "en"));
-
       const conditions: any[] = [
         inArray(knowledgeItems.topic, topics),
-        langCondition!,
         eq(knowledgeItems.status, "published"),
       ];
 
@@ -784,7 +775,7 @@ export const knowledgeBaseAdminRouter = router({
         );
       }
 
-      // Fetch all matching items (up to 5000 for dedup + sort)
+      // Fetch all matching items (no language filter — show all languages)
       const allItems = await db
         .select()
         .from(knowledgeItems)
@@ -792,36 +783,19 @@ export const knowledgeBaseAdminRouter = router({
         .orderBy(desc(knowledgeItems.publishedAt), desc(knowledgeItems.createdAt))
         .limit(5000);
 
-      // Deduplicate: if both zh and en versions exist for same title, keep only locale version
-      let deduped = allItems;
-      if (locale !== "en") {
-        const localeTitles = new Set(
-          allItems.filter((i) => i.language === locale).map((i) => i.title)
-        );
-        deduped = allItems.filter(
-          (i) => i.language === locale || !localeTitles.has(i.title)
-        );
-      }
-
       // Paginate
       const startIdx = (page - 1) * pageSize;
-      const paginatedItems = deduped.slice(startIdx, startIdx + pageSize);
-
-      // Mark English fallback articles
-      const itemsWithFallback = paginatedItems.map((item) => ({
-        ...item,
-        isFallback: locale !== "en" && item.language === "en",
-      }));
+      const paginatedItems = allItems.slice(startIdx, startIdx + pageSize);
 
       // Topic counts
       const topicCounts: Record<string, number> = {};
       for (const topic of topics) {
-        topicCounts[topic] = deduped.filter((item) => item.topic === topic).length;
+        topicCounts[topic] = allItems.filter((item) => item.topic === topic).length;
       }
 
       // Available countries
       const availableCountries: Record<string, number> = {};
-      for (const item of deduped) {
+      for (const item of allItems) {
         const meta = (item.metadata || {}) as Record<string, any>;
         const cc = meta.countryCode ? String(meta.countryCode).toUpperCase() : null;
         if (cc) {
@@ -831,12 +805,12 @@ export const knowledgeBaseAdminRouter = router({
 
       return {
         topicCounts,
-        items: itemsWithFallback,
+        items: paginatedItems,
         pagination: {
           page,
           pageSize,
-          total: deduped.length,
-          totalPages: Math.ceil(deduped.length / pageSize),
+          total: allItems.length,
+          totalPages: Math.ceil(allItems.length / pageSize),
         },
         availableCountries,
       };
