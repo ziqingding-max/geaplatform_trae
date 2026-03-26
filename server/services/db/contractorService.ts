@@ -255,6 +255,50 @@ export async function deleteContractorAdjustment(id: number) {
   await db.delete(contractorAdjustments).where(eq(contractorAdjustments.id, id));
 }
 
+// RECURRING CONTRACTOR ADJUSTMENT HELPERS
+
+/**
+ * List all active recurring contractor adjustment templates that are admin_approved.
+ * Used by the cron job to generate monthly child records.
+ */
+export async function listRecurringContractorAdjustmentTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+  const { ne } = await import('drizzle-orm');
+  return await db.select().from(contractorAdjustments).where(
+    and(
+      eq(contractorAdjustments.isRecurringTemplate, true),
+      eq(contractorAdjustments.status, 'admin_approved' as any),
+      ne(contractorAdjustments.recurrenceType, 'one_time'),
+    )
+  );
+}
+
+/**
+ * Check if a child contractor adjustment already exists for a given template + month (idempotency).
+ */
+export async function getChildContractorAdjustmentForMonth(parentId: number, month: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(contractorAdjustments).where(
+    and(
+      eq(contractorAdjustments.parentAdjustmentId, parentId),
+      eq(contractorAdjustments.effectiveMonth, month),
+    )
+  ).limit(1);
+  return result[0];
+}
+
+/**
+ * Get a single contractor adjustment by ID.
+ */
+export async function getContractorAdjustmentById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(contractorAdjustments).where(eq(contractorAdjustments.id, id)).limit(1);
+  return result[0];
+}
+
 // INVOICES
 export async function listContractorInvoices(contractorId: number) {
   const db = await getDb();
@@ -360,6 +404,8 @@ export async function lockContractorAdjustments(monthStr: string): Promise<numbe
     eq(contractorAdjustments.effectiveMonth, monthStr),
     eq(contractorAdjustments.status, 'admin_approved' as any),
     isNull(contractorAdjustments.invoiceId),
+    // Never lock recurring templates — they must stay admin_approved to keep generating
+    or(eq(contractorAdjustments.isRecurringTemplate, false), isNull(contractorAdjustments.isRecurringTemplate as any)),
   ];
 
   const result = await db.update(contractorAdjustments)
