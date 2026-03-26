@@ -18,6 +18,93 @@ export type KnowledgeDraft = {
   confidence: number;
 };
 
+// ─── Brand cleansing constants ───────────────────────────────────────────────
+
+const COMPETITOR_BRANDS = [
+  "Deel", "Letsdeel", "Remote.com", "Remote\\.com", "Oyster", "OysterHR",
+  "G-P", "Globalization Partners", "Papaya Global", "Velocity Global",
+  "Multiplier", "Rippling", "Skuad", "Omnipresent", "Lano", "Remofirst",
+  "Safeguard Global", "Atlas HXM", "Horizons", "Airwallex", "Pilot\\.co",
+  "Thera", "Teamed", "WorkMotion", "Pebl",
+];
+
+const CTA_PATTERNS = [
+  /book\s+a\s+demo/gi,
+  /schedule\s+a\s+(call|demo|meeting)/gi,
+  /sign\s+up\s+(for\s+)?free/gi,
+  /try\s+\w+\s+for\s+free/gi,
+  /start\s+(your\s+)?free\s+trial/gi,
+  /get\s+started\s+(today|now|for\s+free)/gi,
+  /request\s+a\s+(demo|quote|proposal)/gi,
+  /talk\s+to\s+(an?\s+)?(expert|sales|specialist)/gi,
+  /contact\s+(our\s+)?(sales|team)/gi,
+  /see\s+(how|why)\s+\w+\s+(can|helps)/gi,
+  /learn\s+more\s+about\s+\w+('s)?\s+(platform|product|solution)/gi,
+  /powered\s+by\s+\w+/gi,
+  /©\s*\d{4}\s*\w+/gi,
+  /all\s+rights\s+reserved/gi,
+];
+
+/**
+ * Layer 1: Pre-processing content cleaner
+ * Strips CTAs, promotional sentences, and obvious brand mentions before AI processing
+ */
+export function preCleanContent(text: string): string {
+  let cleaned = text;
+
+  // Remove CTA patterns
+  for (const pattern of CTA_PATTERNS) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+
+  // Remove sentences that are purely promotional (contain brand + action verb)
+  const brandPattern = new RegExp(
+    `(?:^|[.!?]\\s*)(?:[^.!?]*(?:${COMPETITOR_BRANDS.join("|")})(?:'s)?\\s+(?:helps?|offers?|provides?|enables?|makes?|allows?|lets?|gives?|delivers?|simplifies?|streamlines?|automates?|powers?)[^.!?]*[.!?])`,
+    "gi"
+  );
+  cleaned = cleaned.replace(brandPattern, " ");
+
+  // Remove lines that are just links or buttons
+  cleaned = cleaned.replace(/^.*(?:https?:\/\/\S+\s*){2,}.*$/gm, "");
+
+  // Collapse multiple whitespace
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").replace(/\s{2,}/g, " ").trim();
+
+  return cleaned;
+}
+
+/**
+ * Layer 3: Post-processing brand scrubber
+ * Final safety net to replace any remaining brand names in AI output
+ */
+export function postCleanBrands(text: string): string {
+  let cleaned = text;
+
+  // Build case-insensitive replacement for each brand
+  for (const brand of COMPETITOR_BRANDS) {
+    // Skip regex-escaped entries for the display pattern
+    const displayBrand = brand.replace(/\\\./g, ".");
+    const regex = new RegExp(`\\b${brand}(?:'s)?\\b`, "gi");
+
+    // Context-aware replacement
+    cleaned = cleaned.replace(regex, (_match) => {
+      return "your EOR provider";
+    });
+  }
+
+  // Clean up awkward double replacements like "your EOR provider your EOR provider"
+  cleaned = cleaned.replace(/(your EOR provider\s*){2,}/gi, "your EOR provider ");
+
+  // Remove leftover CTA sentences that slipped through
+  for (const pattern of CTA_PATTERNS) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+
+  return cleaned.trim();
+}
+
+// ─── Existing utility functions ──────────────────────────────────────────────
+
 function clampScore(n: number) {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
@@ -122,28 +209,59 @@ export async function generateKnowledgeDraftWithAI(params: {
   };
 
   try {
+    // Layer 1: Pre-clean the raw content
+    const cleanedTitle = postCleanBrands(params.rawTitle);
+    const cleanedContent = preCleanContent(params.rawContent);
+
+    // Layer 2: Enhanced AI prompt with brand policy
     const prompt = {
-      goal: "Summarize and normalize raw web content for enterprise knowledge base",
+      goal: "Rewrite and normalize raw web content into a neutral, brand-free knowledge article for our enterprise knowledge base",
       constraints: {
         audience: "B2B clients using EOR/AOR/visa services",
         output_language: params.languageHint,
-        style: "concise, practical, policy-aware",
+        style: "concise, practical, policy-aware, neutral tone",
+        brand_policy: {
+          critical_rule: "You MUST remove ALL third-party company names, brand names, product names, and promotional content from the output. This is non-negotiable.",
+          competitor_brands_to_remove: [
+            "Deel", "Remote.com", "Oyster", "OysterHR", "G-P", "Globalization Partners",
+            "Papaya Global", "Velocity Global", "Multiplier", "Rippling", "Skuad",
+            "Omnipresent", "Lano", "Remofirst", "Safeguard Global", "Atlas HXM",
+            "Horizons", "WorkMotion", "Pebl",
+          ],
+          replacement_strategy: "Replace any brand/company name with generic terms like 'your EOR provider', 'the employer of record', 'a global employment platform', or simply omit the brand reference",
+          content_to_remove: [
+            "Calls-to-action (book a demo, sign up, get started, etc.)",
+            "Pricing mentions or plan comparisons",
+            "Product feature promotions or platform-specific workflows",
+            "Demo/signup links and URLs",
+            "Testimonials or case studies mentioning specific vendors",
+            "Copyright notices and legal disclaimers from the source",
+            "Author bios that mention competitor companies",
+          ],
+          content_to_preserve: [
+            "Factual legal and compliance information",
+            "Regulatory requirements and deadlines",
+            "Country-specific labor law details",
+            "Tax rates, contribution percentages, and statutory benefits",
+            "Best practices for global employment operations",
+          ],
+        },
       },
       input: {
         sourceName: params.sourceName,
         sourceUrl: params.sourceUrl,
         topic: params.topic,
-        rawTitle: params.rawTitle,
-        rawContent: params.rawContent.slice(0, 6000),
+        rawTitle: cleanedTitle,
+        rawContent: cleanedContent.slice(0, 6000),
       },
       output_schema: {
-        title: "string",
-        summary: "string <= 240 chars",
-        content: "string markdown format",
+        title: "string - neutral, no brand names",
+        summary: "string <= 240 chars - neutral, no brand names",
+        content: "string markdown format - neutral, factual, no brand names or CTAs",
         category: "article|alert|guide",
         topic: "payroll|compliance|leave|invoice|onboarding|general",
         language: "en|zh",
-        tags: "string[]",
+        tags: "string[] - no brand names in tags",
         countries: "string[] ISO country code if possible",
         confidence: "number 0-100",
       },
@@ -154,7 +272,12 @@ export async function generateKnowledgeDraftWithAI(params: {
         {
           role: "system",
           content:
-            "You are a legal/compliance editor for global employment operations. Return strict JSON only.",
+            "You are a legal/compliance editor for a global employment operations platform. " +
+            "Your PRIMARY directive is to produce brand-neutral content. " +
+            "NEVER include any third-party company names, product names, or promotional language in your output. " +
+            "Replace all brand references with generic terms. " +
+            "Focus exclusively on extracting factual, regulatory, and compliance information. " +
+            "Return strict JSON only.",
         },
         {
           role: "user",
@@ -169,10 +292,19 @@ export async function generateKnowledgeDraftWithAI(params: {
     const text = typeof raw === "string" ? raw : "";
     const parsed = JSON.parse(text || "{}");
 
+    // Layer 3: Post-clean AI output to catch any remaining brand mentions
+    const finalTitle = postCleanBrands(String(parsed.title || fallback.title)).slice(0, 500);
+    const finalSummary = postCleanBrands(String(parsed.summary || fallback.summary)).slice(0, 500);
+    const finalContent = postCleanBrands(String(parsed.content || fallback.content)).slice(0, 10000);
+    const finalTags = (Array.isArray(parsed.tags) ? parsed.tags : fallback.tags)
+      .map((x: unknown) => postCleanBrands(String(x)))
+      .filter((t: string) => t.length > 0 && t !== "your EOR provider")
+      .slice(0, 12);
+
     return {
-      title: String(parsed.title || fallback.title).slice(0, 500),
-      summary: String(parsed.summary || fallback.summary).slice(0, 500),
-      content: String(parsed.content || fallback.content).slice(0, 10000),
+      title: finalTitle,
+      summary: finalSummary,
+      content: finalContent,
       category: ["article", "alert", "guide"].includes(parsed.category)
         ? parsed.category
         : fallback.category,
@@ -180,7 +312,7 @@ export async function generateKnowledgeDraftWithAI(params: {
         ? parsed.topic
         : fallback.topic,
       language: parsed.language === "zh" ? "zh" : "en",
-      tags: Array.isArray(parsed.tags) ? parsed.tags.map((x: unknown) => String(x)).slice(0, 12) : fallback.tags,
+      tags: finalTags,
       countries: Array.isArray(parsed.countries)
         ? parsed.countries.map((x: unknown) => String(x).toUpperCase()).slice(0, 8)
         : fallback.countries,
