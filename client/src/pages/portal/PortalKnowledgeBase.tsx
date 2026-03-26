@@ -170,14 +170,11 @@ export default function PortalKnowledgeBase() {
                             {countryName(meta.countryCode)}
                           </Badge>
                         )}
+                <Badge variant="outline" className={`text-xs ${selectedItem.language === "zh" ? "border-orange-400 text-orange-600" : "border-blue-400 text-blue-600"}`}>
+                  {selectedItem.language === "zh" ? "ZH" : "EN"}
+                </Badge>
                 {isNewArticle(selectedItem.publishedAt) && (
                   <Badge className="bg-green-500 text-white hover:bg-green-600">NEW</Badge>
-                )}
-                {(selectedItem as any).isFallback && (
-                  <Badge variant="outline" className="border-amber-400 text-amber-600">
-                    <Globe className="w-3 h-3 mr-1" />
-                    English Only
-                  </Badge>
                 )}
               </div>
               <CardTitle className="text-xl">{selectedItem.title}</CardTitle>
@@ -488,15 +485,12 @@ export default function PortalKnowledgeBase() {
                             {countryName(meta.countryCode)}
                           </Badge>
                         )}
+                        <Badge variant="outline" className={`text-xs ${item.language === "zh" ? "border-orange-400 text-orange-600" : "border-blue-400 text-blue-600"}`}>
+                          {item.language === "zh" ? "ZH" : "EN"}
+                        </Badge>
                         {isNewArticle(item.publishedAt) && (
                           <Badge className="bg-green-500 text-white hover:bg-green-600 text-xs">
                             NEW
-                          </Badge>
-                        )}
-                        {(item as any).isFallback && (
-                          <Badge variant="outline" className="text-xs border-amber-400 text-amber-600">
-                            <Globe className="w-3 h-3 mr-1" />
-                            English Only
                           </Badge>
                         )}
                       </div>

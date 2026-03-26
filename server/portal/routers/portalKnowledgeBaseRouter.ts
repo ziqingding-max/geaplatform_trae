@@ -105,16 +105,9 @@ export const portalKnowledgeBaseRouter = portalRouter({
         )
       );
 
-      // ── 2. Build WHERE conditions ──
-      // Include current locale + English fallback (for articles without a translation)
-      const langCondition =
-        locale === "en"
-          ? eq(knowledgeItems.language, "en")
-          : or(eq(knowledgeItems.language, locale), eq(knowledgeItems.language, "en"));
-
+      // ── 2. Build WHERE conditions (no language filter — show all languages) ──
       const conditions = [
         inArray(knowledgeItems.topic, topics),
-        langCondition!,
         eq(knowledgeItems.status, "published"),
         or(eq(knowledgeItems.customerId, customerId), isNull(knowledgeItems.customerId)),
       ];
@@ -137,11 +130,7 @@ export const portalKnowledgeBaseRouter = portalRouter({
         .from(knowledgeItems)
         .where(and(...conditions));
 
-      // ── 4. Fetch ALL items for smart sorting (up to a reasonable cap) ──
-      // We fetch all matching items, sort them in memory, then paginate.
-      // This is necessary because the sort logic depends on customer context
-      // which cannot be expressed in a single SQL ORDER BY.
-      // Performance note: for very large datasets (>5000), consider caching.
+      // ── 4. Fetch ALL items for smart sorting (no language filter — show all languages) ──
       const allItems = await db
         .select()
         .from(knowledgeItems)
@@ -149,40 +138,22 @@ export const portalKnowledgeBaseRouter = portalRouter({
         .orderBy(desc(knowledgeItems.publishedAt), desc(knowledgeItems.createdAt))
         .limit(5000);
 
-      // ── 5. Deduplicate: if both zh and en versions exist for same title, keep only the locale version ──
-      let deduped = allItems;
-      if (locale !== "en") {
-        const localeTitles = new Set(
-          allItems.filter((i) => i.language === locale).map((i) => i.title)
-        );
-        // Remove English articles that have a corresponding locale version
-        deduped = allItems.filter(
-          (i) => i.language === locale || !localeTitles.has(i.title)
-        );
-      }
+      // ── 5. Smart sort (mixed, no language priority) ──
+      const sortedItems = smartSort(allItems, customerCountryCodes, customerId);
 
-      // ── 6. Smart sort (mixed, no language priority) ──
-      const sortedItems = smartSort(deduped, customerCountryCodes, customerId);
-
-      // ── 7. Paginate ──
+      // ── 6. Paginate ──
       const startIdx = (page - 1) * pageSize;
       const paginatedItems = sortedItems.slice(startIdx, startIdx + pageSize);
 
-      // ── 7b. Mark English fallback articles ──
-      const itemsWithFallback = paginatedItems.map((item) => ({
-        ...item,
-        isFallback: locale !== "en" && item.language === "en",
-      }));
-
-      // ── 8. Compute topic counts from ALL deduplicated items (not just current page) ──
+      // ── 7. Compute topic counts from ALL items (not just current page) ──
       const topicCounts = topics.reduce<Record<string, number>>((acc, topic) => {
-        acc[topic] = deduped.filter((item) => item.topic === topic).length;
+        acc[topic] = allItems.filter((item) => item.topic === topic).length;
         return acc;
       }, {});
 
-      // ── 9. Compute available country codes from all deduplicated items ──
+      // ── 8. Compute available country codes from all items ──
       const availableCountries: Record<string, number> = {};
-      for (const item of deduped) {
+      for (const item of allItems) {
         const meta = (item.metadata || {}) as Record<string, any>;
         const cc = meta.countryCode ? String(meta.countryCode).toUpperCase() : null;
         if (cc) {
@@ -194,12 +165,12 @@ export const portalKnowledgeBaseRouter = portalRouter({
         customerId,
         generatedAt: Date.now(),
         topicCounts,
-        items: itemsWithFallback,
+        items: paginatedItems,
         pagination: {
           page,
           pageSize,
-          total: deduped.length,
-          totalPages: Math.ceil(deduped.length / pageSize),
+          total: allItems.length,
+          totalPages: Math.ceil(allItems.length / pageSize),
         },
         customerCountryCodes,
         availableCountries,
