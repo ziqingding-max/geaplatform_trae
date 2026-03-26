@@ -387,7 +387,7 @@ export const portalInvoicesRouter = portalRouter({
 
     // Total invoiced (excluding credit notes and deposit refunds)
     const [invoiced] = await db
-      .select({ total: sql<string>`COALESCE(SUM(${invoices.total}), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${invoices.total} AS numeric)), 0)` })
       .from(invoices)
       .where(
         and(
@@ -399,7 +399,7 @@ export const portalInvoicesRouter = portalRouter({
 
     // Total paid
     const [paid] = await db
-      .select({ total: sql<string>`COALESCE(SUM(${invoices.paidAmount}), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${invoices.paidAmount} AS numeric)), 0)` })
       .from(invoices)
       .where(
         and(
@@ -410,7 +410,7 @@ export const portalInvoicesRouter = portalRouter({
 
     // Total credit notes issued (absolute value)
     const [credits] = await db
-      .select({ total: sql<string>`COALESCE(SUM(ABS(${invoices.total})), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(ABS(CAST(${invoices.total} AS numeric))), 0)` })
       .from(invoices)
       .where(
         and(
@@ -424,7 +424,7 @@ export const portalInvoicesRouter = portalRouter({
 
     // Total deposits (gross - paid deposits)
     const [depositsGross] = await db
-      .select({ total: sql<string>`COALESCE(SUM(${invoices.total}), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${invoices.total} AS numeric)), 0)` })
       .from(invoices)
       .where(
         and(
@@ -436,20 +436,20 @@ export const portalInvoicesRouter = portalRouter({
 
     // Subtract credit notes derived from deposits
     const [depositCreditNotes] = await db
-      .select({ total: sql<string>`COALESCE(SUM(ABS(${invoices.total})), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(ABS(CAST(${invoices.total} AS numeric))), 0)` })
       .from(invoices)
       .where(
         and(
           eq(invoices.customerId, cid),
           eq(invoices.invoiceType, "credit_note"),
           ACTIVE_FILTER,
-          sql`${invoices.relatedInvoiceId} IN (SELECT id FROM invoices WHERE customerId = ${cid} AND invoiceType = 'deposit')`
+          sql`${invoices.relatedInvoiceId} IN (SELECT id FROM invoices WHERE "customerId" = ${cid} AND "invoiceType" = 'deposit')`
         )
       );
 
     // Subtract deposit refunds
     const [depositRefunds] = await db
-      .select({ total: sql<string>`COALESCE(SUM(ABS(${invoices.total})), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(ABS(CAST(${invoices.total} AS numeric))), 0)` })
       .from(invoices)
       .where(
         and(
@@ -468,7 +468,7 @@ export const portalInvoicesRouter = portalRouter({
 
     // Outstanding balance (sent + overdue, excluding credit notes)
     const [outstanding] = await db
-      .select({ total: sql<string>`COALESCE(SUM(COALESCE(${invoices.amountDue}, ${invoices.total})), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(COALESCE(${invoices.amountDue}, ${invoices.total}) AS numeric)), 0)` })
       .from(invoices)
       .where(
         and(

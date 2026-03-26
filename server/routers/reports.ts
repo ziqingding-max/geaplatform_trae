@@ -463,7 +463,7 @@ export const reportsRouter = router({
       const revenueByTypeResult = await db
         .select({
           type: invoicesTable.invoiceType,
-          amount: sql<string>`COALESCE(SUM(${invoicesTable.total}), 0)`,
+          amount: sql<string>`COALESCE(SUM(CAST(${invoicesTable.total} AS numeric)), 0)`,
         })
         .from(invoicesTable)
         .where(
@@ -515,7 +515,7 @@ export const reportsRouter = router({
         .select({
           customerId: invoicesTable.customerId,
           customerName: customersTable.companyName,
-          amount: sql<string>`COALESCE(SUM(${invoicesTable.total}), 0)`,
+          amount: sql<string>`COALESCE(SUM(CAST(${invoicesTable.total} AS numeric)), 0)`,
         })
         .from(invoicesTable)
         .innerJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
@@ -534,8 +534,8 @@ export const reportsRouter = router({
         .select({
           customerId: invoicesTable.customerId,
           customerName: customersTable.companyName,
-          revenue: sql<string>`COALESCE(SUM(DISTINCT ${invoicesTable.total}), 0)`,
-          costAllocated: sql<string>`COALESCE(SUM(${billInvoiceAllocations.allocatedAmount}), 0)`,
+          revenue: sql<string>`COALESCE(SUM(DISTINCT CAST(${invoicesTable.total} AS numeric)), 0)`,
+          costAllocated: sql<string>`COALESCE(SUM(CAST(${billInvoiceAllocations.allocatedAmount} AS numeric)), 0)`,
         })
         .from(invoicesTable)
         .innerJoin(customersTable, eq(invoicesTable.customerId, customersTable.id))
@@ -657,7 +657,7 @@ export const reportsRouter = router({
 
     // Current month revenue
     const [curRevenue] = await db
-      .select({ total: sql<string>`COALESCE(SUM(${invoicesTable.total}), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${invoicesTable.total} AS numeric)), 0)` })
       .from(invoicesTable)
       .where(
         and(
@@ -682,7 +682,7 @@ export const reportsRouter = router({
 
     // Previous month revenue
     const [prevRevenue] = await db
-      .select({ total: sql<string>`COALESCE(SUM(${invoicesTable.total}), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${invoicesTable.total} AS numeric)), 0)` })
       .from(invoicesTable)
       .where(
         and(
@@ -713,7 +713,7 @@ export const reportsRouter = router({
 
     // Outstanding invoices (sent + overdue)
     const [outstandingInvoices] = await db
-      .select({ total: sql<string>`COALESCE(SUM(${invoicesTable.total}), 0)` })
+      .select({ total: sql<string>`COALESCE(SUM(CAST(${invoicesTable.total} AS numeric)), 0)` })
       .from(invoicesTable)
       .where(
         and(
