@@ -479,7 +479,7 @@ export const knowledgeBaseAdminRouter = router({
   batchReview: adminProcedure
     .input(
       z.object({
-        ids: z.array(z.number()).min(1).max(100),
+        ids: z.array(z.number()).min(1).max(500),
         action: z.enum(["publish", "reject"]),
         note: z.string().optional(),
       })
