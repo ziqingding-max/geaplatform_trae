@@ -263,6 +263,11 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "knowledge_base.no_content": "No content available for this article.",
     "knowledge_base.pagination.showing": "Showing",
     "knowledge_base.pagination.of": "of",
+    "knowledge_base.filter.topics": "Topics",
+    "knowledge_base.filter.countries": "Countries / Regions",
+    "knowledge_base.filter.clear_countries": "Clear filter",
+    "knowledge_base.filter.your_countries": "Countries where you have employees or contractors",
+    "knowledge_base.feed.filtered_by_countries": "Filtered by countries",
     // Settings
     "settings.title": "Settings",
     "settings.subtitle": "Manage your company profile, leave policies, and team access",
@@ -2361,6 +2366,11 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "knowledge_base.no_content": "该文章暂无内容。",
     "knowledge_base.pagination.showing": "显示",
     "knowledge_base.pagination.of": "共",
+    "knowledge_base.filter.topics": "主题",
+    "knowledge_base.filter.countries": "国家 / 地区",
+    "knowledge_base.filter.clear_countries": "清除筛选",
+    "knowledge_base.filter.your_countries": "您有员工或承包商的国家",
+    "knowledge_base.feed.filtered_by_countries": "按国家筛选",
     // Settings
     "settings.title": "设置",
     "settings.subtitle": "管理公司信息、休假政策和团队权限",
