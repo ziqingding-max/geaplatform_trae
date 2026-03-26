@@ -217,9 +217,9 @@ export const portalDashboardRouter = portalRouter({
     const result = await db
       .select({
         month: payrollRuns.payrollMonth,
-        totalGross: sql<string>`COALESCE(SUM(${payrollItems.gross}), 0)`,
-        totalNet: sql<string>`COALESCE(SUM(${payrollItems.net}), 0)`,
-        totalEmployerCost: sql<string>`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`,
+        totalGross: sql<string>`COALESCE(SUM(CAST(${payrollItems.gross} AS numeric)), 0)`,
+        totalNet: sql<string>`COALESCE(SUM(CAST(${payrollItems.net} AS numeric)), 0)`,
+        totalEmployerCost: sql<string>`COALESCE(SUM(CAST(${payrollItems.totalEmploymentCost} AS numeric)), 0)`,
         currency: payrollRuns.currency,
       })
       .from(payrollItems)
@@ -229,7 +229,7 @@ export const portalDashboardRouter = portalRouter({
         and(
           eq(employees.customerId, cid),
           sql`${payrollRuns.status} IN ('approved', 'locked', 'paid')`,
-          sql`${payrollRuns.payrollMonth} >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)`
+          sql`${payrollRuns.payrollMonth} >= TO_CHAR(CURRENT_DATE - INTERVAL '12 months', 'YYYY-MM')`
         )
       )
       .groupBy(payrollRuns.payrollMonth, payrollRuns.currency)

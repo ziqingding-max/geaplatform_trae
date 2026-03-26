@@ -103,10 +103,10 @@ export const portalPayrollRouter = portalRouter({
           // Get customer-specific totals (not the whole run totals)
           const [customerTotals] = await db
             .select({
-              totalGross: sql<string>`COALESCE(SUM(${payrollItems.gross}), 0)`,
-              totalNet: sql<string>`COALESCE(SUM(${payrollItems.net}), 0)`,
-              totalDeductions: sql<string>`COALESCE(SUM(${payrollItems.deductions} + ${payrollItems.taxDeduction} + ${payrollItems.socialSecurityDeduction} + ${payrollItems.unpaidLeaveDeduction}), 0)`,
-              totalEmployerCost: sql<string>`COALESCE(SUM(${payrollItems.totalEmploymentCost}), 0)`,
+              totalGross: sql<string>`COALESCE(SUM(CAST(${payrollItems.gross} AS numeric)), 0)`,
+              totalNet: sql<string>`COALESCE(SUM(CAST(${payrollItems.net} AS numeric)), 0)`,
+              totalDeductions: sql<string>`COALESCE(SUM(CAST(${payrollItems.deductions} AS numeric) + CAST(${payrollItems.taxDeduction} AS numeric) + CAST(${payrollItems.socialSecurityDeduction} AS numeric) + CAST(${payrollItems.unpaidLeaveDeduction} AS numeric)), 0)`,
+              totalEmployerCost: sql<string>`COALESCE(SUM(CAST(${payrollItems.totalEmploymentCost} AS numeric)), 0)`,
             })
             .from(payrollItems)
             .innerJoin(employees, eq(payrollItems.employeeId, employees.id))
