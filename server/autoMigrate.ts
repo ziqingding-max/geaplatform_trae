@@ -243,6 +243,24 @@ const REQUIRED_COLUMNS: ColumnMigration[] = [
     defaultValue: "false",
   },
 
+  // ── Knowledge Base: new columns (PR-B/PR-C) ──
+  {
+    table: "knowledge_items",
+    column: "expiresAt",
+    type: "TIMESTAMPTZ",
+  },
+  {
+    table: "knowledge_sources",
+    column: "fetchFrequency",
+    type: "TEXT NOT NULL",
+    defaultValue: "'manual'",
+  },
+  {
+    table: "knowledge_sources",
+    column: "nextFetchAt",
+    type: "TIMESTAMPTZ",
+  },
+
   // ── Recurring adjustment support (AOR contractor_adjustments) ──
   {
     table: "contractor_adjustments",
