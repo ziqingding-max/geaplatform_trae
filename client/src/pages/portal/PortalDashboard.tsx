@@ -875,7 +875,7 @@ function FinanceWorkspace({ stats, t }: { stats: any; t: (key: string) => string
 // MAIN DASHBOARD — role-based rendering
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function PortalDashboard() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = usePortalAuth();
   const { data: stats, isLoading } = portalTrpc.dashboard.stats.useQuery();
   const { data: greeting } = portalTrpc.dashboard.greeting.useQuery();
@@ -885,12 +885,13 @@ export default function PortalDashboard() {
   const showFinance = ["admin", "finance"].includes(role);
   const isViewer = role === "viewer";
 
-  // Dynamic greeting
+  // Dynamic greeting — respects current i18n locale
   const greetingText = useMemo(() => {
     if (!greeting) return `${t("portal_dashboard.welcome")}, ${user?.contactName?.split(" ")[0] || "User"}`;
-    // Use English greeting by default; i18n locale could be used to switch
-    return greeting.en || greeting.zh || `${t("portal_dashboard.welcome")}, ${user?.contactName?.split(" ")[0] || "User"}`;
-  }, [greeting, t, user]);
+    // Pick the greeting matching the current locale; fall back to the other language
+    const localized = locale === "zh" ? (greeting.zh || greeting.en) : (greeting.en || greeting.zh);
+    return localized || `${t("portal_dashboard.welcome")}, ${user?.contactName?.split(" ")[0] || "User"}`;
+  }, [greeting, locale, t, user]);
 
   return (
     <PortalLayout title={t("portal_dashboard.header.title")}>
