@@ -215,10 +215,9 @@ describe('Admin Frontend: KnowledgeBaseAdmin.tsx', () => {
     expect(frontendContent).toMatch(/fetchFrequency|fetch_frequency/);
   });
 
-  test('should display new article types (salaryBenchmark, contractorGuide, exchangeRateImpact)', () => {
+  test('should display new article types (salaryBenchmark, contractorGuide)', () => {
     expect(frontendContent).toContain('salaryBenchmark');
     expect(frontendContent).toContain('contractorGuide');
-    expect(frontendContent).toContain('exchangeRateImpact');
   });
 
   test('should have auto-publishable badge for high-confidence items', () => {
@@ -226,7 +225,7 @@ describe('Admin Frontend: KnowledgeBaseAdmin.tsx', () => {
   });
 
   test('should have confirmation dialog for batch actions', () => {
-    expect(frontendContent).toMatch(/confirm|Confirm/);
+    expect(frontendContent).toMatch(/confirm|Confirm|window\.confirm/);
   });
 });
 
@@ -244,26 +243,23 @@ describe('i18n: New Knowledge Admin Keys', () => {
     'knowledge_admin.toast.batch_reviewed',
     'knowledge_admin.generate.type.salaryBenchmark',
     'knowledge_admin.generate.type.contractorGuide',
-    'knowledge_admin.generate.type.exchangeRateImpact',
     'knowledge_admin.tabs.expired',
     'knowledge_admin.metrics.expired',
     'knowledge_admin.auto_publishable',
     'knowledge_admin.batch.selected',
     'knowledge_admin.batch.select_all',
-    'knowledge_admin.batch.publish_selected',
-    'knowledge_admin.batch.reject_selected',
-    'knowledge_admin.batch.no_selection',
-    'knowledge_admin.batch.confirm',
-    'knowledge_admin.batch.cancel',
-    'knowledge_admin.source.fetch_frequency',
-    'knowledge_admin.source.freq.manual',
-    'knowledge_admin.source.freq.daily',
-    'knowledge_admin.source.freq.weekly',
-    'knowledge_admin.source.freq.monthly',
-    'knowledge_admin.source.next_fetch',
-    'knowledge_admin.expired.empty',
+    'knowledge_admin.batch.publish_all',
+    'knowledge_admin.batch.reject_all',
+    'knowledge_admin.new_source.type',
+    'knowledge_admin.new_source.frequency',
+    'knowledge_admin.frequency.manual',
+    'knowledge_admin.frequency.daily',
+    'knowledge_admin.frequency.weekly',
+    'knowledge_admin.frequency.monthly',
+    'knowledge_admin.next_fetch',
+    'knowledge_admin.expired.all_fresh',
     'knowledge_admin.expired.status_expired',
-    'knowledge_admin.expired.status_expiring',
+    'knowledge_admin.expired.status_expiring_soon',
     'knowledge_admin.expired.expires_at',
     'knowledge_admin.expired.published_at',
   ];

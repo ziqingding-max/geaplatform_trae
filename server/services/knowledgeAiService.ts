@@ -162,7 +162,7 @@ export async function generateKnowledgeDraftWithAI(params: {
         },
       ],
       responseFormat: { type: "json_object" },
-      maxTokens: 900,
+      maxTokens: 2000,
     });
 
     const raw = result.choices?.[0]?.message?.content;
