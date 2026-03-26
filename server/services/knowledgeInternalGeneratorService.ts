@@ -873,14 +873,9 @@ export async function generateKnowledgeFromInternalData(options?: {
   };
 
   const typesToGenerate = options?.types || [
-    "countryOverview",
     "socialInsurance",
     "publicHolidays",
     "leaveEntitlements",
-    "hiringGuide",
-    "compensationGuide",
-    "terminationGuide",
-    "workingConditions",
     "salaryBenchmark",
     "contractorGuide",
   ];

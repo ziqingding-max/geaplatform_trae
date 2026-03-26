@@ -173,6 +173,12 @@ export default function PortalKnowledgeBase() {
                 {isNewArticle(selectedItem.publishedAt) && (
                   <Badge className="bg-green-500 text-white hover:bg-green-600">NEW</Badge>
                 )}
+                {(selectedItem as any).isFallback && (
+                  <Badge variant="outline" className="border-amber-400 text-amber-600">
+                    <Globe className="w-3 h-3 mr-1" />
+                    English Only
+                  </Badge>
+                )}
               </div>
               <CardTitle className="text-xl">{selectedItem.title}</CardTitle>
               {selectedItem.summary && (
@@ -256,7 +262,7 @@ export default function PortalKnowledgeBase() {
               <div className="flex flex-wrap gap-4">
                 {topicList.map((topic) => {
                   const key = `knowledge_base.topic.${topic}`;
-                  const topicCount = data?.topicCounts?.[topic] ?? 0;
+                  const topicCount = (data?.topicCounts as Record<string, number> | undefined)?.[topic] ?? 0;
                   return (
                     <div key={topic} className="flex items-center gap-2">
                       <Checkbox
@@ -485,6 +491,12 @@ export default function PortalKnowledgeBase() {
                         {isNewArticle(item.publishedAt) && (
                           <Badge className="bg-green-500 text-white hover:bg-green-600 text-xs">
                             NEW
+                          </Badge>
+                        )}
+                        {(item as any).isFallback && (
+                          <Badge variant="outline" className="text-xs border-amber-400 text-amber-600">
+                            <Globe className="w-3 h-3 mr-1" />
+                            English Only
                           </Badge>
                         )}
                       </div>

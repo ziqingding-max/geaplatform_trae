@@ -106,9 +106,15 @@ export const portalKnowledgeBaseRouter = portalRouter({
       );
 
       // ── 2. Build WHERE conditions ──
+      // Include current locale + English fallback (for articles without a translation)
+      const langCondition =
+        locale === "en"
+          ? eq(knowledgeItems.language, "en")
+          : or(eq(knowledgeItems.language, locale), eq(knowledgeItems.language, "en"));
+
       const conditions = [
         inArray(knowledgeItems.topic, topics),
-        eq(knowledgeItems.language, locale),
+        langCondition!,
         eq(knowledgeItems.status, "published"),
         or(eq(knowledgeItems.customerId, customerId), isNull(knowledgeItems.customerId)),
       ];
@@ -143,22 +149,40 @@ export const portalKnowledgeBaseRouter = portalRouter({
         .orderBy(desc(knowledgeItems.publishedAt), desc(knowledgeItems.createdAt))
         .limit(5000);
 
-      // ── 5. Smart sort ──
-      const sortedItems = smartSort(allItems, customerCountryCodes, customerId);
+      // ── 5. Deduplicate: if both zh and en versions exist for same title, keep only the locale version ──
+      let deduped = allItems;
+      if (locale !== "en") {
+        const localeTitles = new Set(
+          allItems.filter((i) => i.language === locale).map((i) => i.title)
+        );
+        // Remove English articles that have a corresponding locale version
+        deduped = allItems.filter(
+          (i) => i.language === locale || !localeTitles.has(i.title)
+        );
+      }
 
-      // ── 6. Paginate ──
+      // ── 6. Smart sort (mixed, no language priority) ──
+      const sortedItems = smartSort(deduped, customerCountryCodes, customerId);
+
+      // ── 7. Paginate ──
       const startIdx = (page - 1) * pageSize;
       const paginatedItems = sortedItems.slice(startIdx, startIdx + pageSize);
 
-      // ── 7. Compute topic counts from ALL items (not just current page) ──
+      // ── 7b. Mark English fallback articles ──
+      const itemsWithFallback = paginatedItems.map((item) => ({
+        ...item,
+        isFallback: locale !== "en" && item.language === "en",
+      }));
+
+      // ── 8. Compute topic counts from ALL deduplicated items (not just current page) ──
       const topicCounts = topics.reduce<Record<string, number>>((acc, topic) => {
-        acc[topic] = allItems.filter((item) => item.topic === topic).length;
+        acc[topic] = deduped.filter((item) => item.topic === topic).length;
         return acc;
       }, {});
 
-      // ── 8. Compute available country codes from all items ──
+      // ── 9. Compute available country codes from all deduplicated items ──
       const availableCountries: Record<string, number> = {};
-      for (const item of allItems) {
+      for (const item of deduped) {
         const meta = (item.metadata || {}) as Record<string, any>;
         const cc = meta.countryCode ? String(meta.countryCode).toUpperCase() : null;
         if (cc) {
@@ -170,12 +194,12 @@ export const portalKnowledgeBaseRouter = portalRouter({
         customerId,
         generatedAt: Date.now(),
         topicCounts,
-        items: paginatedItems,
+        items: itemsWithFallback,
         pagination: {
           page,
           pageSize,
-          total,
-          totalPages: Math.ceil(total / pageSize),
+          total: deduped.length,
+          totalPages: Math.ceil(deduped.length / pageSize),
         },
         customerCountryCodes,
         availableCountries,

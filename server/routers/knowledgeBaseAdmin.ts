@@ -444,14 +444,9 @@ export const knowledgeBaseAdminRouter = router({
       z.object({
         types: z.array(
           z.enum([
-            "countryOverview",
             "socialInsurance",
             "publicHolidays",
             "leaveEntitlements",
-            "hiringGuide",
-            "compensationGuide",
-            "terminationGuide",
-            "workingConditions",
             "salaryBenchmark",
             "contractorGuide",
           ])
@@ -691,4 +686,41 @@ export const knowledgeBaseAdminRouter = router({
         groupsProcessed: Array.from(groups.values()).filter((g) => g.length > 1).length,
       };
     }),
+
+  /**
+   * Clean Country Guide duplicates — reject all knowledge items that were generated
+   * from internal country guide data (since Country Guide is a separate feature).
+   */
+  cleanCountryGuideItems: adminProcedure.mutation(async () => {
+    const db = await getDb();
+    if (!db) {
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    }
+
+    // Find all items with metadata.sourceType = 'internal_country_guide' that are not already rejected
+    const items = await db
+      .select({ id: knowledgeItems.id })
+      .from(knowledgeItems)
+      .where(
+        and(
+          sql`(metadata->>'sourceType') = 'internal_country_guide'`,
+          sql`status != 'rejected'`
+        )
+      );
+
+    if (items.length === 0) {
+      return { success: true, cleaned: 0 };
+    }
+
+    const idsToReject = items.map((i) => i.id);
+    for (let i = 0; i < idsToReject.length; i += 500) {
+      const batch = idsToReject.slice(i, i + 500);
+      await db
+        .update(knowledgeItems)
+        .set({ status: "rejected" as const })
+        .where(inArray(knowledgeItems.id, batch));
+    }
+
+    return { success: true, cleaned: idsToReject.length };
+  }),
 });

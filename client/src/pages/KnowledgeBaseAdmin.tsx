@@ -29,11 +29,6 @@ import {
 } from "lucide-react";
 
 const ARTICLE_TYPES = [
-  "countryOverview",
-  "hiringGuide",
-  "compensationGuide",
-  "terminationGuide",
-  "workingConditions",
   "socialInsurance",
   "publicHolidays",
   "leaveEntitlements",
@@ -176,6 +171,14 @@ export default function KnowledgeBaseAdmin() {
     onError: (error) => toast.error(error.message),
   });
 
+  const cleanCountryGuideMutation = trpc.knowledgeBaseAdmin.cleanCountryGuideItems.useMutation({
+    onSuccess: async (res) => {
+      toast.success(`Cleaned ${res.cleaned} country guide articles`);
+      await Promise.all([refetchQueue(), refetchPublished()]);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   // Dismissed gaps state
   const [dismissedGaps, setDismissedGaps] = useState<string[]>([]);
 
@@ -232,6 +235,12 @@ export default function KnowledgeBaseAdmin() {
     const confirmMsg = "This will scan all articles and reject older duplicates (keeping the newest per title + language). Continue?";
     if (!window.confirm(confirmMsg)) return;
     deduplicateMutation.mutate();
+  };
+
+  const handleCleanCountryGuide = () => {
+    const confirmMsg = "This will reject all articles generated from Country Guide data (overview, hiring, compensation, termination, working conditions). These are already available in the Country Guide feature. Continue?";
+    if (!window.confirm(confirmMsg)) return;
+    cleanCountryGuideMutation.mutate();
   };
 
   // ─── Pagination Helper ─────────────────────────────────────────────────────
@@ -347,15 +356,26 @@ export default function KnowledgeBaseAdmin() {
             <h1 className="text-2xl font-bold">{t("knowledge_admin.title")}</h1>
             <p className="text-muted-foreground">{t("knowledge_admin.subtitle")}</p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDeduplicate}
-            disabled={deduplicateMutation.isPending}
-          >
-            <Trash2 className="w-4 h-4 mr-1.5" />
-            {deduplicateMutation.isPending ? t("knowledge_admin.dedup.running") : t("knowledge_admin.dedup.btn")}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCleanCountryGuide}
+              disabled={cleanCountryGuideMutation.isPending}
+            >
+              <XCircle className="w-4 h-4 mr-1.5" />
+              {cleanCountryGuideMutation.isPending ? "Cleaning..." : "Clean Country Guide Items"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDeduplicate}
+              disabled={deduplicateMutation.isPending}
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              {deduplicateMutation.isPending ? t("knowledge_admin.dedup.running") : t("knowledge_admin.dedup.btn")}
+            </Button>
+          </div>
         </div>
 
         {/* ─── Metrics Cards ─── */}
