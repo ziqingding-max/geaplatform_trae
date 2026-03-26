@@ -10,11 +10,37 @@ import {
   generateKnowledgeDraftWithAI,
 } from "../services/knowledgeAiService";
 
-async function pullFromSource(url: string): Promise<Array<{ title: string; summary: string; content: string }>> {
-  const res = await fetch(url, { method: "GET" });
+async function pullFromSource(url: string, sourceType?: string): Promise<Array<{ title: string; summary: string; content: string }>> {
+  // --- RSS Feed parsing ---
+  if (sourceType === "rss" || url.match(/\/(feed|rss|atom)(\.xml)?\/?$/i)) {
+    try {
+      const RssParser = (await import("rss-parser")).default;
+      const parser = new RssParser({ timeout: 15000 });
+      const feed = await parser.parseURL(url);
+      const items = (feed.items || []).slice(0, 20);
+      if (items.length === 0) {
+        return [{ title: feed.title || "Empty RSS Feed", summary: feed.description || "", content: "No articles found in this feed." }];
+      }
+      return items.map((item, idx) => ({
+        title: String(item.title || `Article ${idx + 1}`),
+        summary: String(item.contentSnippet || item.summary || item.content || "").slice(0, 500),
+        content: String(item["content:encoded"] || item.content || item.contentSnippet || item.summary || "").slice(0, 8000),
+      }));
+    } catch (rssError: any) {
+      console.warn(`[pullFromSource] RSS parse failed for ${url}, falling back to HTML:`, rssError?.message);
+      // Fall through to HTML parsing
+    }
+  }
+
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "User-Agent": "GEA-KnowledgeBot/1.0" },
+  });
   if (!res.ok) throw new TRPCError({ code: "BAD_REQUEST", message: `Failed to fetch source: ${res.status}` });
 
   const contentType = res.headers.get("content-type") || "";
+
+  // --- JSON / API parsing ---
   if (contentType.includes("application/json")) {
     const json = (await res.json()) as any;
     if (Array.isArray(json)) {
@@ -28,20 +54,70 @@ async function pullFromSource(url: string): Promise<Array<{ title: string; summa
       {
         title: String(json.title || "JSON Source Update"),
         summary: String(json.summary || json.message || "Pulled from JSON endpoint"),
-        content: JSON.stringify(json).slice(0, 4000),
+        content: JSON.stringify(json).slice(0, 8000),
       },
     ];
   }
 
   const text = await res.text();
-  const titleMatch = text.match(/<title>(.*?)<\/title>/i);
-  return [
-    {
+
+  // --- Try RSS parsing on text content (some servers return RSS as text/html) ---
+  if (text.trim().startsWith("<?xml") || text.includes("<rss") || text.includes("<feed")) {
+    try {
+      const RssParser = (await import("rss-parser")).default;
+      const parser = new RssParser();
+      const feed = await parser.parseString(text);
+      const items = (feed.items || []).slice(0, 20);
+      if (items.length > 0) {
+        return items.map((item, idx) => ({
+          title: String(item.title || `Article ${idx + 1}`),
+          summary: String(item.contentSnippet || item.summary || "").slice(0, 500),
+          content: String(item["content:encoded"] || item.content || item.contentSnippet || "").slice(0, 8000),
+        }));
+      }
+    } catch { /* not RSS, continue to HTML parsing */ }
+  }
+
+  // --- HTML content extraction with cheerio ---
+  try {
+    const cheerio = await import("cheerio");
+    const $ = cheerio.load(text);
+
+    // Remove non-content elements
+    $("script, style, nav, header, footer, aside, .sidebar, .menu, .navigation, .ad, .advertisement, .cookie-banner").remove();
+
+    // Try to find the main content area
+    const mainContent = $("article").first().length
+      ? $("article").first()
+      : $("main").first().length
+        ? $("main").first()
+        : $(".post-content, .entry-content, .article-content, .content, #content").first().length
+          ? $(".post-content, .entry-content, .article-content, .content, #content").first()
+          : $("body");
+
+    const title = $("title").text().trim() || $("h1").first().text().trim() || "Web Source Update";
+    const metaDesc = $("meta[name='description']").attr("content") || "";
+
+    // Extract text paragraphs from main content
+    const paragraphs: string[] = [];
+    mainContent.find("p, h2, h3, h4, li").each((_, el) => {
+      const t = $(el).text().trim();
+      if (t.length > 20) paragraphs.push(t);
+    });
+
+    const content = paragraphs.join("\n\n").slice(0, 8000) || mainContent.text().trim().slice(0, 8000);
+    const summary = metaDesc || paragraphs.slice(0, 2).join(" ").slice(0, 500) || "Fetched from web source";
+
+    return [{ title, summary, content }];
+  } catch {
+    // Fallback: raw text extraction
+    const titleMatch = text.match(/<title>(.*?)<\/title>/i);
+    return [{
       title: titleMatch?.[1]?.trim() || "Web Source Update",
       summary: "Fetched from web source",
-      content: text.slice(0, 4000),
-    },
-  ];
+      content: text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 8000),
+    }];
+  }
 }
 
 function computeFreshnessScore(): number {
@@ -286,7 +362,7 @@ export const knowledgeBaseAdminRouter = router({
       const [source] = await db.select().from(knowledgeSources).where(eq(knowledgeSources.id, input.sourceId)).limit(1);
       if (!source) throw new TRPCError({ code: "NOT_FOUND", message: "Source not found" });
 
-      const pulled = await pullFromSource(source.url);
+      const pulled = await pullFromSource(source.url, source.sourceType);
       if (!pulled.length) return { success: true, created: 0 };
 
       const drafts = await Promise.all(
@@ -360,7 +436,6 @@ export const knowledgeBaseAdminRouter = router({
             "workingConditions",
             "salaryBenchmark",
             "contractorGuide",
-            "exchangeRateImpact",
           ])
         ).optional(),
         countryCodes: z.array(z.string()).optional(),

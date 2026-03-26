@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { useI18n } from "@/lib/i18n";
-import { formatDate } from "@/lib/format";
+import { formatDate, countryName, countryFlag } from "@/lib/format";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +46,7 @@ export default function PortalKnowledgeBase() {
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
+  const [showAllCountries, setShowAllCountries] = useState(false);
 
   // ── Server-side paginated query ──
   const { data, isLoading, refetch, isFetching } = portalTrpc.knowledgeBase.dashboard.useQuery({
@@ -164,11 +165,11 @@ export default function PortalKnowledgeBase() {
                   {t(`knowledge_base.topic.${selectedItem.topic}`)}
                 </Badge>
                 {meta.countryCode && (
-                  <Badge variant="outline" className="gap-1">
-                    <MapPin className="w-3 h-3" />
-                    {meta.countryCode}
-                  </Badge>
-                )}
+                          <Badge variant="outline" className="gap-1">
+                            <span>{countryFlag(meta.countryCode)}</span>
+                            {countryName(meta.countryCode)}
+                          </Badge>
+                        )}
                 {isNewArticle(selectedItem.publishedAt) && (
                   <Badge className="bg-green-500 text-white hover:bg-green-600">NEW</Badge>
                 )}
@@ -307,11 +308,11 @@ export default function PortalKnowledgeBase() {
                           isCustomerCountry && !isSelected
                             ? "border-primary/50 text-primary hover:bg-primary/10"
                             : ""
-                        }`}
+                        } ${!isCustomerCountry && !showAllCountries && !isSelected ? "hidden" : ""}`}
                         onClick={() => toggleCountry(code)}
                       >
-                        <MapPin className="w-3 h-3" />
-                        {code}
+                        <span>{countryFlag(code)}</span>
+                        {countryName(code)}
                         <span className="text-xs opacity-70">({articleCount})</span>
                         {isCustomerCountry && !isSelected && (
                           <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
@@ -319,6 +320,16 @@ export default function PortalKnowledgeBase() {
                       </Button>
                     );
                   })}
+                  {sortedCountryCodes.some((c) => !customerCountryCodes.some((cc) => cc.toUpperCase() === c.toUpperCase())) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAllCountries((prev) => !prev)}
+                      className="text-muted-foreground"
+                    >
+                      {showAllCountries ? t("knowledge_base.filter.show_less") : t("knowledge_base.filter.show_more")}
+                    </Button>
+                  )}
                 </div>
                 {customerCountryCodes.length > 0 && (
                   <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
@@ -467,8 +478,8 @@ export default function PortalKnowledgeBase() {
                         </Badge>
                         {meta.countryCode && (
                           <Badge variant="outline" className="gap-1 text-xs">
-                            <MapPin className="w-3 h-3" />
-                            {meta.countryCode}
+                            <span>{countryFlag(meta.countryCode)}</span>
+                            {countryName(meta.countryCode)}
                           </Badge>
                         )}
                         {isNewArticle(item.publishedAt) && (

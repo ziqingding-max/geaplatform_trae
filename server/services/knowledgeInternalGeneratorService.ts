@@ -23,7 +23,6 @@ import {
   countrySocialInsuranceItems,
   countryGuideChapters,
   salaryBenchmarks,
-  exchangeRates,
 } from "../../drizzle/schema";
 import { contractors } from "../../drizzle/aor-schema";
 import { eq, and, asc, desc, sql } from "drizzle-orm";
@@ -61,7 +60,6 @@ interface GenerationResult {
     workingConditions: number;
     salaryBenchmark: number;
     contractorGuide: number;
-    exchangeRateImpact: number;
   };
   countries: string[];
   errors: string[];
@@ -833,97 +831,6 @@ function generateContractorGuideArticle(
   ];
 }
 
-// ─── Exchange Rate Impact Generator ─────────────────────────────────────────
-
-function generateExchangeRateImpactArticle(
-  rates: Array<{
-    fromCurrency: string;
-    toCurrency: string;
-    rate: string;
-    rateWithMarkup: string;
-    effectiveDate: string;
-  }>
-): GeneratedArticleWithExpiry[] {
-  if (rates.length === 0) return [];
-
-  // Group by currency pair
-  const pairs = new Map<string, typeof rates>();
-  for (const r of rates) {
-    const key = `${r.fromCurrency}/${r.toCurrency}`;
-    const list = pairs.get(key) || [];
-    list.push(r);
-    pairs.set(key, list);
-  }
-
-  let contentEn = `## Exchange Rate Overview for Cross-Border Payroll\n\n`;
-  contentEn += `Current exchange rates affecting international payroll processing. Data covers **${pairs.size}** currency pairs.\n\n`;
-  contentEn += `| Currency Pair | Rate | With Markup | Effective Date |\n`;
-  contentEn += `|--------------|------|------------|----------------|\n`;
-
-  for (const [pair, rateList] of Array.from(pairs)) {
-    // Use the most recent rate
-    const latest = rateList.sort((a: typeof rateList[0], b: typeof rateList[0]) => b.effectiveDate.localeCompare(a.effectiveDate))[0];
-    contentEn += `| ${pair} | ${Number(latest.rate).toFixed(4)} | ${Number(latest.rateWithMarkup).toFixed(4)} | ${latest.effectiveDate} |\n`;
-  }
-
-  contentEn += `\n### Impact on Employer Costs\n\n`;
-  contentEn += `- Exchange rate fluctuations directly affect the cost of employing staff in foreign currencies.\n`;
-  contentEn += `- A 5% depreciation in the local currency can increase employer costs by 5% when converted to the billing currency.\n`;
-  contentEn += `- Consider hedging strategies or fixed-rate agreements for predictable budgeting.\n\n`;
-  contentEn += `> Rates are indicative and updated periodically. Actual transaction rates may differ.\n`;
-
-  let contentZh = `## 跨境薪资汇率概览\n\n`;
-  contentZh += `影响国际薪资处理的当前汇率。数据涵盖**${pairs.size}**个货币对。\n\n`;
-  contentZh += `| 货币对 | 汇率 | 含加价 | 生效日期 |\n`;
-  contentZh += `|--------|------|--------|---------|\n`;
-
-  for (const [pair, rateList] of Array.from(pairs)) {
-    const latest = rateList.sort((a: typeof rateList[0], b: typeof rateList[0]) => b.effectiveDate.localeCompare(a.effectiveDate))[0];
-    contentZh += `| ${pair} | ${Number(latest.rate).toFixed(4)} | ${Number(latest.rateWithMarkup).toFixed(4)} | ${latest.effectiveDate} |\n`;
-  }
-
-  contentZh += `\n### 对雇主成本的影响\n\n`;
-  contentZh += `- 汇率波动直接影响以外币雇佣员工的成本。\n`;
-  contentZh += `- 当地货币贬值5%可能导致折算为结算货币后雇主成本增加5%。\n`;
-  contentZh += `- 建议考虑对冲策略或固定汇率协议以实现可预测的预算规划。\n\n`;
-  contentZh += `> 汇率仅供参考，定期更新。实际交易汇率可能有所不同。\n`;
-
-  // Exchange rate data expires after 30 days
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 30);
-
-  return [
-    {
-      title: `Cross-Border Payroll Exchange Rates: ${pairs.size} Currency Pairs`,
-      summary: `Current exchange rates for ${pairs.size} currency pairs used in international payroll, with markup rates and employer cost impact analysis.`,
-      content: contentEn,
-      topic: "payroll",
-      language: "en",
-      category: "article",
-      metadata: {
-        sourceType: "internal_exchange_rates",
-        pairCount: pairs.size,
-        rateCount: rates.length,
-      },
-      expiresAt,
-    },
-    {
-      title: `跨境薪资汇率报告：${pairs.size}个货币对`,
-      summary: `国际薪资处理中${pairs.size}个货币对的当前汇率，含加价汇率及雇主成本影响分析。`,
-      content: contentZh,
-      topic: "payroll",
-      language: "zh",
-      category: "article",
-      metadata: {
-        sourceType: "internal_exchange_rates",
-        pairCount: pairs.size,
-        rateCount: rates.length,
-      },
-      expiresAt,
-    },
-  ];
-}
-
 // ─── Main Generation Function ────────────────────────────────────────────────
 
 export async function generateKnowledgeFromInternalData(options?: {
@@ -939,7 +846,6 @@ export async function generateKnowledgeFromInternalData(options?: {
     | "workingConditions"
     | "salaryBenchmark"
     | "contractorGuide"
-    | "exchangeRateImpact"
   >;
   dryRun?: boolean;
 }): Promise<GenerationResult> {
@@ -961,8 +867,7 @@ export async function generateKnowledgeFromInternalData(options?: {
       workingConditions: 0,
       salaryBenchmark: 0,
       contractorGuide: 0,
-      exchangeRateImpact: 0,
-    },
+      },
     countries: [],
     errors: [],
   };
@@ -978,7 +883,6 @@ export async function generateKnowledgeFromInternalData(options?: {
     "workingConditions",
     "salaryBenchmark",
     "contractorGuide",
-    "exchangeRateImpact",
   ];
 
   // Get all active countries
@@ -1125,25 +1029,6 @@ export async function generateKnowledgeFromInternalData(options?: {
     }
   }
 
-  // 11. Exchange Rate Impact (global, not per-country)
-  if (typesToGenerate.includes("exchangeRateImpact")) {
-    try {
-      const rates = await db
-        .select()
-        .from(exchangeRates)
-        .orderBy(desc(exchangeRates.effectiveDate));
-
-      if (rates.length > 0) {
-        const articles = generateExchangeRateImpactArticle(rates);
-        allArticles.push(...articles);
-        result.byType.exchangeRateImpact += articles.length;
-      }
-    } catch (error: any) {
-      result.errors.push(`Exchange Rates: ${error?.message || "Unknown error"}`);
-      console.error(`[KnowledgeGenerator] Error processing exchange rates:`, error);
-    }
-  }
-
   result.totalGenerated = allArticles.length;
   result.countries = Array.from(processedCountries);
 
@@ -1161,13 +1046,13 @@ export async function generateKnowledgeFromInternalData(options?: {
           title: article.title,
           summary: article.summary,
           content: article.content,
-          status: "published" as const,
+          status: "pending_review" as const,
           category: article.category,
           topic: article.topic,
           language: article.language,
           aiConfidence: 95,
           aiSummary: article.summary,
-          publishedAt: now,
+          publishedAt: null,
           expiresAt: (article as GeneratedArticleWithExpiry).expiresAt || null,
           metadata: article.metadata,
         }))

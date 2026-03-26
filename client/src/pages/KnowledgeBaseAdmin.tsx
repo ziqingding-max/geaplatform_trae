@@ -31,7 +31,6 @@ const ARTICLE_TYPES = [
   "leaveEntitlements",
   "salaryBenchmark",
   "contractorGuide",
-  "exchangeRateImpact",
 ] as const;
 
 type ArticleType = (typeof ARTICLE_TYPES)[number];
@@ -149,6 +148,7 @@ export default function KnowledgeBaseAdmin() {
     onSuccess: async (result) => {
       setGenerateResult(result);
       toast.success(`${t("knowledge_admin.toast.generate_success")} (${result.totalGenerated})`);
+      toast.info(t("knowledge_admin.toast.generate_review_hint"));
       await Promise.all([refetchQueue(), refetchPublished()]);
     },
     onError: (error) => toast.error(error.message),
@@ -187,9 +187,7 @@ export default function KnowledgeBaseAdmin() {
 
   const handleBatchReview = (action: "publish" | "reject") => {
     if (selectedReviewIds.length === 0) return;
-    const confirmMsg = action === "publish"
-      ? `Confirm batch publish ${selectedReviewIds.length} item(s)?`
-      : `Confirm batch reject ${selectedReviewIds.length} item(s)?`;
+    const confirmMsg = `Are you sure you want to ${action} ${selectedReviewIds.length} selected article(s)?`;
     if (!window.confirm(confirmMsg)) return;
     batchReviewMutation.mutate({ ids: selectedReviewIds, action });
   };
@@ -448,6 +446,13 @@ export default function KnowledgeBaseAdmin() {
               const meta = (item.metadata || {}) as Record<string, any>;
               const riskScore = Number((item as any).riskScore ?? meta.riskScore ?? 0);
               const aiConfidence = Number(item.aiConfidence ?? 0);
+              const sourceLabel = item.sourceId
+                ? `External: ${meta.sourceName || "#" + item.sourceId}`
+                : (String(meta.sourceType || "").startsWith("internal") || meta.generatorType)
+                  ? "Internal"
+                  : meta.generatedFrom === "content_gap"
+                    ? "Content Gap"
+                    : "Internal";
               return (
                 <Card key={item.id} className={selectedReviewIds.includes(item.id) ? "ring-2 ring-primary" : ""}>
                   <CardHeader>
@@ -461,6 +466,10 @@ export default function KnowledgeBaseAdmin() {
                         <CardTitle className="text-base">{item.title}</CardTitle>
                         <CardDescription>{item.summary || "-"}</CardDescription>
                       </div>
+                      {/* Source origin label */}
+                      <Badge variant="outline" className={item.sourceId ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-50 text-gray-600 border-gray-200"}>
+                        {sourceLabel}
+                      </Badge>
                       {/* Auto-publish indicator */}
                       {aiConfidence >= 85 && riskScore < 30 && (
                         <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
