@@ -428,6 +428,82 @@ export const knowledgeBaseAdminRouter = router({
       return { success: true, count: input.ids.length };
     }),
 
+  // Generate article from content gap signal using AI
+  generateFromContentGap: adminProcedure
+    .input(
+      z.object({
+        query: z.string().min(1).max(500),
+        topics: z.array(z.string()).default([]),
+        language: z.enum(["en", "zh"]).default("en"),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      // Use AI to generate a knowledge article based on the gap query
+      const topicHint = input.topics.length > 0
+        ? (input.topics[0] as "payroll" | "compliance" | "leave" | "invoice" | "onboarding" | "general")
+        : "general";
+
+      const draft = await generateKnowledgeDraftWithAI({
+        sourceName: "Content Gap Auto-Generation",
+        sourceUrl: "internal://content-gap",
+        topic: topicHint,
+        languageHint: input.language === "zh" ? "zh" : "en",
+        rawTitle: input.query,
+        rawContent: `User search query that had no results: "${input.query}". Topics: ${input.topics.join(", ") || "general"}. Please generate a comprehensive knowledge article that answers this query for B2B clients using EOR/AOR/visa services.`,
+      });
+
+      const freshnessScore = computeFreshnessScore();
+      const duplicationScore = computeDuplicationScore(input.query, draft.title);
+      const riskScore = computeRiskScore({
+        authorityScore: 70, // internal generation has moderate authority
+        freshnessScore,
+        duplicationScore,
+      });
+
+      await db.insert(knowledgeItems).values({
+        customerId: null,
+        sourceId: null,
+        title: draft.title,
+        summary: draft.summary,
+        content: draft.content,
+        status: "pending_review" as const,
+        category: draft.category,
+        topic: draft.topic,
+        language: draft.language,
+        aiConfidence: draft.confidence,
+        aiSummary: draft.summary,
+        metadata: {
+          generatedFrom: "content_gap",
+          originalQuery: input.query,
+          originalTopics: input.topics,
+          aiTags: draft.tags,
+          aiCountries: draft.countries,
+          authorityScore: 70,
+          freshnessScore,
+          duplicationScore,
+          riskScore,
+        },
+      });
+
+      return { success: true, title: draft.title, confidence: draft.confidence };
+    }),
+
+  // Dismiss a content gap signal
+  dismissContentGap: adminProcedure
+    .input(
+      z.object({
+        query: z.string().min(1),
+      })
+    )
+    .mutation(async ({ input }) => {
+      // We don't delete feedback events, but we can mark them as addressed
+      // For now, this is a no-op that the frontend uses to hide dismissed gaps
+      return { success: true, query: input.query };
+    }),
+
   // List expired or soon-to-expire articles
   listExpiredContent: adminProcedure
     .input(

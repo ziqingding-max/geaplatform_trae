@@ -127,6 +127,24 @@ export default function KnowledgeBaseAdmin() {
     onError: (error) => toast.error(error.message),
   });
 
+  const generateFromGapMutation = trpc.knowledgeBaseAdmin.generateFromContentGap.useMutation({
+    onSuccess: async (res) => {
+      toast.success(`${t("knowledge_admin.toast.gap_generated")}: ${res.title}`);
+      await Promise.all([refetchQueue()]);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const dismissGapMutation = trpc.knowledgeBaseAdmin.dismissContentGap.useMutation({
+    onSuccess: () => {
+      toast.success(t("knowledge_admin.toast.gap_dismissed"));
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  // Dismissed gaps state
+  const [dismissedGaps, setDismissedGaps] = useState<string[]>([]);
+
   const generateMutation = trpc.knowledgeBaseAdmin.generateFromInternalData.useMutation({
     onSuccess: async (result) => {
       setGenerateResult(result);
@@ -663,15 +681,27 @@ export default function KnowledgeBaseAdmin() {
 
           {/* ─── Content Gaps Tab ─── */}
           <TabsContent value="gaps" className="space-y-3">
-            {(contentGaps ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t("knowledge_admin.gaps.empty")}</p>
+            {(contentGaps ?? []).filter((g) => !dismissedGaps.includes(g.query)).length === 0 ? (
+              <Card>
+                <CardContent className="pt-6 text-center text-muted-foreground">
+                  <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-green-500" />
+                  <p>{t("knowledge_admin.gaps.empty")}</p>
+                </CardContent>
+              </Card>
             ) : (
-              (contentGaps ?? []).map((gap) => (
-                <Card key={`${gap.query}-${gap.latestAt}`}>
-                  <CardContent className="pt-4 space-y-2">
+              (contentGaps ?? []).filter((g) => !dismissedGaps.includes(g.query)).map((gap) => (
+                <Card key={`${gap.query}-${gap.latestAt}`} className="border-blue-100">
+                  <CardContent className="pt-4 space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <p className="font-medium">{gap.query || t("knowledge_admin.gaps.empty_query")}</p>
-                      <Badge>{t("knowledge_admin.gaps.hits")}: {gap.hits}</Badge>
+                      <div className="flex-1">
+                        <p className="font-medium">{gap.query || t("knowledge_admin.gaps.empty_query")}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {t("knowledge_admin.gaps.latest")}: {formatDate(gap.latestAt)}
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="bg-blue-100 text-blue-700">
+                        {t("knowledge_admin.gaps.hits")}: {gap.hits}
+                      </Badge>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {gap.topics.map((topic) => (
@@ -680,9 +710,45 @@ export default function KnowledgeBaseAdmin() {
                         </Badge>
                       ))}
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {t("knowledge_admin.gaps.latest")}: {formatDate(gap.latestAt)}
-                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        onClick={() => generateFromGapMutation.mutate({
+                          query: gap.query,
+                          topics: gap.topics,
+                          language: "en",
+                        })}
+                        disabled={generateFromGapMutation.isPending}
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        {t("knowledge_admin.gaps.ai_generate_en")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => generateFromGapMutation.mutate({
+                          query: gap.query,
+                          topics: gap.topics,
+                          language: "zh",
+                        })}
+                        disabled={generateFromGapMutation.isPending}
+                      >
+                        <RefreshCw className="w-3 h-3 mr-1" />
+                        {t("knowledge_admin.gaps.ai_generate_zh")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground"
+                        onClick={() => {
+                          setDismissedGaps((prev) => [...prev, gap.query]);
+                          dismissGapMutation.mutate({ query: gap.query });
+                        }}
+                      >
+                        <XCircle className="w-3 h-3 mr-1" />
+                        {t("knowledge_admin.gaps.dismiss")}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))
