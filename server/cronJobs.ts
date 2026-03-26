@@ -394,6 +394,12 @@ export async function runRecurringAdjustmentGeneration(): Promise<{ eorGenerated
           continue;
         }
 
+        // Skip the template's own effectiveMonth — the template itself serves as the record for that month
+        if (tpl.effectiveMonth === currentMonthStr) {
+          eorSkipped++;
+          continue;
+        }
+
         // Skip if monthly and endMonth has passed
         if (tpl.recurrenceType === "monthly" && tpl.recurrenceEndMonth && tpl.recurrenceEndMonth < currentMonthStr) {
           // Auto-stop expired monthly template
@@ -474,6 +480,12 @@ export async function runRecurringAdjustmentGeneration(): Promise<{ eorGenerated
       try {
         // Skip if template's effectiveMonth is after current month
         if (tpl.effectiveMonth && tpl.effectiveMonth > currentMonthStr) {
+          aorSkipped++;
+          continue;
+        }
+
+        // Skip the template's own effectiveMonth — the template itself serves as the record for that month
+        if (tpl.effectiveMonth === currentMonthStr) {
           aorSkipped++;
           continue;
         }

@@ -64,6 +64,8 @@ const ACTION_LABELS: Record<string, string> = {
   contractor_invoices_auto_created: "Auto-created contractor invoices",
   exchange_rate_auto_fetched: "Auto-fetched exchange rates",
   cron_job_executed: "Cron job executed",
+  stop_recurring: "Stopped recurring",
+  recurring_adjustment_generation: "Generated recurring adjustments",
 };
 
 /**
@@ -248,6 +250,14 @@ export function formatAuditDescription(log: {
 
   if (log.action === "cron_job_executed") {
     return `${details || "Cron job executed"}`;
+  }
+
+  if (log.action === "stop_recurring") {
+    return `Stopped recurring adjustment #${log.entityId}${details ? ` — ${details}` : ""}`;
+  }
+
+  if (log.action === "recurring_adjustment_generation") {
+    return `System generated recurring adjustments${details ? ` — ${details}` : ""}`;
   }
 
   if (log.action === "convert_to_customer") {

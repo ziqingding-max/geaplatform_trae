@@ -19,6 +19,7 @@ import {
   updateContractorAdjustment,
   deleteContractorAdjustment,
   getContractorAdjustmentById,
+  listRecurringContractorAdjustmentTemplates,
   getContractorInvoiceById,
   listContractorInvoices,
   listAllContractorInvoices,
@@ -185,7 +186,8 @@ export const contractorsRouter = router({
       }
 
       // Validation: transitioning to terminated requires endDate
-      if (sanitizedData.status === "terminated") {
+      const isTerminating = sanitizedData.status === "terminated";
+      if (isTerminating) {
         const existing = await getContractorById(input.id);
         const effectiveEndDate = sanitizedData.endDate || existing?.endDate;
         if (!effectiveEndDate) {
@@ -196,6 +198,30 @@ export const contractorsRouter = router({
       }
 
       await updateContractor(input.id, updateData);
+
+      // Stop recurring adjustment templates when contractor transitions to terminated
+      if (isTerminating) {
+        try {
+          const recurringTemplates = await listRecurringContractorAdjustmentTemplates();
+          const conTemplates = recurringTemplates.filter(t => t.contractorId === input.id);
+          for (const tpl of conTemplates) {
+            await updateContractorAdjustment(tpl.id, {
+              recurrenceType: "one_time",
+              isRecurringTemplate: false,
+            } as any);
+            await logAuditAction({
+              userId: ctx.user.id,
+              userName: ctx.user.name || null,
+              action: "stop_recurring",
+              entityType: "contractor_adjustment",
+              entityId: tpl.id,
+              changes: JSON.stringify({ reason: "contractor_terminated", previousRecurrenceType: tpl.recurrenceType }),
+            });
+          }
+        } catch (recurErr) {
+          console.error(`[Contractor Update] Failed to stop recurring templates for contractor #${input.id}:`, recurErr);
+        }
+      }
 
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
@@ -217,7 +243,29 @@ export const contractorsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const endDate = input.endDate || new Date().toISOString().split('T')[0];
       await updateContractor(input.id, { status: "terminated", endDate });
-      
+
+      // Stop recurring adjustment templates for terminated contractor
+      try {
+        const recurringTemplates = await listRecurringContractorAdjustmentTemplates();
+        const conTemplates = recurringTemplates.filter(t => t.contractorId === input.id);
+        for (const tpl of conTemplates) {
+          await updateContractorAdjustment(tpl.id, {
+            recurrenceType: "one_time",
+            isRecurringTemplate: false,
+          } as any);
+          await logAuditAction({
+            userId: ctx.user.id,
+            userName: ctx.user.name || null,
+            action: "stop_recurring",
+            entityType: "contractor_adjustment",
+            entityId: tpl.id,
+            changes: JSON.stringify({ reason: "contractor_terminated", previousRecurrenceType: tpl.recurrenceType }),
+          });
+        }
+      } catch (recurErr) {
+        console.error(`[Contractor Terminate] Failed to stop recurring templates for contractor #${input.id}:`, recurErr);
+      }
+
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
         action: "terminate",
