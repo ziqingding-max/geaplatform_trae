@@ -51,6 +51,14 @@ import {
   updateLeaveBalance,
   getCustomerLeavePoliciesForCountry,
   createAdjustment,
+  listRecurringAdjustmentTemplates,
+  getChildAdjustmentForMonth,
+  updateAdjustment,
+  listRecurringContractorAdjustmentTemplates,
+  getChildContractorAdjustmentForMonth,
+  createContractorAdjustment,
+  updateContractorAdjustment,
+  getContractorById,
 } from "./db";
 import { notificationService } from "./services/notificationService";
 import { generateDepositRefund } from "./services/depositRefundService";
@@ -348,6 +356,200 @@ export async function runEmployeeAutoActivation(): Promise<{ activated: number; 
 
   console.log(`[CronJob] Employee activation complete: ${activated} activated, ${addedToPayroll} added to payroll`);
   return { activated, addedToPayroll };
+}
+
+// ============================================================================
+// CRON JOB: Generate recurring adjustment child records
+// Runs monthly on the 1st at 00:00 Beijing time.
+// For each active recurring template (monthly/permanent), generates a child
+// adjustment for the CURRENT month if one doesn't already exist.
+// ============================================================================
+
+export async function runRecurringAdjustmentGeneration(): Promise<{ eorGenerated: number; aorGenerated: number; eorSkipped: number; aorSkipped: number; templatesStopped: number }> {
+  const today = new Date();
+  const beijingOffset = 8 * 60;
+  const beijingDate = new Date(today.getTime() + (beijingOffset - today.getTimezoneOffset()) * 60000);
+  const currentYear = beijingDate.getFullYear();
+  const currentMonth = beijingDate.getMonth() + 1;
+  const currentMonthStr = `${currentYear}-${String(currentMonth).padStart(2, "0")}-01`;
+
+  console.log(`[CronJob] Generating recurring adjustments for ${currentMonthStr}`);
+
+  let eorGenerated = 0;
+  let aorGenerated = 0;
+  let eorSkipped = 0;
+  let aorSkipped = 0;
+  let templatesStopped = 0;
+
+  // ── EOR: Process employee recurring adjustment templates ──
+  try {
+    const eorTemplates = await listRecurringAdjustmentTemplates();
+    console.log(`[CronJob] Found ${eorTemplates.length} EOR recurring templates`);
+
+    for (const tpl of eorTemplates) {
+      try {
+        // Skip if template's effectiveMonth is after current month (not started yet)
+        if (tpl.effectiveMonth && tpl.effectiveMonth > currentMonthStr) {
+          eorSkipped++;
+          continue;
+        }
+
+        // Skip if monthly and endMonth has passed
+        if (tpl.recurrenceType === "monthly" && tpl.recurrenceEndMonth && tpl.recurrenceEndMonth < currentMonthStr) {
+          // Auto-stop expired monthly template
+          await updateAdjustment(tpl.id, {
+            recurrenceType: "one_time",
+            isRecurringTemplate: false,
+          } as any);
+          templatesStopped++;
+          console.log(`[CronJob] Auto-stopped expired EOR template #${tpl.id} (endMonth: ${tpl.recurrenceEndMonth})`);
+          continue;
+        }
+
+        // Check if employee is still active
+        const emp = await getEmployeeById(tpl.employeeId!);
+        if (!emp || emp.status === "terminated") {
+          // Auto-stop template for terminated employee
+          await updateAdjustment(tpl.id, {
+            recurrenceType: "one_time",
+            isRecurringTemplate: false,
+          } as any);
+          templatesStopped++;
+          console.log(`[CronJob] Auto-stopped EOR template #${tpl.id} (employee ${tpl.employeeId} terminated/not found)`);
+          continue;
+        }
+
+        // Check if child already exists for this month (idempotency)
+        const existing = await getChildAdjustmentForMonth(tpl.id, currentMonthStr);
+        if (existing) {
+          eorSkipped++;
+          continue;
+        }
+
+        // Check if payroll for this month is already approved/locked
+        const existingPayroll = await findPayrollRunByCountryMonth(emp.country, currentMonthStr);
+        if (existingPayroll && (existingPayroll.status === "approved" || existingPayroll.status === "pending_approval")) {
+          eorSkipped++;
+          console.log(`[CronJob] Skipped EOR template #${tpl.id}: payroll for ${currentMonthStr} already ${existingPayroll.status}`);
+          continue;
+        }
+
+        // Generate child record — directly as admin_approved
+        await createAdjustment({
+          employeeId: tpl.employeeId!,
+          customerId: tpl.customerId!,
+          adjustmentType: tpl.adjustmentType as any,
+          category: tpl.category || null,
+          description: tpl.description || null,
+          amount: tpl.amount!,
+          currency: tpl.currency!,
+          effectiveMonth: currentMonthStr,
+          receiptFileUrl: tpl.receiptFileUrl || null,
+          receiptFileKey: tpl.receiptFileKey || null,
+          status: "admin_approved",
+          submittedBy: tpl.submittedBy || null,
+          // Link to parent template
+          parentAdjustmentId: tpl.id,
+          recurrenceType: "one_time",
+          isRecurringTemplate: false,
+          recurrenceEndMonth: null,
+        } as any);
+
+        eorGenerated++;
+        console.log(`[CronJob] Generated EOR child for template #${tpl.id}, employee ${tpl.employeeId}, month ${currentMonthStr}`);
+      } catch (err) {
+        console.error(`[CronJob] Error processing EOR template #${tpl.id}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error(`[CronJob] Error listing EOR recurring templates:`, err);
+  }
+
+  // ── AOR: Process contractor recurring adjustment templates ──
+  try {
+    const aorTemplates = await listRecurringContractorAdjustmentTemplates();
+    console.log(`[CronJob] Found ${aorTemplates.length} AOR recurring templates`);
+
+    for (const tpl of aorTemplates) {
+      try {
+        // Skip if template's effectiveMonth is after current month
+        if (tpl.effectiveMonth && tpl.effectiveMonth > currentMonthStr) {
+          aorSkipped++;
+          continue;
+        }
+
+        // Skip if monthly and endMonth has passed
+        if (tpl.recurrenceType === "monthly" && tpl.recurrenceEndMonth && tpl.recurrenceEndMonth < currentMonthStr) {
+          await updateContractorAdjustment(tpl.id, {
+            recurrenceType: "one_time",
+            isRecurringTemplate: false,
+          } as any);
+          templatesStopped++;
+          console.log(`[CronJob] Auto-stopped expired AOR template #${tpl.id} (endMonth: ${tpl.recurrenceEndMonth})`);
+          continue;
+        }
+
+        // Check if contractor is still active
+        const con = await getContractorById(tpl.contractorId!);
+        if (!con || con.status === "terminated" || con.status === "cancelled") {
+          await updateContractorAdjustment(tpl.id, {
+            recurrenceType: "one_time",
+            isRecurringTemplate: false,
+          } as any);
+          templatesStopped++;
+          console.log(`[CronJob] Auto-stopped AOR template #${tpl.id} (contractor ${tpl.contractorId} terminated/not found)`);
+          continue;
+        }
+
+        // Check if child already exists (idempotency)
+        const existing = await getChildContractorAdjustmentForMonth(tpl.id, currentMonthStr);
+        if (existing) {
+          aorSkipped++;
+          continue;
+        }
+
+        // Generate child record — directly as admin_approved
+        await createContractorAdjustment({
+          contractorId: tpl.contractorId!,
+          customerId: tpl.customerId!,
+          type: tpl.type as any,
+          description: tpl.description || "Recurring adjustment",
+          amount: tpl.amount!,
+          currency: tpl.currency!,
+          effectiveMonth: currentMonthStr,
+          attachmentUrl: tpl.attachmentUrl || null,
+          attachmentFileKey: tpl.attachmentFileKey || null,
+          status: "admin_approved" as any,
+          // Link to parent template
+          parentAdjustmentId: tpl.id,
+          recurrenceType: "one_time",
+          isRecurringTemplate: false,
+          recurrenceEndMonth: null,
+        } as any);
+
+        aorGenerated++;
+        console.log(`[CronJob] Generated AOR child for template #${tpl.id}, contractor ${tpl.contractorId}, month ${currentMonthStr}`);
+      } catch (err) {
+        console.error(`[CronJob] Error processing AOR template #${tpl.id}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error(`[CronJob] Error listing AOR recurring templates:`, err);
+  }
+
+  // Audit log
+  await logAuditAction({
+    userName: "System",
+    action: "recurring_adjustment_generation",
+    entityType: "system",
+    entityId: 0,
+    changes: {
+      detail: `Recurring adjustments for ${currentMonthStr}: EOR(${eorGenerated} generated, ${eorSkipped} skipped) + AOR(${aorGenerated} generated, ${aorSkipped} skipped), ${templatesStopped} templates auto-stopped`,
+    },
+  });
+
+  console.log(`[CronJob] Recurring adjustment generation complete: EOR(${eorGenerated} gen, ${eorSkipped} skip) + AOR(${aorGenerated} gen, ${aorSkipped} skip), ${templatesStopped} stopped`);
+  return { eorGenerated, aorGenerated, eorSkipped, aorSkipped, templatesStopped };
 }
 
 // ============================================================================
@@ -1125,6 +1327,21 @@ export async function runEmployeeAutoTermination(): Promise<{ terminated: number
 
     console.log(`[CronJob] Auto-terminated employee ${emp.employeeCode} (${emp.firstName} ${emp.lastName}), endDate: ${emp.endDate}`);
 
+    // Stop any active recurring adjustment templates for this employee
+    try {
+      const recurringTemplates = await listRecurringAdjustmentTemplates();
+      const empTemplates = recurringTemplates.filter(t => t.employeeId === emp.id);
+      for (const tpl of empTemplates) {
+        await updateAdjustment(tpl.id, {
+          recurrenceType: "one_time",
+          isRecurringTemplate: false,
+        } as any);
+        console.log(`[CronJob] Auto-stopped recurring template #${tpl.id} for terminated employee ${emp.employeeCode}`);
+      }
+    } catch (recurErr) {
+      console.error(`[CronJob] Failed to stop recurring templates for employee ${emp.employeeCode}:`, recurErr);
+    }
+
     await logAuditAction({
       userName: "System",
       action: "employee_auto_terminated",
@@ -1186,6 +1403,16 @@ export const CRON_JOB_DEFS: CronJobDef[] = [
     defaultTime: "00:01",
     defaultEnabled: true,
     runner: runEmployeeAutoTermination,
+  },
+  {
+    key: "recurring_adjustment_generation",
+    label: "Recurring Adjustment Generation",
+    description: "Generates child adjustment records for active recurring templates (monthly/permanent). Runs on the 1st before auto-lock.",
+    frequency: "monthly",
+    defaultDay: 1,
+    defaultTime: "00:00",
+    defaultEnabled: true,
+    runner: runRecurringAdjustmentGeneration,
   },
   {
     key: "auto_lock",
