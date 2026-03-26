@@ -12,12 +12,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationPrevious,
+  PaginationNext,
+} from "@/components/ui/pagination";
+import {
   Database,
   RefreshCw,
   AlertTriangle,
   Clock,
   CheckCircle2,
   XCircle,
+  Trash2,
 } from "lucide-react";
 
 const ARTICLE_TYPES = [
@@ -42,6 +50,8 @@ const SOURCE_TYPES = ["rss", "api", "web"] as const;
 const TOPICS = ["payroll", "compliance", "leave", "invoice", "onboarding", "general"] as const;
 const LANGUAGES = ["en", "zh", "multi"] as const;
 
+const PAGE_SIZE = 50;
+
 export default function KnowledgeBaseAdmin() {
   const { t } = useI18n();
   // Source form state
@@ -60,23 +70,40 @@ export default function KnowledgeBaseAdmin() {
     byType: Record<string, number>;
     countries: string[];
     errors: string[];
+    skippedDuplicates?: number;
   } | null>(null);
 
   // Batch review state
   const [selectedReviewIds, setSelectedReviewIds] = useState<number[]>([]);
 
+  // Pagination state
+  const [reviewPage, setReviewPage] = useState(1);
+  const [publishedPage, setPublishedPage] = useState(1);
+
   // ─── Data Queries ──────────────────────────────────────────────────────────
-  const { data: queue, refetch: refetchQueue } = trpc.knowledgeBaseAdmin.listReviewQueue.useQuery({
+  const { data: queueData, refetch: refetchQueue } = trpc.knowledgeBaseAdmin.listReviewQueue.useQuery({
     statuses: ["pending_review"],
+    page: reviewPage,
+    pageSize: PAGE_SIZE,
   });
-  const { data: publishedItems, refetch: refetchPublished } = trpc.knowledgeBaseAdmin.listReviewQueue.useQuery({
+  const { data: publishedData, refetch: refetchPublished } = trpc.knowledgeBaseAdmin.listReviewQueue.useQuery({
     statuses: ["published"],
+    page: publishedPage,
+    pageSize: PAGE_SIZE,
   });
   const { data: sources, refetch: refetchSources } = trpc.knowledgeBaseAdmin.listSources.useQuery();
   const { data: contentGaps } = trpc.knowledgeBaseAdmin.listContentGaps.useQuery({ days: 30 });
   const { data: expiredContent, refetch: refetchExpired } = trpc.knowledgeBaseAdmin.listExpiredContent.useQuery({
     includeExpiringSoon: true,
   });
+
+  // Extract paginated data
+  const queue = queueData?.items ?? [];
+  const pendingTotal = queueData?.total ?? 0;
+  const reviewTotalPages = queueData?.totalPages ?? 1;
+  const publishedItems = publishedData?.items ?? [];
+  const publishedTotal = publishedData?.total ?? 0;
+  const publishedTotalPages = publishedData?.totalPages ?? 1;
 
   // ─── Mutations ─────────────────────────────────────────────────────────────
   const createSourceMutation = trpc.knowledgeBaseAdmin.upsertSource.useMutation({
@@ -112,7 +139,7 @@ export default function KnowledgeBaseAdmin() {
   const reviewMutation = trpc.knowledgeBaseAdmin.reviewItem.useMutation({
     onSuccess: async () => {
       toast.success(t("knowledge_admin.toast.reviewed"));
-      await refetchQueue();
+      await Promise.all([refetchQueue(), refetchPublished()]);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -121,7 +148,7 @@ export default function KnowledgeBaseAdmin() {
     onSuccess: async (res) => {
       toast.success(`${t("knowledge_admin.toast.batch_reviewed")} (${res.count})`);
       setSelectedReviewIds([]);
-      await refetchQueue();
+      await Promise.all([refetchQueue(), refetchPublished()]);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -141,6 +168,14 @@ export default function KnowledgeBaseAdmin() {
     onError: (error) => toast.error(error.message),
   });
 
+  const deduplicateMutation = trpc.knowledgeBaseAdmin.deduplicateItems.useMutation({
+    onSuccess: async (res) => {
+      toast.success(`${t("knowledge_admin.toast.dedup_success")} (${res.duplicatesFound} duplicates from ${res.groupsProcessed} groups)`);
+      await Promise.all([refetchQueue(), refetchPublished()]);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   // Dismissed gaps state
   const [dismissedGaps, setDismissedGaps] = useState<string[]>([]);
 
@@ -148,6 +183,9 @@ export default function KnowledgeBaseAdmin() {
     onSuccess: async (result) => {
       setGenerateResult(result);
       toast.success(`${t("knowledge_admin.toast.generate_success")} (${result.totalGenerated})`);
+      if ((result as any).skippedDuplicates > 0) {
+        toast.info(`Skipped ${(result as any).skippedDuplicates} duplicate articles`);
+      }
       toast.info(t("knowledge_admin.toast.generate_review_hint"));
       await Promise.all([refetchQueue(), refetchPublished()]);
     },
@@ -155,8 +193,6 @@ export default function KnowledgeBaseAdmin() {
   });
 
   // ─── Computed Values ───────────────────────────────────────────────────────
-  const pendingCount = queue?.length ?? 0;
-  const publishedCount = publishedItems?.length ?? 0;
   const expiredCount = expiredContent?.length ?? 0;
   const topSources = useMemo(() => (sources ?? []).slice(0, 20), [sources]);
 
@@ -192,12 +228,134 @@ export default function KnowledgeBaseAdmin() {
     batchReviewMutation.mutate({ ids: selectedReviewIds, action });
   };
 
+  const handleDeduplicate = () => {
+    const confirmMsg = "This will scan all articles and reject older duplicates (keeping the newest per title + language). Continue?";
+    if (!window.confirm(confirmMsg)) return;
+    deduplicateMutation.mutate();
+  };
+
+  // ─── Pagination Helper ─────────────────────────────────────────────────────
+  const renderPagination = (
+    currentPage: number,
+    totalPages: number,
+    total: number,
+    onPageChange: (page: number) => void
+  ) => {
+    if (totalPages <= 1) return null;
+    return (
+      <div className="flex items-center justify-between pt-4">
+        <span className="text-sm text-muted-foreground">
+          {t("knowledge_admin.pagination.showing")} {((currentPage - 1) * PAGE_SIZE) + 1}-{Math.min(currentPage * PAGE_SIZE, total)} {t("knowledge_admin.pagination.of")} {total}
+        </span>
+        <Pagination>
+          <PaginationContent>
+            <PaginationItem>
+              <PaginationPrevious
+                onClick={(e) => { e.preventDefault(); if (currentPage > 1) onPageChange(currentPage - 1); }}
+                className={currentPage <= 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+            <PaginationItem>
+              <span className="px-3 py-1 text-sm">
+                {currentPage} / {totalPages}
+              </span>
+            </PaginationItem>
+            <PaginationItem>
+              <PaginationNext
+                onClick={(e) => { e.preventDefault(); if (currentPage < totalPages) onPageChange(currentPage + 1); }}
+                className={currentPage >= totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+              />
+            </PaginationItem>
+          </PaginationContent>
+        </Pagination>
+      </div>
+    );
+  };
+
+  // ─── Article Card Renderer ─────────────────────────────────────────────────
+  const renderArticleCard = (item: (typeof queue)[number], showCheckbox: boolean) => {
+    const meta = (item.metadata || {}) as Record<string, any>;
+    const riskScore = Number((item as any).riskScore ?? meta.riskScore ?? 0);
+    const aiConfidence = Number(item.aiConfidence ?? 0);
+    const sourceLabel = item.sourceId
+      ? `External: ${meta.sourceName || "#" + item.sourceId}`
+      : (String(meta.sourceType || "").startsWith("internal") || meta.generatorType)
+        ? "Internal"
+        : meta.generatedFrom === "content_gap"
+          ? "Content Gap"
+          : "Internal";
+    return (
+      <Card key={item.id} className={selectedReviewIds.includes(item.id) ? "ring-2 ring-primary" : ""}>
+        <CardHeader>
+          <div className="flex items-start gap-3">
+            {showCheckbox && (
+              <Checkbox
+                checked={selectedReviewIds.includes(item.id)}
+                onCheckedChange={() => toggleReviewItem(item.id)}
+                className="mt-1"
+              />
+            )}
+            <div className="flex-1">
+              <CardTitle className="text-base">{item.title}</CardTitle>
+              <CardDescription>{item.summary || "-"}</CardDescription>
+            </div>
+            <Badge variant="outline" className={item.sourceId ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-50 text-gray-600 border-gray-200"}>
+              {sourceLabel}
+            </Badge>
+            {aiConfidence >= 85 && riskScore < 30 && (
+              <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
+                {t("knowledge_admin.auto_publishable")}
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className={`space-y-3 ${showCheckbox ? "ml-9" : ""}`}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">{item.topic}</Badge>
+            <Badge variant="outline">{item.language}</Badge>
+            <Badge>{item.category}</Badge>
+            <Badge variant="outline">AI {aiConfidence}</Badge>
+            <Badge variant={riskScore >= 60 ? "destructive" : "secondary"}>
+              {t("knowledge_admin.risk")}: {riskScore}
+            </Badge>
+          </div>
+          <div className="text-xs text-muted-foreground grid grid-cols-1 md:grid-cols-3 gap-2">
+            <span>{t("knowledge_admin.score.authority")} {Number(meta.authorityScore ?? 0)}</span>
+            <span>{t("knowledge_admin.score.freshness")} {Number(meta.freshnessScore ?? 0)}</span>
+            <span>{t("knowledge_admin.score.duplication")} {Number(meta.duplicationScore ?? 0)}</span>
+          </div>
+          {showCheckbox && (
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => reviewMutation.mutate({ id: item.id, action: "publish" })}>
+                {t("knowledge_admin.actions.publish")}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => reviewMutation.mutate({ id: item.id, action: "reject" })}>
+                {t("knowledge_admin.actions.reject")}
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
   return (
     <Layout title={t("knowledge_admin.title")}>
       <div className="p-6 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">{t("knowledge_admin.title")}</h1>
-          <p className="text-muted-foreground">{t("knowledge_admin.subtitle")}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">{t("knowledge_admin.title")}</h1>
+            <p className="text-muted-foreground">{t("knowledge_admin.subtitle")}</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDeduplicate}
+            disabled={deduplicateMutation.isPending}
+          >
+            <Trash2 className="w-4 h-4 mr-1.5" />
+            {deduplicateMutation.isPending ? t("knowledge_admin.dedup.running") : t("knowledge_admin.dedup.btn")}
+          </Button>
         </div>
 
         {/* ─── Metrics Cards ─── */}
@@ -207,7 +365,7 @@ export default function KnowledgeBaseAdmin() {
               <CardTitle className="text-sm">{t("knowledge_admin.metrics.pending")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold">{pendingCount}</div>
+              <div className="text-2xl font-semibold">{pendingTotal}</div>
             </CardContent>
           </Card>
           <Card>
@@ -215,7 +373,7 @@ export default function KnowledgeBaseAdmin() {
               <CardTitle className="text-sm">{t("knowledge_admin.metrics.published")}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold">{publishedCount}</div>
+              <div className="text-2xl font-semibold">{publishedTotal}</div>
             </CardContent>
           </Card>
           <Card>
@@ -256,11 +414,17 @@ export default function KnowledgeBaseAdmin() {
             </TabsTrigger>
             <TabsTrigger value="review">
               {t("knowledge_admin.tabs.review")}
-              {pendingCount > 0 && (
+              {pendingTotal > 0 && (
                 <Badge variant="destructive" className="ml-1.5 text-xs px-1.5 py-0">
-                  {pendingCount}
+                  {pendingTotal}
                 </Badge>
               )}
+            </TabsTrigger>
+            <TabsTrigger value="published">
+              {t("knowledge_admin.tabs.published")}
+              <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 py-0">
+                {publishedTotal}
+              </Badge>
             </TabsTrigger>
             <TabsTrigger value="sources">{t("knowledge_admin.tabs.sources")}</TabsTrigger>
             <TabsTrigger value="expired">
@@ -353,7 +517,7 @@ export default function KnowledgeBaseAdmin() {
                 {generateResult && (
                   <Card className="bg-muted/50">
                     <CardContent className="pt-4 space-y-3">
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <div>
                           <p className="text-xs text-muted-foreground">{t("knowledge_admin.generate.result.total")}</p>
                           <p className="text-xl font-semibold">{generateResult.totalGenerated}</p>
@@ -362,6 +526,12 @@ export default function KnowledgeBaseAdmin() {
                           <p className="text-xs text-muted-foreground">{t("knowledge_admin.generate.result.countries")}</p>
                           <p className="text-xl font-semibold">{generateResult.countries.length}</p>
                         </div>
+                        {(generateResult.skippedDuplicates ?? 0) > 0 && (
+                          <div>
+                            <p className="text-xs text-muted-foreground">{t("knowledge_admin.generate.result.skipped")}</p>
+                            <p className="text-xl font-semibold text-amber-600">{generateResult.skippedDuplicates}</p>
+                          </div>
+                        )}
                         {generateResult.errors.length > 0 && (
                           <div>
                             <p className="text-xs text-destructive">{t("knowledge_admin.generate.result.errors")}</p>
@@ -394,18 +564,18 @@ export default function KnowledgeBaseAdmin() {
             </Card>
           </TabsContent>
 
-          {/* ─── Review Tab (with Batch Actions) ─── */}
+          {/* ─── Review Tab (Pending Review with Batch Actions + Pagination) ─── */}
           <TabsContent value="review" className="space-y-3">
             {/* Batch action bar */}
-            {pendingCount > 0 && (
+            {queue.length > 0 && (
               <Card className="bg-muted/30">
                 <CardContent className="pt-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Checkbox
-                      checked={selectedReviewIds.length === pendingCount && pendingCount > 0}
+                      checked={selectedReviewIds.length === queue.length && queue.length > 0}
                       onCheckedChange={(checked) => {
                         if (checked) {
-                          setSelectedReviewIds((queue ?? []).map((item) => item.id));
+                          setSelectedReviewIds(queue.map((item) => item.id));
                         } else {
                           setSelectedReviewIds([]);
                         }
@@ -413,8 +583,8 @@ export default function KnowledgeBaseAdmin() {
                     />
                     <span className="text-sm text-muted-foreground">
                       {selectedReviewIds.length > 0
-                        ? `${selectedReviewIds.length} ${t("knowledge_admin.batch.selected")}`
-                        : t("knowledge_admin.batch.select_all")}
+                        ? `${selectedReviewIds.length} ${t("knowledge_admin.batch.selected")} (${t("knowledge_admin.pagination.page")} ${reviewPage})`
+                        : `${t("knowledge_admin.batch.select_all")} (${t("knowledge_admin.pagination.page")} ${reviewPage})`}
                     </span>
                   </div>
                   {selectedReviewIds.length > 0 && (
@@ -442,70 +612,21 @@ export default function KnowledgeBaseAdmin() {
               </Card>
             )}
 
-            {(queue ?? []).map((item) => {
-              const meta = (item.metadata || {}) as Record<string, any>;
-              const riskScore = Number((item as any).riskScore ?? meta.riskScore ?? 0);
-              const aiConfidence = Number(item.aiConfidence ?? 0);
-              const sourceLabel = item.sourceId
-                ? `External: ${meta.sourceName || "#" + item.sourceId}`
-                : (String(meta.sourceType || "").startsWith("internal") || meta.generatorType)
-                  ? "Internal"
-                  : meta.generatedFrom === "content_gap"
-                    ? "Content Gap"
-                    : "Internal";
-              return (
-                <Card key={item.id} className={selectedReviewIds.includes(item.id) ? "ring-2 ring-primary" : ""}>
-                  <CardHeader>
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        checked={selectedReviewIds.includes(item.id)}
-                        onCheckedChange={() => toggleReviewItem(item.id)}
-                        className="mt-1"
-                      />
-                      <div className="flex-1">
-                        <CardTitle className="text-base">{item.title}</CardTitle>
-                        <CardDescription>{item.summary || "-"}</CardDescription>
-                      </div>
-                      {/* Source origin label */}
-                      <Badge variant="outline" className={item.sourceId ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-50 text-gray-600 border-gray-200"}>
-                        {sourceLabel}
-                      </Badge>
-                      {/* Auto-publish indicator */}
-                      {aiConfidence >= 85 && riskScore < 30 && (
-                        <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
-                          {t("knowledge_admin.auto_publishable")}
-                        </Badge>
-                      )}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3 ml-9">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary">{item.topic}</Badge>
-                      <Badge variant="outline">{item.language}</Badge>
-                      <Badge>{item.category}</Badge>
-                      <Badge variant="outline">AI {aiConfidence}</Badge>
-                      <Badge variant={riskScore >= 60 ? "destructive" : "secondary"}>
-                        {t("knowledge_admin.risk")}: {riskScore}
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-muted-foreground grid grid-cols-1 md:grid-cols-3 gap-2">
-                      <span>{t("knowledge_admin.score.authority")} {Number(meta.authorityScore ?? 0)}</span>
-                      <span>{t("knowledge_admin.score.freshness")} {Number(meta.freshnessScore ?? 0)}</span>
-                      <span>{t("knowledge_admin.score.duplication")} {Number(meta.duplicationScore ?? 0)}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => reviewMutation.mutate({ id: item.id, action: "publish" })}>
-                        {t("knowledge_admin.actions.publish")}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => reviewMutation.mutate({ id: item.id, action: "reject" })}>
-                        {t("knowledge_admin.actions.reject")}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
+            {queue.map((item) => renderArticleCard(item, true))}
+            {queue.length === 0 && <p className="text-sm text-muted-foreground">{t("knowledge_admin.empty")}</p>}
+
+            {renderPagination(reviewPage, reviewTotalPages, pendingTotal, (p) => {
+              setReviewPage(p);
+              setSelectedReviewIds([]);
             })}
-            {pendingCount === 0 && <p className="text-sm text-muted-foreground">{t("knowledge_admin.empty")}</p>}
+          </TabsContent>
+
+          {/* ─── Published Tab (Separate tab with Pagination) ─── */}
+          <TabsContent value="published" className="space-y-3">
+            {publishedItems.map((item) => renderArticleCard(item, false))}
+            {publishedItems.length === 0 && <p className="text-sm text-muted-foreground">{t("knowledge_admin.empty")}</p>}
+
+            {renderPagination(publishedPage, publishedTotalPages, publishedTotal, setPublishedPage)}
           </TabsContent>
 
           {/* ─── Sources Tab (Enhanced with Frequency) ─── */}

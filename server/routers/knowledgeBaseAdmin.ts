@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { desc, eq, gte, inArray } from "drizzle-orm";
+import { desc, eq, gte, inArray, count, and, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, userProcedure } from "../procedures";
 import { router } from "../_core/trpc";
@@ -160,6 +160,8 @@ export const knowledgeBaseAdminRouter = router({
           statuses: z
             .array(z.enum(["pending_review", "published", "rejected", "draft"]))
             .default(["pending_review"]),
+          page: z.number().int().min(1).default(1),
+          pageSize: z.number().int().min(1).max(200).default(50),
         })
         .optional()
     )
@@ -169,15 +171,29 @@ export const knowledgeBaseAdminRouter = router({
 
       const statuses: Array<"draft" | "pending_review" | "published" | "rejected"> =
         input?.statuses?.length ? input.statuses : ["pending_review"];
+      const page = input?.page ?? 1;
+      const pageSize = input?.pageSize ?? 50;
+      const offset = (page - 1) * pageSize;
 
-      const rows = await db
-        .select()
-        .from(knowledgeItems)
-        .where(inArray(knowledgeItems.status, statuses))
-        .orderBy(desc(knowledgeItems.createdAt))
-        .limit(200);
+      const whereClause = inArray(knowledgeItems.status, statuses);
 
-      return rows
+      const [rows, totalResult] = await Promise.all([
+        db
+          .select()
+          .from(knowledgeItems)
+          .where(whereClause)
+          .orderBy(desc(knowledgeItems.createdAt))
+          .limit(pageSize)
+          .offset(offset),
+        db
+          .select({ count: count() })
+          .from(knowledgeItems)
+          .where(whereClause),
+      ]);
+
+      const total = totalResult[0]?.count || 0;
+
+      const items = rows
         .map((row) => {
           const meta = (row.metadata || {}) as Record<string, any>;
           const riskScore = computeRiskScore({
@@ -196,6 +212,8 @@ export const knowledgeBaseAdminRouter = router({
           };
         })
         .sort((a, b) => b.riskScore - a.riskScore || Number(b.createdAt) - Number(a.createdAt));
+
+      return { items, total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
     }),
 
   listSources: userProcedure.query(async () => {
@@ -614,5 +632,63 @@ export const knowledgeBaseAdminRouter = router({
           isExpired: row.expiresAt ? new Date(row.expiresAt) <= now : false,
           isExpiringSoon: row.expiresAt ? new Date(row.expiresAt) <= soonThreshold && new Date(row.expiresAt) > now : false,
         }));
+    }),
+
+  // Deduplicate knowledge items: keep newest per title+language, reject older duplicates
+  deduplicateItems: adminProcedure
+    .mutation(async () => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      // Find all non-rejected items grouped by title + language
+      const allItems = await db
+        .select({
+          id: knowledgeItems.id,
+          title: knowledgeItems.title,
+          language: knowledgeItems.language,
+          status: knowledgeItems.status,
+          createdAt: knowledgeItems.createdAt,
+        })
+        .from(knowledgeItems)
+        .where(
+          inArray(knowledgeItems.status, ["published", "pending_review", "draft"])
+        )
+        .orderBy(desc(knowledgeItems.createdAt));
+
+      // Group by title + language
+      const groups = new Map<string, typeof allItems>();
+      for (const item of allItems) {
+        const key = `${item.title}|||${item.language}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(item);
+      }
+
+      // Collect IDs of duplicates to reject (keep the first = newest per group)
+      const idsToReject: number[] = [];
+      const groupEntries = Array.from(groups.entries());
+      for (const [, items] of groupEntries) {
+        if (items.length <= 1) continue;
+        // Skip the first (newest), reject the rest
+        for (let i = 1; i < items.length; i++) {
+          idsToReject.push(items[i].id);
+        }
+      }
+
+      if (idsToReject.length > 0) {
+        // Batch update in chunks of 500
+        for (let i = 0; i < idsToReject.length; i += 500) {
+          const batch = idsToReject.slice(i, i + 500);
+          await db
+            .update(knowledgeItems)
+            .set({ status: "rejected" as const })
+            .where(inArray(knowledgeItems.id, batch));
+        }
+      }
+
+      return {
+        success: true,
+        duplicatesFound: idsToReject.length,
+        groupsProcessed: Array.from(groups.values()).filter((g) => g.length > 1).length,
+      };
     }),
 });

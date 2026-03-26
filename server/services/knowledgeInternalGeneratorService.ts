@@ -25,7 +25,7 @@ import {
   salaryBenchmarks,
 } from "../../drizzle/schema";
 import { contractors } from "../../drizzle/aor-schema";
-import { eq, and, asc, desc, sql } from "drizzle-orm";
+import { eq, and, asc, desc, sql, inArray } from "drizzle-orm";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1032,13 +1032,32 @@ export async function generateKnowledgeFromInternalData(options?: {
   result.totalGenerated = allArticles.length;
   result.countries = Array.from(processedCountries);
 
-  // Insert into DB (with expiresAt support)
+  // Insert into DB (with dedup + expiresAt support)
   if (!options?.dryRun && allArticles.length > 0) {
+    // Dedup: check existing articles by title + language to avoid duplicates
+    const existingRows = await db
+      .select({ title: knowledgeItems.title, language: knowledgeItems.language })
+      .from(knowledgeItems)
+      .where(
+        inArray(knowledgeItems.status, ["published", "pending_review", "draft"])
+      );
+    const existingKeys = new Set(
+      existingRows.map((r) => `${r.title}|||${r.language}`)
+    );
+
+    const newArticles = allArticles.filter(
+      (a) => !existingKeys.has(`${a.title}|||${a.language}`)
+    );
+    const skippedCount = allArticles.length - newArticles.length;
+    if (skippedCount > 0) {
+      console.log(`[KnowledgeGenerator] Skipped ${skippedCount} duplicate articles`);
+    }
+
     const now = new Date();
     const batchSize = 50;
 
-    for (let i = 0; i < allArticles.length; i += batchSize) {
-      const batch = allArticles.slice(i, i + batchSize);
+    for (let i = 0; i < newArticles.length; i += batchSize) {
+      const batch = newArticles.slice(i, i + batchSize);
       await db.insert(knowledgeItems).values(
         batch.map((article) => ({
           customerId: null,
@@ -1059,7 +1078,9 @@ export async function generateKnowledgeFromInternalData(options?: {
       );
     }
 
-    console.log(`[KnowledgeGenerator] Inserted ${allArticles.length} articles into knowledge_items`);
+    result.totalGenerated = newArticles.length;
+    (result as any).skippedDuplicates = skippedCount;
+    console.log(`[KnowledgeGenerator] Inserted ${newArticles.length} articles (skipped ${skippedCount} duplicates)`);
   }
 
   return result;
