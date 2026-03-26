@@ -19,7 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Wallet, CreditCard, ArrowDownLeft, ArrowUpRight, History, Download } from "lucide-react";
+import { Wallet, History, Download, Info, Lock, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import {
@@ -127,30 +127,39 @@ export default function PortalWallet() {
             </CardContent>
           </Card>
 
-          {/* Quick Stats or Info */}
+          {/* How It Works */}
           <Card className="md:col-span-1">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <CreditCard className="w-4 h-4" /> {t("portal_wallet.overview.quick_actions")}
+                <Info className="w-4 h-4" /> {t("portal_wallet.overview.how_it_works")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-sm text-muted-foreground">
               <div className="flex gap-3">
                 <div className="bg-emerald-100 text-emerald-700 p-2 rounded-full h-fit">
-                  <ArrowDownLeft className="w-4 h-4" />
+                  <Wallet className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">{t("portal_wallet.overview.make_deposit")}</p>
-                  <p className="text-xs">{t("portal_wallet.overview.make_deposit_desc")}</p>
+                  <p className="font-medium text-foreground">{t("portal_wallet.overview.how_deposit_balance")}</p>
+                  <p className="text-xs">{t("portal_wallet.overview.how_deposit_balance_desc")}</p>
                 </div>
               </div>
               <div className="flex gap-3">
                 <div className="bg-indigo-100 text-indigo-700 p-2 rounded-full h-fit">
-                  <Wallet className="w-4 h-4" />
+                  <Lock className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">{t("portal_wallet.overview.contact_support")}</p>
-                  <p className="text-xs">{t("portal_wallet.overview.contact_support_desc")}</p>
+                  <p className="font-medium text-foreground">{t("portal_wallet.overview.how_security_deposit")}</p>
+                  <p className="text-xs">{t("portal_wallet.overview.how_security_deposit_desc")}</p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <div className="bg-amber-100 text-amber-700 p-2 rounded-full h-fit">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-medium text-foreground">{t("portal_wallet.overview.how_auto_apply")}</p>
+                  <p className="text-xs">{t("portal_wallet.overview.how_auto_apply_desc")}</p>
                 </div>
               </div>
             </CardContent>
