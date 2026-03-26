@@ -187,6 +187,10 @@ export default function KnowledgeBaseAdmin() {
 
   const handleBatchReview = (action: "publish" | "reject") => {
     if (selectedReviewIds.length === 0) return;
+    const confirmMsg = action === "publish"
+      ? `Confirm batch publish ${selectedReviewIds.length} item(s)?`
+      : `Confirm batch reject ${selectedReviewIds.length} item(s)?`;
+    if (!window.confirm(confirmMsg)) return;
     batchReviewMutation.mutate({ ids: selectedReviewIds, action });
   };
 

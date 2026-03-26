@@ -503,7 +503,7 @@ export async function runRecurringAdjustmentGeneration(): Promise<{ eorGenerated
 
         // Check if contractor is still active
         const con = await getContractorById(tpl.contractorId!);
-        if (!con || con.status === "terminated" || con.status === "cancelled") {
+        if (!con || con.status === "terminated") {
           await updateContractorAdjustment(tpl.id, {
             recurrenceType: "one_time",
             isRecurringTemplate: false,
