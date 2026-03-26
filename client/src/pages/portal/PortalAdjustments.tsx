@@ -31,6 +31,7 @@ import {
 import {
   ArrowUpDown, ChevronLeft, ChevronRight, Plus, Pencil, Trash2,
   Upload, Loader2, Receipt, ExternalLink, CheckCircle2, XCircle, Download,
+  Repeat, StopCircle,
 } from "lucide-react";
 import { usePortalAuth } from "@/hooks/usePortalAuth";
 import { toast } from "sonner";
@@ -85,6 +86,8 @@ interface AdjustmentForm {
   description: string;
   receiptFileUrl: string;
   receiptFileKey: string;
+  recurrenceType: "one_time" | "monthly" | "permanent";
+  recurrenceEndMonth: string;
 }
 
 const emptyForm: AdjustmentForm = {
@@ -98,6 +101,8 @@ const emptyForm: AdjustmentForm = {
   description: "",
   receiptFileUrl: "",
   receiptFileKey: "",
+  recurrenceType: "one_time",
+  recurrenceEndMonth: "",
 };
 
 export default function PortalAdjustments() {
@@ -186,6 +191,14 @@ export default function PortalAdjustments() {
     },
   });
 
+  const stopRecurringMutation = portalTrpc.adjustments.stopRecurring.useMutation({
+    onSuccess: () => {
+      toast.success(t("adjustments.toast.stopRecurringSuccess"));
+      utils.adjustments.list.invalidate();
+    },
+    onError: (err: any) => toast.error(err.message),
+  });
+
   const items = Array.isArray(data?.items) ? data.items : [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
@@ -229,6 +242,8 @@ export default function PortalAdjustments() {
       description: form.description || undefined,
       receiptFileUrl: form.receiptFileUrl || undefined,
       receiptFileKey: form.receiptFileKey || undefined,
+      recurrenceType: form.recurrenceType,
+      recurrenceEndMonth: form.recurrenceType === "monthly" ? form.recurrenceEndMonth || undefined : undefined,
     });
   }
 
@@ -258,7 +273,15 @@ export default function PortalAdjustments() {
       description: adj.description || "",
       receiptFileUrl: adj.receiptFileUrl || "",
       receiptFileKey: "",
+      recurrenceType: adj.recurrenceType || "one_time",
+      recurrenceEndMonth: adj.recurrenceEndMonth ? adj.recurrenceEndMonth.slice(0, 7) : "",
     });
+  }
+
+  function handleStopRecurring(adj: any) {
+    if (confirm(t("adjustments.recurrence.stop.confirm"))) {
+      stopRecurringMutation.mutate({ id: adj.id, workerType: adj.workerType || "employee" });
+    }
   }
 
   const isFormOpen = showCreate || editingId !== null;
@@ -288,6 +311,8 @@ export default function PortalAdjustments() {
                   { header: "Amount", accessor: (r: any) => r.amount || 0 },
                   { header: "Currency", accessor: (r: any) => r.currency || "" },
                   { header: "Status", accessor: (r: any) => t(`portal_adjustments.status.${r.status}`) || r.status || "" },
+                  { header: "Recurrence", accessor: (r: any) => r.recurrenceType || "one_time" },
+                  { header: "Recurrence End", accessor: (r: any) => r.recurrenceEndMonth || "" },
                 ], `adjustments-export-${new Date().toISOString().slice(0, 10)}.csv`);
               }}
             >
@@ -378,19 +403,32 @@ export default function PortalAdjustments() {
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={statusColors[adj.status] || ""}>
-                          {t(`portal_adjustments.status.${adj.status}`) || adj.status}
-                        </Badge>
-                        {adj.clientRejectionReason && adj.status === "client_rejected" && (
-                          <p className="text-xs text-red-600 mt-1 max-w-[200px] truncate" title={adj.clientRejectionReason}>
-                            {adj.clientRejectionReason}
-                          </p>
-                        )}
-                        {adj.adminRejectionReason && adj.status === "admin_rejected" && (
-                          <p className="text-xs text-orange-600 mt-1 max-w-[200px] truncate" title={adj.adminRejectionReason}>
-                            {adj.adminRejectionReason}
-                          </p>
-                        )}
+                        <div className="flex flex-col gap-1">
+                          <Badge variant="outline" className={statusColors[adj.status] || ""}>
+                            {t(`portal_adjustments.status.${adj.status}`) || adj.status}
+                          </Badge>
+                          {adj.isRecurringTemplate && (
+                            <Badge variant="outline" className="text-[10px] px-1 h-4 bg-purple-50 text-purple-700 border-purple-200">
+                              <Repeat className="w-2.5 h-2.5 mr-0.5 inline" />
+                              {adj.recurrenceType === "permanent" ? t("adjustments.recurrence.badge.permanent") : t("adjustments.recurrence.badge.monthly").replace("{endMonth}", adj.recurrenceEndMonth ? adj.recurrenceEndMonth.slice(0, 7) : "?")}
+                            </Badge>
+                          )}
+                          {adj.parentAdjustmentId && (
+                            <Badge variant="outline" className="text-[10px] px-1 h-4 bg-sky-50 text-sky-700 border-sky-200">
+                              {t("adjustments.recurrence.badge.auto_generated")}
+                            </Badge>
+                          )}
+                          {adj.clientRejectionReason && adj.status === "client_rejected" && (
+                            <p className="text-xs text-red-600 mt-1 max-w-[200px] truncate" title={adj.clientRejectionReason}>
+                              {adj.clientRejectionReason}
+                            </p>
+                          )}
+                          {adj.adminRejectionReason && adj.status === "admin_rejected" && (
+                            <p className="text-xs text-orange-600 mt-1 max-w-[200px] truncate" title={adj.adminRejectionReason}>
+                              {adj.adminRejectionReason}
+                            </p>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {adj.receiptFileUrl ? (
@@ -433,6 +471,16 @@ export default function PortalAdjustments() {
                                 <Trash2 className="w-4 h-4" />
                               </Button>
                             </>
+                          )}
+                          {adj.isRecurringTemplate && (
+                            <Button
+                              variant="ghost" size="sm"
+                              className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                              onClick={() => handleStopRecurring(adj)}
+                              title={t("adjustments.recurrence.stop")}
+                            >
+                              <StopCircle className="w-4 h-4" />
+                            </Button>
                           )}
                         </div>
                       </TableCell>
@@ -527,6 +575,39 @@ export default function PortalAdjustments() {
                     placeholder={t("payroll.filters.placeholder.month")}
                   />
                 </div>
+                {/* Recurrence Type */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t("adjustments.form.label.recurrenceType")}</Label>
+                    <Select
+                      value={form.recurrenceType}
+                      onValueChange={(v) => setForm((f) => ({ ...f, recurrenceType: v as any, recurrenceEndMonth: v === "monthly" ? f.recurrenceEndMonth : "" }))}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="one_time">{t("adjustments.recurrence.one_time")}</SelectItem>
+                        <SelectItem value="monthly">{t("adjustments.recurrence.monthly")}</SelectItem>
+                        <SelectItem value="permanent">{t("adjustments.recurrence.permanent")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {form.recurrenceType === "monthly" && (
+                    <div className="space-y-2">
+                      <Label>{t("adjustments.form.label.recurrenceEndMonth")}</Label>
+                      <MonthPicker
+                        value={form.recurrenceEndMonth}
+                        onChange={(v) => setForm((f) => ({ ...f, recurrenceEndMonth: v }))}
+                        placeholder={t("adjustments.form.placeholder.recurrenceEndMonth")}
+                      />
+                    </div>
+                  )}
+                </div>
+                {form.recurrenceType !== "one_time" && (
+                  <p className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-md p-2">
+                    <Repeat className="w-3.5 h-3.5 inline mr-1" />
+                    {t("adjustments.form.hint.recurrence")}
+                  </p>
+                )}
               </>
             )}
             <div className="grid grid-cols-2 gap-4">
