@@ -21,6 +21,7 @@ import {
   contractorAdjustments,
   customers,
 } from "../../../drizzle/schema";
+import { sanitizeTextFields } from "../../utils/sanitizeText";
 
 // Fields visible to portal users
 const PORTAL_CONTRACTOR_LIST_FIELDS = {
@@ -175,7 +176,8 @@ export const portalContractorsRouter = portalRouter({
         bankDetails: z.any().optional(),
       })
     )
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ ctx, input: rawInput }) => {
+      const input = sanitizeTextFields(rawInput);
       const db = getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available" });
 

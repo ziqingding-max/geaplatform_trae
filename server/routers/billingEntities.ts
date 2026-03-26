@@ -11,6 +11,7 @@ import {
 } from "../db";
 import { storagePut, storageGet } from "../storage";
 import { TRPCError } from "@trpc/server";
+import { sanitizeTextFields } from "../utils/sanitizeText";
 
 /**
  * Helper: resolve logoUrl to a signed URL if logoFileKey exists.
@@ -66,7 +67,8 @@ export const billingEntitiesRouter = router({
         notes: z.string().optional(),
       })
     )
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input: rawInput, ctx }) => {
+      const input = sanitizeTextFields(rawInput);
       // Check invoicePrefix uniqueness
       if (input.invoicePrefix) {
         const allEntities = await listBillingEntities();
@@ -128,26 +130,27 @@ export const billingEntitiesRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      const sanitizedData = sanitizeTextFields(input.data);
       // Check invoicePrefix uniqueness on update
-      if (input.data.invoicePrefix) {
+      if (sanitizedData.invoicePrefix) {
         const allEntities = await listBillingEntities();
         const prefixDup = allEntities.find(
-          (e: any) => e.invoicePrefix === input.data.invoicePrefix && e.id !== input.id
+          (e: any) => e.invoicePrefix === sanitizedData.invoicePrefix && e.id !== input.id
         );
         if (prefixDup) {
           throw new TRPCError({
             code: 'CONFLICT',
-            message: `Invoice prefix "${input.data.invoicePrefix}" is already used by billing entity "${prefixDup.entityName}".`,
+            message: `Invoice prefix "${sanitizedData.invoicePrefix}" is already used by billing entity "${prefixDup.entityName}".`,
           });
         }
       }
-      await updateBillingEntity(input.id, input.data);
+      await updateBillingEntity(input.id, sanitizedData);
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
         action: "update",
         entityType: "billing_entity",
         entityId: input.id,
-        changes: JSON.stringify(input.data),
+        changes: JSON.stringify(sanitizedData),
       });
       return { success: true };
     }),

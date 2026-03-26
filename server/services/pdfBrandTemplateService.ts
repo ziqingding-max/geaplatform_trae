@@ -2,6 +2,7 @@ import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
 import os from "os";
+import { sanitizeText } from "../utils/sanitizeText";
 
 // --- Constants & Config ---
 
@@ -84,17 +85,20 @@ export function drawCoverPage(doc: PDFKit.PDFDocument, title: string, subtitle: 
   // Title Centered
   const centerY = doc.page.height / 2 - 50;
   
+  const cleanTitle = sanitizeText(title);
+  const cleanSubtitle = sanitizeText(subtitle);
+
   doc.fontSize(36).fillColor(BRAND_COLORS.primary);
-  if (hasCJK(title) && cjkFontPath) doc.font("NotoSansSC");
+  if (hasCJK(cleanTitle) && cjkFontPath) doc.font("NotoSansSC");
   else doc.font("Helvetica-Bold");
-  doc.text(title, 50, centerY, { align: "center", width: doc.page.width - 100 });
+  doc.text(cleanTitle, 50, centerY, { align: "center", width: doc.page.width - 100 });
 
   // Subtitle
   doc.moveDown();
   doc.fontSize(18).fillColor(BRAND_COLORS.text);
-  if (hasCJK(subtitle) && cjkFontPath) doc.font("NotoSansSC");
+  if (hasCJK(cleanSubtitle) && cjkFontPath) doc.font("NotoSansSC");
   else doc.font("Helvetica");
-  doc.text(subtitle, { align: "center", width: doc.page.width - 100 });
+  doc.text(cleanSubtitle, { align: "center", width: doc.page.width - 100 });
 
   // Date
   doc.moveDown(2);
@@ -133,16 +137,17 @@ export function drawFooter(doc: PDFKit.PDFDocument, pageNumber: number) {
 }
 
 export function smartText(doc: PDFKit.PDFDocument, text: string, x: number | null, y: number | null, opts: any, cjkFontPath: string | null, bold = false) {
-  if (hasCJK(text) && cjkFontPath) {
+  const clean = sanitizeText(text);
+  if (hasCJK(clean) && cjkFontPath) {
     doc.registerFont("NotoSansSC", cjkFontPath);
     doc.font("NotoSansSC");
   } else {
     doc.font(bold ? "Helvetica-Bold" : "Helvetica");
   }
   if (x !== null && y !== null) {
-    doc.text(text, x, y, opts);
+    doc.text(clean, x, y, opts);
   } else {
-    doc.text(text, opts);
+    doc.text(clean, opts);
   }
 }
 

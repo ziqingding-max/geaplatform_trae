@@ -28,6 +28,7 @@ import { TRPCError } from "@trpc/server";
 import { generateInviteToken, getInviteExpiryDate, hashPassword, signPortalToken } from "../portal/portalAuth";
 import type { PortalJwtPayload } from "../portal/portalAuth";
 import { sendPortalInviteEmail, sendPortalPasswordChangedEmail } from "../services/authEmailService";
+import { sanitizeTextFields } from "../utils/sanitizeText";
 
 export const customersRouter = router({
   list: userProcedure
@@ -78,7 +79,8 @@ export const customersRouter = router({
         notes: z.string().optional(),
       })
     )
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input: rawInput, ctx }) => {
+      const input = sanitizeTextFields(rawInput);
       // Check email uniqueness
       if (input.primaryContactEmail) {
         const existing = await getCustomerByEmail(input.primaryContactEmail);
@@ -154,20 +156,21 @@ export const customersRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      await updateCustomer(input.id, input.data);
+      const sanitizedData = sanitizeTextFields(input.data);
+      await updateCustomer(input.id, sanitizedData);
 
       // If primaryContact fields changed, sync to the isPrimary contact record
-      const primaryChanged = input.data.primaryContactName !== undefined
-        || input.data.primaryContactEmail !== undefined
-        || input.data.primaryContactPhone !== undefined;
+      const primaryChanged = sanitizedData.primaryContactName !== undefined
+        || sanitizedData.primaryContactEmail !== undefined
+        || sanitizedData.primaryContactPhone !== undefined;
       if (primaryChanged) {
         const contacts = await listCustomerContacts(input.id);
         const primaryContact = contacts.find((c: any) => c.isPrimary);
         if (primaryContact) {
           const syncData: any = {};
-          if (input.data.primaryContactName !== undefined) syncData.contactName = input.data.primaryContactName;
-          if (input.data.primaryContactEmail !== undefined) syncData.email = input.data.primaryContactEmail;
-          if (input.data.primaryContactPhone !== undefined) syncData.phone = input.data.primaryContactPhone;
+          if (sanitizedData.primaryContactName !== undefined) syncData.contactName = sanitizedData.primaryContactName;
+          if (sanitizedData.primaryContactEmail !== undefined) syncData.email = sanitizedData.primaryContactEmail;
+          if (sanitizedData.primaryContactPhone !== undefined) syncData.phone = sanitizedData.primaryContactPhone;
           await updateCustomerContact(primaryContact.id, syncData);
         }
       }
@@ -177,7 +180,7 @@ export const customersRouter = router({
         action: "update",
         entityType: "customer",
         entityId: input.id,
-        changes: JSON.stringify(input.data),
+        changes: JSON.stringify(sanitizedData),
       });
       return { success: true };
     }),
