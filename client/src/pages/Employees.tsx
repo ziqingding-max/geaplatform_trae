@@ -34,7 +34,7 @@ import {
   Calendar, Building2, Briefcase, Shield, Globe, Pencil,
   Upload, FileText, Trash2, Eye, DollarSign, CalendarDays,
   Receipt, FileCheck, AlertTriangle, Undo2, Clock, Hash, User, Cake,
-  CreditCard, Home, UserPlus, CheckCircle, Send, Loader2,
+  CreditCard, Home, UserPlus, CheckCircle, Send, Loader2, Repeat,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1475,9 +1475,22 @@ function EmployeeDetail({ id }: { id: number }) {
                           </TableCell>
                           <TableCell className="text-sm">{adj.effectiveMonth ? formatMonth(adj.effectiveMonth) : "—"}</TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={`text-xs ${adj.status === "approved" ? "bg-emerald-50 text-emerald-700" : adj.status === "rejected" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
-                              {adj.status}
-                            </Badge>
+                            <div className="flex flex-col gap-1">
+                              <Badge variant="outline" className={`text-xs ${adj.status === "approved" ? "bg-emerald-50 text-emerald-700" : adj.status === "rejected" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+                                {adj.status}
+                              </Badge>
+                              {adj.isRecurringTemplate && (
+                                <Badge variant="outline" className="text-[10px] px-1 h-4 bg-purple-50 text-purple-700 border-purple-200">
+                                  <Repeat className="w-2.5 h-2.5 mr-0.5 inline" />
+                                  {adj.recurrenceType === "permanent" ? t("adjustments.recurrence.badge.permanent") : t("adjustments.recurrence.badge.monthly").replace("{endMonth}", adj.recurrenceEndMonth ? adj.recurrenceEndMonth.slice(0, 7) : "?")}
+                                </Badge>
+                              )}
+                              {adj.parentAdjustmentId && (
+                                <Badge variant="outline" className="text-[10px] px-1 h-4 bg-sky-50 text-sky-700 border-sky-200">
+                                  {t("adjustments.recurrence.badge.auto_generated")}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
