@@ -75,6 +75,10 @@ export const portalAdjustmentsRouter = portalRouter({
             adminApprovedBy: adjustments.adminApprovedBy,
             adminApprovedAt: adjustments.adminApprovedAt,
             adminRejectionReason: adjustments.adminRejectionReason,
+            recurrenceType: adjustments.recurrenceType,
+            recurrenceEndMonth: adjustments.recurrenceEndMonth,
+            isRecurringTemplate: adjustments.isRecurringTemplate,
+            parentAdjustmentId: adjustments.parentAdjustmentId,
             createdAt: adjustments.createdAt,
             updatedAt: adjustments.updatedAt,
             workerFirstName: employees.firstName,
@@ -123,6 +127,10 @@ export const portalAdjustmentsRouter = portalRouter({
             adminApprovedBy: contractorAdjustments.adminApprovedBy,
             adminApprovedAt: contractorAdjustments.adminApprovedAt,
             adminRejectionReason: contractorAdjustments.adminRejectionReason,
+            recurrenceType: contractorAdjustments.recurrenceType,
+            recurrenceEndMonth: contractorAdjustments.recurrenceEndMonth,
+            isRecurringTemplate: contractorAdjustments.isRecurringTemplate,
+            parentAdjustmentId: contractorAdjustments.parentAdjustmentId,
             createdAt: contractorAdjustments.createdAt,
             updatedAt: contractorAdjustments.updatedAt,
             workerFirstName: contractors.firstName,
@@ -177,6 +185,9 @@ export const portalAdjustmentsRouter = portalRouter({
         description: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
+        // Recurring adjustment fields
+        recurrenceType: z.enum(["one_time", "monthly", "permanent"]).default("one_time"),
+        recurrenceEndMonth: z.string().optional(), // YYYY-MM or YYYY-MM-01, required for monthly
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -190,6 +201,23 @@ export const portalAdjustmentsRouter = portalRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid effective month format" });
       }
       const normalizedMonth = `${parts[0]}-${parts[1].padStart(2, "0")}-01`;
+
+      // Validate recurrence fields
+      const isRecurring = input.recurrenceType !== "one_time";
+      let normalizedEndMonth: string | null = null;
+      if (input.recurrenceType === "monthly") {
+        if (!input.recurrenceEndMonth) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: "End month is required for monthly recurring adjustments" });
+        }
+        const endParts = input.recurrenceEndMonth.split("-");
+        normalizedEndMonth = `${endParts[0]}-${endParts[1].padStart(2, "0")}-01`;
+        if (normalizedEndMonth < normalizedMonth) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: "End month must be on or after the effective month" });
+        }
+      }
+      if (input.recurrenceType === "permanent" && input.recurrenceEndMonth) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Permanent adjustments should not have an end month" });
+      }
 
       if (input.workerType === "employee") {
         // ── EOR path ──
@@ -241,6 +269,11 @@ export const portalAdjustmentsRouter = portalRouter({
           receiptFileUrl: input.receiptFileUrl || null,
           receiptFileKey: input.receiptFileKey || null,
           status: "submitted",
+          // Recurring fields
+          recurrenceType: input.recurrenceType,
+          recurrenceEndMonth: normalizedEndMonth,
+          isRecurringTemplate: isRecurring,
+          parentAdjustmentId: null,
         });
       } else {
         // ── AOR path ──
@@ -277,7 +310,12 @@ export const portalAdjustmentsRouter = portalRouter({
           attachmentUrl: input.receiptFileUrl && input.receiptFileUrl.trim() ? input.receiptFileUrl.trim() : null,
           attachmentFileKey: input.receiptFileKey && input.receiptFileKey.trim() ? input.receiptFileKey.trim() : null,
           status: "submitted",
-        });
+          // Recurring fields
+          recurrenceType: input.recurrenceType,
+          recurrenceEndMonth: normalizedEndMonth,
+          isRecurringTemplate: isRecurring,
+          parentAdjustmentId: null,
+        } as any);
       }
 
       return { success: true };
@@ -497,5 +535,52 @@ export const portalAdjustmentsRouter = portalRouter({
       const fileKey = `adjustment-receipts/${Date.now()}-${randomSuffix}-${input.fileName}`;
       const { url } = await storagePut(fileKey, fileBuffer, input.mimeType);
       return { url, fileKey };
+    }),
+
+  /**
+   * Stop a recurring adjustment template.
+   * Portal HR can stop recurring templates for their own customer's workers.
+   */
+  stopRecurring: portalHrProcedure
+    .input(z.object({
+      id: z.number(),
+      workerType: z.enum(["employee", "contractor"]).default("employee"),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const cid = ctx.portalUser.customerId;
+
+      if (input.workerType === "contractor") {
+        const [adj] = await db
+          .select({ id: contractorAdjustments.id, isRecurringTemplate: contractorAdjustments.isRecurringTemplate })
+          .from(contractorAdjustments)
+          .where(and(eq(contractorAdjustments.id, input.id), eq(contractorAdjustments.customerId, cid)));
+
+        if (!adj) throw new TRPCError({ code: "NOT_FOUND", message: "Adjustment not found" });
+        if (!adj.isRecurringTemplate) throw new TRPCError({ code: "BAD_REQUEST", message: "This adjustment is not a recurring template" });
+
+        await db.update(contractorAdjustments).set({
+          recurrenceType: "one_time" as any,
+          isRecurringTemplate: false,
+          recurrenceEndMonth: null,
+        }).where(eq(contractorAdjustments.id, input.id));
+      } else {
+        const [adj] = await db
+          .select({ id: adjustments.id, isRecurringTemplate: adjustments.isRecurringTemplate })
+          .from(adjustments)
+          .where(and(eq(adjustments.id, input.id), eq(adjustments.customerId, cid)));
+
+        if (!adj) throw new TRPCError({ code: "NOT_FOUND", message: "Adjustment not found" });
+        if (!adj.isRecurringTemplate) throw new TRPCError({ code: "BAD_REQUEST", message: "This adjustment is not a recurring template" });
+
+        await db.update(adjustments).set({
+          recurrenceType: "one_time",
+          isRecurringTemplate: false,
+          recurrenceEndMonth: null,
+        }).where(eq(adjustments.id, input.id));
+      }
+
+      return { success: true };
     }),
 });
