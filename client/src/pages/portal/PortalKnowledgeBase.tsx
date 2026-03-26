@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { toast } from "sonner";
 import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
@@ -19,6 +19,8 @@ import {
   ChevronRight,
   ArrowLeft,
   ChevronLeft,
+  Globe,
+  MapPin,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -29,16 +31,29 @@ const topicList: Topic[] = ["payroll", "compliance", "leave", "invoice", "onboar
 
 const PAGE_SIZE = 20;
 
+/** Check if an article was published within the last 7 days */
+function isNewArticle(publishedAt: Date | string | null): boolean {
+  if (!publishedAt) return false;
+  const pubDate = typeof publishedAt === "string" ? new Date(publishedAt) : publishedAt;
+  const sevenDaysAgo = Date.now() - 7 * 86_400_000;
+  return pubDate.getTime() > sevenDaysAgo;
+}
+
 export default function PortalKnowledgeBase() {
   const { t, locale } = useI18n();
   const [search, setSearch] = useState("");
   const [topics, setTopics] = useState<Topic[]>(topicList);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
 
+  // ── Server-side paginated query ──
   const { data, isLoading, refetch, isFetching } = portalTrpc.knowledgeBase.dashboard.useQuery({
     locale,
     topics,
+    countryCodes: selectedCountries.length > 0 ? selectedCountries : undefined,
+    page,
+    pageSize: PAGE_SIZE,
   });
 
   const feedbackMutation = portalTrpc.knowledgeBase.submitSearchFeedback.useMutation({
@@ -50,35 +65,50 @@ export default function PortalKnowledgeBase() {
     },
   });
 
-  const allItems = data?.items ?? [];
+  const items = data?.items ?? [];
+  const pagination = data?.pagination ?? { page: 1, pageSize: PAGE_SIZE, total: 0, totalPages: 1 };
+  const customerCountryCodes = data?.customerCountryCodes ?? [];
+  const availableCountries = data?.availableCountries ?? {};
 
+  // Client-side text search within current page items
   const filteredItems = useMemo(() => {
-    if (!search.trim()) return allItems;
+    if (!search.trim()) return items;
     const q = search.toLowerCase();
-    return allItems.filter(
+    return items.filter(
       (item) =>
         item.title.toLowerCase().includes(q) ||
         (item.summary || "").toLowerCase().includes(q)
     );
-  }, [allItems, search]);
+  }, [items, search]);
 
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pagedItems = filteredItems.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // Sort available countries: customer countries first, then alphabetically
+  const sortedCountryCodes = useMemo(() => {
+    const customerSet = new Set(customerCountryCodes.map((c) => c.toUpperCase()));
+    const allCodes = Object.keys(availableCountries);
+    return allCodes.sort((a, b) => {
+      const aIsCustomer = customerSet.has(a) ? 0 : 1;
+      const bIsCustomer = customerSet.has(b) ? 0 : 1;
+      if (aIsCustomer !== bIsCustomer) return aIsCustomer - bIsCustomer;
+      return a.localeCompare(b);
+    });
+  }, [availableCountries, customerCountryCodes]);
 
-  // Reset page when search/topics change
-  const handleSearchChange = (value: string) => {
+  // Reset page when filters change
+  const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
-    setPage(1);
-  };
+  }, []);
+
+  const handlePageChange = useCallback((newPage: number) => {
+    setPage(newPage);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
   const selectedItem = useMemo(() => {
     if (selectedItemId === null) return null;
-    return allItems.find((item) => item.id === selectedItemId) || null;
-  }, [allItems, selectedItemId]);
+    return items.find((item) => item.id === selectedItemId) || null;
+  }, [items, selectedItemId]);
 
-  const toggleTopic = (topic: Topic, checked: boolean) => {
+  const toggleTopic = useCallback((topic: Topic, checked: boolean) => {
     setTopics((prev) => {
       if (checked) {
         if (prev.includes(topic)) return prev;
@@ -87,12 +117,26 @@ export default function PortalKnowledgeBase() {
       return prev.filter((t) => t !== topic);
     });
     setPage(1);
-  };
+  }, []);
+
+  const toggleCountry = useCallback((code: string) => {
+    setSelectedCountries((prev) => {
+      const next = prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code];
+      return next;
+    });
+    setPage(1);
+  }, []);
+
+  const clearCountryFilter = useCallback(() => {
+    setSelectedCountries([]);
+    setPage(1);
+  }, []);
 
   const hasNoResults = !isLoading && filteredItems.length === 0;
 
   // ─── Article Detail View ───
   if (selectedItem) {
+    const meta = (selectedItem.metadata || {}) as Record<string, any>;
     return (
       <PortalLayout title={selectedItem.title}>
         <div className="p-6 space-y-6 page-enter max-w-4xl mx-auto">
@@ -107,7 +151,7 @@ export default function PortalKnowledgeBase() {
 
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 {selectedItem.category === "alert" ? (
                   <Bell className="w-4 h-4 text-amber-600" />
                 ) : (
@@ -119,6 +163,15 @@ export default function PortalKnowledgeBase() {
                 <Badge variant="outline">
                   {t(`knowledge_base.topic.${selectedItem.topic}`)}
                 </Badge>
+                {meta.countryCode && (
+                  <Badge variant="outline" className="gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {meta.countryCode}
+                  </Badge>
+                )}
+                {isNewArticle(selectedItem.publishedAt) && (
+                  <Badge className="bg-green-500 text-white hover:bg-green-600">NEW</Badge>
+                )}
               </div>
               <CardTitle className="text-xl">{selectedItem.title}</CardTitle>
               {selectedItem.summary && (
@@ -183,6 +236,7 @@ export default function PortalKnowledgeBase() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Search */}
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -193,23 +247,87 @@ export default function PortalKnowledgeBase() {
               />
             </div>
 
-            <div className="flex flex-wrap gap-4">
-              {topicList.map((topic) => {
-                const key = `knowledge_base.topic.${topic}`;
-                return (
-                  <div key={topic} className="flex items-center gap-2">
-                    <Checkbox
-                      id={topic}
-                      checked={topics.includes(topic)}
-                      onCheckedChange={(checked) =>
-                        toggleTopic(topic, checked === true)
-                      }
-                    />
-                    <Label htmlFor={topic}>{t(key)}</Label>
-                  </div>
-                );
-              })}
+            {/* Topic filters */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">
+                {t("knowledge_base.filter.topics")}
+              </Label>
+              <div className="flex flex-wrap gap-4">
+                {topicList.map((topic) => {
+                  const key = `knowledge_base.topic.${topic}`;
+                  const topicCount = data?.topicCounts?.[topic] ?? 0;
+                  return (
+                    <div key={topic} className="flex items-center gap-2">
+                      <Checkbox
+                        id={topic}
+                        checked={topics.includes(topic)}
+                        onCheckedChange={(checked) =>
+                          toggleTopic(topic, checked === true)
+                        }
+                      />
+                      <Label htmlFor={topic} className="cursor-pointer">
+                        {t(key)}
+                        {topicCount > 0 && (
+                          <span className="ml-1 text-xs text-muted-foreground">({topicCount})</span>
+                        )}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* Country filters */}
+            {sortedCountryCodes.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-sm font-medium flex items-center gap-1.5">
+                    <Globe className="w-4 h-4" />
+                    {t("knowledge_base.filter.countries")}
+                  </Label>
+                  {selectedCountries.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearCountryFilter}>
+                      {t("knowledge_base.filter.clear_countries")}
+                    </Button>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {sortedCountryCodes.map((code) => {
+                    const isCustomerCountry = customerCountryCodes.some(
+                      (c) => c.toUpperCase() === code.toUpperCase()
+                    );
+                    const isSelected = selectedCountries.includes(code);
+                    const articleCount = availableCountries[code] ?? 0;
+                    return (
+                      <Button
+                        key={code}
+                        variant={isSelected ? "default" : "outline"}
+                        size="sm"
+                        className={`gap-1.5 ${
+                          isCustomerCountry && !isSelected
+                            ? "border-primary/50 text-primary hover:bg-primary/10"
+                            : ""
+                        }`}
+                        onClick={() => toggleCountry(code)}
+                      >
+                        <MapPin className="w-3 h-3" />
+                        {code}
+                        <span className="text-xs opacity-70">({articleCount})</span>
+                        {isCustomerCountry && !isSelected && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                        )}
+                      </Button>
+                    );
+                  })}
+                </div>
+                {customerCountryCodes.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
+                    {t("knowledge_base.filter.your_countries")}
+                  </p>
+                )}
+              </div>
+            )}
 
             <Button
               variant="outline"
@@ -222,7 +340,7 @@ export default function PortalKnowledgeBase() {
         </Card>
 
         {/* ─── Stats ─── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">
@@ -231,7 +349,7 @@ export default function PortalKnowledgeBase() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-semibold">
-                {filteredItems.length}
+                {pagination.total}
               </div>
             </CardContent>
           </Card>
@@ -248,6 +366,18 @@ export default function PortalKnowledgeBase() {
                     (v) => Number(v) > 0
                   ).length
                 }
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">
+                {t("knowledge_base.stats.countries")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-semibold">
+                {Object.keys(availableCountries).length}
               </div>
             </CardContent>
           </Card>
@@ -272,7 +402,9 @@ export default function PortalKnowledgeBase() {
               {t("knowledge_base.feed.title")}
             </CardTitle>
             <CardDescription>
-              {t("knowledge_base.feed.description")}
+              {selectedCountries.length > 0
+                ? `${t("knowledge_base.feed.filtered_by_countries")}: ${selectedCountries.join(", ")}`
+                : t("knowledge_base.feed.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -305,71 +437,91 @@ export default function PortalKnowledgeBase() {
               </div>
             ) : (
               <>
-                {pagedItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-lg border p-4 space-y-2 cursor-pointer hover:bg-accent/50 hover:border-primary/30 transition-colors group"
-                    onClick={() => setSelectedItemId(item.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSelectedItemId(item.id);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center gap-2">
-                      {item.category === "alert" ? (
-                        <Bell className="w-4 h-4 text-amber-600" />
-                      ) : (
-                        <BookOpen className="w-4 h-4 text-primary" />
+                {filteredItems.map((item) => {
+                  const meta = (item.metadata || {}) as Record<string, any>;
+                  return (
+                    <div
+                      key={item.id}
+                      className="rounded-lg border p-4 space-y-2 cursor-pointer hover:bg-accent/50 hover:border-primary/30 transition-colors group"
+                      onClick={() => setSelectedItemId(item.id)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedItemId(item.id);
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {item.category === "alert" ? (
+                          <Bell className="w-4 h-4 text-amber-600" />
+                        ) : (
+                          <BookOpen className="w-4 h-4 text-primary" />
+                        )}
+                        <Badge variant="secondary">
+                          {t(`knowledge_base.category.${item.category}`)}
+                        </Badge>
+                        <Badge variant="outline">
+                          {t(`knowledge_base.topic.${item.topic}`)}
+                        </Badge>
+                        {meta.countryCode && (
+                          <Badge variant="outline" className="gap-1 text-xs">
+                            <MapPin className="w-3 h-3" />
+                            {meta.countryCode}
+                          </Badge>
+                        )}
+                        {isNewArticle(item.publishedAt) && (
+                          <Badge className="bg-green-500 text-white hover:bg-green-600 text-xs">
+                            NEW
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-semibold group-hover:text-primary transition-colors">
+                          {item.title}
+                        </h3>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary flex-shrink-0 transition-colors" />
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {item.summary || "-"}
+                      </p>
+                      {item.publishedAt && (
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(item.publishedAt)}
+                        </p>
                       )}
-                      <Badge variant="secondary">
-                        {t(`knowledge_base.category.${item.category}`)}
-                      </Badge>
-                      <Badge variant="outline">
-                        {t(`knowledge_base.topic.${item.topic}`)}
-                      </Badge>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold group-hover:text-primary transition-colors">
-                        {item.title}
-                      </h3>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary flex-shrink-0 transition-colors" />
-                    </div>
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {item.summary || "-"}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
 
-                {/* ─── Pagination ─── */}
-                {totalPages > 1 && (
+                {/* ─── Server-side Pagination ─── */}
+                {pagination.totalPages > 1 && (
                   <div className="flex items-center justify-between pt-4">
                     <p className="text-sm text-muted-foreground">
-                      {t("knowledge_base.pagination.showing")} {(currentPage - 1) * PAGE_SIZE + 1}-
-                      {Math.min(currentPage * PAGE_SIZE, filteredItems.length)}{" "}
-                      {t("knowledge_base.pagination.of")} {filteredItems.length}
+                      {t("knowledge_base.pagination.showing")}{" "}
+                      {(pagination.page - 1) * pagination.pageSize + 1}-
+                      {Math.min(pagination.page * pagination.pageSize, pagination.total)}{" "}
+                      {t("knowledge_base.pagination.of")} {pagination.total}
                     </p>
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={currentPage <= 1}
-                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={pagination.page <= 1 || isFetching}
+                        onClick={() => handlePageChange(pagination.page - 1)}
                       >
                         <ChevronLeft className="w-4 h-4" />
                         {t("common.previous")}
                       </Button>
                       <span className="text-sm text-muted-foreground px-2">
-                        {currentPage} / {totalPages}
+                        {pagination.page} / {pagination.totalPages}
                       </span>
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={currentPage >= totalPages}
-                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={pagination.page >= pagination.totalPages || isFetching}
+                        onClick={() => handlePageChange(pagination.page + 1)}
                       >
                         {t("common.next")}
                         <ChevronRight className="w-4 h-4" />

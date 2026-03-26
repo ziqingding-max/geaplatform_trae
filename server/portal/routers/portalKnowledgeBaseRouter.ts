@@ -1,19 +1,74 @@
 import { z } from "zod";
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql, count } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { protectedPortalProcedure, portalRouter } from "../portalTrpc";
 import { getDb } from "../../db";
-import { knowledgeFeedbackEvents, knowledgeItems, knowledgeMarketingEvents } from "../../../drizzle/schema";
+import {
+  knowledgeFeedbackEvents,
+  knowledgeItems,
+  knowledgeMarketingEvents,
+  employees,
+} from "../../../drizzle/schema";
+import { contractors } from "../../../drizzle/aor-schema";
 
 const topicEnum = ["payroll", "compliance", "leave", "invoice", "onboarding", "general"] as const;
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/** How many days ago a date was (negative = future) */
+function daysAgo(date: Date | null): number {
+  if (!date) return 999;
+  return Math.floor((Date.now() - date.getTime()) / 86_400_000);
+}
+
+/**
+ * Smart-sort knowledge items:
+ *  1. Customer-specific articles first
+ *  2. Articles matching customer's employee/contractor countries second
+ *  3. Articles published within 7 days get a "new" boost
+ *  4. Within each tier, sort by publishedAt desc
+ */
+function smartSort(
+  items: (typeof knowledgeItems.$inferSelect)[],
+  customerCountryCodes: string[],
+  customerId: number
+) {
+  const countrySet = new Set(customerCountryCodes.map((c) => c.toUpperCase()));
+
+  return items.sort((a, b) => {
+    // Tier 1: Customer-specific articles first
+    const aCustomer = a.customerId === customerId ? 1 : 0;
+    const bCustomer = b.customerId === customerId ? 1 : 0;
+    if (aCustomer !== bCustomer) return bCustomer - aCustomer;
+
+    // Tier 2: Articles matching customer's countries
+    const aMeta = (a.metadata || {}) as Record<string, any>;
+    const bMeta = (b.metadata || {}) as Record<string, any>;
+    const aCountryMatch = aMeta.countryCode && countrySet.has(String(aMeta.countryCode).toUpperCase()) ? 1 : 0;
+    const bCountryMatch = bMeta.countryCode && countrySet.has(String(bMeta.countryCode).toUpperCase()) ? 1 : 0;
+    if (aCountryMatch !== bCountryMatch) return bCountryMatch - aCountryMatch;
+
+    // Tier 3: Newer articles first (within same tier)
+    const aTime = a.publishedAt?.getTime() ?? a.createdAt.getTime();
+    const bTime = b.publishedAt?.getTime() ?? b.createdAt.getTime();
+    return bTime - aTime;
+  });
+}
+
 export const portalKnowledgeBaseRouter = portalRouter({
+  /**
+   * Main dashboard endpoint — now with smart sorting, server-side pagination,
+   * country filtering, and customer country data.
+   */
   dashboard: protectedPortalProcedure
     .input(
       z
         .object({
           locale: z.enum(["en", "zh"]).default("en"),
           topics: z.array(z.enum(topicEnum)).optional(),
+          countryCodes: z.array(z.string()).optional(),
+          page: z.number().int().min(1).default(1),
+          pageSize: z.number().int().min(1).max(100).default(20),
         })
         .optional()
     )
@@ -24,32 +79,106 @@ export const portalKnowledgeBaseRouter = portalRouter({
       }
 
       const customerId = ctx.portalUser.customerId;
+      const locale = input?.locale ?? "en";
       const topics = input?.topics?.length ? input.topics : [...topicEnum];
+      const page = input?.page ?? 1;
+      const pageSize = input?.pageSize ?? 20;
+      const filterCountryCodes = input?.countryCodes;
 
-      const items = await db
+      // ── 1. Fetch customer's employee countries ──
+      const empCountries = await db
+        .select({ countryCode: employees.country })
+        .from(employees)
+        .where(eq(employees.customerId, customerId))
+        .groupBy(employees.country);
+
+      // Also fetch contractor countries
+      const ctrCountries = await db
+        .select({ countryCode: contractors.country })
+        .from(contractors)
+        .where(eq(contractors.customerId, customerId))
+        .groupBy(contractors.country);
+
+      const customerCountryCodes = Array.from(
+        new Set(
+          empCountries.map((r) => r.countryCode).concat(ctrCountries.map((r) => r.countryCode))
+        )
+      );
+
+      // ── 2. Build WHERE conditions ──
+      const conditions = [
+        inArray(knowledgeItems.topic, topics),
+        eq(knowledgeItems.language, locale),
+        eq(knowledgeItems.status, "published"),
+        or(eq(knowledgeItems.customerId, customerId), isNull(knowledgeItems.customerId)),
+      ];
+
+      // Country filter: filter by metadata->>'countryCode'
+      if (filterCountryCodes && filterCountryCodes.length > 0) {
+        const upperCodes = filterCountryCodes.map((c) => c.toUpperCase());
+        // Include articles that match the country filter OR have no country (global articles)
+        conditions.push(
+          or(
+            inArray(sql`(metadata->>'countryCode')`, upperCodes),
+            sql`(metadata->>'countryCode') IS NULL`
+          )!
+        );
+      }
+
+      // ── 3. Get total count for pagination ──
+      const [{ total }] = await db
+        .select({ total: count() })
+        .from(knowledgeItems)
+        .where(and(...conditions));
+
+      // ── 4. Fetch ALL items for smart sorting (up to a reasonable cap) ──
+      // We fetch all matching items, sort them in memory, then paginate.
+      // This is necessary because the sort logic depends on customer context
+      // which cannot be expressed in a single SQL ORDER BY.
+      // Performance note: for very large datasets (>5000), consider caching.
+      const allItems = await db
         .select()
         .from(knowledgeItems)
-        .where(
-          and(
-            inArray(knowledgeItems.topic, topics),
-            eq(knowledgeItems.language, input?.locale ?? "en"),
-            eq(knowledgeItems.status, "published"),
-            or(eq(knowledgeItems.customerId, customerId), isNull(knowledgeItems.customerId))
-          )
-        )
+        .where(and(...conditions))
         .orderBy(desc(knowledgeItems.publishedAt), desc(knowledgeItems.createdAt))
-        .limit(500);
+        .limit(5000);
 
+      // ── 5. Smart sort ──
+      const sortedItems = smartSort(allItems, customerCountryCodes, customerId);
+
+      // ── 6. Paginate ──
+      const startIdx = (page - 1) * pageSize;
+      const paginatedItems = sortedItems.slice(startIdx, startIdx + pageSize);
+
+      // ── 7. Compute topic counts from ALL items (not just current page) ──
       const topicCounts = topics.reduce<Record<string, number>>((acc, topic) => {
-        acc[topic] = items.filter((item) => item.topic === topic).length;
+        acc[topic] = allItems.filter((item) => item.topic === topic).length;
         return acc;
       }, {});
+
+      // ── 8. Compute available country codes from all items ──
+      const availableCountries: Record<string, number> = {};
+      for (const item of allItems) {
+        const meta = (item.metadata || {}) as Record<string, any>;
+        const cc = meta.countryCode ? String(meta.countryCode).toUpperCase() : null;
+        if (cc) {
+          availableCountries[cc] = (availableCountries[cc] || 0) + 1;
+        }
+      }
 
       return {
         customerId,
         generatedAt: Date.now(),
         topicCounts,
-        items,
+        items: paginatedItems,
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize),
+        },
+        customerCountryCodes,
+        availableCountries,
       };
     }),
 
