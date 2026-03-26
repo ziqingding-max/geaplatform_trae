@@ -22,8 +22,11 @@ import {
   leaveTypes,
   countrySocialInsuranceItems,
   countryGuideChapters,
+  salaryBenchmarks,
+  exchangeRates,
 } from "../../drizzle/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { contractors } from "../../drizzle/aor-schema";
+import { eq, and, asc, desc, sql } from "drizzle-orm";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -41,6 +44,10 @@ interface GeneratedArticle {
   metadata: Record<string, any>;
 }
 
+interface GeneratedArticleWithExpiry extends GeneratedArticle {
+  expiresAt?: Date;
+}
+
 interface GenerationResult {
   totalGenerated: number;
   byType: {
@@ -52,6 +59,9 @@ interface GenerationResult {
     compensationGuide: number;
     terminationGuide: number;
     workingConditions: number;
+    salaryBenchmark: number;
+    contractorGuide: number;
+    exchangeRateImpact: number;
   };
   countries: string[];
   errors: string[];
@@ -635,6 +645,285 @@ function generateLeaveEntitlementsArticle(
   ];
 }
 
+// ─── Salary Benchmark Generator ─────────────────────────────────────────────
+
+function generateSalaryBenchmarkArticle(
+  countryCode: string,
+  benchmarks: Array<{
+    jobCategory: string;
+    jobTitle: string;
+    seniorityLevel: string;
+    salaryP25: string;
+    salaryP50: string;
+    salaryP75: string;
+    currency: string;
+    dataYear: number;
+    source: string | null;
+  }>,
+  countryName: string
+): GeneratedArticleWithExpiry[] {
+  if (benchmarks.length === 0) return [];
+
+  const year = benchmarks[0]?.dataYear || 2026;
+  const currency = benchmarks[0]?.currency || "USD";
+
+  // Group by job category
+  const byCategory = new Map<string, typeof benchmarks>();
+  for (const b of benchmarks) {
+    const list = byCategory.get(b.jobCategory) || [];
+    list.push(b);
+    byCategory.set(b.jobCategory, list);
+  }
+
+  let contentEn = `## ${countryName} Salary Benchmarks ${year}\n\n`;
+  contentEn += `Salary data for **${benchmarks.length}** roles across **${byCategory.size}** categories in ${countryName}. All figures in ${currency}.\n\n`;
+
+  for (const [category, items] of Array.from(byCategory)) {
+    contentEn += `### ${category}\n\n`;
+    contentEn += `| Role | Seniority | P25 | Median (P50) | P75 |\n`;
+    contentEn += `|------|-----------|-----|-------------|-----|\n`;
+    for (const item of items) {
+      contentEn += `| ${item.jobTitle} | ${item.seniorityLevel} | ${Number(item.salaryP25).toLocaleString()} | ${Number(item.salaryP50).toLocaleString()} | ${Number(item.salaryP75).toLocaleString()} |\n`;
+    }
+    contentEn += `\n`;
+  }
+
+  contentEn += `> Data sourced for ${year}. Salary ranges are annual gross figures. Actual compensation may vary based on experience, company size, and industry.\n`;
+
+  let contentZh = `## ${countryName} ${year}年薪资基准报告\n\n`;
+  contentZh += `${countryName}**${benchmarks.length}**个岗位、**${byCategory.size}**个类别的薪资数据。所有数据单位为${currency}。\n\n`;
+
+  const seniorityZh: Record<string, string> = {
+    junior: "初级", mid: "中级", senior: "高级", lead: "主管", director: "总监",
+  };
+
+  for (const [category, items] of Array.from(byCategory)) {
+    contentZh += `### ${category}\n\n`;
+    contentZh += `| 岗位 | 级别 | P25 | 中位数 (P50) | P75 |\n`;
+    contentZh += `|------|------|-----|------------|-----|\n`;
+    for (const item of items) {
+      contentZh += `| ${item.jobTitle} | ${seniorityZh[item.seniorityLevel] || item.seniorityLevel} | ${Number(item.salaryP25).toLocaleString()} | ${Number(item.salaryP50).toLocaleString()} | ${Number(item.salaryP75).toLocaleString()} |\n`;
+    }
+    contentZh += `\n`;
+  }
+
+  contentZh += `> 数据来源于${year}年。薪资范围为年度税前总额。实际薪酬可能因经验、公司规模和行业而异。\n`;
+
+  // Salary data expires at end of the data year
+  const expiresAt = new Date(`${year + 1}-03-31T23:59:59Z`);
+
+  return [
+    {
+      title: `${countryName} Salary Benchmarks ${year}: ${benchmarks.length} Roles Across ${byCategory.size} Categories`,
+      summary: `Comprehensive salary benchmark data for ${countryName} in ${year}, covering ${benchmarks.length} roles with P25/P50/P75 ranges in ${currency}.`,
+      content: contentEn,
+      topic: "payroll",
+      language: "en",
+      category: "article",
+      metadata: {
+        countryCode,
+        sourceType: "internal_salary_benchmark",
+        dataYear: year,
+        roleCount: benchmarks.length,
+        categoryCount: byCategory.size,
+        currency,
+      },
+      expiresAt,
+    },
+    {
+      title: `${countryName} ${year}年薪资基准报告：${byCategory.size}个类别${benchmarks.length}个岗位`,
+      summary: `${countryName}${year}年综合薪资基准数据，涵盖${benchmarks.length}个岗位的P25/P50/P75薪资范围（${currency}）。`,
+      content: contentZh,
+      topic: "payroll",
+      language: "zh",
+      category: "article",
+      metadata: {
+        countryCode,
+        sourceType: "internal_salary_benchmark",
+        dataYear: year,
+        roleCount: benchmarks.length,
+        categoryCount: byCategory.size,
+        currency,
+      },
+      expiresAt,
+    },
+  ];
+}
+
+// ─── Contractor / AOR Guide Generator ───────────────────────────────────────
+
+function generateContractorGuideArticle(
+  countryCode: string,
+  contractorCount: number,
+  countryName: string
+): GeneratedArticleWithExpiry[] {
+  let contentEn = `## Contractor Engagement Guide: ${countryName}\n\n`;
+  contentEn += `This guide covers key considerations for engaging independent contractors in ${countryName}, including compliance requirements, contract structures, and payment best practices.\n\n`;
+  contentEn += `### Key Facts\n\n`;
+  contentEn += `- **Active contractors in ${countryName}**: ${contractorCount} (across all GEA clients)\n`;
+  contentEn += `- **Misclassification risk**: Engaging workers as contractors when they should be employees can result in significant penalties, back-taxes, and legal liability.\n\n`;
+  contentEn += `### Contractor vs Employee Classification\n\n`;
+  contentEn += `| Factor | Contractor | Employee |\n`;
+  contentEn += `|--------|-----------|----------|\n`;
+  contentEn += `| Control over work | Sets own schedule | Employer-directed |\n`;
+  contentEn += `| Tools & equipment | Provides own | Employer-provided |\n`;
+  contentEn += `| Exclusivity | Can work for others | Typically exclusive |\n`;
+  contentEn += `| Payment | Per invoice/milestone | Regular salary |\n`;
+  contentEn += `| Benefits | Not entitled | Statutory benefits |\n`;
+  contentEn += `| Termination | Per contract terms | Labor law protections |\n\n`;
+  contentEn += `### Recommended Contract Clauses\n\n`;
+  contentEn += `1. **Scope of Work**: Clearly define deliverables, timelines, and milestones\n`;
+  contentEn += `2. **Payment Terms**: Specify rates, invoicing frequency, and payment timeline\n`;
+  contentEn += `3. **IP Assignment**: Ensure intellectual property rights are properly assigned\n`;
+  contentEn += `4. **Confidentiality**: Include NDA provisions\n`;
+  contentEn += `5. **Termination**: Define notice period and grounds for early termination\n`;
+  contentEn += `6. **Governing Law**: Specify ${countryName} law as the governing jurisdiction\n\n`;
+  contentEn += `> This guide provides general information only. Consult local legal counsel for specific compliance requirements in ${countryName}.\n`;
+
+  let contentZh = `## 承包商聘用指南：${countryName}\n\n`;
+  contentZh += `本指南涵盖在${countryName}聘用独立承包商的关键注意事项，包括合规要求、合同结构和付款最佳实践。\n\n`;
+  contentZh += `### 关键信息\n\n`;
+  contentZh += `- **${countryName}活跃承包商数量**：${contractorCount}（所有GEA客户）\n`;
+  contentZh += `- **错误分类风险**：将应为雇员的工作者作为承包商聘用，可能导致巨额罚款、补缴税款和法律责任。\n\n`;
+  contentZh += `### 承包商与雇员分类对比\n\n`;
+  contentZh += `| 因素 | 承包商 | 雇员 |\n`;
+  contentZh += `|------|--------|------|\n`;
+  contentZh += `| 工作控制 | 自行安排 | 雇主指导 |\n`;
+  contentZh += `| 工具设备 | 自行提供 | 雇主提供 |\n`;
+  contentZh += `| 排他性 | 可为他人工作 | 通常排他 |\n`;
+  contentZh += `| 付款方式 | 按发票/里程碑 | 固定薪资 |\n`;
+  contentZh += `| 福利 | 无权享有 | 法定福利 |\n`;
+  contentZh += `| 终止 | 按合同条款 | 劳动法保护 |\n\n`;
+  contentZh += `### 推荐合同条款\n\n`;
+  contentZh += `1. **工作范围**：明确定义交付物、时间表和里程碑\n`;
+  contentZh += `2. **付款条款**：指定费率、开票频率和付款时间\n`;
+  contentZh += `3. **知识产权转让**：确保知识产权正确转让\n`;
+  contentZh += `4. **保密条款**：包含保密协议条款\n`;
+  contentZh += `5. **终止条款**：定义通知期和提前终止的理由\n`;
+  contentZh += `6. **适用法律**：指定${countryName}法律为管辖法律\n\n`;
+  contentZh += `> 本指南仅提供一般性信息。有关${countryName}具体合规要求，请咨询当地法律顾问。\n`;
+
+  return [
+    {
+      title: `Contractor Engagement Guide for ${countryName}: Classification, Contracts & Compliance`,
+      summary: `Essential guide for engaging contractors in ${countryName}, covering misclassification risks, contract clauses, and ${contractorCount} active contractors.`,
+      content: contentEn,
+      topic: "compliance",
+      language: "en",
+      category: "guide",
+      metadata: {
+        countryCode,
+        sourceType: "internal_contractor_guide",
+        contractorCount,
+      },
+    },
+    {
+      title: `${countryName}承包商聘用指南：分类、合同与合规`,
+      summary: `在${countryName}聘用承包商的必备指南，涵盖错误分类风险、合同条款及${contractorCount}名活跃承包商。`,
+      content: contentZh,
+      topic: "compliance",
+      language: "zh",
+      category: "guide",
+      metadata: {
+        countryCode,
+        sourceType: "internal_contractor_guide",
+        contractorCount,
+      },
+    },
+  ];
+}
+
+// ─── Exchange Rate Impact Generator ─────────────────────────────────────────
+
+function generateExchangeRateImpactArticle(
+  rates: Array<{
+    fromCurrency: string;
+    toCurrency: string;
+    rate: string;
+    rateWithMarkup: string;
+    effectiveDate: string;
+  }>
+): GeneratedArticleWithExpiry[] {
+  if (rates.length === 0) return [];
+
+  // Group by currency pair
+  const pairs = new Map<string, typeof rates>();
+  for (const r of rates) {
+    const key = `${r.fromCurrency}/${r.toCurrency}`;
+    const list = pairs.get(key) || [];
+    list.push(r);
+    pairs.set(key, list);
+  }
+
+  let contentEn = `## Exchange Rate Overview for Cross-Border Payroll\n\n`;
+  contentEn += `Current exchange rates affecting international payroll processing. Data covers **${pairs.size}** currency pairs.\n\n`;
+  contentEn += `| Currency Pair | Rate | With Markup | Effective Date |\n`;
+  contentEn += `|--------------|------|------------|----------------|\n`;
+
+  for (const [pair, rateList] of Array.from(pairs)) {
+    // Use the most recent rate
+    const latest = rateList.sort((a: typeof rateList[0], b: typeof rateList[0]) => b.effectiveDate.localeCompare(a.effectiveDate))[0];
+    contentEn += `| ${pair} | ${Number(latest.rate).toFixed(4)} | ${Number(latest.rateWithMarkup).toFixed(4)} | ${latest.effectiveDate} |\n`;
+  }
+
+  contentEn += `\n### Impact on Employer Costs\n\n`;
+  contentEn += `- Exchange rate fluctuations directly affect the cost of employing staff in foreign currencies.\n`;
+  contentEn += `- A 5% depreciation in the local currency can increase employer costs by 5% when converted to the billing currency.\n`;
+  contentEn += `- Consider hedging strategies or fixed-rate agreements for predictable budgeting.\n\n`;
+  contentEn += `> Rates are indicative and updated periodically. Actual transaction rates may differ.\n`;
+
+  let contentZh = `## 跨境薪资汇率概览\n\n`;
+  contentZh += `影响国际薪资处理的当前汇率。数据涵盖**${pairs.size}**个货币对。\n\n`;
+  contentZh += `| 货币对 | 汇率 | 含加价 | 生效日期 |\n`;
+  contentZh += `|--------|------|--------|---------|\n`;
+
+  for (const [pair, rateList] of Array.from(pairs)) {
+    const latest = rateList.sort((a: typeof rateList[0], b: typeof rateList[0]) => b.effectiveDate.localeCompare(a.effectiveDate))[0];
+    contentZh += `| ${pair} | ${Number(latest.rate).toFixed(4)} | ${Number(latest.rateWithMarkup).toFixed(4)} | ${latest.effectiveDate} |\n`;
+  }
+
+  contentZh += `\n### 对雇主成本的影响\n\n`;
+  contentZh += `- 汇率波动直接影响以外币雇佣员工的成本。\n`;
+  contentZh += `- 当地货币贬值5%可能导致折算为结算货币后雇主成本增加5%。\n`;
+  contentZh += `- 建议考虑对冲策略或固定汇率协议以实现可预测的预算规划。\n\n`;
+  contentZh += `> 汇率仅供参考，定期更新。实际交易汇率可能有所不同。\n`;
+
+  // Exchange rate data expires after 30 days
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30);
+
+  return [
+    {
+      title: `Cross-Border Payroll Exchange Rates: ${pairs.size} Currency Pairs`,
+      summary: `Current exchange rates for ${pairs.size} currency pairs used in international payroll, with markup rates and employer cost impact analysis.`,
+      content: contentEn,
+      topic: "payroll",
+      language: "en",
+      category: "article",
+      metadata: {
+        sourceType: "internal_exchange_rates",
+        pairCount: pairs.size,
+        rateCount: rates.length,
+      },
+      expiresAt,
+    },
+    {
+      title: `跨境薪资汇率报告：${pairs.size}个货币对`,
+      summary: `国际薪资处理中${pairs.size}个货币对的当前汇率，含加价汇率及雇主成本影响分析。`,
+      content: contentZh,
+      topic: "payroll",
+      language: "zh",
+      category: "article",
+      metadata: {
+        sourceType: "internal_exchange_rates",
+        pairCount: pairs.size,
+        rateCount: rates.length,
+      },
+      expiresAt,
+    },
+  ];
+}
+
 // ─── Main Generation Function ────────────────────────────────────────────────
 
 export async function generateKnowledgeFromInternalData(options?: {
@@ -648,6 +937,9 @@ export async function generateKnowledgeFromInternalData(options?: {
     | "compensationGuide"
     | "terminationGuide"
     | "workingConditions"
+    | "salaryBenchmark"
+    | "contractorGuide"
+    | "exchangeRateImpact"
   >;
   dryRun?: boolean;
 }): Promise<GenerationResult> {
@@ -667,6 +959,9 @@ export async function generateKnowledgeFromInternalData(options?: {
       compensationGuide: 0,
       terminationGuide: 0,
       workingConditions: 0,
+      salaryBenchmark: 0,
+      contractorGuide: 0,
+      exchangeRateImpact: 0,
     },
     countries: [],
     errors: [],
@@ -681,6 +976,9 @@ export async function generateKnowledgeFromInternalData(options?: {
     "compensationGuide",
     "terminationGuide",
     "workingConditions",
+    "salaryBenchmark",
+    "contractorGuide",
+    "exchangeRateImpact",
   ];
 
   // Get all active countries
@@ -788,6 +1086,38 @@ export async function generateKnowledgeFromInternalData(options?: {
         }
       }
 
+      // 9. Salary Benchmarks
+      if (typesToGenerate.includes("salaryBenchmark")) {
+        const benchmarks = await db
+          .select()
+          .from(salaryBenchmarks)
+          .where(eq(salaryBenchmarks.countryCode, cc));
+
+        if (benchmarks.length > 0) {
+          const articles = generateSalaryBenchmarkArticle(cc, benchmarks, countryName);
+          allArticles.push(...articles);
+          result.byType.salaryBenchmark += articles.length;
+        }
+      }
+
+      // 10. Contractor Guide
+      if (typesToGenerate.includes("contractorGuide")) {
+        const contractorCountResult = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(contractors)
+          .where(and(
+            eq(contractors.country, cc),
+            eq(contractors.status, "active")
+          ));
+
+        const contractorCount = contractorCountResult[0]?.count || 0;
+        if (contractorCount > 0) {
+          const articles = generateContractorGuideArticle(cc, contractorCount, countryName);
+          allArticles.push(...articles);
+          result.byType.contractorGuide += articles.length;
+        }
+      }
+
       processedCountries.add(cc);
     } catch (error: any) {
       result.errors.push(`${cc} (${countryName}): ${error?.message || "Unknown error"}`);
@@ -795,10 +1125,29 @@ export async function generateKnowledgeFromInternalData(options?: {
     }
   }
 
+  // 11. Exchange Rate Impact (global, not per-country)
+  if (typesToGenerate.includes("exchangeRateImpact")) {
+    try {
+      const rates = await db
+        .select()
+        .from(exchangeRates)
+        .orderBy(desc(exchangeRates.effectiveDate));
+
+      if (rates.length > 0) {
+        const articles = generateExchangeRateImpactArticle(rates);
+        allArticles.push(...articles);
+        result.byType.exchangeRateImpact += articles.length;
+      }
+    } catch (error: any) {
+      result.errors.push(`Exchange Rates: ${error?.message || "Unknown error"}`);
+      console.error(`[KnowledgeGenerator] Error processing exchange rates:`, error);
+    }
+  }
+
   result.totalGenerated = allArticles.length;
   result.countries = Array.from(processedCountries);
 
-  // Insert into DB
+  // Insert into DB (with expiresAt support)
   if (!options?.dryRun && allArticles.length > 0) {
     const now = new Date();
     const batchSize = 50;
@@ -819,6 +1168,7 @@ export async function generateKnowledgeFromInternalData(options?: {
           aiConfidence: 95,
           aiSummary: article.summary,
           publishedAt: now,
+          expiresAt: (article as GeneratedArticleWithExpiry).expiresAt || null,
           metadata: article.metadata,
         }))
       );

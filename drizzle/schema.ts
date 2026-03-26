@@ -1392,6 +1392,8 @@ export const knowledgeSources = pgTable(
     authorityReason: text("authorityReason"),
     aiReviewedAt: timestamp("aiReviewedAt", { withTimezone: true, mode: "date" }),
     lastFetchedAt: timestamp("lastFetchedAt", { withTimezone: true, mode: "date" }),
+    fetchFrequency: text("fetchFrequency", { enum: ["manual", "daily", "weekly", "monthly"] }).default("manual").notNull(),
+    nextFetchAt: timestamp("nextFetchAt", { withTimezone: true, mode: "date" }),
     updatedBy: integer("updatedBy"),
     createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
@@ -1428,6 +1430,7 @@ export const knowledgeItems = pgTable(
     reviewedAt: timestamp("reviewedAt", { withTimezone: true, mode: "date" }),
     reviewNote: text("reviewNote"),
     createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    expiresAt: timestamp("expiresAt", { withTimezone: true, mode: "date" }), // null = never expires
     updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (table) => ({
