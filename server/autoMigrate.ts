@@ -218,6 +218,54 @@ const REQUIRED_COLUMNS: ColumnMigration[] = [
     column: "jobDescription",
     type: "TEXT",
   },
+
+  // ── Recurring adjustment support (EOR adjustments) ──
+  {
+    table: "adjustments",
+    column: "recurrenceType",
+    type: "TEXT NOT NULL",
+    defaultValue: "'one_time'",
+  },
+  {
+    table: "adjustments",
+    column: "recurrenceEndMonth",
+    type: "TEXT",
+  },
+  {
+    table: "adjustments",
+    column: "parentAdjustmentId",
+    type: "INTEGER",
+  },
+  {
+    table: "adjustments",
+    column: "isRecurringTemplate",
+    type: "BOOLEAN NOT NULL",
+    defaultValue: "false",
+  },
+
+  // ── Recurring adjustment support (AOR contractor_adjustments) ──
+  {
+    table: "contractor_adjustments",
+    column: "recurrenceType",
+    type: "TEXT NOT NULL",
+    defaultValue: "'one_time'",
+  },
+  {
+    table: "contractor_adjustments",
+    column: "recurrenceEndMonth",
+    type: "TEXT",
+  },
+  {
+    table: "contractor_adjustments",
+    column: "parentAdjustmentId",
+    type: "INTEGER",
+  },
+  {
+    table: "contractor_adjustments",
+    column: "isRecurringTemplate",
+    type: "BOOLEAN NOT NULL",
+    defaultValue: "false",
+  },
 ];
 
 /**
