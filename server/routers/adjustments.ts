@@ -77,6 +77,9 @@ export const adjustmentsRouter = router({
         effectiveMonth: z.string(), // YYYY-MM or YYYY-MM-01
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
+        // Recurring adjustment fields
+        recurrenceType: z.enum(["one_time", "monthly", "permanent"]).default("one_time"),
+        recurrenceEndMonth: z.string().optional(), // YYYY-MM or YYYY-MM-01, required for monthly
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -124,6 +127,23 @@ export const adjustmentsRouter = router({
 
       const payrollMonth = getAdjustmentPayrollMonth(normalizedMonth);
 
+      // Validate recurrence fields
+      const isRecurring = input.recurrenceType !== "one_time";
+      let normalizedEndMonth: string | undefined;
+      if (input.recurrenceType === "monthly") {
+        if (!input.recurrenceEndMonth) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: "End month is required for monthly recurring adjustments" });
+        }
+        const endParts = input.recurrenceEndMonth.split("-");
+        normalizedEndMonth = `${endParts[0]}-${endParts[1].padStart(2, "0")}-01`;
+        if (normalizedEndMonth < normalizedMonth) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: "End month must be on or after the effective month" });
+        }
+      }
+      if (input.recurrenceType === "permanent" && input.recurrenceEndMonth) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "Permanent adjustments should not have an end month" });
+      }
+
       const result = await createAdjustment({
         employeeId: input.employeeId,
         customerId,
@@ -137,7 +157,12 @@ export const adjustmentsRouter = router({
         receiptFileKey: input.receiptFileKey,
         status: "submitted",
         submittedBy: ctx.user.id,
-      });
+        // Recurring fields
+        recurrenceType: input.recurrenceType,
+        recurrenceEndMonth: normalizedEndMonth || null,
+        isRecurringTemplate: isRecurring,
+        parentAdjustmentId: null,
+      } as any);
 
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
@@ -169,6 +194,9 @@ export const adjustmentsRouter = router({
           effectiveMonth: z.string().optional(),
           receiptFileUrl: z.string().optional().nullable(),
           receiptFileKey: z.string().optional().nullable(),
+          // Recurring adjustment fields
+          recurrenceType: z.enum(["one_time", "monthly", "permanent"]).optional(),
+          recurrenceEndMonth: z.string().optional().nullable(),
         }),
       })
     )
@@ -195,6 +223,36 @@ export const adjustmentsRouter = router({
       }
 
       // Receipt is optional for all adjustment types (reimbursement is now a separate module)
+
+      // Handle recurrence field updates
+      if (input.data.recurrenceType !== undefined) {
+        updateData.recurrenceType = input.data.recurrenceType;
+        if (input.data.recurrenceType === "one_time") {
+          // Stopping recurrence: clear template flag and end month
+          updateData.isRecurringTemplate = false;
+          updateData.recurrenceEndMonth = null;
+        } else {
+          updateData.isRecurringTemplate = true;
+          if (input.data.recurrenceType === "monthly") {
+            if (!input.data.recurrenceEndMonth) {
+              throw new TRPCError({ code: 'BAD_REQUEST', message: "End month is required for monthly recurring adjustments" });
+            }
+            const endParts = input.data.recurrenceEndMonth.split("-");
+            updateData.recurrenceEndMonth = `${endParts[0]}-${endParts[1].padStart(2, "0")}-01`;
+          } else {
+            // permanent
+            updateData.recurrenceEndMonth = null;
+          }
+        }
+      } else if (input.data.recurrenceEndMonth !== undefined) {
+        // Allow updating just the end month
+        if (input.data.recurrenceEndMonth) {
+          const endParts = input.data.recurrenceEndMonth.split("-");
+          updateData.recurrenceEndMonth = `${endParts[0]}-${endParts[1].padStart(2, "0")}-01`;
+        } else {
+          updateData.recurrenceEndMonth = null;
+        }
+      }
 
       await updateAdjustment(input.id, updateData);
 
@@ -362,5 +420,37 @@ export const adjustmentsRouter = router({
       });
 
       return { url, fileKey };
+    }),
+
+  /**
+   * Stop a recurring adjustment template — sets recurrenceType to one_time
+   * so the cron job will no longer generate child records.
+   * Already-generated child records are NOT affected.
+   */
+  stopRecurring: operationsManagerProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const existing = await getAdjustmentById(input.id);
+      if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Adjustment not found" });
+      if (!existing.isRecurringTemplate) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "This adjustment is not a recurring template" });
+      }
+
+      await updateAdjustment(input.id, {
+        recurrenceType: "one_time",
+        isRecurringTemplate: false,
+        recurrenceEndMonth: null,
+      } as any);
+
+      await logAuditAction({
+        userId: ctx.user.id,
+        userName: ctx.user.name || null,
+        action: "stop_recurring",
+        entityType: "adjustment",
+        entityId: input.id,
+        changes: JSON.stringify({ previousRecurrenceType: existing.recurrenceType }),
+      });
+
+      return { success: true };
     }),
 });
