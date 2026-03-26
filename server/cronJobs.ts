@@ -1281,6 +1281,34 @@ export const CRON_JOB_DEFS: CronJobDef[] = [
     defaultEnabled: true,
     runner: runMonthlyLeaveAccrual,
   },
+  {
+    key: "knowledge_source_ingest",
+    label: "Knowledge Source Ingestion",
+    description: "Fetches content from external knowledge sources that are due for ingestion, generates AI drafts, and applies tiered auto-publish rules",
+    frequency: "daily",
+    defaultDay: 1,
+    defaultTime: "02:00",
+    defaultEnabled: true,
+    runner: async () => {
+      const { runKnowledgeSourceIngest } = await import("./services/knowledgeCronService");
+      const result = await runKnowledgeSourceIngest();
+      return result;
+    },
+  },
+  {
+    key: "knowledge_content_refresh",
+    label: "Knowledge Content Refresh",
+    description: "Detects expired and stale knowledge articles (expiresAt passed or published > 12 months ago), marks for refresh or flags as stale",
+    frequency: "daily",
+    defaultDay: 1,
+    defaultTime: "03:00",
+    defaultEnabled: true,
+    runner: async () => {
+      const { runKnowledgeContentRefresh } = await import("./services/knowledgeCronService");
+      const result = await runKnowledgeContentRefresh();
+      return result;
+    },
+  },
 ];
 
 /** Map of active ScheduledTask instances, keyed by job key. */
