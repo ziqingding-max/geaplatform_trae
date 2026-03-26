@@ -40,6 +40,7 @@ import { autoInitializeLeavePolicyForCountry } from "../services/leaveAutoInitSe
 import { onboardingInvites, customers, workerUsers } from "../../drizzle/schema";
 import { provisionWorkerUser, resendWorkerInvite } from "../services/workerProvisioningService";
 import { eq, desc, and, sql } from "drizzle-orm";
+import { sanitizeTextFields } from "../utils/sanitizeText";
 
 
 export const employeesRouter = router({
@@ -106,7 +107,8 @@ export const employeesRouter = router({
         bankDetails: z.any().optional(),
       })
     )
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input: rawInput, ctx }) => {
+      const input = sanitizeTextFields(rawInput);
       // === Email uniqueness check (same customer) ===
       const normalizedEmail = input.email.toLowerCase().trim();
       const existingByEmail = await listEmployees({
@@ -236,6 +238,7 @@ export const employeesRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      input.data = sanitizeTextFields(input.data);
       // === Date Validation on update ===
       if (input.data.endDate && input.data.startDate) {
         if (new Date(input.data.endDate) <= new Date(input.data.startDate)) {

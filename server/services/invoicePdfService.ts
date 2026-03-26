@@ -7,6 +7,7 @@
 import PDFDocument from "pdfkit";
 import { getInvoiceById, listInvoiceItemsByInvoice, getCustomerById, getBillingEntityById } from "../db";
 import { storageGet } from "../storage";
+import { sanitizeText } from "../utils/sanitizeText";
 import path from "path";
 import fs from "fs";
 
@@ -116,12 +117,13 @@ export async function generateInvoicePdf(options: PdfOptions): Promise<Buffer> {
      * Helvetica for pure ASCII text.
      */
     function smartText(text: string, x: number, y: number, opts?: any, fontStyle?: "normal" | "bold") {
-      if (hasCJK(text) && cjkFontPath) {
+      const clean = sanitizeText(text);
+      if (hasCJK(clean) && cjkFontPath) {
         doc.font("NotoSansSC");
       } else {
         doc.font(fontStyle === "bold" ? "Helvetica-Bold" : "Helvetica");
       }
-      doc.text(text, x, y, opts);
+      doc.text(clean, x, y, opts);
     }
 
     // ========== HEADER ==========

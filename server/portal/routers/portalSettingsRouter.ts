@@ -34,6 +34,7 @@ import {
   splitLeaveByMonth,
   isLeavesCrossMonth,
 } from "../../utils/cutoff";
+import { sanitizeTextFields } from "../../utils/sanitizeText";
 
 export const portalSettingsRouter = portalRouter({
   // ── Payroll Period Endpoints (for Portal PayrollCycleIndicator) ──
@@ -136,7 +137,8 @@ export const portalSettingsRouter = portalRouter({
         language: z.enum(["en", "zh"]).optional(),
       })
     )
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input: rawInput, ctx }) => {
+      const input = sanitizeTextFields(rawInput);
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       const cid = ctx.portalUser.customerId;

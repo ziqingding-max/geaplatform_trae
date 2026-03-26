@@ -36,6 +36,7 @@ import {
 import { eq } from "drizzle-orm";
 import { ContractorInvoiceGenerationService } from "../services/contractorInvoiceGenerationService";
 import { provisionWorkerUser, resendWorkerInvite } from "../services/workerProvisioningService";
+import { sanitizeTextFields } from "../utils/sanitizeText";
 
 export const contractorsRouter = router({
   getApprovers: userProcedure.query(async () => {
@@ -108,7 +109,8 @@ export const contractorsRouter = router({
         notes: z.string().optional(),
       })
     )
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input: rawInput, ctx }) => {
+      const input = sanitizeTextFields(rawInput);
       // 1. Validate dates
       if (input.endDate && new Date(input.endDate) <= new Date(input.startDate)) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: "End date must be after start date." });
@@ -175,15 +177,16 @@ export const contractorsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const updateData: any = { ...input.data };
-      if (input.data.bankDetails) {
-        updateData.bankDetails = JSON.parse(input.data.bankDetails);
+      const sanitizedData = sanitizeTextFields(input.data);
+      const updateData: any = { ...sanitizedData };
+      if (sanitizedData.bankDetails) {
+        updateData.bankDetails = JSON.parse(sanitizedData.bankDetails);
       }
 
       // Validation: transitioning to terminated requires endDate
-      if (input.data.status === "terminated") {
+      if (sanitizedData.status === "terminated") {
         const existing = await getContractorById(input.id);
-        const effectiveEndDate = input.data.endDate || existing?.endDate;
+        const effectiveEndDate = sanitizedData.endDate || existing?.endDate;
         if (!effectiveEndDate) {
           // Auto-set endDate to today for immediate termination
           const today = new Date();
@@ -198,7 +201,7 @@ export const contractorsRouter = router({
         action: "update",
         entityType: "contractor",
         entityId: input.id,
-        changes: JSON.stringify(input.data),
+        changes: JSON.stringify(sanitizedData),
       });
 
       return { success: true };
