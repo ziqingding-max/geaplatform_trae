@@ -261,6 +261,12 @@ export const contractorAdjustments = pgTable(
     // Target month
     effectiveMonth: text("effectiveMonth").notNull(), // Which month this applies to (YYYY-MM-01)
     
+    // Recurring adjustment support
+    recurrenceType: text("recurrenceType", { enum: ["one_time", "monthly", "permanent"] }).default("one_time").notNull(),
+    recurrenceEndMonth: text("recurrenceEndMonth"), // YYYY-MM-01, only for monthly recurrence
+    parentAdjustmentId: integer("parentAdjustmentId"), // Points to the recurring template that generated this record
+    isRecurringTemplate: boolean("isRecurringTemplate").default(false).notNull(), // True for the original recurring template record
+    
     // Link to contractor invoice when locked
     invoiceId: integer("invoiceId"), // Linked to contractorInvoice when included
     
@@ -272,6 +278,8 @@ export const contractorAdjustments = pgTable(
     caCustomerIdIdx: index("ca_customer_id_idx").on(table.customerId),
     caStatusIdx: index("ca_status_idx").on(table.status),
     caEffectiveMonthIdx: index("ca_effective_month_idx").on(table.effectiveMonth),
+    caRecurringTemplateIdx: index("ca_recurring_template_idx").on(table.isRecurringTemplate),
+    caParentAdjustmentIdIdx: index("ca_parent_adjustment_id_idx").on(table.parentAdjustmentId),
   })
 );
 

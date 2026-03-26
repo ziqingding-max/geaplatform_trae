@@ -3,7 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, Calendar, DollarSign, User, Briefcase, FileText, CreditCard, Pencil, MapPin, UserPlus, CheckCircle, Send, Trash2, AlertTriangle, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Calendar, DollarSign, User, Briefcase, FileText, CreditCard, Pencil, MapPin, UserPlus, CheckCircle, Send, Trash2, AlertTriangle, Loader2, Repeat } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -859,7 +859,22 @@ export default function ContractorDetail() {
                           {adj.type === 'deduction' ? "-" : "+"}{adj.currency} {adj.amount}
                         </TableCell>
                         <TableCell>{formatDate(adj.effectiveMonth)}</TableCell>
-                        <TableCell><Badge variant="outline">{adj.status}</Badge></TableCell>
+                        <TableCell>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant="outline">{adj.status}</Badge>
+                            {adj.isRecurringTemplate && (
+                              <Badge variant="outline" className="text-[10px] px-1 h-4 bg-purple-50 text-purple-700 border-purple-200">
+                                <Repeat className="w-2.5 h-2.5 mr-0.5 inline" />
+                                {adj.recurrenceType === "permanent" ? "Permanent" : `Monthly → ${adj.recurrenceEndMonth ? adj.recurrenceEndMonth.slice(0, 7) : "?"}`}
+                              </Badge>
+                            )}
+                            {adj.parentAdjustmentId && (
+                              <Badge variant="outline" className="text-[10px] px-1 h-4 bg-sky-50 text-sky-700 border-sky-200">
+                                Auto-generated
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
                       </TableRow>
                     )) : (
                       <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No adjustments found</TableCell></TableRow>

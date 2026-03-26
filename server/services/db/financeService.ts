@@ -452,9 +452,12 @@ export async function lockSubmittedAdjustments(monthStr: string, countryCode?: s
   if (!db) return 0;
   // Lock admin_approved adjustments for the given country+month by setting status to 'locked'
   // Optionally link them to a payroll run for rollback tracking
+  const { or, isNull } = await import('drizzle-orm');
   const conditions = [
     eq(adjustments.effectiveMonth, monthStr),
-    eq(adjustments.status, 'admin_approved')
+    eq(adjustments.status, 'admin_approved'),
+    // Never lock recurring templates — they must stay admin_approved to keep generating
+    or(eq(adjustments.isRecurringTemplate, false), isNull(adjustments.isRecurringTemplate)),
   ];
 
   if (countryCode) {
@@ -472,6 +475,40 @@ export async function lockSubmittedAdjustments(monthStr: string, countryCode?: s
 
   const result = await db.update(adjustments).set(setData).where(and(...conditions));
   return (result as any).changes || 0;
+}
+
+// RECURRING ADJUSTMENT HELPERS
+
+/**
+ * List all active recurring templates (EOR) that are admin_approved.
+ * Used by the cron job to generate monthly child records.
+ */
+export async function listRecurringAdjustmentTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+  const { ne } = await import('drizzle-orm');
+  return await db.select().from(adjustments).where(
+    and(
+      eq(adjustments.isRecurringTemplate, true),
+      eq(adjustments.status, 'admin_approved'),
+      ne(adjustments.recurrenceType, 'one_time'),
+    )
+  );
+}
+
+/**
+ * Check if a child adjustment already exists for a given template + month (idempotency).
+ */
+export async function getChildAdjustmentForMonth(parentId: number, month: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(adjustments).where(
+    and(
+      eq(adjustments.parentAdjustmentId, parentId),
+      eq(adjustments.effectiveMonth, month),
+    )
+  ).limit(1);
+  return result[0];
 }
 
 // REIMBURSEMENTS

@@ -548,6 +548,11 @@ export const adjustments = pgTable(
     adminRejectionReason: text("adminRejectionReason"),
     // Target month
     effectiveMonth: text("effectiveMonth").notNull(), // Which payroll month this applies to (YYYY-MM-01)
+    // Recurring adjustment support
+    recurrenceType: text("recurrenceType", { enum: ["one_time", "monthly", "permanent"] }).default("one_time").notNull(),
+    recurrenceEndMonth: text("recurrenceEndMonth"), // YYYY-MM-01, only for monthly recurrence
+    parentAdjustmentId: integer("parentAdjustmentId"), // Points to the recurring template that generated this record
+    isRecurringTemplate: boolean("isRecurringTemplate").default(false).notNull(), // True for the original recurring template record
     createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
   },
@@ -557,6 +562,8 @@ export const adjustments = pgTable(
     adjStatusIdx: index("adj_status_idx").on(table.status),
     adjPayrollRunIdIdx: index("adj_payroll_run_id_idx").on(table.payrollRunId),
     adjEffectiveMonthIdx: index("adj_effective_month_idx").on(table.effectiveMonth),
+    adjRecurringTemplateIdx: index("adj_recurring_template_idx").on(table.isRecurringTemplate),
+    adjParentAdjustmentIdIdx: index("adj_parent_adjustment_id_idx").on(table.parentAdjustmentId),
   })
 );
 

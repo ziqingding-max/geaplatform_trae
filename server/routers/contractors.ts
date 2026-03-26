@@ -18,6 +18,8 @@ import {
   createContractorAdjustment,
   updateContractorAdjustment,
   deleteContractorAdjustment,
+  getContractorAdjustmentById,
+  listRecurringContractorAdjustmentTemplates,
   getContractorInvoiceById,
   listContractorInvoices,
   listAllContractorInvoices,
@@ -184,7 +186,8 @@ export const contractorsRouter = router({
       }
 
       // Validation: transitioning to terminated requires endDate
-      if (sanitizedData.status === "terminated") {
+      const isTerminating = sanitizedData.status === "terminated";
+      if (isTerminating) {
         const existing = await getContractorById(input.id);
         const effectiveEndDate = sanitizedData.endDate || existing?.endDate;
         if (!effectiveEndDate) {
@@ -195,6 +198,30 @@ export const contractorsRouter = router({
       }
 
       await updateContractor(input.id, updateData);
+
+      // Stop recurring adjustment templates when contractor transitions to terminated
+      if (isTerminating) {
+        try {
+          const recurringTemplates = await listRecurringContractorAdjustmentTemplates();
+          const conTemplates = recurringTemplates.filter(t => t.contractorId === input.id);
+          for (const tpl of conTemplates) {
+            await updateContractorAdjustment(tpl.id, {
+              recurrenceType: "one_time",
+              isRecurringTemplate: false,
+            } as any);
+            await logAuditAction({
+              userId: ctx.user.id,
+              userName: ctx.user.name || null,
+              action: "stop_recurring",
+              entityType: "contractor_adjustment",
+              entityId: tpl.id,
+              changes: JSON.stringify({ reason: "contractor_terminated", previousRecurrenceType: tpl.recurrenceType }),
+            });
+          }
+        } catch (recurErr) {
+          console.error(`[Contractor Update] Failed to stop recurring templates for contractor #${input.id}:`, recurErr);
+        }
+      }
 
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
@@ -216,7 +243,29 @@ export const contractorsRouter = router({
     .mutation(async ({ input, ctx }) => {
       const endDate = input.endDate || new Date().toISOString().split('T')[0];
       await updateContractor(input.id, { status: "terminated", endDate });
-      
+
+      // Stop recurring adjustment templates for terminated contractor
+      try {
+        const recurringTemplates = await listRecurringContractorAdjustmentTemplates();
+        const conTemplates = recurringTemplates.filter(t => t.contractorId === input.id);
+        for (const tpl of conTemplates) {
+          await updateContractorAdjustment(tpl.id, {
+            recurrenceType: "one_time",
+            isRecurringTemplate: false,
+          } as any);
+          await logAuditAction({
+            userId: ctx.user.id,
+            userName: ctx.user.name || null,
+            action: "stop_recurring",
+            entityType: "contractor_adjustment",
+            entityId: tpl.id,
+            changes: JSON.stringify({ reason: "contractor_terminated", previousRecurrenceType: tpl.recurrenceType }),
+          });
+        }
+      } catch (recurErr) {
+        console.error(`[Contractor Terminate] Failed to stop recurring templates for contractor #${input.id}:`, recurErr);
+      }
+
       await logAuditAction({
         userId: ctx.user.id, userName: ctx.user.name || null,
         action: "terminate",
@@ -379,6 +428,9 @@ export const contractorsRouter = router({
         currency: z.string(),
         date: z.string(),
         attachmentUrl: z.string().optional(),
+        // Recurring adjustment fields
+        recurrenceType: z.enum(["one_time", "monthly", "permanent"]).default("one_time"),
+        recurrenceEndMonth: z.string().optional(), // YYYY-MM or YYYY-MM-01, required for monthly
       }))
       .mutation(async ({ input, ctx }) => {
         // Auto-fill customerId from contractor (required by schema)
@@ -388,6 +440,25 @@ export const contractorsRouter = router({
         }
         // Currency is locked from the contractor record
         const currency = contractor.currency || input.currency;
+        const effectiveMonth = input.date.substring(0, 7) + "-01";
+
+        // Validate recurrence fields
+        const isRecurring = input.recurrenceType !== "one_time";
+        let normalizedEndMonth: string | null = null;
+        if (input.recurrenceType === "monthly") {
+          if (!input.recurrenceEndMonth) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: "End month is required for monthly recurring adjustments" });
+          }
+          const endParts = input.recurrenceEndMonth.split("-");
+          normalizedEndMonth = `${endParts[0]}-${endParts[1].padStart(2, "0")}-01`;
+          if (normalizedEndMonth < effectiveMonth) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: "End month must be on or after the effective month" });
+          }
+        }
+        if (input.recurrenceType === "permanent" && input.recurrenceEndMonth) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: "Permanent adjustments should not have an end month" });
+        }
+
         const result = await createContractorAdjustment({
           contractorId: input.contractorId,
           type: input.type,
@@ -396,9 +467,14 @@ export const contractorsRouter = router({
           currency,
           attachmentUrl: input.attachmentUrl || null,
           customerId: contractor.customerId,
-          effectiveMonth: input.date.substring(0, 7) + "-01", // Derive from date: YYYY-MM-01
+          effectiveMonth,
           status: "submitted" as any,
-        });
+          // Recurring fields
+          recurrenceType: input.recurrenceType,
+          recurrenceEndMonth: normalizedEndMonth,
+          isRecurringTemplate: isRecurring,
+          parentAdjustmentId: null,
+        } as any);
         return result;
       }),
 
@@ -411,10 +487,41 @@ export const contractorsRouter = router({
           amount: z.string().optional(),
           effectiveMonth: z.string().optional(),
           status: z.enum(["submitted", "client_approved", "client_rejected", "admin_approved", "admin_rejected", "locked"]).optional(),
+          // Recurring adjustment fields
+          recurrenceType: z.enum(["one_time", "monthly", "permanent"]).optional(),
+          recurrenceEndMonth: z.string().optional().nullable(),
         })
       }))
       .mutation(async ({ input }) => {
-        await updateContractorAdjustment(input.id, input.data);
+        const updateData: any = { ...input.data };
+
+        // Handle recurrence field updates
+        if (input.data.recurrenceType !== undefined) {
+          if (input.data.recurrenceType === "one_time") {
+            updateData.isRecurringTemplate = false;
+            updateData.recurrenceEndMonth = null;
+          } else {
+            updateData.isRecurringTemplate = true;
+            if (input.data.recurrenceType === "monthly") {
+              if (!input.data.recurrenceEndMonth) {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: "End month is required for monthly recurring adjustments" });
+              }
+              const endParts = input.data.recurrenceEndMonth.split("-");
+              updateData.recurrenceEndMonth = `${endParts[0]}-${endParts[1].padStart(2, "0")}-01`;
+            } else {
+              updateData.recurrenceEndMonth = null;
+            }
+          }
+        } else if (input.data.recurrenceEndMonth !== undefined) {
+          if (input.data.recurrenceEndMonth) {
+            const endParts = input.data.recurrenceEndMonth.split("-");
+            updateData.recurrenceEndMonth = `${endParts[0]}-${endParts[1].padStart(2, "0")}-01`;
+          } else {
+            updateData.recurrenceEndMonth = null;
+          }
+        }
+
+        await updateContractorAdjustment(input.id, updateData);
         return { success: true };
       }),
 
@@ -422,6 +529,36 @@ export const contractorsRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input }) => {
         await deleteContractorAdjustment(input.id);
+        return { success: true };
+      }),
+
+    /**
+     * Stop a recurring contractor adjustment template.
+     */
+    stopRecurring: operationsManagerProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input, ctx }) => {
+        const existing = await getContractorAdjustmentById(input.id);
+        if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Contractor adjustment not found" });
+        if (!existing.isRecurringTemplate) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: "This adjustment is not a recurring template" });
+        }
+
+        await updateContractorAdjustment(input.id, {
+          recurrenceType: "one_time",
+          isRecurringTemplate: false,
+          recurrenceEndMonth: null,
+        } as any);
+
+        await logAuditAction({
+          userId: ctx.user.id,
+          userName: ctx.user.name || null,
+          action: "stop_recurring",
+          entityType: "contractor_adjustment",
+          entityId: input.id,
+          changes: JSON.stringify({ previousRecurrenceType: existing.recurrenceType }),
+        });
+
         return { success: true };
       }),
   }),

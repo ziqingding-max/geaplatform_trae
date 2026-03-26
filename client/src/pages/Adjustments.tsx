@@ -41,7 +41,7 @@ import {
 import {
   Tabs, TabsList, TabsTrigger,
 } from "@/components/ui/tabs";
-import { ArrowUpDown, Plus, Search, Pencil, Trash2, Lock, Upload, FileText, X, Paperclip, Eye, CheckCircle2, XCircle, Download, Briefcase, User, Loader2 } from "lucide-react";
+import { ArrowUpDown, Plus, Search, Pencil, Trash2, Lock, Upload, FileText, X, Paperclip, Eye, CheckCircle2, XCircle, Download, Briefcase, User, Loader2, Repeat, StopCircle } from "lucide-react";
 import { toast } from "sonner";
 import WorkerSelector from "@/components/WorkerSelector";
 import PayrollCycleIndicator from "@/components/PayrollCycleIndicator";
@@ -188,6 +188,14 @@ export default function Adjustments() {
   const uploadReceiptMutation = trpc.adjustments.uploadReceipt.useMutation({
     onError: (err) => toast.error(err.message),
   });
+  const stopRecurringEmployeeMutation = trpc.adjustments.stopRecurring.useMutation({
+    onSuccess: () => { toast.success(t("adjustments.toast.stopRecurringSuccess")); refetch(); },
+    onError: (err) => toast.error(err.message),
+  });
+  const stopRecurringContractorMutation = trpc.contractors.adjustments.stopRecurring.useMutation({
+    onSuccess: () => { toast.success(t("adjustments.toast.stopRecurringSuccess")); refetch(); },
+    onError: (err) => toast.error(err.message),
+  });
 
   // Contractor Mutations
   const createContractorMutation = trpc.contractors.adjustments.create.useMutation({
@@ -213,6 +221,8 @@ export default function Adjustments() {
     description: "",
     amount: "",
     effectiveMonth: defaultMonth,
+    recurrenceType: "one_time" as "one_time" | "monthly" | "permanent",
+    recurrenceEndMonth: "",
   });
 
   const [editFormData, setEditFormData] = useState({
@@ -221,6 +231,8 @@ export default function Adjustments() {
     description: "",
     amount: "",
     effectiveMonth: "",
+    recurrenceType: "one_time" as "one_time" | "monthly" | "permanent",
+    recurrenceEndMonth: "",
   });
 
   // Receipt file state
@@ -287,6 +299,8 @@ export default function Adjustments() {
           effectiveMonth: formData.effectiveMonth,
           receiptFileUrl,
           receiptFileKey,
+          recurrenceType: formData.recurrenceType,
+          recurrenceEndMonth: formData.recurrenceType === "monthly" ? formData.recurrenceEndMonth || undefined : undefined,
         });
       } else {
         // Contractor
@@ -323,6 +337,8 @@ export default function Adjustments() {
           currency: autoCurrency,
           date: date,
           attachmentUrl,
+          recurrenceType: formData.recurrenceType,
+          recurrenceEndMonth: formData.recurrenceType === "monthly" ? formData.recurrenceEndMonth || undefined : undefined,
         });
       }
     } catch {
@@ -354,6 +370,8 @@ export default function Adjustments() {
       description: adj.description || "",
       amount: adj.amount?.toString() || "",
       effectiveMonth: effMonth,
+      recurrenceType: adj.recurrenceType || "one_time",
+      recurrenceEndMonth: adj.recurrenceEndMonth ? adj.recurrenceEndMonth.slice(0, 7) : "",
     });
     setEditReceiptFile(null);
     setEditOpen(true);
@@ -386,6 +404,8 @@ export default function Adjustments() {
             amount: editFormData.amount,
             effectiveMonth: editFormData.effectiveMonth,
             ...(receiptFileUrl ? { receiptFileUrl, receiptFileKey } : {}),
+            recurrenceType: editFormData.recurrenceType,
+            recurrenceEndMonth: editFormData.recurrenceType === "monthly" ? editFormData.recurrenceEndMonth || undefined : undefined,
           },
         });
       } else {
@@ -434,6 +454,16 @@ export default function Adjustments() {
       adminRejectEmployeeMutation.mutate({ id: adj.id });
     } else {
       updateContractorMutation.mutate({ id: adj.id, data: { status: "admin_rejected" } });
+    }
+  };
+
+  const handleStopRecurring = (adj: any) => {
+    if (confirm(t("adjustments.recurrence.stop.confirm"))) {
+      if (adj.workerType === "employee") {
+        stopRecurringEmployeeMutation.mutate({ id: adj.id });
+      } else {
+        stopRecurringContractorMutation.mutate({ id: adj.id });
+      }
     }
   };
 
@@ -631,6 +661,8 @@ export default function Adjustments() {
                   { header: "Month/Date", accessor: (r: any) => r.effectiveMonth ? new Date(r.effectiveMonth).toISOString().slice(0, 7) : "" },
                   { header: "Description", accessor: (r: any) => r.description || "" },
                   { header: "Status", accessor: (r: any) => r.status },
+                  { header: "Recurrence", accessor: (r: any) => r.recurrenceType || "one_time" },
+                  { header: "Recurrence End", accessor: (r: any) => r.recurrenceEndMonth || "" },
                 ], `adjustments-export-${new Date().toISOString().slice(0, 10)}.csv`);
                 toast.success(`CSV exported successfully - ${allAdjs.length} records`);
               } catch (err) {
@@ -727,6 +759,40 @@ export default function Adjustments() {
                     />
                   </div>
                 </div>
+
+                {/* Recurrence Type */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t("adjustments.form.label.recurrenceType")}</Label>
+                    <Select
+                      value={formData.recurrenceType}
+                      onValueChange={(v) => setFormData({ ...formData, recurrenceType: v as any, recurrenceEndMonth: v === "monthly" ? formData.recurrenceEndMonth : "" })}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="one_time">{t("adjustments.recurrence.one_time")}</SelectItem>
+                        <SelectItem value="monthly">{t("adjustments.recurrence.monthly")}</SelectItem>
+                        <SelectItem value="permanent">{t("adjustments.recurrence.permanent")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {formData.recurrenceType === "monthly" && (
+                    <div className="space-y-2">
+                      <Label>{t("adjustments.form.label.recurrenceEndMonth")}</Label>
+                      <MonthPicker
+                        value={formData.recurrenceEndMonth}
+                        onChange={(v) => setFormData({ ...formData, recurrenceEndMonth: v })}
+                        placeholder={t("adjustments.form.placeholder.recurrenceEndMonth")}
+                      />
+                    </div>
+                  )}
+                </div>
+                {formData.recurrenceType !== "one_time" && (
+                  <p className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-md p-2">
+                    <Repeat className="w-3.5 h-3.5 inline mr-1" />
+                    {t("adjustments.form.hint.recurrence")}
+                  </p>
+                )}
 
                 <div className="space-y-2">
                   <Label>{t("adjustments.form.label.description")}</Label>
@@ -915,10 +981,23 @@ export default function Adjustments() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className={`text-xs ${statusColors[adj.status] || ""}`}>
-                            {adj.status === "locked" && <Lock className="w-3 h-3 mr-1 inline" />}
-                            {t(`adjustments.status.${adj.status}`) || adj.status}
-                          </Badge>
+                          <div className="flex flex-col gap-1">
+                            <Badge variant="outline" className={`text-xs ${statusColors[adj.status] || ""}`}>
+                              {adj.status === "locked" && <Lock className="w-3 h-3 mr-1 inline" />}
+                              {t(`adjustments.status.${adj.status}`) || adj.status}
+                            </Badge>
+                            {adj.isRecurringTemplate && (
+                              <Badge variant="outline" className="text-[10px] px-1 h-4 bg-purple-50 text-purple-700 border-purple-200">
+                                <Repeat className="w-2.5 h-2.5 mr-0.5 inline" />
+                                {adj.recurrenceType === "permanent" ? t("adjustments.recurrence.badge.permanent") : t("adjustments.recurrence.badge.monthly").replace("{endMonth}", adj.recurrenceEndMonth ? new Date(adj.recurrenceEndMonth).toISOString().slice(0, 7) : "?")}
+                              </Badge>
+                            )}
+                            {adj.parentAdjustmentId && (
+                              <Badge variant="outline" className="text-[10px] px-1 h-4 bg-sky-50 text-sky-700 border-sky-200">
+                                {t("adjustments.recurrence.badge.auto_generated")}
+                              </Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-1">
@@ -954,6 +1033,15 @@ export default function Adjustments() {
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
                               </>
+                            )}
+                            {canEditOps && adj.isRecurringTemplate && (
+                              <Button
+                                variant="ghost" size="icon" className="h-7 w-7 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                                onClick={() => handleStopRecurring(adj)}
+                                title={t("adjustments.recurrence.stop")}
+                              >
+                                <StopCircle className="w-3.5 h-3.5" />
+                              </Button>
                             )}
                             <Button
                               variant="ghost" size="icon" className="h-7 w-7"
@@ -1045,6 +1133,40 @@ export default function Adjustments() {
                   />
                 </div>
               </div>
+              {/* Recurrence Type (Edit) */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t("adjustments.form.label.recurrenceType")}</Label>
+                  <Select
+                    value={editFormData.recurrenceType}
+                    onValueChange={(v) => setEditFormData({ ...editFormData, recurrenceType: v as any, recurrenceEndMonth: v === "monthly" ? editFormData.recurrenceEndMonth : "" })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="one_time">{t("adjustments.recurrence.one_time")}</SelectItem>
+                      <SelectItem value="monthly">{t("adjustments.recurrence.monthly")}</SelectItem>
+                      <SelectItem value="permanent">{t("adjustments.recurrence.permanent")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {editFormData.recurrenceType === "monthly" && (
+                  <div className="space-y-2">
+                    <Label>{t("adjustments.form.label.recurrenceEndMonth")}</Label>
+                    <MonthPicker
+                      value={editFormData.recurrenceEndMonth}
+                      onChange={(v) => setEditFormData({ ...editFormData, recurrenceEndMonth: v })}
+                      placeholder={t("adjustments.form.placeholder.recurrenceEndMonth")}
+                    />
+                  </div>
+                )}
+              </div>
+              {editFormData.recurrenceType !== "one_time" && (
+                <p className="text-xs text-muted-foreground bg-blue-50 border border-blue-200 rounded-md p-2">
+                  <Repeat className="w-3.5 h-3.5 inline mr-1" />
+                  {t("adjustments.form.hint.recurrence")}
+                </p>
+              )}
+
               <div className="space-y-2">
                 <Label>{t("adjustments.form.label.description")}</Label>
                 <Textarea
@@ -1117,6 +1239,32 @@ export default function Adjustments() {
                     {t(`adjustments.status.${viewAdj.status}`) || viewAdj.status}
                   </Badge>
                 </div>
+
+                {/* Recurrence info */}
+                {(viewAdj.recurrenceType && viewAdj.recurrenceType !== "one_time") && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">{t("adjustments.form.label.recurrenceType")}</Label>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                        <Repeat className="w-3 h-3 mr-1 inline" />
+                        {viewAdj.recurrenceType === "permanent" ? t("adjustments.recurrence.badge.permanent") : t("adjustments.recurrence.badge.monthly").replace("{endMonth}", viewAdj.recurrenceEndMonth ? new Date(viewAdj.recurrenceEndMonth).toISOString().slice(0, 7) : "?")}
+                      </Badge>
+                      {viewAdj.isRecurringTemplate && (
+                        <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200">
+                          {t("adjustments.recurrence.badge.template")}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {viewAdj.parentAdjustmentId && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">{t("adjustments.form.label.recurrenceType")}</Label>
+                    <Badge variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">
+                      {t("adjustments.recurrence.badge.auto_generated")}
+                    </Badge>
+                  </div>
+                )}
 
                 {viewAdj.description && (
                   <div className="space-y-1">

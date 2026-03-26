@@ -31,6 +31,8 @@ import {
   deleteEmployee,
   getDb,
   getInvoiceById,
+  listRecurringAdjustmentTemplates,
+  updateAdjustment,
 } from "../db";
 import { storagePut, storageGet, storageDownload } from "../storage";
 import { generateDepositInvoice } from "../services/depositInvoiceService";
@@ -347,6 +349,30 @@ export const employeesRouter = router({
             entityId: depositInvoiceResult.invoiceId,
             changes: JSON.stringify({ invoiceNumber: depInv?.invoiceNumber, type: "deposit", employeeId: input.id, trigger: "onboarding_transition" }),
           });
+        }
+      }
+
+      // Stop recurring adjustment templates when employee transitions to terminated
+      if (isTransitioningToTerminated && previousStatus !== "terminated") {
+        try {
+          const recurringTemplates = await listRecurringAdjustmentTemplates();
+          const empTemplates = recurringTemplates.filter(t => t.employeeId === input.id);
+          for (const tpl of empTemplates) {
+            await updateAdjustment(tpl.id, {
+              recurrenceType: "one_time",
+              isRecurringTemplate: false,
+            } as any);
+            await logAuditAction({
+              userId: ctx.user.id,
+              userName: ctx.user.name || null,
+              action: "stop_recurring",
+              entityType: "adjustment",
+              entityId: tpl.id,
+              changes: JSON.stringify({ reason: "employee_terminated", previousRecurrenceType: tpl.recurrenceType }),
+            });
+          }
+        } catch (recurErr) {
+          console.error(`[Employee Update] Failed to stop recurring templates for employee #${input.id}:`, recurErr);
         }
       }
 
