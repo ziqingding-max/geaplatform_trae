@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Database, RefreshCw } from "lucide-react";
+import { Database, RefreshCw, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 
 const ARTICLE_TYPES = [
   "countryOverview",
@@ -22,14 +22,21 @@ const ARTICLE_TYPES = [
   "socialInsurance",
   "publicHolidays",
   "leaveEntitlements",
+  "salaryBenchmark",
+  "contractorGuide",
+  "exchangeRateImpact",
 ] as const;
 
 type ArticleType = (typeof ARTICLE_TYPES)[number];
+
+const FETCH_FREQUENCIES = ["manual", "daily", "weekly", "monthly"] as const;
+type FetchFrequency = (typeof FETCH_FREQUENCIES)[number];
 
 export default function KnowledgeBaseAdmin() {
   const { t } = useI18n();
   const [newSourceName, setNewSourceName] = useState("");
   const [newSourceUrl, setNewSourceUrl] = useState("");
+  const [newSourceFrequency, setNewSourceFrequency] = useState<FetchFrequency>("manual");
 
   // Generate tab state
   const [selectedTypes, setSelectedTypes] = useState<ArticleType[]>([...ARTICLE_TYPES]);
@@ -41,6 +48,10 @@ export default function KnowledgeBaseAdmin() {
     errors: string[];
   } | null>(null);
 
+  // Batch review state
+  const [selectedReviewIds, setSelectedReviewIds] = useState<number[]>([]);
+  const [batchConfirmAction, setBatchConfirmAction] = useState<"publish" | "reject" | null>(null);
+
   const { data: queue, refetch: refetchQueue } = trpc.knowledgeBaseAdmin.listReviewQueue.useQuery({
     statuses: ["pending_review"],
   });
@@ -49,12 +60,14 @@ export default function KnowledgeBaseAdmin() {
   });
   const { data: sources, refetch: refetchSources } = trpc.knowledgeBaseAdmin.listSources.useQuery();
   const { data: contentGaps } = trpc.knowledgeBaseAdmin.listContentGaps.useQuery({ days: 30 });
+  const { data: expiredContent, refetch: refetchExpired } = trpc.knowledgeBaseAdmin.listExpiredContent.useQuery();
 
   const createSourceMutation = trpc.knowledgeBaseAdmin.upsertSource.useMutation({
     onSuccess: async () => {
       toast.success(t("knowledge_admin.toast.source_saved"));
       setNewSourceName("");
       setNewSourceUrl("");
+      setNewSourceFrequency("manual");
       await refetchSources();
     },
     onError: (error) => toast.error(error.message),
@@ -84,6 +97,16 @@ export default function KnowledgeBaseAdmin() {
     onError: (error) => toast.error(error.message),
   });
 
+  const batchReviewMutation = trpc.knowledgeBaseAdmin.batchReview.useMutation({
+    onSuccess: async (res) => {
+      toast.success(`${t("knowledge_admin.toast.batch_reviewed")} (${res.count})`);
+      setSelectedReviewIds([]);
+      setBatchConfirmAction(null);
+      await Promise.all([refetchQueue(), refetchPublished()]);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const generateMutation = trpc.knowledgeBaseAdmin.generateFromInternalData.useMutation({
     onSuccess: async (result) => {
       setGenerateResult(result);
@@ -95,11 +118,18 @@ export default function KnowledgeBaseAdmin() {
 
   const pendingCount = queue?.length ?? 0;
   const publishedCount = publishedItems?.length ?? 0;
+  const expiredCount = expiredContent?.length ?? 0;
   const topSources = useMemo(() => (sources ?? []).slice(0, 20), [sources]);
 
   const toggleType = (type: ArticleType) => {
     setSelectedTypes((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  };
+
+  const toggleReviewId = (id: number) => {
+    setSelectedReviewIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
     );
   };
 
@@ -116,6 +146,22 @@ export default function KnowledgeBaseAdmin() {
     });
   };
 
+  const handleBatchReview = (action: "publish" | "reject") => {
+    if (selectedReviewIds.length === 0) {
+      toast.error(t("knowledge_admin.batch.no_selection"));
+      return;
+    }
+    setBatchConfirmAction(action);
+  };
+
+  const confirmBatchReview = () => {
+    if (!batchConfirmAction || selectedReviewIds.length === 0) return;
+    batchReviewMutation.mutate({
+      ids: selectedReviewIds,
+      action: batchConfirmAction,
+    });
+  };
+
   return (
     <Layout title={t("knowledge_admin.title")}>
       <div className="p-6 space-y-6">
@@ -124,7 +170,8 @@ export default function KnowledgeBaseAdmin() {
           <p className="text-muted-foreground">{t("knowledge_admin.subtitle")}</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* ─── Stats Cards ─── */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm">{t("knowledge_admin.metrics.pending")}</CardTitle></CardHeader>
             <CardContent><div className="text-2xl font-semibold">{pendingCount}</div></CardContent>
@@ -141,16 +188,38 @@ export default function KnowledgeBaseAdmin() {
             <CardHeader className="pb-2"><CardTitle className="text-sm">{t("knowledge_admin.metrics.content_gaps")}</CardTitle></CardHeader>
             <CardContent><div className="text-2xl font-semibold">{contentGaps?.length ?? 0}</div></CardContent>
           </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                {t("knowledge_admin.metrics.expired")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent><div className="text-2xl font-semibold text-amber-600">{expiredCount}</div></CardContent>
+          </Card>
         </div>
 
+        {/* ─── Tabs ─── */}
         <Tabs defaultValue="generate">
           <TabsList>
             <TabsTrigger value="generate">
               <Database className="w-4 h-4 mr-1.5" />
               {t("knowledge_admin.tabs.generate")}
             </TabsTrigger>
-            <TabsTrigger value="review">{t("knowledge_admin.tabs.review")}</TabsTrigger>
+            <TabsTrigger value="review">
+              {t("knowledge_admin.tabs.review")}
+              {pendingCount > 0 && (
+                <Badge variant="destructive" className="ml-1.5 text-xs px-1.5 py-0">{pendingCount}</Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="sources">{t("knowledge_admin.tabs.sources")}</TabsTrigger>
+            <TabsTrigger value="expired">
+              <AlertTriangle className="w-4 h-4 mr-1.5" />
+              {t("knowledge_admin.tabs.expired")}
+              {expiredCount > 0 && (
+                <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 py-0">{expiredCount}</Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="gaps">{t("knowledge_admin.tabs.gaps")}</TabsTrigger>
           </TabsList>
 
@@ -278,16 +347,101 @@ export default function KnowledgeBaseAdmin() {
             </Card>
           </TabsContent>
 
-          {/* ─── Review Tab ─── */}
+          {/* ─── Review Tab (with batch actions) ─── */}
           <TabsContent value="review" className="space-y-3">
+            {/* Batch action bar */}
+            {pendingCount > 0 && (
+              <Card className="bg-muted/30">
+                <CardContent className="pt-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      checked={selectedReviewIds.length === pendingCount && pendingCount > 0}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setSelectedReviewIds((queue ?? []).map((item) => item.id));
+                        } else {
+                          setSelectedReviewIds([]);
+                        }
+                      }}
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {selectedReviewIds.length > 0
+                        ? `${selectedReviewIds.length} ${t("knowledge_admin.batch.selected")}`
+                        : t("knowledge_admin.batch.select_all")}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => handleBatchReview("publish")}
+                      disabled={selectedReviewIds.length === 0 || batchReviewMutation.isPending}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                      {t("knowledge_admin.batch.publish_selected")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleBatchReview("reject")}
+                      disabled={selectedReviewIds.length === 0 || batchReviewMutation.isPending}
+                    >
+                      <XCircle className="w-3.5 h-3.5 mr-1" />
+                      {t("knowledge_admin.batch.reject_selected")}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Batch confirm dialog */}
+            {batchConfirmAction && (
+              <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+                <CardContent className="pt-4 flex items-center justify-between gap-4">
+                  <p className="text-sm">
+                    <AlertTriangle className="w-4 h-4 inline mr-1 text-amber-500" />
+                    {t("knowledge_admin.batch.confirm_prompt", {
+                      count: String(selectedReviewIds.length),
+                      action: batchConfirmAction,
+                    })}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="destructive" onClick={confirmBatchReview} disabled={batchReviewMutation.isPending}>
+                      {batchReviewMutation.isPending ? (
+                        <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" />
+                      ) : null}
+                      {t("knowledge_admin.batch.confirm")}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setBatchConfirmAction(null)}>
+                      {t("knowledge_admin.batch.cancel")}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {(queue ?? []).map((item) => {
               const meta = (item.metadata || {}) as Record<string, any>;
               const riskScore = Number((item as any).riskScore ?? meta.riskScore ?? 0);
+              const isAutoPublishable = (item.aiConfidence ?? 0) >= 85 && (meta.authorityScore ?? 0) >= 75;
               return (
-                <Card key={item.id}>
+                <Card key={item.id} className={selectedReviewIds.includes(item.id) ? "ring-2 ring-primary" : ""}>
                   <CardHeader>
-                    <CardTitle className="text-base">{item.title}</CardTitle>
-                    <CardDescription>{item.summary || "-"}</CardDescription>
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        checked={selectedReviewIds.includes(item.id)}
+                        onCheckedChange={() => toggleReviewId(item.id)}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <CardTitle className="text-base">{item.title}</CardTitle>
+                        <CardDescription>{item.summary || "-"}</CardDescription>
+                      </div>
+                      {isAutoPublishable && (
+                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 shrink-0">
+                          {t("knowledge_admin.auto_publishable")}
+                        </Badge>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
@@ -317,7 +471,7 @@ export default function KnowledgeBaseAdmin() {
             {pendingCount === 0 && <p className="text-sm text-muted-foreground">{t("knowledge_admin.empty")}</p>}
           </TabsContent>
 
-          {/* ─── Sources Tab ─── */}
+          {/* ─── Sources Tab (with fetchFrequency) ─── */}
           <TabsContent value="sources" className="space-y-4">
             <Card>
               <CardHeader>
@@ -326,8 +480,34 @@ export default function KnowledgeBaseAdmin() {
               <CardContent className="space-y-3">
                 <Input value={newSourceName} onChange={(e) => setNewSourceName(e.target.value)} placeholder={t("knowledge_admin.new_source.name")} />
                 <Input value={newSourceUrl} onChange={(e) => setNewSourceUrl(e.target.value)} placeholder={t("knowledge_admin.new_source.url")} />
+                {/* Fetch frequency selector */}
+                <div className="space-y-1.5">
+                  <Label className="text-sm">{t("knowledge_admin.source.fetch_frequency")}</Label>
+                  <div className="flex gap-2">
+                    {FETCH_FREQUENCIES.map((freq) => (
+                      <Button
+                        key={freq}
+                        variant={newSourceFrequency === freq ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setNewSourceFrequency(freq)}
+                      >
+                        {t(`knowledge_admin.source.freq.${freq}`)}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
                 <Button
-                  onClick={() => createSourceMutation.mutate({ name: newSourceName, url: newSourceUrl, sourceType: "web", language: "multi", topic: "general", isActive: true })}
+                  onClick={() =>
+                    createSourceMutation.mutate({
+                      name: newSourceName,
+                      url: newSourceUrl,
+                      sourceType: "web",
+                      language: "multi",
+                      topic: "general",
+                      isActive: true,
+                      fetchFrequency: newSourceFrequency,
+                    })
+                  }
                   disabled={!newSourceName || !newSourceUrl || createSourceMutation.isPending}
                 >
                   {t("knowledge_admin.actions.save_source")}
@@ -335,37 +515,98 @@ export default function KnowledgeBaseAdmin() {
               </CardContent>
             </Card>
 
-            {topSources.map((source) => (
-              <Card key={source.id}>
-                <CardHeader>
-                  <CardTitle className="text-base">{source.name}</CardTitle>
-                  <CardDescription>{source.url}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Badge variant="secondary">{source.sourceType}</Badge>
-                    <Badge variant="outline">{source.topic}</Badge>
-                    <Badge>{source.authorityLevel} ({source.authorityScore})</Badge>
-                  </div>
-                  {source.authorityReason && (
-                    <p className="text-xs text-muted-foreground">{source.authorityReason}</p>
-                  )}
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => ingestMutation.mutate({ sourceId: source.id })}>
-                      {t("knowledge_admin.actions.ingest")}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => auditSourceMutation.mutate({ sourceId: source.id })}
-                      disabled={auditSourceMutation.isPending}
-                    >
-                      {t("knowledge_admin.actions.audit_source")}
-                    </Button>
-                  </div>
+            {topSources.map((source) => {
+              const freq = (source as any).fetchFrequency || "manual";
+              const nextFetch = (source as any).nextFetchAt;
+              return (
+                <Card key={source.id}>
+                  <CardHeader>
+                    <CardTitle className="text-base">{source.name}</CardTitle>
+                    <CardDescription>{source.url}</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                      <Badge variant="secondary">{source.sourceType}</Badge>
+                      <Badge variant="outline">{source.topic}</Badge>
+                      <Badge>{source.authorityLevel} ({source.authorityScore})</Badge>
+                      <Badge variant={freq === "manual" ? "outline" : "default"}>
+                        {t(`knowledge_admin.source.freq.${freq}`)}
+                      </Badge>
+                      {nextFetch && (
+                        <span className="text-xs">
+                          {t("knowledge_admin.source.next_fetch")}: {formatDate(nextFetch)}
+                        </span>
+                      )}
+                    </div>
+                    {source.authorityReason && (
+                      <p className="text-xs text-muted-foreground">{source.authorityReason}</p>
+                    )}
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => ingestMutation.mutate({ sourceId: source.id })}>
+                        {t("knowledge_admin.actions.ingest")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => auditSourceMutation.mutate({ sourceId: source.id })}
+                        disabled={auditSourceMutation.isPending}
+                      >
+                        {t("knowledge_admin.actions.audit_source")}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </TabsContent>
+
+          {/* ─── Expired Content Tab ─── */}
+          <TabsContent value="expired" className="space-y-3">
+            {expiredCount === 0 ? (
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <CheckCircle2 className="w-8 h-8 mx-auto text-green-500 mb-2" />
+                  <p className="text-sm text-muted-foreground">{t("knowledge_admin.expired.empty")}</p>
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              (expiredContent ?? []).map((item) => {
+                const isExpired = (item as any).isExpired;
+                return (
+                  <Card key={item.id} className={isExpired ? "border-red-300" : "border-amber-300"}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <CardTitle className="text-base">{item.title}</CardTitle>
+                          <CardDescription>{item.summary || "-"}</CardDescription>
+                        </div>
+                        <Badge variant={isExpired ? "destructive" : "secondary"}>
+                          {isExpired
+                            ? t("knowledge_admin.expired.status_expired")
+                            : t("knowledge_admin.expired.status_expiring")}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                        <Badge variant="outline">{item.topic}</Badge>
+                        <Badge variant="outline">{item.language}</Badge>
+                        {item.expiresAt && (
+                          <span className="text-xs">
+                            {t("knowledge_admin.expired.expires_at")}: {formatDate(item.expiresAt)}
+                          </span>
+                        )}
+                        {item.publishedAt && (
+                          <span className="text-xs">
+                            {t("knowledge_admin.expired.published_at")}: {formatDate(item.publishedAt)}
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
           </TabsContent>
 
           {/* ─── Content Gaps Tab ─── */}

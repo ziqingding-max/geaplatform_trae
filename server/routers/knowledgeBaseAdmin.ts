@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { desc, eq, gte, inArray } from "drizzle-orm";
+import { desc, eq, gte, lte, and, isNotNull, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, userProcedure } from "../procedures";
 import { router } from "../_core/trpc";
@@ -62,6 +62,18 @@ function computeRiskScore(input: {
   const freshness = Number(input.freshnessScore ?? 0);
   const duplication = Number(input.duplicationScore ?? 0);
   return Math.max(0, Math.min(100, Math.round((100 - authority) * 0.45 + (100 - freshness) * 0.25 + duplication * 0.3)));
+}
+
+function computeNextFetchAtHelper(frequency: "daily" | "weekly" | "monthly"): Date {
+  const now = new Date();
+  switch (frequency) {
+    case "daily":
+      return new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    case "weekly":
+      return new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    case "monthly":
+      return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  }
 }
 
 export const knowledgeBaseAdminRouter = router({
@@ -177,6 +189,7 @@ export const knowledgeBaseAdminRouter = router({
           .enum(["payroll", "compliance", "leave", "invoice", "onboarding", "general"])
           .default("general"),
         isActive: z.boolean().default(true),
+        fetchFrequency: z.enum(["manual", "daily", "weekly", "monthly"]).default("manual"),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -189,6 +202,10 @@ export const knowledgeBaseAdminRouter = router({
         sourceType: input.sourceType,
       });
 
+      const nextFetchAt = input.fetchFrequency !== "manual"
+        ? computeNextFetchAtHelper(input.fetchFrequency as "daily" | "weekly" | "monthly")
+        : null;
+
       if (input.id) {
         await db
           .update(knowledgeSources)
@@ -199,6 +216,8 @@ export const knowledgeBaseAdminRouter = router({
             language: input.language,
             topic: input.topic,
             isActive: input.isActive,
+            fetchFrequency: input.fetchFrequency,
+            nextFetchAt,
             authorityScore: authority.score,
             authorityLevel: authority.level,
             authorityReason: authority.reason,
@@ -216,6 +235,8 @@ export const knowledgeBaseAdminRouter = router({
         language: input.language,
         topic: input.topic,
         isActive: input.isActive,
+        fetchFrequency: input.fetchFrequency,
+        nextFetchAt,
         authorityScore: authority.score,
         authorityLevel: authority.level,
         authorityReason: authority.reason,
@@ -338,6 +359,9 @@ export const knowledgeBaseAdminRouter = router({
             "compensationGuide",
             "terminationGuide",
             "workingConditions",
+            "salaryBenchmark",
+            "contractorGuide",
+            "exchangeRateImpact",
           ])
         ).optional(),
         countryCodes: z.array(z.string()).optional(),
@@ -376,4 +400,62 @@ export const knowledgeBaseAdminRouter = router({
 
       return { success: true };
     }),
+
+  batchReview: adminProcedure
+    .input(
+      z.object({
+        ids: z.array(z.number()).min(1).max(100),
+        action: z.enum(["publish", "reject"]),
+        note: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const now = new Date();
+      await db
+        .update(knowledgeItems)
+        .set({
+          status: input.action === "publish" ? "published" : "rejected",
+          reviewedBy: ctx.user.id,
+          reviewedAt: now,
+          publishedAt: input.action === "publish" ? now : undefined,
+          reviewNote: input.note || null,
+        })
+        .where(inArray(knowledgeItems.id, input.ids));
+
+      return { success: true, count: input.ids.length };
+    }),
+
+  listExpiredContent: adminProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+    const now = new Date();
+    const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    // Articles with expiresAt that have expired or will expire within 30 days
+    const expiredItems = await db
+      .select()
+      .from(knowledgeItems)
+      .where(
+        and(
+          eq(knowledgeItems.status, "published"),
+          isNotNull(knowledgeItems.expiresAt),
+          lte(knowledgeItems.expiresAt, thirtyDaysFromNow),
+        )
+      )
+      .orderBy(desc(knowledgeItems.expiresAt))
+      .limit(200);
+
+    return expiredItems.map((item) => {
+      const isExpired = item.expiresAt && item.expiresAt <= now;
+      return {
+        ...item,
+        isExpired: !!isExpired,
+        isExpiringSoon: !isExpired,
+      };
+    });
+  }),
 });
