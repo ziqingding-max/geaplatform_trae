@@ -46,7 +46,12 @@ import {
   PieChart,
   KeyRound,
   Calculator,
-  Wrench
+  Wrench,
+  CalendarCheck,
+  Gift,
+  ShieldCheck,
+  FolderOpen,
+  DatabaseZap
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -111,8 +116,13 @@ function useNavGroups(user: any) {
       label: t("nav.toolkit"),
       icon: Wrench,
       items: [
-        { label: t("nav.countryGuide"), icon: Globe, href: "/admin/country-guide" },
+        { label: t("nav.startDatePredictor"), icon: CalendarCheck, href: "/admin/toolkit/start-date" },
+        { label: t("nav.globalBenefits"), icon: Gift, href: "/admin/toolkit/benefits" },
+        { label: t("nav.salaryBenchmark"), icon: BarChart3, href: "/admin/toolkit/salary-benchmark" },
+        { label: t("nav.hiringCompliance"), icon: ShieldCheck, href: "/admin/toolkit/compliance" },
+        { label: t("nav.documentTemplates"), icon: FolderOpen, href: "/admin/toolkit/templates" },
         { label: t("nav.costSimulator"), icon: Calculator, href: "/admin/cost-simulator" },
+        { label: t("nav.countryGuide"), icon: Globe, href: "/admin/country-guide" },
         { label: t("nav.knowledgeBase"), icon: BookOpen, href: "/admin/knowledge-base" },
       ],
     },
@@ -164,6 +174,7 @@ function useNavGroups(user: any) {
         ...(isAdmin(roleStr) ? [
           { label: t("nav.knowledge_admin"), icon: BookOpen, href: "/knowledge-base-admin" },
           { label: t("nav.countryGuideAdmin"), icon: Globe, href: "/admin/knowledge/country-guides" },
+          { label: t("nav.toolkitCms"), icon: DatabaseZap, href: "/admin/system/toolkit-cms" },
         ] : []),
       ],
     },
