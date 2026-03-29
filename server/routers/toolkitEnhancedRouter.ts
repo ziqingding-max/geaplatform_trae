@@ -26,6 +26,7 @@ import {
 } from "../../drizzle/schema";
 import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
+import { generateProposalPdf, type ProposalData } from "../services/proposalPdfService";
 
 // ─── Helper: get DB or throw ──────────────────────────────────────────────────
 function requireDb() {
@@ -596,4 +597,190 @@ export const toolkitEnhancedRouter = router({
       .where(eq(countriesConfig.isActive, true))
       .orderBy(asc(countriesConfig.countryName));
   }),
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 7. PROPOSAL: Generate combined PDF from cart items
+  // ═══════════════════════════════════════════════════════════════════════════
+  /** Generate a combined Proposal PDF from selected toolkit sections */
+  generateProposal: userProcedure
+    .input(
+      z.object({
+        sections: z.array(
+          z.object({
+            type: z.enum(["benefits", "compliance", "salary", "start_date", "templates"]),
+            countryCode: z.string(),
+          })
+        ),
+        locale: z.enum(["en", "zh"]).optional().default("en"),
+        clientName: z.string().optional(),
+        preparedBy: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = requireDb();
+
+      // Resolve country names
+      const countryCodes = [...new Set(input.sections.map((s) => s.countryCode))];
+      const countries = await db
+        .select({ countryCode: countriesConfig.countryCode, countryName: countriesConfig.countryName })
+        .from(countriesConfig)
+        .where(inArray(countriesConfig.countryCode, countryCodes));
+      const countryMap = Object.fromEntries(countries.map((c) => [c.countryCode, c.countryName]));
+
+      // Build proposal sections by fetching data for each cart item
+      const proposalSections: ProposalData["sections"] = [];
+
+      for (const section of input.sections) {
+        const countryName = countryMap[section.countryCode] || section.countryCode;
+
+        switch (section.type) {
+          case "benefits": {
+            const rows = await db
+              .select()
+              .from(globalBenefits)
+              .where(and(eq(globalBenefits.countryCode, section.countryCode), eq(globalBenefits.isActive, true)))
+              .orderBy(asc(globalBenefits.sortOrder));
+            proposalSections.push({
+              type: "benefits",
+              country: countryName,
+              countryCode: section.countryCode,
+              data: rows.map((r) => ({
+                nameEn: r.nameEn,
+                nameZh: r.nameZh,
+                category: r.category,
+                descriptionEn: r.descriptionEn,
+                descriptionZh: r.descriptionZh,
+                costIndication: r.costIndication,
+              })),
+            });
+            break;
+          }
+          case "compliance": {
+            const row = await db
+              .select()
+              .from(hiringCompliance)
+              .where(eq(hiringCompliance.countryCode, section.countryCode))
+              .then((rows) => rows[0]);
+            if (row) {
+              // Transform compliance row into metric items for PDF
+              const metrics: any[] = [];
+              if (row.probationRulesEn) metrics.push({ metricNameEn: "Probation Period", metricNameZh: "试用期", metricValueEn: row.probationRulesEn, metricValueZh: row.probationRulesZh, riskLevel: "low", category: "probation" });
+              if (row.noticePeriodRulesEn) metrics.push({ metricNameEn: "Notice Period", metricNameZh: "通知期", metricValueEn: row.noticePeriodRulesEn, metricValueZh: row.noticePeriodRulesZh, riskLevel: "medium", category: "notice" });
+              if (row.backgroundCheckRulesEn) metrics.push({ metricNameEn: "Background Check", metricNameZh: "背景调查", metricValueEn: row.backgroundCheckRulesEn, metricValueZh: row.backgroundCheckRulesZh, riskLevel: "medium", category: "background_check" });
+              if (row.severanceRulesEn) metrics.push({ metricNameEn: "Severance Pay", metricNameZh: "遣散费", metricValueEn: row.severanceRulesEn, metricValueZh: row.severanceRulesZh, riskLevel: "high", category: "severance" });
+              if (row.nonCompeteRulesEn) metrics.push({ metricNameEn: "Non-Compete", metricNameZh: "竞业限制", metricValueEn: row.nonCompeteRulesEn, metricValueZh: row.nonCompeteRulesZh, riskLevel: "medium", category: "non_compete" });
+              if (row.workPermitRulesEn) metrics.push({ metricNameEn: "Work Permit", metricNameZh: "工作许可", metricValueEn: row.workPermitRulesEn, metricValueZh: row.workPermitRulesZh, riskLevel: "high", category: "work_permit" });
+              proposalSections.push({
+                type: "compliance",
+                country: countryName,
+                countryCode: section.countryCode,
+                data: metrics,
+              });
+            }
+            break;
+          }
+          case "salary": {
+            const rows = await db
+              .select()
+              .from(salaryBenchmarks)
+              .where(eq(salaryBenchmarks.countryCode, section.countryCode));
+            proposalSections.push({
+              type: "salary",
+              country: countryName,
+              countryCode: section.countryCode,
+              data: rows.map((r) => ({
+                jobTitle: r.jobTitle,
+                level: r.level,
+                p25: r.p25,
+                p50: r.p50,
+                p75: r.p75,
+                currency: r.currency,
+              })),
+            });
+            break;
+          }
+          case "start_date": {
+            const countryRow = await db
+              .select()
+              .from(countriesConfig)
+              .where(eq(countriesConfig.countryCode, section.countryCode))
+              .then((rows) => rows[0]);
+            const noticePeriodDays = countryRow?.noticePeriodDays ?? 30;
+            const workingDaysPerWeek = countryRow?.workingDaysPerWeek ?? 5;
+            const eorOnboardingDays = 10;
+            const today = new Date();
+
+            // Fetch holidays
+            const rangeEnd = new Date(today);
+            rangeEnd.setDate(rangeEnd.getDate() + noticePeriodDays + eorOnboardingDays + 30);
+            const holidays = await db
+              .select()
+              .from(publicHolidays)
+              .where(
+                and(
+                  eq(publicHolidays.countryCode, section.countryCode),
+                  sql`${publicHolidays.date} >= ${today.toISOString().split("T")[0]}`,
+                  sql`${publicHolidays.date} <= ${rangeEnd.toISOString().split("T")[0]}`
+                )
+              );
+            const holidaySet = new Set(holidays.map((h) => h.date));
+
+            // Calculate: notice period (business days) + EOR onboarding (business days)
+            const afterNotice = addBusinessDays(today, noticePeriodDays, holidaySet, workingDaysPerWeek);
+            const candidateDate = addBusinessDays(afterNotice, eorOnboardingDays, holidaySet, workingDaysPerWeek);
+            const startDate = getNextBusinessDay(candidateDate, holidaySet, workingDaysPerWeek);
+
+            proposalSections.push({
+              type: "start_date",
+              country: countryName,
+              countryCode: section.countryCode,
+              data: [{
+                countryName,
+                noticePeriodDays,
+                eorOnboardingDays,
+                holidaysInRange: holidays.map((h) => `${h.date} (${h.localName || h.name})`),
+                earliestStartDate: startDate.toISOString().split("T")[0],
+              }],
+            });
+            break;
+          }
+          case "templates": {
+            const rows = await db
+              .select()
+              .from(documentTemplates)
+              .where(and(eq(documentTemplates.countryCode, section.countryCode), eq(documentTemplates.isActive, true)))
+              .orderBy(asc(documentTemplates.sortOrder));
+            proposalSections.push({
+              type: "templates",
+              country: countryName,
+              countryCode: section.countryCode,
+              data: rows.map((r) => ({
+                titleEn: r.titleEn,
+                titleZh: r.titleZh,
+                templateType: r.templateType,
+                fileFormat: r.fileFormat,
+              })),
+            });
+            break;
+          }
+        }
+      }
+
+      if (proposalSections.length === 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No valid sections to generate proposal" });
+      }
+
+      const pdfBuffer = await generateProposalPdf({
+        sections: proposalSections,
+        locale: input.locale,
+        clientName: input.clientName,
+        preparedBy: input.preparedBy,
+      });
+
+      // Return as base64 for tRPC transport
+      return {
+        pdf: pdfBuffer.toString("base64"),
+        filename: `GEA_Toolkit_Proposal_${new Date().toISOString().split("T")[0]}.pdf`,
+      };
+    }),
 });
