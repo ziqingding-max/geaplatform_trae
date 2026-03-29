@@ -274,10 +274,10 @@ function AdminRouter() {
       {/* Headhunter Toolkit Enhanced */}
       <Route path="/admin/toolkit/start-date" component={StartDatePredictor} />
       <Route path="/admin/toolkit/benefits" component={GlobalBenefits} />
-      <Route path="/admin/toolkit/salary" component={SalaryBenchmark} />
+      <Route path="/admin/toolkit/salary-benchmark" component={SalaryBenchmark} />
       <Route path="/admin/toolkit/compliance" component={HiringCompliance} />
       <Route path="/admin/toolkit/templates" component={DocumentTemplates} />
-      <Route path="/admin/toolkit-cms" component={ToolkitCms} />
+      <Route path="/admin/system/toolkit-cms" component={ToolkitCms} />
       <Route path="/settings" component={Settings} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

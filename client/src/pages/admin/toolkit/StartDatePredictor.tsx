@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarCheck, CalendarDays, Loader2, Plus, Info, ArrowRight } from "lucide-react";
 import { format, parseISO, eachDayOfInterval, isWithinInterval } from "date-fns";
 import { toast } from "sonner";
+import { AddToProposalButton } from "@/components/AddToProposalButton";
 
 export default function StartDatePredictor() {
   const { t } = useI18n();
@@ -40,8 +41,8 @@ export default function StartDatePredictor() {
     predictMutation.mutate({
       countryCode,
       resignationDate: format(resignationDate, "yyyy-MM-dd"),
-      eorSlaDays: parseInt(eorSla) || 10,
-      customNoticeDays: customNotice ? parseInt(customNotice) : undefined,
+      eorOnboardingSla: parseInt(eorSla) || 10,
+      customNoticePeriodDays: customNotice ? parseInt(customNotice) : undefined,
     });
   };
 
@@ -49,10 +50,10 @@ export default function StartDatePredictor() {
 
   // Build calendar modifiers for visual timeline
   const calendarModifiers = result ? (() => {
-    const noticeEnd = parseISO(result.noticeEndDate);
+    const noticeEnd = parseISO(result.noticePeriodEndDate);
     const eorReady = parseISO(result.eorReadyDate);
     const startDate = parseISO(result.earliestStartDate);
-    const holidays = result.holidaysInRange.map((h: string) => parseISO(h));
+    const holidays = result.holidaysInRange.map((h: any) => parseISO(typeof h === 'string' ? h : h.date));
 
     const noticeDays = resignationDate ? eachDayOfInterval({
       start: resignationDate,
@@ -208,12 +209,12 @@ export default function StartDatePredictor() {
                     </div>
                     <TimelineStep
                       label={t("start_date.notice_end")}
-                      date={result.noticeEndDate}
+                      date={result.noticePeriodEndDate}
                       color="bg-chart-1/20"
                     />
                     <div className="flex items-center gap-2 pl-4 text-xs text-muted-foreground">
                       <ArrowRight className="h-3 w-3" />
-                      <span>{t("start_date.eor_setup")}: {result.eorSlaDays} {t("start_date.business_days")}</span>
+                      <span>{t("start_date.eor_setup")}: {result.eorOnboardingSla} {t("start_date.business_days")}</span>
                     </div>
                     <TimelineStep
                       label={t("start_date.eor_ready")}
@@ -237,20 +238,15 @@ export default function StartDatePredictor() {
                   </div>
 
                   {/* Add to Proposal */}
-                  <Button variant="outline" className="w-full" onClick={() => {
-                    const item = {
-                      type: "start_date" as const,
-                      country: selectedCountry?.countryName || countryCode,
-                      data: result,
-                    };
-                    const existing = JSON.parse(localStorage.getItem("proposalCart") || "[]");
-                    existing.push(item);
-                    localStorage.setItem("proposalCart", JSON.stringify(existing));
-                    toast.success(t("start_date.add_to_proposal"));
-                  }}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    {t("start_date.add_to_proposal")}
-                  </Button>
+                  {selectedCountry && (
+                    <AddToProposalButton
+                      type="start_date"
+                      countryCode={countryCode}
+                      countryName={selectedCountry.countryName}
+                      variant="outline"
+                      className="w-full"
+                    />
+                  )}
                 </CardContent>
               </Card>
 

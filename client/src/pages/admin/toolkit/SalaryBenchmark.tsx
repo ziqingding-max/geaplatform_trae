@@ -1,6 +1,7 @@
 /**
  * Enhanced Salary Benchmark
  * Multi-dimensional salary data with visualization.
+ * Uses correct field names from salaryBenchmarks table: salaryP25, salaryP50, salaryP75, jobCategory, seniorityLevel
  */
 
 import { useState } from "react";
@@ -13,53 +14,43 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart3, Plus, Info, TrendingUp, Filter } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { toast } from "sonner";
+import { AddToProposalButton } from "@/components/AddToProposalButton";
 
 const COLORS = ["hsl(221, 83%, 53%)", "hsl(142, 71%, 45%)", "hsl(38, 92%, 50%)", "hsl(0, 84%, 60%)"];
 
 export default function SalaryBenchmark() {
-  const { t, language } = useI18n();
+  const { t, locale: language } = useI18n();
   const [countryCode, setCountryCode] = useState("");
-  const [jobTitle, setJobTitle] = useState("");
+  const [jobCategory, setJobCategory] = useState("");
   const [seniorityLevel, setSeniorityLevel] = useState("");
-  const [industry, setIndustry] = useState("");
 
   const { data: countries } = trpc.toolkitEnhanced.getActiveCountries.useQuery();
   const { data: benchmarks, isLoading } = trpc.toolkitEnhanced.getSalaryBenchmarks.useQuery(
-    { countryCode, jobTitle: jobTitle || undefined, seniorityLevel: seniorityLevel || undefined, industry: industry || undefined },
+    {
+      countryCode,
+      jobCategory: jobCategory || undefined,
+      seniorityLevel: (seniorityLevel || undefined) as any,
+    },
     { enabled: !!countryCode }
   );
 
   const selectedCountry = countries?.find((c: any) => c.countryCode === countryCode);
 
   // Extract unique filter options from data
-  const jobTitles = [...new Set(benchmarks?.map((b: any) => b.jobTitle).filter(Boolean) || [])];
-  const seniorityLevels = [...new Set(benchmarks?.map((b: any) => b.seniorityLevel).filter(Boolean) || [])];
-  const industries = [...new Set(benchmarks?.map((b: any) => b.industry).filter(Boolean) || [])];
+  const jobCategories = Array.from(new Set(benchmarks?.map((b: any) => b.jobCategory).filter(Boolean) || []));
+  const seniorityLevels = Array.from(new Set(benchmarks?.map((b: any) => b.seniorityLevel).filter(Boolean) || []));
 
-  // Prepare chart data
+  // Prepare chart data (use correct field names: salaryP25, salaryP50, salaryP75)
   const chartData = benchmarks?.map((b: any) => ({
     name: `${b.jobTitle}${b.seniorityLevel ? ` (${b.seniorityLevel})` : ""}`,
-    p25: b.p25Salary ? parseFloat(b.p25Salary) : null,
-    p50: b.medianSalary ? parseFloat(b.medianSalary) : null,
-    p75: b.p75Salary ? parseFloat(b.p75Salary) : null,
+    p25: b.salaryP25 ? parseFloat(b.salaryP25) : null,
+    p50: b.salaryP50 ? parseFloat(b.salaryP50) : null,
+    p75: b.salaryP75 ? parseFloat(b.salaryP75) : null,
   })).slice(0, 10) || [];
 
-  const handleAddToProposal = () => {
-    if (!benchmarks?.length) return;
-    const item = {
-      type: "salary_benchmark" as const,
-      country: selectedCountry?.countryName || countryCode,
-      countryCode,
-      filters: { jobTitle, seniorityLevel, industry },
-      data: benchmarks,
-    };
-    const existing = JSON.parse(localStorage.getItem("proposalCart") || "[]");
-    existing.push(item);
-    localStorage.setItem("proposalCart", JSON.stringify(existing));
-    toast.success(t("salary_benchmark.added_to_proposal"));
-  };
+
 
   const formatSalary = (val: string | number | null) => {
     if (!val) return "—";
@@ -79,11 +70,12 @@ export default function SalaryBenchmark() {
             </h1>
             <p className="text-muted-foreground mt-1">{t("salary_benchmark.subtitle")}</p>
           </div>
-          {benchmarks?.length ? (
-            <Button variant="outline" onClick={handleAddToProposal}>
-              <Plus className="mr-2 h-4 w-4" />
-              {t("salary_benchmark.add_to_proposal")}
-            </Button>
+          {benchmarks?.length && selectedCountry ? (
+            <AddToProposalButton
+              type="salary"
+              countryCode={countryCode}
+              countryName={selectedCountry.countryName}
+            />
           ) : null}
         </div>
 
@@ -96,10 +88,10 @@ export default function SalaryBenchmark() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("salary_benchmark.country")}</label>
-                <Select value={countryCode} onValueChange={(v) => { setCountryCode(v); setJobTitle(""); setSeniorityLevel(""); setIndustry(""); }}>
+                <Select value={countryCode} onValueChange={(v) => { setCountryCode(v); setJobCategory(""); setSeniorityLevel(""); }}>
                   <SelectTrigger>
                     <SelectValue placeholder={t("salary_benchmark.country_placeholder")} />
                   </SelectTrigger>
@@ -111,15 +103,15 @@ export default function SalaryBenchmark() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">{t("salary_benchmark.job_title")}</label>
-                <Select value={jobTitle} onValueChange={setJobTitle}>
+                <label className="text-sm font-medium">{t("salary_benchmark.job_category")}</label>
+                <Select value={jobCategory} onValueChange={setJobCategory}>
                   <SelectTrigger>
                     <SelectValue placeholder={t("salary_benchmark.all")} />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="">{t("salary_benchmark.all")}</SelectItem>
-                    {jobTitles.map((jt: string) => (
-                      <SelectItem key={jt} value={jt}>{jt}</SelectItem>
+                    {jobCategories.map((jc: string) => (
+                      <SelectItem key={jc} value={jc}>{jc}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -134,20 +126,6 @@ export default function SalaryBenchmark() {
                     <SelectItem value="">{t("salary_benchmark.all")}</SelectItem>
                     {seniorityLevels.map((sl: string) => (
                       <SelectItem key={sl} value={sl}>{sl}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">{t("salary_benchmark.industry")}</label>
-                <Select value={industry} onValueChange={setIndustry}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={t("salary_benchmark.all")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">{t("salary_benchmark.all")}</SelectItem>
-                    {industries.map((ind: string) => (
-                      <SelectItem key={ind} value={ind}>{ind}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -195,8 +173,8 @@ export default function SalaryBenchmark() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t("salary_benchmark.job_title")}</TableHead>
+                    <TableHead>{t("salary_benchmark.job_category")}</TableHead>
                     <TableHead>{t("salary_benchmark.seniority")}</TableHead>
-                    <TableHead>{t("salary_benchmark.industry")}</TableHead>
                     <TableHead className="text-right">P25</TableHead>
                     <TableHead className="text-right">P50</TableHead>
                     <TableHead className="text-right">P75</TableHead>
@@ -208,12 +186,14 @@ export default function SalaryBenchmark() {
                     <TableRow key={b.id}>
                       <TableCell className="font-medium">{b.jobTitle}</TableCell>
                       <TableCell>
+                        <Badge variant="outline">{b.jobCategory}</Badge>
+                      </TableCell>
+                      <TableCell>
                         {b.seniorityLevel ? <Badge variant="secondary">{b.seniorityLevel}</Badge> : "—"}
                       </TableCell>
-                      <TableCell>{b.industry || "—"}</TableCell>
-                      <TableCell className="text-right">{formatSalary(b.p25Salary)}</TableCell>
-                      <TableCell className="text-right font-semibold">{formatSalary(b.medianSalary)}</TableCell>
-                      <TableCell className="text-right">{formatSalary(b.p75Salary)}</TableCell>
+                      <TableCell className="text-right">{formatSalary(b.salaryP25)}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatSalary(b.salaryP50)}</TableCell>
+                      <TableCell className="text-right">{formatSalary(b.salaryP75)}</TableCell>
                       <TableCell>
                         <Badge variant={b.source === "gea_official" ? "default" : "outline"} className="text-xs">
                           {b.source || "ai_generated"}

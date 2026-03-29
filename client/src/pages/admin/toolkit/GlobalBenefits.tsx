@@ -15,9 +15,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Gift, Plus, Shield, Sparkles, Info, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
+import { AddToProposalButton } from "@/components/AddToProposalButton";
 
 export default function GlobalBenefits() {
-  const { t, language } = useI18n();
+  const { t, locale: language } = useI18n();
   const [countryCode, setCountryCode] = useState("");
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
@@ -29,8 +30,8 @@ export default function GlobalBenefits() {
 
   const selectedCountry = countries?.find((c: any) => c.countryCode === countryCode);
 
-  const statutory = benefits?.filter((b: any) => b.category === "statutory") || [];
-  const customary = benefits?.filter((b: any) => b.category === "customary") || [];
+  const statutory = benefits?.filter((b: any) => b.benefitType === "statutory") || [];
+  const customary = benefits?.filter((b: any) => b.benefitType === "customary") || [];
 
   const handleCopyPitch = (benefit: any) => {
     const text = language === "zh" ? benefit.pitchCardZh : benefit.pitchCardEn;
@@ -42,19 +43,7 @@ export default function GlobalBenefits() {
     }
   };
 
-  const handleAddToProposal = () => {
-    if (!benefits?.length) return;
-    const item = {
-      type: "benefits" as const,
-      country: selectedCountry?.countryName || countryCode,
-      countryCode,
-      data: benefits,
-    };
-    const existing = JSON.parse(localStorage.getItem("proposalCart") || "[]");
-    existing.push(item);
-    localStorage.setItem("proposalCart", JSON.stringify(existing));
-    toast.success(t("benefits.added_to_proposal"));
-  };
+
 
   const BenefitTable = ({ items }: { items: any[] }) => (
     <Table>
@@ -120,11 +109,12 @@ export default function GlobalBenefits() {
             </h1>
             <p className="text-muted-foreground mt-1">{t("benefits.subtitle")}</p>
           </div>
-          {benefits?.length ? (
-            <Button variant="outline" onClick={handleAddToProposal}>
-              <Plus className="mr-2 h-4 w-4" />
-              {t("benefits.add_to_proposal")}
-            </Button>
+          {benefits?.length && selectedCountry ? (
+            <AddToProposalButton
+              type="benefits"
+              countryCode={countryCode}
+              countryName={selectedCountry.countryName}
+            />
           ) : null}
         </div>
 

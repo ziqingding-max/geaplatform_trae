@@ -25,7 +25,7 @@ export interface ProposalBenefitItem {
 export interface ProposalComplianceItem {
   metricNameEn: string;
   metricNameZh?: string | null;
-  metricValueEn: string;
+  metricValueEn: string | null;
   metricValueZh?: string | null;
   riskLevel?: string | null;
   category?: string | null;
@@ -35,10 +35,10 @@ export interface ProposalComplianceItem {
 
 export interface ProposalSalaryItem {
   jobTitle: string;
-  level?: string | null;
-  p25?: number | null;
-  p50?: number | null;
-  p75?: number | null;
+  seniorityLevel?: string | null;
+  salaryP25?: string | null;
+  salaryP50?: string | null;
+  salaryP75?: string | null;
   currency?: string | null;
 }
 
@@ -53,8 +53,8 @@ export interface ProposalStartDateItem {
 export interface ProposalTemplateItem {
   titleEn: string;
   titleZh?: string | null;
-  templateType: string;
-  fileFormat?: string | null;
+  documentType: string;
+  fileName?: string | null;
 }
 
 export interface ProposalSection {
@@ -233,8 +233,12 @@ async function mergePdfs(pdfBuffers: Buffer[]): Promise<Buffer> {
 
 function renderBenefitsSection(country: string, items: ProposalBenefitItem[], locale: string): string {
   const isZh = locale === "zh";
-  const statutory = items.filter(i => i.category === "statutory");
-  const customary = items.filter(i => i.category !== "statutory");
+  // Items already have category field; group by checking if there's a benefitType or use category
+  // In proposal data, items come with category field from the DB
+  // We need to separate statutory vs customary based on the original benefitType
+  // Since the router passes the raw DB rows, we check for a 'benefitType' property
+  const statutory = items.filter((i: any) => i.benefitType === "statutory" || i.category === "social_security" || i.category === "pension" || i.category === "paid_leave" || i.category === "parental");
+  const customary = items.filter((i: any) => i.benefitType === "customary" || (i.benefitType !== "statutory" && !statutory.includes(i)));
 
   let html = `<h2>${isZh ? `${country} — 福利概览` : `${country} — Benefits Overview`}</h2>`;
 
@@ -268,7 +272,7 @@ function renderComplianceSection(country: string, items: ProposalComplianceItem[
     const riskLabel = c.riskLevel ? c.riskLevel.toUpperCase() : "—";
     html += `<tr>
       <td><strong>${isZh ? (c.metricNameZh || c.metricNameEn) : c.metricNameEn}</strong></td>
-      <td>${isZh ? (c.metricValueZh || c.metricValueEn) : c.metricValueEn}</td>
+      <td>${isZh ? (c.metricValueZh || c.metricValueEn || "—") : (c.metricValueEn || "—")}</td>
       <td><span class="${riskClass}">${riskLabel}</span></td>
       <td>${isZh ? (c.notesZh || c.notesEn || "") : (c.notesEn || "")}</td>
     </tr>`;
@@ -284,10 +288,10 @@ function renderSalarySection(country: string, items: ProposalSalaryItem[], local
   for (const s of items) {
     html += `<tr>
       <td><strong>${s.jobTitle}</strong></td>
-      <td>${s.level || "—"}</td>
-      <td>${s.p25 != null ? s.p25.toLocaleString() : "—"}</td>
-      <td>${s.p50 != null ? s.p50.toLocaleString() : "—"}</td>
-      <td>${s.p75 != null ? s.p75.toLocaleString() : "—"}</td>
+      <td>${s.seniorityLevel || "—"}</td>
+      <td>${s.salaryP25 != null ? Number(s.salaryP25).toLocaleString() : "—"}</td>
+      <td>${s.salaryP50 != null ? Number(s.salaryP50).toLocaleString() : "—"}</td>
+      <td>${s.salaryP75 != null ? Number(s.salaryP75).toLocaleString() : "—"}</td>
       <td>${s.currency || "USD"}</td>
     </tr>`;
   }
@@ -315,7 +319,8 @@ function renderTemplatesSection(country: string, items: ProposalTemplateItem[], 
   let html = `<h2>${isZh ? `${country} — 文档模版清单` : `${country} — Document Templates`}</h2>`;
   html += `<table><tr><th>${isZh ? "文档名称" : "Document"}</th><th>${isZh ? "类型" : "Type"}</th><th>${isZh ? "格式" : "Format"}</th></tr>`;
   for (const t of items) {
-    html += `<tr><td>${isZh ? (t.titleZh || t.titleEn) : t.titleEn}</td><td>${t.templateType}</td><td>${(t.fileFormat || "PDF").toUpperCase()}</td></tr>`;
+    const ext = t.fileName ? t.fileName.split('.').pop()?.toUpperCase() || 'PDF' : 'PDF';
+    html += `<tr><td>${isZh ? (t.titleZh || t.titleEn) : t.titleEn}</td><td>${t.documentType.replace(/_/g, ' ')}</td><td>${ext}</td></tr>`;
   }
   html += `</table>`;
   return html;
@@ -329,7 +334,7 @@ export async function generateProposalPdf(data: ProposalData): Promise<Buffer> {
   const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
   // ── 1. Cover Page ──
-  const countries = [...new Set(data.sections.map(s => s.country))];
+  const countries = Array.from(new Set(data.sections.map(s => s.country)));
   const coverMeta = [
     { label: isZh ? "国家" : "Countries", value: countries.join(", ") },
     { label: isZh ? "模块数" : "Sections", value: `${data.sections.length}` },

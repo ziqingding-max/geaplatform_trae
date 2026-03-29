@@ -1,6 +1,7 @@
 /**
  * Document Templates Library
  * Browse and download employment document templates by country.
+ * Uses correct DB field names: documentType (not templateType), fileName, mimeType.
  */
 
 import { useState } from "react";
@@ -12,39 +13,32 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FolderOpen, Download, FileText, File, Plus, Info, Search } from "lucide-react";
+import { FolderOpen, Download, FileText, Plus, Info, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { AddToProposalButton } from "@/components/AddToProposalButton";
 
-const TEMPLATE_TYPE_ICONS: Record<string, string> = {
+const DOC_TYPE_ICONS: Record<string, string> = {
   employment_contract: "📝",
   offer_letter: "💌",
   nda: "🔒",
-  ip_assignment: "💡",
-  employee_handbook: "📖",
   termination_letter: "📋",
+  employee_handbook: "📖",
   other: "📄",
 };
 
-const TEMPLATE_TYPE_LABELS: Record<string, { en: string; zh: string }> = {
-  employment_contract: { en: "Employment Contract", zh: "劳动合同" },
-  offer_letter: { en: "Offer Letter", zh: "Offer Letter" },
-  nda: { en: "NDA", zh: "保密协议" },
-  ip_assignment: { en: "IP Assignment", zh: "知识产权协议" },
-  employee_handbook: { en: "Employee Handbook", zh: "员工手册" },
-  termination_letter: { en: "Termination Letter", zh: "解除劳动合同通知" },
-  other: { en: "Other", zh: "其他" },
-};
-
 export default function DocumentTemplates() {
-  const { t, language } = useI18n();
+  const { t, locale: language } = useI18n();
   const [countryCode, setCountryCode] = useState("");
-  const [templateType, setTemplateType] = useState("");
+  const [documentType, setDocumentType] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: countries } = trpc.toolkitEnhanced.getActiveCountries.useQuery();
   const { data: templates, isLoading } = trpc.toolkitEnhanced.getDocumentTemplates.useQuery(
-    { countryCode: countryCode || undefined, templateType: templateType || undefined },
+    {
+      countryCode: countryCode || undefined,
+      documentType: (documentType || undefined) as any,
+    },
     { enabled: true }
   );
 
@@ -73,25 +67,23 @@ export default function DocumentTemplates() {
     if (tpl.fileUrl) {
       window.open(tpl.fileUrl, "_blank");
     } else {
-      toast.error(t("templates.no_file"));
+      toast.error(t("templates.no_data"));
     }
   };
 
-  const handleAddToProposal = () => {
-    if (!filteredTemplates.length) return;
-    const item = {
-      type: "templates" as const,
-      country: selectedCountry?.countryName || countryCode || "All",
-      data: filteredTemplates.map((tpl: any) => ({
-        title: language === "zh" ? tpl.titleZh : tpl.titleEn,
-        type: tpl.templateType,
-        country: tpl.countryCode,
-      })),
-    };
-    const existing = JSON.parse(localStorage.getItem("proposalCart") || "[]");
-    existing.push(item);
-    localStorage.setItem("proposalCart", JSON.stringify(existing));
-    toast.success(t("templates.added_to_proposal"));
+
+
+  // Get file extension from fileName or mimeType
+  const getFileFormat = (tpl: any) => {
+    if (tpl.fileName) {
+      const ext = tpl.fileName.split(".").pop()?.toUpperCase();
+      if (ext) return ext;
+    }
+    if (tpl.mimeType) {
+      if (tpl.mimeType.includes("pdf")) return "PDF";
+      if (tpl.mimeType.includes("word") || tpl.mimeType.includes("docx")) return "DOCX";
+    }
+    return "PDF";
   };
 
   return (
@@ -106,11 +98,12 @@ export default function DocumentTemplates() {
             </h1>
             <p className="text-muted-foreground mt-1">{t("templates.subtitle")}</p>
           </div>
-          {filteredTemplates.length ? (
-            <Button variant="outline" onClick={handleAddToProposal}>
-              <Plus className="mr-2 h-4 w-4" />
-              {t("templates.add_to_proposal")}
-            </Button>
+          {filteredTemplates.length && countryCode && selectedCountry ? (
+            <AddToProposalButton
+              type="templates"
+              countryCode={countryCode}
+              countryName={selectedCountry.countryName}
+            />
           ) : null}
         </div>
 
@@ -119,13 +112,13 @@ export default function DocumentTemplates() {
           <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">{t("templates.country")}</label>
+                <label className="text-sm font-medium">{t("templates.country_label")}</label>
                 <Select value={countryCode} onValueChange={setCountryCode}>
                   <SelectTrigger>
-                    <SelectValue placeholder={t("templates.all_countries")} />
+                    <SelectValue placeholder={t("templates.country_placeholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t("templates.all_countries")}</SelectItem>
+                    <SelectItem value="">{t("templates.country_placeholder")}</SelectItem>
                     {countries?.map((c: any) => (
                       <SelectItem key={c.countryCode} value={c.countryCode}>{c.countryName}</SelectItem>
                     ))}
@@ -133,29 +126,30 @@ export default function DocumentTemplates() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">{t("templates.type")}</label>
-                <Select value={templateType} onValueChange={setTemplateType}>
+                <label className="text-sm font-medium">{t("templates.type_label")}</label>
+                <Select value={documentType} onValueChange={setDocumentType}>
                   <SelectTrigger>
-                    <SelectValue placeholder={t("templates.all_types")} />
+                    <SelectValue placeholder={t("templates.type_placeholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t("templates.all_types")}</SelectItem>
-                    {Object.entries(TEMPLATE_TYPE_LABELS).map(([key, labels]) => (
-                      <SelectItem key={key} value={key}>
-                        {TEMPLATE_TYPE_ICONS[key]} {language === "zh" ? labels.zh : labels.en}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="">{t("templates.type_placeholder")}</SelectItem>
+                    <SelectItem value="employment_contract">{DOC_TYPE_ICONS.employment_contract} {t("templates.type_employment_contract")}</SelectItem>
+                    <SelectItem value="offer_letter">{DOC_TYPE_ICONS.offer_letter} {t("templates.type_offer_letter")}</SelectItem>
+                    <SelectItem value="nda">{DOC_TYPE_ICONS.nda} {t("templates.type_nda")}</SelectItem>
+                    <SelectItem value="termination_letter">{DOC_TYPE_ICONS.termination_letter} {t("templates.type_termination_letter")}</SelectItem>
+                    <SelectItem value="employee_handbook">{DOC_TYPE_ICONS.employee_handbook} {t("templates.type_employee_handbook")}</SelectItem>
+                    <SelectItem value="other">{DOC_TYPE_ICONS.other} {t("templates.type_other")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">{t("templates.search")}</label>
+                <label className="text-sm font-medium">{t("templates.search_label") || "Search"}</label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={t("templates.search_placeholder")}
+                    placeholder={t("templates.search_placeholder") || "Search templates..."}
                     className="pl-9"
                   />
                 </div>
@@ -171,8 +165,8 @@ export default function DocumentTemplates() {
             <Card key={cc} className="border-0 shadow-lg bg-white/90 backdrop-blur-md">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <span className="text-xl">{cc === "GLOBAL" ? "🌐" : ""}</span>
-                  {cc === "GLOBAL" ? t("templates.global") : countryName}
+                  {cc === "GLOBAL" ? "🌐" : ""}
+                  {cc === "GLOBAL" ? "Global" : countryName}
                   <Badge variant="secondary">{(tpls as any[]).length}</Badge>
                 </CardTitle>
               </CardHeader>
@@ -181,34 +175,31 @@ export default function DocumentTemplates() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[40px]"></TableHead>
-                      <TableHead>{t("templates.template_name")}</TableHead>
-                      <TableHead>{t("templates.type")}</TableHead>
-                      <TableHead>{t("templates.format")}</TableHead>
+                      <TableHead>{t("templates.title") || "Template"}</TableHead>
+                      <TableHead>{t("templates.type_label")}</TableHead>
+                      <TableHead>{t("templates.file_size")}</TableHead>
                       <TableHead>{t("templates.version")}</TableHead>
-                      <TableHead>{t("templates.source")}</TableHead>
-                      <TableHead className="w-[100px]">{t("templates.action")}</TableHead>
+                      <TableHead>{t("templates.source") || "Source"}</TableHead>
+                      <TableHead className="w-[100px]">{t("templates.download")}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(tpls as any[]).map((tpl: any) => (
                       <TableRow key={tpl.id}>
                         <TableCell>
-                          <span className="text-lg">{TEMPLATE_TYPE_ICONS[tpl.templateType] || "📄"}</span>
+                          <span className="text-lg">{DOC_TYPE_ICONS[tpl.documentType] || "📄"}</span>
                         </TableCell>
                         <TableCell className="font-medium">
                           {language === "zh" ? tpl.titleZh : tpl.titleEn}
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {language === "zh"
-                              ? TEMPLATE_TYPE_LABELS[tpl.templateType]?.zh
-                              : TEMPLATE_TYPE_LABELS[tpl.templateType]?.en
-                              || tpl.templateType}
+                            {t(`templates.type_${tpl.documentType}`) || tpl.documentType}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" className="uppercase text-xs">
-                            {tpl.fileFormat || "PDF"}
+                            {getFileFormat(tpl)}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
@@ -252,7 +243,7 @@ export default function DocumentTemplates() {
         {filteredTemplates.length > 0 && (
           <div className="bg-muted/50 p-3 rounded-lg flex gap-2 text-xs text-muted-foreground">
             <Info className="w-4 h-4 flex-shrink-0" />
-            <p>{t("templates.disclaimer")}</p>
+            <p>{t("templates.disclaimer") || "Templates are provided for reference only. Please consult local legal counsel before use."}</p>
           </div>
         )}
       </div>

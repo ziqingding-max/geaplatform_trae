@@ -2,15 +2,19 @@
  * Toolkit Enhanced Router — Backend APIs for Headhunter Toolkit
  *
  * Provides:
- *   1. Global Benefits — list / upsert / delete
- *   2. Hiring Compliance — get / upsert
- *   3. Document Templates — list / create / update / delete
- *   4. Start Date Predictor — algorithm combining notice period + public holidays + EOR SLA
- *   5. Enhanced Salary Benchmark — list with multi-dimension filters + chart data
+ *   1. Global Benefits — getBenefitsByCountry / createBenefit / updateBenefit / deleteBenefit
+ *   2. Hiring Compliance — getComplianceByCountry / createCompliance / updateCompliance / deleteCompliance
+ *   3. Document Templates — getDocumentTemplates / createTemplate / updateTemplate / deleteTemplate
+ *   4. Start Date Predictor — predictStartDate (mutation)
+ *   5. Enhanced Salary Benchmark — getSalaryBenchmarks / getBenchmarkChartData / listJobCategories
+ *   6. Shared — getActiveCountries
+ *   7. Proposal PDF — generateProposal
  *
  * Permission:
  *   - Read endpoints use `userProcedure` (all authenticated users)
  *   - Write/CMS endpoints use `adminProcedure` (admin only)
+ *
+ * Naming convention: frontend procedure names are the source of truth.
  */
 import { z } from "zod";
 import { router } from "../_core/trpc";
@@ -88,8 +92,8 @@ export const toolkitEnhancedRouter = router({
   // 1. GLOBAL BENEFITS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /** List benefits by country (optionally filter by type) */
-  listBenefits: userProcedure
+  /** List benefits by country (optionally filter by type) — used by toolkit pages */
+  getBenefitsByCountry: userProcedure
     .input(
       z.object({
         countryCode: z.string(),
@@ -112,43 +116,10 @@ export const toolkitEnhancedRouter = router({
         .orderBy(asc(globalBenefits.sortOrder), asc(globalBenefits.id));
     }),
 
-  /** List all countries that have benefits data */
-  listBenefitCountries: userProcedure.query(async () => {
-    const db = requireDb();
-    const rows = await db
-      .selectDistinct({ countryCode: globalBenefits.countryCode })
-      .from(globalBenefits)
-      .where(eq(globalBenefits.isActive, true));
-    return rows.map((r) => r.countryCode);
-  }),
-
-  /** CMS: List all benefits (including inactive) for admin management */
-  adminListBenefits: adminProcedure
+  /** CMS: Create a new benefit */
+  createBenefit: adminProcedure
     .input(
       z.object({
-        countryCode: z.string().optional(),
-      }).optional()
-    )
-    .query(async ({ input }) => {
-      const db = requireDb();
-      if (input?.countryCode) {
-        return await db
-          .select()
-          .from(globalBenefits)
-          .where(eq(globalBenefits.countryCode, input.countryCode))
-          .orderBy(asc(globalBenefits.sortOrder), asc(globalBenefits.id));
-      }
-      return await db
-        .select()
-        .from(globalBenefits)
-        .orderBy(asc(globalBenefits.countryCode), asc(globalBenefits.sortOrder));
-    }),
-
-  /** CMS: Upsert a benefit */
-  upsertBenefit: adminProcedure
-    .input(
-      z.object({
-        id: z.number().optional(),
         countryCode: z.string(),
         benefitType: z.enum(["statutory", "customary"]),
         category: z.enum([
@@ -171,17 +142,6 @@ export const toolkitEnhancedRouter = router({
     .mutation(async ({ input }) => {
       const db = requireDb();
       const now = new Date();
-      if (input.id) {
-        await db
-          .update(globalBenefits)
-          .set({
-            ...input,
-            lastVerifiedAt: now,
-            updatedAt: now,
-          })
-          .where(eq(globalBenefits.id, input.id));
-        return { id: input.id };
-      }
       const [res] = await db
         .insert(globalBenefits)
         .values({
@@ -191,6 +151,45 @@ export const toolkitEnhancedRouter = router({
         })
         .returning({ id: globalBenefits.id });
       return res;
+    }),
+
+  /** CMS: Update an existing benefit */
+  updateBenefit: adminProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        countryCode: z.string().optional(),
+        benefitType: z.enum(["statutory", "customary"]).optional(),
+        category: z.enum([
+          "social_security", "health_insurance", "pension", "paid_leave",
+          "parental", "housing", "meal_transport", "bonus", "insurance",
+          "equity", "wellness", "education", "other",
+        ]).optional(),
+        nameEn: z.string().min(1).optional(),
+        nameZh: z.string().min(1).optional(),
+        descriptionEn: z.string().min(1).optional(),
+        descriptionZh: z.string().min(1).optional(),
+        costIndication: z.string().optional(),
+        pitchCardEn: z.string().optional(),
+        pitchCardZh: z.string().optional(),
+        source: z.string().optional(),
+        isActive: z.boolean().optional(),
+        sortOrder: z.number().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = requireDb();
+      const now = new Date();
+      const { id, ...data } = input;
+      await db
+        .update(globalBenefits)
+        .set({
+          ...data,
+          lastVerifiedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(globalBenefits.id, id));
+      return { id };
     }),
 
   /** CMS: Delete a benefit */
@@ -206,39 +205,22 @@ export const toolkitEnhancedRouter = router({
   // 2. HIRING COMPLIANCE
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /** Get compliance data for a country */
-  getCompliance: userProcedure
+  /** Get compliance data for a country — used by toolkit pages */
+  getComplianceByCountry: userProcedure
     .input(z.object({ countryCode: z.string() }))
     .query(async ({ input }) => {
       const db = requireDb();
-      return await db.query.hiringCompliance.findFirst({
-        where: eq(hiringCompliance.countryCode, input.countryCode),
-      });
+      const rows = await db
+        .select()
+        .from(hiringCompliance)
+        .where(eq(hiringCompliance.countryCode, input.countryCode));
+      return rows[0] || null;
     }),
 
-  /** List all countries that have compliance data */
-  listComplianceCountries: userProcedure.query(async () => {
-    const db = requireDb();
-    const rows = await db
-      .select({ countryCode: hiringCompliance.countryCode })
-      .from(hiringCompliance);
-    return rows.map((r) => r.countryCode);
-  }),
-
-  /** CMS: List all compliance records */
-  adminListCompliance: adminProcedure.query(async () => {
-    const db = requireDb();
-    return await db
-      .select()
-      .from(hiringCompliance)
-      .orderBy(asc(hiringCompliance.countryCode));
-  }),
-
-  /** CMS: Upsert compliance data */
-  upsertCompliance: adminProcedure
+  /** CMS: Create a new compliance record */
+  createCompliance: adminProcedure
     .input(
       z.object({
-        id: z.number().optional(),
         countryCode: z.string(),
         probationRulesEn: z.string().optional(),
         probationRulesZh: z.string().optional(),
@@ -260,17 +242,6 @@ export const toolkitEnhancedRouter = router({
     .mutation(async ({ input }) => {
       const db = requireDb();
       const now = new Date();
-      if (input.id) {
-        await db
-          .update(hiringCompliance)
-          .set({
-            ...input,
-            lastVerifiedAt: now,
-            updatedAt: now,
-          })
-          .where(eq(hiringCompliance.id, input.id));
-        return { id: input.id };
-      }
       const [res] = await db
         .insert(hiringCompliance)
         .values({
@@ -282,12 +253,59 @@ export const toolkitEnhancedRouter = router({
       return res;
     }),
 
+  /** CMS: Update an existing compliance record */
+  updateCompliance: adminProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        countryCode: z.string().optional(),
+        probationRulesEn: z.string().optional(),
+        probationRulesZh: z.string().optional(),
+        noticePeriodRulesEn: z.string().optional(),
+        noticePeriodRulesZh: z.string().optional(),
+        backgroundCheckRulesEn: z.string().optional(),
+        backgroundCheckRulesZh: z.string().optional(),
+        severanceRulesEn: z.string().optional(),
+        severanceRulesZh: z.string().optional(),
+        nonCompeteRulesEn: z.string().optional(),
+        nonCompeteRulesZh: z.string().optional(),
+        workPermitRulesEn: z.string().optional(),
+        workPermitRulesZh: z.string().optional(),
+        additionalNotesEn: z.string().optional(),
+        additionalNotesZh: z.string().optional(),
+        source: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = requireDb();
+      const now = new Date();
+      const { id, ...data } = input;
+      await db
+        .update(hiringCompliance)
+        .set({
+          ...data,
+          lastVerifiedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(hiringCompliance.id, id));
+      return { id };
+    }),
+
+  /** CMS: Delete a compliance record */
+  deleteCompliance: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = requireDb();
+      await db.delete(hiringCompliance).where(eq(hiringCompliance.id, input.id));
+      return { success: true };
+    }),
+
   // ═══════════════════════════════════════════════════════════════════════════
   // 3. DOCUMENT TEMPLATES
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /** List templates by country */
-  listTemplates: userProcedure
+  /** List templates by country — used by toolkit pages */
+  getDocumentTemplates: userProcedure
     .input(
       z.object({
         countryCode: z.string().optional(),
@@ -313,43 +331,10 @@ export const toolkitEnhancedRouter = router({
         .orderBy(asc(documentTemplates.countryCode), desc(documentTemplates.createdAt));
     }),
 
-  /** List all countries that have templates */
-  listTemplateCountries: userProcedure.query(async () => {
-    const db = requireDb();
-    const rows = await db
-      .selectDistinct({ countryCode: documentTemplates.countryCode })
-      .from(documentTemplates)
-      .where(eq(documentTemplates.isActive, true));
-    return rows.map((r) => r.countryCode);
-  }),
-
-  /** CMS: List all templates (including inactive) */
-  adminListTemplates: adminProcedure
+  /** CMS: Create a new template record */
+  createTemplate: adminProcedure
     .input(
       z.object({
-        countryCode: z.string().optional(),
-      }).optional()
-    )
-    .query(async ({ input }) => {
-      const db = requireDb();
-      if (input?.countryCode) {
-        return await db
-          .select()
-          .from(documentTemplates)
-          .where(eq(documentTemplates.countryCode, input.countryCode))
-          .orderBy(desc(documentTemplates.createdAt));
-      }
-      return await db
-        .select()
-        .from(documentTemplates)
-        .orderBy(asc(documentTemplates.countryCode), desc(documentTemplates.createdAt));
-    }),
-
-  /** CMS: Upsert a template record */
-  upsertTemplate: adminProcedure
-    .input(
-      z.object({
-        id: z.number().optional(),
         countryCode: z.string(),
         documentType: z.enum([
           "employment_contract", "offer_letter", "nda",
@@ -371,17 +356,6 @@ export const toolkitEnhancedRouter = router({
     .mutation(async ({ input }) => {
       const db = requireDb();
       const now = new Date();
-      if (input.id) {
-        await db
-          .update(documentTemplates)
-          .set({
-            ...input,
-            lastVerifiedAt: now,
-            updatedAt: now,
-          })
-          .where(eq(documentTemplates.id, input.id));
-        return { id: input.id };
-      }
       const [res] = await db
         .insert(documentTemplates)
         .values({
@@ -391,6 +365,44 @@ export const toolkitEnhancedRouter = router({
         })
         .returning({ id: documentTemplates.id });
       return res;
+    }),
+
+  /** CMS: Update an existing template record */
+  updateTemplate: adminProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        countryCode: z.string().optional(),
+        documentType: z.enum([
+          "employment_contract", "offer_letter", "nda",
+          "termination_letter", "employee_handbook", "other",
+        ]).optional(),
+        titleEn: z.string().min(1).optional(),
+        titleZh: z.string().min(1).optional(),
+        descriptionEn: z.string().optional(),
+        descriptionZh: z.string().optional(),
+        fileUrl: z.string().min(1).optional(),
+        fileName: z.string().min(1).optional(),
+        fileSize: z.number().optional(),
+        mimeType: z.string().optional(),
+        version: z.string().optional(),
+        source: z.string().optional(),
+        isActive: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = requireDb();
+      const now = new Date();
+      const { id, ...data } = input;
+      await db
+        .update(documentTemplates)
+        .set({
+          ...data,
+          lastVerifiedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(documentTemplates.id, id));
+      return { id };
     }),
 
   /** CMS: Delete a template */
@@ -403,7 +415,7 @@ export const toolkitEnhancedRouter = router({
     }),
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // 4. START DATE PREDICTOR
+  // 4. START DATE PREDICTOR (mutation — frontend uses useMutation)
   // ═══════════════════════════════════════════════════════════════════════════
 
   /** Predict the earliest realistic start date */
@@ -416,7 +428,7 @@ export const toolkitEnhancedRouter = router({
         customNoticePeriodDays: z.number().optional(), // override default
       })
     )
-    .query(async ({ input }) => {
+    .mutation(async ({ input }) => {
       const db = requireDb();
 
       // 1. Get country config
@@ -434,7 +446,7 @@ export const toolkitEnhancedRouter = router({
       const resignDate = new Date(input.resignationDate);
       const year = resignDate.getFullYear();
       const holidayRows = await db
-        .select({ holidayDate: publicHolidays.holidayDate })
+        .select({ holidayDate: publicHolidays.holidayDate, holidayName: publicHolidays.holidayName, localName: publicHolidays.localName })
         .from(publicHolidays)
         .where(
           and(
@@ -470,7 +482,7 @@ export const toolkitEnhancedRouter = router({
         .split("T")[0];
       const holidaysInRange = holidayRows
         .filter((h) => h.holidayDate >= rangeStart && h.holidayDate <= rangeEnd)
-        .map((h) => h.holidayDate);
+        .map((h) => ({ date: h.holidayDate, name: h.holidayName, localName: h.localName }));
 
       return {
         countryCode: input.countryCode,
@@ -490,8 +502,8 @@ export const toolkitEnhancedRouter = router({
   // 5. ENHANCED SALARY BENCHMARK
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /** List benchmarks with multi-dimension filters */
-  listBenchmarks: userProcedure
+  /** List benchmarks with multi-dimension filters — used by toolkit pages */
+  getSalaryBenchmarks: userProcedure
     .input(
       z.object({
         countryCode: z.string(),
@@ -566,21 +578,12 @@ export const toolkitEnhancedRouter = router({
       return rows.map((r) => r.category);
     }),
 
-  /** List all countries that have benchmark data */
-  listBenchmarkCountries: userProcedure.query(async () => {
-    const db = requireDb();
-    const rows = await db
-      .selectDistinct({ countryCode: salaryBenchmarks.countryCode })
-      .from(salaryBenchmarks);
-    return rows.map((r) => r.countryCode);
-  }),
-
   // ═══════════════════════════════════════════════════════════════════════════
   // 6. SHARED: Countries list for toolkit dropdowns
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /** List all active countries with key metadata */
-  listCountries: userProcedure.query(async () => {
+  /** List all active countries with key metadata — used by all toolkit pages */
+  getActiveCountries: userProcedure.query(async () => {
     const db = requireDb();
     return await db
       .select({
@@ -601,6 +604,7 @@ export const toolkitEnhancedRouter = router({
   // ═══════════════════════════════════════════════════════════════════════════
   // 7. PROPOSAL: Generate combined PDF from cart items
   // ═══════════════════════════════════════════════════════════════════════════
+
   /** Generate a combined Proposal PDF from selected toolkit sections */
   generateProposal: userProcedure
     .input(
@@ -620,7 +624,7 @@ export const toolkitEnhancedRouter = router({
       const db = requireDb();
 
       // Resolve country names
-      const countryCodes = [...new Set(input.sections.map((s) => s.countryCode))];
+      const countryCodes = Array.from(new Set(input.sections.map((s) => s.countryCode)));
       const countries = await db
         .select({ countryCode: countriesConfig.countryCode, countryName: countriesConfig.countryName })
         .from(countriesConfig)
@@ -662,8 +666,14 @@ export const toolkitEnhancedRouter = router({
               .where(eq(hiringCompliance.countryCode, section.countryCode))
               .then((rows) => rows[0]);
             if (row) {
-              // Transform compliance row into metric items for PDF
-              const metrics: any[] = [];
+              const metrics: Array<{
+                metricNameEn: string;
+                metricNameZh: string;
+                metricValueEn: string | null;
+                metricValueZh: string | null;
+                riskLevel: string;
+                category: string;
+              }> = [];
               if (row.probationRulesEn) metrics.push({ metricNameEn: "Probation Period", metricNameZh: "试用期", metricValueEn: row.probationRulesEn, metricValueZh: row.probationRulesZh, riskLevel: "low", category: "probation" });
               if (row.noticePeriodRulesEn) metrics.push({ metricNameEn: "Notice Period", metricNameZh: "通知期", metricValueEn: row.noticePeriodRulesEn, metricValueZh: row.noticePeriodRulesZh, riskLevel: "medium", category: "notice" });
               if (row.backgroundCheckRulesEn) metrics.push({ metricNameEn: "Background Check", metricNameZh: "背景调查", metricValueEn: row.backgroundCheckRulesEn, metricValueZh: row.backgroundCheckRulesZh, riskLevel: "medium", category: "background_check" });
@@ -683,17 +693,18 @@ export const toolkitEnhancedRouter = router({
             const rows = await db
               .select()
               .from(salaryBenchmarks)
-              .where(eq(salaryBenchmarks.countryCode, section.countryCode));
+              .where(eq(salaryBenchmarks.countryCode, section.countryCode))
+              .orderBy(asc(salaryBenchmarks.jobCategory), asc(salaryBenchmarks.seniorityLevel));
             proposalSections.push({
               type: "salary",
               country: countryName,
               countryCode: section.countryCode,
               data: rows.map((r) => ({
                 jobTitle: r.jobTitle,
-                level: r.level,
-                p25: r.p25,
-                p50: r.p50,
-                p75: r.p75,
+                seniorityLevel: r.seniorityLevel,
+                salaryP25: r.salaryP25,
+                salaryP50: r.salaryP50,
+                salaryP75: r.salaryP75,
                 currency: r.currency,
               })),
             });
@@ -710,25 +721,30 @@ export const toolkitEnhancedRouter = router({
             const eorOnboardingDays = 10;
             const today = new Date();
 
-            // Fetch holidays
-            const rangeEnd = new Date(today);
-            rangeEnd.setDate(rangeEnd.getDate() + noticePeriodDays + eorOnboardingDays + 30);
-            const holidays = await db
-              .select()
+            // Fetch holidays using correct column names
+            const year = today.getFullYear();
+            const holidayRowsForProposal = await db
+              .select({ holidayDate: publicHolidays.holidayDate, holidayName: publicHolidays.holidayName, localName: publicHolidays.localName })
               .from(publicHolidays)
               .where(
                 and(
                   eq(publicHolidays.countryCode, section.countryCode),
-                  sql`${publicHolidays.date} >= ${today.toISOString().split("T")[0]}`,
-                  sql`${publicHolidays.date} <= ${rangeEnd.toISOString().split("T")[0]}`
+                  inArray(publicHolidays.year, [year, year + 1])
                 )
               );
-            const holidaySet = new Set(holidays.map((h) => h.date));
+            const holidaySetForProposal = new Set(holidayRowsForProposal.map((h) => h.holidayDate));
 
             // Calculate: notice period (business days) + EOR onboarding (business days)
-            const afterNotice = addBusinessDays(today, noticePeriodDays, holidaySet, workingDaysPerWeek);
-            const candidateDate = addBusinessDays(afterNotice, eorOnboardingDays, holidaySet, workingDaysPerWeek);
-            const startDate = getNextBusinessDay(candidateDate, holidaySet, workingDaysPerWeek);
+            const afterNotice = addBusinessDays(today, noticePeriodDays, holidaySetForProposal, workingDaysPerWeek);
+            const candidateDate = addBusinessDays(afterNotice, eorOnboardingDays, holidaySetForProposal, workingDaysPerWeek);
+            const startDate = getNextBusinessDay(candidateDate, holidaySetForProposal, workingDaysPerWeek);
+
+            // Filter holidays in range
+            const rangeStartStr = today.toISOString().split("T")[0];
+            const rangeEndStr = new Date(startDate.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+            const holidaysInRange = holidayRowsForProposal
+              .filter((h) => h.holidayDate >= rangeStartStr && h.holidayDate <= rangeEndStr)
+              .map((h) => `${h.holidayDate} (${h.localName || h.holidayName})`);
 
             proposalSections.push({
               type: "start_date",
@@ -738,7 +754,7 @@ export const toolkitEnhancedRouter = router({
                 countryName,
                 noticePeriodDays,
                 eorOnboardingDays,
-                holidaysInRange: holidays.map((h) => `${h.date} (${h.localName || h.name})`),
+                holidaysInRange,
                 earliestStartDate: startDate.toISOString().split("T")[0],
               }],
             });
@@ -749,7 +765,7 @@ export const toolkitEnhancedRouter = router({
               .select()
               .from(documentTemplates)
               .where(and(eq(documentTemplates.countryCode, section.countryCode), eq(documentTemplates.isActive, true)))
-              .orderBy(asc(documentTemplates.sortOrder));
+              .orderBy(asc(documentTemplates.countryCode), desc(documentTemplates.createdAt));
             proposalSections.push({
               type: "templates",
               country: countryName,
@@ -757,8 +773,8 @@ export const toolkitEnhancedRouter = router({
               data: rows.map((r) => ({
                 titleEn: r.titleEn,
                 titleZh: r.titleZh,
-                templateType: r.templateType,
-                fileFormat: r.fileFormat,
+                documentType: r.documentType,
+                fileName: r.fileName,
               })),
             });
             break;

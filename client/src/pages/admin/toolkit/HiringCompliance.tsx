@@ -1,6 +1,8 @@
 /**
  * Hiring Compliance Cheat Sheet
  * Quick reference for key hiring compliance metrics by country.
+ * Backend returns a single flat record per country with fields like
+ * probationRulesEn, noticePeriodRulesEn, etc.
  */
 
 import { useState } from "react";
@@ -11,66 +13,63 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ShieldCheck, Plus, Info, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
+import { ShieldCheck, Plus, Info, AlertTriangle, FileText } from "lucide-react";
 import { toast } from "sonner";
+import { AddToProposalButton } from "@/components/AddToProposalButton";
+
+interface ComplianceSection {
+  key: string;
+  labelKey: string;
+  icon: string;
+  riskLevel: "low" | "medium" | "high";
+  enField: string;
+  zhField: string;
+}
+
+const COMPLIANCE_SECTIONS: ComplianceSection[] = [
+  { key: "probation", labelKey: "compliance.probation", icon: "📋", riskLevel: "low", enField: "probationRulesEn", zhField: "probationRulesZh" },
+  { key: "notice_period", labelKey: "compliance.notice_period", icon: "⏰", riskLevel: "medium", enField: "noticePeriodRulesEn", zhField: "noticePeriodRulesZh" },
+  { key: "background_check", labelKey: "compliance.background_check", icon: "🔍", riskLevel: "medium", enField: "backgroundCheckRulesEn", zhField: "backgroundCheckRulesZh" },
+  { key: "severance", labelKey: "compliance.severance", icon: "💰", riskLevel: "high", enField: "severanceRulesEn", zhField: "severanceRulesZh" },
+  { key: "non_compete", labelKey: "compliance.non_compete", icon: "🚫", riskLevel: "medium", enField: "nonCompeteRulesEn", zhField: "nonCompeteRulesZh" },
+  { key: "work_permit", labelKey: "compliance.work_permit", icon: "🛂", riskLevel: "high", enField: "workPermitRulesEn", zhField: "workPermitRulesZh" },
+  { key: "additional", labelKey: "compliance.additional_notes", icon: "📝", riskLevel: "low", enField: "additionalNotesEn", zhField: "additionalNotesZh" },
+];
 
 export default function HiringCompliance() {
-  const { t, language } = useI18n();
+  const { t, locale: language } = useI18n();
   const [countryCode, setCountryCode] = useState("");
 
   const { data: countries } = trpc.toolkitEnhanced.getActiveCountries.useQuery();
-  const { data: complianceItems, isLoading } = trpc.toolkitEnhanced.getComplianceByCountry.useQuery(
+  const { data: complianceData, isLoading } = trpc.toolkitEnhanced.getComplianceByCountry.useQuery(
     { countryCode },
     { enabled: !!countryCode }
   );
 
   const selectedCountry = countries?.find((c: any) => c.countryCode === countryCode);
 
-  const handleAddToProposal = () => {
-    if (!complianceItems?.length) return;
-    const item = {
-      type: "compliance" as const,
-      country: selectedCountry?.countryName || countryCode,
-      countryCode,
-      data: complianceItems,
-    };
-    const existing = JSON.parse(localStorage.getItem("proposalCart") || "[]");
-    existing.push(item);
-    localStorage.setItem("proposalCart", JSON.stringify(existing));
-    toast.success(t("compliance.added_to_proposal"));
-  };
 
-  const getRiskBadge = (level: string | null) => {
+
+  const getRiskBadge = (level: string) => {
     switch (level) {
       case "high":
-        return <Badge variant="destructive" className="flex items-center gap-1"><AlertTriangle className="h-3 w-3" />{t("compliance.high_risk")}</Badge>;
+        return <Badge variant="destructive" className="flex items-center gap-1 text-xs"><AlertTriangle className="h-3 w-3" />{t("compliance.high_risk")}</Badge>;
       case "medium":
-        return <Badge variant="outline" className="flex items-center gap-1 border-orange-400 text-orange-600"><AlertTriangle className="h-3 w-3" />{t("compliance.medium_risk")}</Badge>;
+        return <Badge variant="outline" className="flex items-center gap-1 border-orange-400 text-orange-600 text-xs"><AlertTriangle className="h-3 w-3" />{t("compliance.medium_risk")}</Badge>;
       case "low":
-        return <Badge variant="secondary" className="flex items-center gap-1 text-green-600"><CheckCircle className="h-3 w-3" />{t("compliance.low_risk")}</Badge>;
+        return <Badge variant="secondary" className="text-xs">{t("compliance.low_risk")}</Badge>;
       default:
-        return <Badge variant="outline">—</Badge>;
+        return null;
     }
   };
 
-  // Group by category
-  const grouped = complianceItems?.reduce((acc: Record<string, any[]>, item: any) => {
-    const cat = item.category || "general";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(item);
-    return acc;
-  }, {} as Record<string, any[]>) || {};
-
-  const categoryLabels: Record<string, string> = {
-    probation: t("compliance.cat_probation"),
-    notice_period: t("compliance.cat_notice"),
-    termination: t("compliance.cat_termination"),
-    background_check: t("compliance.cat_background"),
-    working_hours: t("compliance.cat_working_hours"),
-    leave: t("compliance.cat_leave"),
-    general: t("compliance.cat_general"),
-  };
+  // Filter sections that have data
+  const activeSections = complianceData
+    ? COMPLIANCE_SECTIONS.filter((s) => {
+        const val = (complianceData as any)[s.enField] || (complianceData as any)[s.zhField];
+        return val && val.trim().length > 0;
+      })
+    : [];
 
   return (
     <Layout title={t("compliance.title")}>
@@ -84,11 +83,12 @@ export default function HiringCompliance() {
             </h1>
             <p className="text-muted-foreground mt-1">{t("compliance.subtitle")}</p>
           </div>
-          {complianceItems?.length ? (
-            <Button variant="outline" onClick={handleAddToProposal}>
-              <Plus className="mr-2 h-4 w-4" />
-              {t("compliance.add_to_proposal")}
-            </Button>
+          {complianceData && selectedCountry ? (
+            <AddToProposalButton
+              type="compliance"
+              countryCode={countryCode}
+              countryName={selectedCountry.countryName}
+            />
           ) : null}
         </div>
 
@@ -96,7 +96,7 @@ export default function HiringCompliance() {
         <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-md">
           <CardContent className="pt-6">
             <div className="max-w-sm">
-              <label className="text-sm font-medium mb-2 block">{t("compliance.select_country")}</label>
+              <label className="text-sm font-medium mb-2 block">{t("compliance.country_label")}</label>
               <Select value={countryCode} onValueChange={setCountryCode}>
                 <SelectTrigger>
                   <SelectValue placeholder={t("compliance.country_placeholder")} />
@@ -113,56 +113,57 @@ export default function HiringCompliance() {
           </CardContent>
         </Card>
 
-        {/* Compliance Cards by Category */}
-        {Object.entries(grouped).map(([category, items]) => (
-          <Card key={category} className="border-0 shadow-lg bg-white/90 backdrop-blur-md">
-            <CardHeader>
-              <CardTitle className="text-lg">
-                {categoryLabels[category] || category}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[200px]">{t("compliance.metric")}</TableHead>
-                    <TableHead>{t("compliance.value")}</TableHead>
-                    <TableHead className="w-[120px]">{t("compliance.risk_level")}</TableHead>
-                    <TableHead>{t("compliance.notes")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(items as any[]).map((item: any) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">
-                        {language === "zh" ? item.metricNameZh : item.metricNameEn}
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-semibold">
-                          {language === "zh" ? item.metricValueZh : item.metricValueEn}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {getRiskBadge(item.riskLevel)}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground max-w-xs">
-                        {language === "zh" ? item.notesZh : item.notesEn}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+        {/* Compliance Cards */}
+        {countryCode && complianceData && activeSections.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {activeSections.map((section) => {
+              const content = language === "zh"
+                ? (complianceData as any)[section.zhField] || (complianceData as any)[section.enField]
+                : (complianceData as any)[section.enField] || (complianceData as any)[section.zhField];
+              return (
+                <Card key={section.key} className="border-0 shadow-lg bg-white/90 backdrop-blur-md">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <span className="text-lg">{section.icon}</span>
+                        {t(section.labelKey)}
+                      </CardTitle>
+                      {getRiskBadge(section.riskLevel)}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                      {content}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Empty State */}
+        {countryCode && !isLoading && !complianceData && (
+          <Card className="border-0 shadow-lg bg-white/90 backdrop-blur-md">
+            <CardContent className="py-12 text-center text-muted-foreground">
+              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>{t("compliance.no_data")}</p>
             </CardContent>
           </Card>
-        ))}
+        )}
 
-        {/* Disclaimer */}
-        {complianceItems?.length ? (
+        {/* Source Info */}
+        {complianceData && (
           <div className="bg-muted/50 p-3 rounded-lg flex gap-2 text-xs text-muted-foreground">
             <Info className="w-4 h-4 flex-shrink-0" />
-            <p>{t("compliance.disclaimer")}</p>
+            <div className="space-y-1">
+              <p>{t("compliance.source")}: <Badge variant="outline" className="text-xs ml-1">{(complianceData as any).source || "ai_generated"}</Badge></p>
+              {(complianceData as any).lastVerifiedAt && (
+                <p>{t("compliance.last_verified")}: {new Date((complianceData as any).lastVerifiedAt).toLocaleDateString()}</p>
+              )}
+            </div>
           </div>
-        ) : null}
+        )}
       </div>
     </Layout>
   );
