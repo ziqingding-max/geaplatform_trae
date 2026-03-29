@@ -1977,7 +1977,151 @@ export type LeadChangeLog = typeof leadChangeLogs.$inferSelect;
 export type InsertLeadChangeLog = typeof leadChangeLogs.$inferInsert;
 
 // ============================================================================
-// 21. AOR SERVICES & WORKER PORTAL
+// 21. HEADHUNTER TOOLKIT
+// ============================================================================
+
+/**
+ * Global Benefits – stores statutory and customary benefits per country.
+ * Each row represents one benefit item (e.g. "13th Month Pay" in PH).
+ */
+export const globalBenefits = pgTable(
+  "global_benefits",
+  {
+    id: serial("id").primaryKey(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull(),
+    benefitType: text("benefitType", { enum: ["statutory", "customary"] }).notNull(),
+    category: text("category", { enum: [
+      "social_security",
+      "health_insurance",
+      "pension",
+      "paid_leave",
+      "parental",
+      "housing",
+      "meal_transport",
+      "bonus",
+      "insurance",
+      "equity",
+      "wellness",
+      "education",
+      "other",
+    ] }).notNull(),
+    nameEn: varchar("nameEn", { length: 200 }).notNull(),
+    nameZh: varchar("nameZh", { length: 200 }).notNull(),
+    descriptionEn: text("descriptionEn").notNull(),
+    descriptionZh: text("descriptionZh").notNull(),
+    /** Employer cost indication, e.g. "8.33% of base salary" or "~500 USD/year" */
+    costIndication: text("costIndication"),
+    /** Client-facing pitch card text in English */
+    pitchCardEn: text("pitchCardEn"),
+    /** Client-facing pitch card text in Chinese */
+    pitchCardZh: text("pitchCardZh"),
+    source: text("source").default("ai_generated").notNull(),
+    lastVerifiedAt: timestamp("lastVerifiedAt", { withTimezone: true, mode: "date" }),
+    isActive: boolean("isActive").default(true).notNull(),
+    sortOrder: integer("sortOrder").default(0).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    gbCountryIdx: index("gb_country_idx").on(table.countryCode),
+    gbTypeIdx: index("gb_type_idx").on(table.benefitType),
+  })
+);
+
+export type GlobalBenefit = typeof globalBenefits.$inferSelect;
+export type InsertGlobalBenefit = typeof globalBenefits.$inferInsert;
+
+/**
+ * Hiring Compliance – stores key compliance indicators per country
+ * that headhunters need when advising clients.
+ */
+export const hiringCompliance = pgTable(
+  "hiring_compliance",
+  {
+    id: serial("id").primaryKey(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull().unique(),
+    /** Probation rules (markdown) */
+    probationRulesEn: text("probationRulesEn"),
+    probationRulesZh: text("probationRulesZh"),
+    /** Notice period rules (markdown) */
+    noticePeriodRulesEn: text("noticePeriodRulesEn"),
+    noticePeriodRulesZh: text("noticePeriodRulesZh"),
+    /** Background check legality & restrictions */
+    backgroundCheckRulesEn: text("backgroundCheckRulesEn"),
+    backgroundCheckRulesZh: text("backgroundCheckRulesZh"),
+    /** Severance / termination pay rules */
+    severanceRulesEn: text("severanceRulesEn"),
+    severanceRulesZh: text("severanceRulesZh"),
+    /** Non-compete enforceability */
+    nonCompeteRulesEn: text("nonCompeteRulesEn"),
+    nonCompeteRulesZh: text("nonCompeteRulesZh"),
+    /** Work permit / visa requirements for foreign hires */
+    workPermitRulesEn: text("workPermitRulesEn"),
+    workPermitRulesZh: text("workPermitRulesZh"),
+    /** Any additional compliance notes */
+    additionalNotesEn: text("additionalNotesEn"),
+    additionalNotesZh: text("additionalNotesZh"),
+    source: text("source").default("ai_generated").notNull(),
+    lastVerifiedAt: timestamp("lastVerifiedAt", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    hcCountryIdx: uniqueIndex("hc_country_idx").on(table.countryCode),
+  })
+);
+
+export type HiringCompliance = typeof hiringCompliance.$inferSelect;
+export type InsertHiringCompliance = typeof hiringCompliance.$inferInsert;
+
+/**
+ * Document Templates – metadata for downloadable template files
+ * (actual files stored in S3, referenced by fileUrl).
+ */
+export const documentTemplates = pgTable(
+  "document_templates",
+  {
+    id: serial("id").primaryKey(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull(),
+    documentType: text("documentType", { enum: [
+      "employment_contract",
+      "offer_letter",
+      "nda",
+      "termination_letter",
+      "employee_handbook",
+      "other",
+    ] }).notNull(),
+    titleEn: varchar("titleEn", { length: 300 }).notNull(),
+    titleZh: varchar("titleZh", { length: 300 }).notNull(),
+    descriptionEn: text("descriptionEn"),
+    descriptionZh: text("descriptionZh"),
+    /** S3 file URL */
+    fileUrl: text("fileUrl").notNull(),
+    /** Original file name for download */
+    fileName: varchar("fileName", { length: 500 }).notNull(),
+    /** File size in bytes */
+    fileSize: integer("fileSize"),
+    /** MIME type */
+    mimeType: varchar("mimeType", { length: 100 }),
+    /** Template version, e.g. "2026-Q1" */
+    version: varchar("version", { length: 20 }).default("1.0"),
+    source: text("source").default("ai_generated").notNull(),
+    lastVerifiedAt: timestamp("lastVerifiedAt", { withTimezone: true, mode: "date" }),
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    dtCountryIdx: index("dt_country_idx").on(table.countryCode),
+    dtTypeIdx: index("dt_type_idx").on(table.documentType),
+  })
+);
+
+export type DocumentTemplate = typeof documentTemplates.$inferSelect;
+export type InsertDocumentTemplate = typeof documentTemplates.$inferInsert;
+
+// ============================================================================
+// 22. AOR SERVICES & WORKER PORTAL
 // ============================================================================
 
 export {

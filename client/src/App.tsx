@@ -43,6 +43,12 @@ import CountryGuideEditor from "@/pages/admin/CountryGuideEditor";
 import AdminCountryGuide from "@/pages/admin/AdminCountryGuide";
 import AdminCostSimulator from "@/pages/admin/AdminCostSimulator";
 import AdminKnowledgeBaseBrowse from "@/pages/admin/AdminKnowledgeBase";
+import StartDatePredictor from "@/pages/admin/toolkit/StartDatePredictor";
+import GlobalBenefits from "@/pages/admin/toolkit/GlobalBenefits";
+import SalaryBenchmark from "@/pages/admin/toolkit/SalaryBenchmark";
+import HiringCompliance from "@/pages/admin/toolkit/HiringCompliance";
+import DocumentTemplates from "@/pages/admin/toolkit/DocumentTemplates";
+import ToolkitCms from "@/pages/admin/toolkit/ToolkitCms";
 
 // Portal pages (lazy loaded to keep admin bundle separate)
 import { lazy, Suspense } from "react";
@@ -265,6 +271,13 @@ function AdminRouter() {
       <Route path="/admin/country-guide" component={AdminCountryGuide} />
       <Route path="/admin/cost-simulator" component={AdminCostSimulator} />
       <Route path="/admin/knowledge-base" component={AdminKnowledgeBaseBrowse} />
+      {/* Headhunter Toolkit Enhanced */}
+      <Route path="/admin/toolkit/start-date" component={StartDatePredictor} />
+      <Route path="/admin/toolkit/benefits" component={GlobalBenefits} />
+      <Route path="/admin/toolkit/salary-benchmark" component={SalaryBenchmark} />
+      <Route path="/admin/toolkit/compliance" component={HiringCompliance} />
+      <Route path="/admin/toolkit/templates" component={DocumentTemplates} />
+      <Route path="/admin/system/toolkit-cms" component={ToolkitCms} />
       <Route path="/settings" component={Settings} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
