@@ -6,6 +6,8 @@
  */
 
 import { useState, useLayoutEffect, useRef, useEffect } from "react";
+import { ProposalCartProvider } from "../contexts/ProposalCartContext";
+import { ProposalCartDrawer } from "./ProposalCartDrawer";
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -418,6 +420,7 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
   );
 
   return (
+    <ProposalCartProvider>
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Desktop Sidebar */}
       <aside
@@ -579,6 +582,9 @@ export default function Layout({ children, title, breadcrumb }: LayoutProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Proposal Cart Floating Drawer */}
+      <ProposalCartDrawer />
     </div>
+    </ProposalCartProvider>
   );
 }
