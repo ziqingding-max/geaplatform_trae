@@ -117,6 +117,23 @@ const REQUIRED_TABLES: string[] = [
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+
+  // ── income_tax_rules ──
+  `CREATE TABLE IF NOT EXISTS "income_tax_rules" (
+    "id" SERIAL PRIMARY KEY,
+    "countryCode" VARCHAR(3) NOT NULL,
+    "taxYear" INTEGER NOT NULL,
+    "filingStatus" VARCHAR(50) NOT NULL DEFAULT 'individual',
+    "currency" VARCHAR(3) NOT NULL,
+    "standardDeductionAnnual" TEXT NOT NULL DEFAULT '0',
+    "taxBrackets" JSONB NOT NULL,
+    "socialSecurityDeductible" BOOLEAN NOT NULL DEFAULT TRUE,
+    "notes" TEXT,
+    "source" TEXT NOT NULL DEFAULT 'ai_generated',
+    "isActive" BOOLEAN NOT NULL DEFAULT TRUE,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
 ];
 
 /**
@@ -131,6 +148,8 @@ const REQUIRED_INDEXES: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS "hc_country_idx" ON "hiring_compliance" ("countryCode")`,
   `CREATE INDEX IF NOT EXISTS "dt_country_idx" ON "document_templates" ("countryCode")`,
   `CREATE INDEX IF NOT EXISTS "dt_type_idx" ON "document_templates" ("documentType")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "itr_country_year_idx" ON "income_tax_rules" ("countryCode", "taxYear", "filingStatus")`,
+  `CREATE INDEX IF NOT EXISTS "itr_country_idx" ON "income_tax_rules" ("countryCode")`,
 ];
 
 /**
