@@ -7,6 +7,7 @@ import { eq, and } from 'drizzle-orm';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { socialInsuranceRules } from '../server/seed/data/socialInsuranceRules';
+import { seedAllToolkitData, setDb as setToolkitDb } from './seedToolkitData';
 
 // Initialize DB connection
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -393,6 +394,10 @@ async function main() {
     await seedSocialInsurance();
     await seedBusinessData();
     await seedAIConfigs();
+
+    // Toolkit data: benefits, compliance, salary benchmarks, document templates, income tax rules
+    setToolkitDb(db);
+    await seedAllToolkitData();
     
     await verifyData();
     
