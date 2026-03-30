@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Loader2, Calculator, Info, ArrowDownUp } from "lucide-react";
+import { Loader2, Calculator, Info } from "lucide-react";
+import { toast } from "sonner";
 import { formatCurrency } from "@/lib/format";
 import Layout from "@/components/Layout";
 
@@ -29,10 +30,12 @@ export default function AdminCostSimulator() {
 
   const forwardMutation = trpc.calculation.calculateContributions.useMutation({
     onSuccess: (data) => setResult({ ...data, mode: "forward" }),
+    onError: (err) => toast.error(err.message || "Calculation failed"),
   });
 
   const reverseMutation = trpc.calculation.calculateReverse.useMutation({
     onSuccess: (data) => setResult({ ...data, mode: "reverse" }),
+    onError: (err) => toast.error(err.message || "Reverse calculation failed"),
   });
 
   const isPending = forwardMutation.isPending || reverseMutation.isPending;
@@ -94,7 +97,6 @@ export default function AdminCostSimulator() {
                     className="w-full"
                     onClick={() => { setCalcMode("net_to_gross"); setResult(null); setInputAmount(""); }}
                   >
-                    <ArrowDownUp className="mr-1 h-3 w-3" />
                     {t("cost_simulator.mode_net_to_gross")}
                   </Button>
                 </div>
