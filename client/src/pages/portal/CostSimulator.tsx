@@ -1,3 +1,8 @@
+/**
+ * Portal Cost Simulator — Calculate employer costs and social insurance contributions
+ * Supports both forward (Gross → Net) and reverse (Net → Gross) calculation modes.
+ * Uses portal tRPC (portalTrpc.toolkit.*).
+ */
 import { useState } from "react";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { useI18n } from "@/lib/i18n";
@@ -6,32 +11,53 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Loader2, Calculator, Info } from "lucide-react";
+import { Loader2, Calculator, Info, ArrowDownUp } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import PortalLayout from "@/components/PortalLayout";
+
+type CalcMode = "gross_to_net" | "net_to_gross";
 
 export default function CostSimulator() {
   const { t } = useI18n();
   const [countryCode, setCountryCode] = useState<string>("");
-  const [regionCode, setRegionCode] = useState<string>(""); // For China
-  const [salary, setSalary] = useState<string>("");
+  const [regionCode, setRegionCode] = useState<string>("");
+  const [inputAmount, setInputAmount] = useState<string>("");
+  const [calcMode, setCalcMode] = useState<CalcMode>("gross_to_net");
   const [result, setResult] = useState<any>(null);
 
   const { data: countries } = portalTrpc.toolkit.listCountries.useQuery();
-  const calculateMutation = portalTrpc.toolkit.calculateCost.useMutation({
-    onSuccess: (data) => setResult(data),
+
+  const forwardMutation = portalTrpc.toolkit.calculateCost.useMutation({
+    onSuccess: (data) => setResult({ ...data, mode: "forward" }),
   });
 
+  const reverseMutation = portalTrpc.toolkit.calculateCostReverse.useMutation({
+    onSuccess: (data) => setResult({ ...data, mode: "reverse" }),
+  });
+
+  const isPending = forwardMutation.isPending || reverseMutation.isPending;
+
   const handleCalculate = () => {
-    if (!countryCode || !salary) return;
-    calculateMutation.mutate({
-      countryCode,
-      salary: parseFloat(salary),
-      regionCode: regionCode || undefined,
-    });
+    if (!countryCode || !inputAmount) return;
+    setResult(null);
+
+    if (calcMode === "gross_to_net") {
+      forwardMutation.mutate({
+        countryCode,
+        salary: parseFloat(inputAmount),
+        regionCode: regionCode || undefined,
+      });
+    } else {
+      reverseMutation.mutate({
+        countryCode,
+        netPay: parseFloat(inputAmount),
+        regionCode: regionCode || undefined,
+      });
+    }
   };
 
   const selectedCountry = countries?.find(c => c.countryCode === countryCode);
+  const currency = result?.countryCode === "CN" ? "CNY" : selectedCountry?.localCurrency || "USD";
 
   return (
     <PortalLayout title={t("nav.costSimulator")}>
@@ -48,9 +74,35 @@ export default function CostSimulator() {
               <CardTitle>{t("cost_simulator.parameters_title")}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Calculation Mode Toggle */}
+              <div className="space-y-2">
+                <Label>{t("cost_simulator.calc_mode_label")}</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant={calcMode === "gross_to_net" ? "default" : "outline"}
+                    size="sm"
+                    className="w-full"
+                    onClick={() => { setCalcMode("gross_to_net"); setResult(null); setInputAmount(""); }}
+                  >
+                    {t("cost_simulator.mode_gross_to_net")}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={calcMode === "net_to_gross" ? "default" : "outline"}
+                    size="sm"
+                    className="w-full"
+                    onClick={() => { setCalcMode("net_to_gross"); setResult(null); setInputAmount(""); }}
+                  >
+                    <ArrowDownUp className="mr-1 h-3 w-3" />
+                    {t("cost_simulator.mode_net_to_gross")}
+                  </Button>
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <Label>{t("cost_simulator.country_label")}</Label>
-                <Select value={countryCode} onValueChange={setCountryCode}>
+                <Select value={countryCode} onValueChange={(v) => { setCountryCode(v); setRegionCode(""); setResult(null); }}>
                   <SelectTrigger>
                     <SelectValue placeholder={t("cost_simulator.country_placeholder")} />
                   </SelectTrigger>
@@ -85,21 +137,27 @@ export default function CostSimulator() {
               )}
 
               <div className="space-y-2">
-                <Label>{t("cost_simulator.salary_label", { currency: selectedCountry?.localCurrency || "USD" })}</Label>
-                <Input 
-                  type="number" 
-                  value={salary} 
-                  onChange={(e) => setSalary(e.target.value)} 
-                  placeholder={t("cost_simulator.salary_placeholder")}
+                <Label>
+                  {calcMode === "gross_to_net"
+                    ? t("cost_simulator.salary_label", { currency: selectedCountry?.localCurrency || "USD" })
+                    : t("cost_simulator.net_pay_label", { currency: selectedCountry?.localCurrency || "USD" })}
+                </Label>
+                <Input
+                  type="number"
+                  value={inputAmount}
+                  onChange={(e) => setInputAmount(e.target.value)}
+                  placeholder={calcMode === "gross_to_net"
+                    ? t("cost_simulator.salary_placeholder")
+                    : t("cost_simulator.net_pay_placeholder")}
                 />
               </div>
 
-              <Button 
-                onClick={handleCalculate} 
-                disabled={calculateMutation.isPending || !countryCode || !salary}
+              <Button
+                onClick={handleCalculate}
+                disabled={isPending || !countryCode || !inputAmount}
                 className="w-full"
               >
-                {calculateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calculator className="mr-2 h-4 w-4" />}
+                {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calculator className="mr-2 h-4 w-4" />}
                 {t("cost_simulator.calculate")}
               </Button>
             </CardContent>
@@ -111,24 +169,74 @@ export default function CostSimulator() {
               <CardHeader className="bg-primary/5 pb-4">
                 <CardTitle className="text-primary">{t("cost_simulator.total_employment_cost")}</CardTitle>
                 <div className="text-3xl font-bold mt-2">
-                  {formatCurrency(result.countryCode === "CN" ? "CNY" : selectedCountry?.localCurrency || "USD", parseFloat(result.totalCost))}
+                  {formatCurrency(currency, parseFloat(result.totalCost))}
                 </div>
                 <CardDescription>
                   {t("cost_simulator.base_plus_contributions")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-6 space-y-6">
+                {/* Waterfall Breakdown */}
                 <div className="space-y-2">
+                  {/* Gross Salary */}
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{t("cost_simulator.base_salary")}</span>
-                    <span className="font-medium">{formatCurrency(selectedCountry?.localCurrency, result.salary)}</span>
+                    <span className="text-muted-foreground">
+                      {t("cost_simulator.base_salary")}
+                      {result.mode === "reverse" && (
+                        <span className="ml-1 text-xs text-primary font-medium">({t("cost_simulator.calculated")})</span>
+                      )}
+                    </span>
+                    <span className="font-medium">{formatCurrency(currency, result.salary)}</span>
                   </div>
+
+                  {/* Employer Contributions */}
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">{t("cost_simulator.employer_contributions")}</span>
-                    <span className="font-medium text-destructive">+{formatCurrency(selectedCountry?.localCurrency, parseFloat(result.totalEmployer))}</span>
+                    <span className="font-medium text-destructive">+{formatCurrency(currency, parseFloat(result.totalEmployer))}</span>
+                  </div>
+
+                  {/* Employee Contributions */}
+                  {parseFloat(result.totalEmployee) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">{t("cost_simulator.employee_contributions")}</span>
+                      <span className="font-medium text-orange-600">-{formatCurrency(currency, parseFloat(result.totalEmployee))}</span>
+                    </div>
+                  )}
+
+                  {/* Income Tax */}
+                  {parseFloat(result.incomeTax) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">{t("cost_simulator.income_tax")}</span>
+                      <span className="font-medium text-orange-600">-{formatCurrency(currency, parseFloat(result.incomeTax))}</span>
+                    </div>
+                  )}
+
+                  {/* Divider */}
+                  <div className="border-t my-2" />
+
+                  {/* Net Pay */}
+                  <div className="flex justify-between text-sm font-semibold">
+                    <span className="text-foreground">
+                      {t("cost_simulator.net_pay")}
+                      {result.mode === "forward" && parseFloat(result.incomeTax) > 0 && (
+                        <span className="ml-1 text-xs text-primary font-medium">({t("cost_simulator.estimated")})</span>
+                      )}
+                    </span>
+                    <span className="text-primary">{formatCurrency(currency, parseFloat(result.netPay))}</span>
                   </div>
                 </div>
 
+                {/* Effective Tax Rate */}
+                {result.taxDetails && parseFloat(result.incomeTax) > 0 && (
+                  <div className="bg-blue-50 p-3 rounded-lg text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">{t("cost_simulator.effective_tax_rate")}</span>
+                      <span className="font-medium">{result.taxDetails.effectiveTaxRate}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Employer Contribution Breakdown */}
                 <div className="border-t pt-4">
                   <h4 className="font-semibold mb-3 text-sm">{t("cost_simulator.breakdown_title")}</h4>
                   <div className="space-y-2">
@@ -136,18 +244,34 @@ export default function CostSimulator() {
                       parseFloat(item.employerContribution) > 0 && (
                         <div key={item.itemKey} className="flex justify-between text-sm">
                           <span>{item.itemNameEn} <span className="text-xs text-muted-foreground">({item.employerRate})</span></span>
-                          <span>{formatCurrency(selectedCountry?.localCurrency, parseFloat(item.employerContribution))}</span>
+                          <span>{formatCurrency(currency, parseFloat(item.employerContribution))}</span>
                         </div>
                       )
                     ))}
                   </div>
                 </div>
 
+                {/* Employee Deduction Breakdown */}
+                {result.items.some((item: any) => parseFloat(item.employeeContribution) > 0) && (
+                  <div className="border-t pt-4">
+                    <h4 className="font-semibold mb-3 text-sm">{t("cost_simulator.employee_breakdown_title")}</h4>
+                    <div className="space-y-2">
+                      {result.items.map((item: any) => (
+                        parseFloat(item.employeeContribution) > 0 && (
+                          <div key={`emp-${item.itemKey}`} className="flex justify-between text-sm">
+                            <span>{item.itemNameEn} <span className="text-xs text-muted-foreground">({item.employeeRate})</span></span>
+                            <span>{formatCurrency(currency, parseFloat(item.employeeContribution))}</span>
+                          </div>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Disclaimer */}
                 <div className="bg-muted/50 p-3 rounded-lg flex gap-2 text-xs text-muted-foreground">
                   <Info className="w-4 h-4 flex-shrink-0" />
-                  <p>
-                    {t("cost_simulator.disclaimer")}
-                  </p>
+                  <p>{t("cost_simulator.disclaimer_enhanced")}</p>
                 </div>
               </CardContent>
             </Card>
