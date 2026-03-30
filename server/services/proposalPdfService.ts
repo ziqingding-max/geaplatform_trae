@@ -7,7 +7,9 @@
  * Reuses the existing htmlPdfService infrastructure (Puppeteer + branded templates).
  */
 import puppeteer from "puppeteer-core";
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 import { PDFDocument } from "pdf-lib";
 
@@ -166,7 +168,9 @@ const BASE_CSS = `
     flex: 1; display: flex; flex-direction: column; justify-content: center;
     padding: 30mm 24mm 30mm 24mm; margin-left: 8mm;
   }
-  .cover-logo { font-size: 28pt; font-weight: 700; color: ${BRAND.primary}; letter-spacing: 2pt; }
+  .cover-logo { margin-bottom: 2mm; }
+  .cover-logo img { height: 18mm; max-width: 70mm; object-fit: contain; display: block; }
+  .cover-logo-fallback { font-size: 28pt; font-weight: 700; color: ${BRAND.primary}; letter-spacing: 2pt; }
   .cover-divider { width: 50mm; height: 1mm; background: ${BRAND.gold}; margin: 8mm 0; border-radius: 1mm; }
   .cover-title { font-size: 22pt; font-weight: 700; color: ${BRAND.primary}; margin-bottom: 3mm; }
   .cover-subtitle { font-size: 14pt; font-weight: 400; color: ${BRAND.muted}; margin-bottom: 6mm; }
@@ -195,6 +199,7 @@ const BASE_CSS = `
   .badge-statutory { background: #dcfce7; color: #166534; }
   .badge-customary { background: #dbeafe; color: #1e40af; }
   .disclaimer { margin-top: 6mm; padding: 3mm; background: ${BRAND.bg}; border-left: 2pt solid ${BRAND.gold}; font-size: 8pt; color: ${BRAND.muted}; }
+  .cover-disclaimer { position: absolute; bottom: 16mm; left: 12mm; right: 12mm; padding: 3mm 4mm; background: ${BRAND.bg}; border-left: 2pt solid ${BRAND.gold}; font-size: 7pt; color: ${BRAND.muted}; line-height: 1.5; }
   .cost-summary { background: ${BRAND.bg}; border: 1pt solid ${BRAND.border}; border-radius: 2mm; padding: 4mm; margin: 4mm 0; }
   .cost-summary-row { display: flex; justify-content: space-between; padding: 1.5mm 2mm; }
   .cost-summary-row.total { border-top: 1pt solid ${BRAND.primary}; margin-top: 2mm; padding-top: 3mm; font-weight: 700; color: ${BRAND.primary}; font-size: 11pt; }
@@ -203,6 +208,25 @@ const BASE_CSS = `
   .about-section { margin-bottom: 6mm; }
   .about-section p { font-size: 9.5pt; line-height: 1.7; margin-bottom: 3mm; color: ${BRAND.text}; }
 `;
+
+// ─── Logo Helper ─────────────────────────────────────────────────────────────
+
+function loadLogoBase64(): string {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const candidates = [
+    path.resolve(__dirname, "../assets/gea-logo-horizontal-green.png"),
+    path.resolve(__dirname, "../../server/assets/gea-logo-horizontal-green.png"),
+    path.resolve(process.cwd(), "server/assets/gea-logo-horizontal-green.png"),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      const buf = readFileSync(p);
+      return `data:image/png;base64,${buf.toString("base64")}`;
+    }
+  }
+  return "";
+}
 
 // ─── Chromium Launcher ────────────────────────────────────────────────────────
 
@@ -304,15 +328,26 @@ function renderCompanyIntroPage(locale: string): string {
         : "From lightweight market entry targeting a single destination to regional hub models with unified settlement centers, we deliver customized solutions that best fit the flexible and diversified needs of Chinese enterprises going global."
       }</p>
     </div>
-
-    <h3>${isZh ? "我们的核心服务" : "Our Core Services"}</h3>
+  </div><div class="page">
+    <h2>${isZh ? "我们的核心服务" : "Our Core Services"}</h2>
     <table>
       <tr><th>${isZh ? "服务" : "Service"}</th><th>${isZh ? "说明" : "Description"}</th></tr>
-      <tr><td><strong>EOR</strong></td><td>${isZh ? "名义雇主服务 — 合规雇佣全球员工，无需设立海外实体" : "Employer of Record — Compliantly hire global employees without establishing overseas entities"}</td></tr>
-      <tr><td><strong>PEO</strong></td><td>${isZh ? "专业雇主组织 — 为已有海外实体的企业提供人力资源外包服务" : "Professional Employer Organization — HR outsourcing for companies with existing overseas entities"}</td></tr>
-      <tr><td><strong>Payroll</strong></td><td>${isZh ? "全球薪酬管理 — 多国薪资计算、发放与合规申报" : "Global Payroll Management — Multi-country salary calculation, disbursement, and compliance filing"}</td></tr>
-      <tr><td><strong>AOR</strong></td><td>${isZh ? "承包商代理 — 合规管理海外独立承包商" : "Agent of Record — Compliantly manage overseas independent contractors"}</td></tr>
-      <tr><td><strong>Recruitment</strong></td><td>${isZh ? "海外招聘 — 基于本地市场洞察的高端人才搜寻与猎聘" : "Overseas Recruitment — Premium talent search and headhunting based on local market insights"}</td></tr>
+      <tr><td><strong>EOR</strong><br/><span style="font-size:8pt;color:${BRAND.muted};">${isZh ? "名义雇主" : "Employer of Record"}</span></td><td>${isZh
+        ? "无需在海外设立法律实体，由 GEA 作为名义雇主，代表客户在目标国家合规雇佣员工。我们全面承担当地劳动法合规义务，包括劳动合同签署、薪酬发放、社保与税务申报、员工福利管理以及劳动关系的全生命周期管理，帮助企业快速、低风险地进入海外市场。"
+        : "GEA acts as the legal employer on behalf of the client in the target country, eliminating the need to establish a local entity. We assume full local labor law compliance obligations, including employment contract execution, payroll processing, social insurance and tax filing, employee benefits administration, and end-to-end employment lifecycle management — enabling rapid, low-risk market entry."
+      }</td></tr>
+      <tr><td><strong>AOR</strong><br/><span style="font-size:8pt;color:${BRAND.muted};">${isZh ? "承包商代理" : "Agent of Record"}</span></td><td>${isZh
+        ? "为企业合规管理海外独立承包商。GEA 负责承包商合同的起草与签署、合规性审查（防止劳动关系误分类风险）、付款结算与发票管理，以及当地税务合规申报，确保客户与承包商之间的合作关系符合目标国家的法律法规要求。"
+        : "Compliantly manage overseas independent contractors on behalf of the client. GEA handles contractor agreement drafting and execution, compliance review (mitigating misclassification risks), payment settlement and invoice management, and local tax compliance filing — ensuring the engagement between client and contractor fully meets the legal and regulatory requirements of the target country."
+      }</td></tr>
+      <tr><td><strong>MHS</strong><br/><span style="font-size:8pt;color:${BRAND.muted};">${isZh ? "人力资源托管" : "Managed HR Services"}</span></td><td>${isZh
+        ? "面向已在海外设立法律实体的企业，GEA 作为客户的外包人力资源部门，提供全套人力资源服务。服务范围涵盖薪酬计算与发放、劳动合同起草与管理、员工入职与离职全生命周期流程管理、社保与公积金缴纳、个税申报，以及日常人事行政支持，让企业专注于核心业务发展。"
+        : "For companies that have already established a legal entity overseas, GEA serves as the outsourced HR department, delivering comprehensive human resources services. Our scope covers payroll calculation and disbursement, employment contract drafting and management, full employee lifecycle administration (onboarding through offboarding), social insurance and provident fund contributions, individual income tax filing, and day-to-day HR administrative support — allowing businesses to focus on core operations."
+      }</td></tr>
+      <tr><td><strong>${isZh ? "猎头招聘" : "Recruitment"}</strong><br/><span style="font-size:8pt;color:${BRAND.muted};">${isZh ? "高端人才搜寻" : "Executive Search"}</span></td><td>${isZh
+        ? "依托 CGL Group 深厚的国际猎头经验和本地人才市场洞察，为出海企业提供高端人才搜寻与猎聘服务。我们覆盖从人才地图绘制、候选人筛选与评估、薪酬方案设计到入职辅导的全流程，帮助企业在目标市场快速组建核心团队。"
+        : "Leveraging CGL Group's deep international executive search expertise and local talent market insights, we provide premium talent search and headhunting services for enterprises expanding overseas. Our end-to-end coverage spans talent mapping, candidate screening and assessment, compensation package design, and onboarding coaching — helping businesses rapidly build core teams in target markets."
+      }</td></tr>
     </table>
   </div>`;
 }
@@ -558,6 +593,16 @@ export async function generateProposalPdf(data: ProposalData): Promise<Buffer> {
       <span class="cover-meta-value">${m.value}</span>
     </div>`).join("");
 
+  // Load logo as base64 for reliable Puppeteer rendering
+  const logoDataUri = loadLogoBase64();
+  const logoHtml = logoDataUri
+    ? `<div class="cover-logo"><img src="${logoDataUri}" alt="GEA" /></div>`
+    : `<div class="cover-logo-fallback">GEA</div>`;
+
+  const disclaimerText = isZh
+    ? "本报告中的数据仅供参考，不构成法律或税务建议。实际用工成本和合规要求可能因具体情况而异。建议在做出任何雇佣决策前咨询专业法律和税务顾问。所有数据已尽力确保准确性，但可能存在偏差，请以当地官方最新法规为准。"
+    : "The data in this report is for reference purposes only and does not constitute legal or tax advice. Actual employment costs and compliance requirements may vary depending on specific circumstances. We recommend consulting professional legal and tax advisors before making any employment decisions. All data has been prepared with best efforts for accuracy but may contain discrepancies; please refer to the latest local official regulations.";
+
   const coverHtml = `<!DOCTYPE html>
 <html lang="${locale}">
 <head><meta charset="UTF-8"><style>${BASE_CSS}</style></head>
@@ -566,15 +611,19 @@ export async function generateProposalPdf(data: ProposalData): Promise<Buffer> {
     <div class="cover-sidebar"></div>
     <div class="cover-corner"></div>
     <div class="cover-body">
-      <div class="cover-logo">GEA</div>
+      ${logoHtml}
       <div class="cover-divider"></div>
-      <div class="cover-title">${isZh ? "猎头工具包报告" : "Headhunter Toolkit Proposal"}</div>
-      <div class="cover-subtitle">${isZh ? "全球用工解决方案" : "Global Employment Solutions"}</div>
+      <div class="cover-title">${isZh ? "全球劳动力合规指南" : "Global Workforce Compliance Guide"}</div>
+      <div class="cover-subtitle">Global Employment Advisors</div>
       <div class="cover-date">${date}</div>
       <div class="cover-meta">${coverMetaHtml}</div>
     </div>
+    <div class="cover-disclaimer">
+      <strong>${isZh ? "免责声明" : "Disclaimer"}</strong><br/>
+      ${disclaimerText}
+    </div>
     <div class="cover-bottom-accent">
-      <span class="cover-bottom-text">Confidential &amp; Proprietary — Global Employment Advisors</span>
+      <span class="cover-bottom-text">Confidential &amp; Proprietary &mdash; Global Employment Advisors</span>
     </div>
   </div>
 </body>
@@ -642,18 +691,9 @@ export async function generateProposalPdf(data: ProposalData): Promise<Buffer> {
     }
   }
 
-  // Disclaimer page
-  contentPages += `<div class="page">
-    <div class="disclaimer">
-      <strong>${isZh ? "免责声明" : "Disclaimer"}</strong><br/>
-      ${isZh
-        ? "本报告中的数据仅供参考，不构成法律或税务建议。实际用工成本和合规要求可能因具体情况而异。建议在做出任何雇佣决策前咨询专业法律和税务顾问。数据来源标记为 AI Generated 的内容已尽力确保准确性，但可能存在偏差，请以当地官方最新法规为准。"
-        : "The data in this report is for reference purposes only and does not constitute legal or tax advice. Actual employment costs and compliance requirements may vary depending on specific circumstances. We recommend consulting professional legal and tax advisors before making any employment decisions. Data marked as AI Generated has been prepared with best efforts for accuracy but may contain discrepancies; please refer to the latest local official regulations."
-      }
-    </div>
-  </div>`;
+  // Disclaimer is now on the cover page — no separate disclaimer page needed
 
-  const headerTitle = isZh ? "GEA 猎头工具包报告" : "GEA Headhunter Toolkit Proposal";
+  const headerTitle = isZh ? "GEA 全球劳动力合规指南" : "GEA Global Workforce Compliance Guide";
   const headerTemplate = `
     <div style="width:100%;padding:4mm 16mm 2mm 16mm;display:flex;justify-content:space-between;align-items:center;border-bottom:0.5pt solid ${BRAND.border};font-family:'Inter',sans-serif;font-size:9pt;">
       <span style="font-size:11pt;font-weight:700;color:${BRAND.primary};">GEA</span>
