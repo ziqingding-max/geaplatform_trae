@@ -673,7 +673,7 @@ export const toolkitEnhancedRouter = router({
           z.object({
             type: z.enum(["benefits", "compliance", "salary", "start_date", "templates", "cost_simulator"]),
             countryCode: z.string(),
-            metadata: z.record(z.any()).optional(),
+            metadata: z.record(z.string(), z.any()).optional(),
           })
         ),
         locale: z.enum(["en", "zh"]).optional().default("en"),
