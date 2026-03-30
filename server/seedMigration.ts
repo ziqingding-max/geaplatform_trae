@@ -9,7 +9,8 @@
  *   2. Social Insurance Rules (required for Employer Cost calculation)
  *   3. AI Provider Configurations
  *   4. Country Guide chapters
- *   5. Business migration data (customers, employees, invoices) — only in non-production
+ *   5. Toolkit data: Global Benefits, Hiring Compliance, Salary Benchmarks, Document Templates, Income Tax Rules
+ *   6. Business migration data (customers, employees, invoices) — only in non-production
  */
 
 import 'dotenv/config';
@@ -17,10 +18,13 @@ import { getDb } from './db';
 import {
   customers, employees, customerContacts,
   billingEntities, countriesConfig, leaveTypes, publicHolidays,
-  countryGuideChapters, countrySocialInsuranceItems, aiProviderConfigs
+  countryGuideChapters, countrySocialInsuranceItems, aiProviderConfigs,
+  globalBenefits, hiringCompliance, salaryBenchmarks, documentTemplates, incomeTaxRules
 } from '../drizzle/schema';
-import { eq, and, not, inArray } from 'drizzle-orm';
+import { eq, and, not, inArray, desc, lte } from 'drizzle-orm';
 import { socialInsuranceRules } from './seed/data/socialInsuranceRules';
+import toolkitData from './scripts/seedHeadhunterToolkit';
+import { incomeTaxRulesData } from './scripts/seedIncomeTaxRules';
 // @ts-ignore
 import seedData from '../data/seed-migration-data.json';
 import { readFile } from 'fs/promises';
@@ -569,6 +573,163 @@ async function seedBusinessMigrationData(db: any) {
   console.log('[Seed] Business migration data completed (invoices skipped — manual entry).');
 }
 
+// ─── Seed Toolkit Data (Benefits, Compliance, Salary, Templates, Tax Rules) ──
+
+async function seedToolkitData(db: any) {
+  console.log('[Seed] Syncing Toolkit data...');
+
+  // 1. Global Benefits (upsert by countryCode + nameEn)
+  let benefitsCreated = 0, benefitsSkipped = 0;
+  for (const b of toolkitData.benefitsData) {
+    const existing = await db.select({ id: globalBenefits.id }).from(globalBenefits)
+      .where(and(eq(globalBenefits.countryCode, b.countryCode), eq(globalBenefits.nameEn, b.nameEn)))
+      .limit(1);
+    if (existing.length > 0) {
+      benefitsSkipped++;
+    } else {
+      await db.insert(globalBenefits).values({
+        countryCode: b.countryCode,
+        benefitType: b.benefitType,
+        category: b.category,
+        nameEn: b.nameEn,
+        nameZh: b.nameZh,
+        descriptionEn: b.descriptionEn,
+        descriptionZh: b.descriptionZh,
+        costIndication: b.costIndication || null,
+        pitchCardEn: b.pitchCardEn || null,
+        pitchCardZh: b.pitchCardZh || null,
+        sortOrder: b.sortOrder,
+        source: 'gea_official',
+      });
+      benefitsCreated++;
+    }
+  }
+  console.log(`[Seed] Global Benefits: ${benefitsCreated} created, ${benefitsSkipped} skipped`);
+
+  // 2. Hiring Compliance (upsert by countryCode — unique)
+  let complianceCreated = 0, complianceSkipped = 0;
+  for (const c of toolkitData.complianceData) {
+    const existing = await db.select({ id: hiringCompliance.id }).from(hiringCompliance)
+      .where(eq(hiringCompliance.countryCode, c.countryCode))
+      .limit(1);
+    if (existing.length > 0) {
+      complianceSkipped++;
+    } else {
+      await db.insert(hiringCompliance).values({
+        countryCode: c.countryCode,
+        probationRulesEn: c.probationRulesEn,
+        probationRulesZh: c.probationRulesZh,
+        noticePeriodRulesEn: c.noticePeriodRulesEn,
+        noticePeriodRulesZh: c.noticePeriodRulesZh,
+        backgroundCheckRulesEn: c.backgroundCheckRulesEn,
+        backgroundCheckRulesZh: c.backgroundCheckRulesZh,
+        severanceRulesEn: c.severanceRulesEn,
+        severanceRulesZh: c.severanceRulesZh,
+        nonCompeteRulesEn: c.nonCompeteRulesEn,
+        nonCompeteRulesZh: c.nonCompeteRulesZh,
+        workPermitRulesEn: c.workPermitRulesEn,
+        workPermitRulesZh: c.workPermitRulesZh,
+        additionalNotesEn: c.additionalNotesEn || null,
+        additionalNotesZh: c.additionalNotesZh || null,
+      });
+      complianceCreated++;
+    }
+  }
+  console.log(`[Seed] Hiring Compliance: ${complianceCreated} created, ${complianceSkipped} skipped`);
+
+  // 3. Salary Benchmarks (upsert by countryCode + jobTitle + seniorityLevel)
+  let salaryCreated = 0, salarySkipped = 0;
+  for (const s of toolkitData.salaryBenchmarkData) {
+    const existing = await db.select({ id: salaryBenchmarks.id }).from(salaryBenchmarks)
+      .where(and(
+        eq(salaryBenchmarks.countryCode, s.countryCode),
+        eq(salaryBenchmarks.jobTitle, s.jobTitle),
+        eq(salaryBenchmarks.seniorityLevel, s.seniorityLevel)
+      ))
+      .limit(1);
+    if (existing.length > 0) {
+      salarySkipped++;
+    } else {
+      await db.insert(salaryBenchmarks).values({
+        countryCode: s.countryCode,
+        jobCategory: s.jobCategory,
+        jobTitle: s.jobTitle,
+        seniorityLevel: s.seniorityLevel,
+        salaryP25: s.salaryP25,
+        salaryP50: s.salaryP50,
+        salaryP75: s.salaryP75,
+        currency: s.currency,
+        dataYear: s.dataYear,
+        source: 'ai_generated',
+      });
+      salaryCreated++;
+    }
+  }
+  console.log(`[Seed] Salary Benchmarks: ${salaryCreated} created, ${salarySkipped} skipped`);
+
+  // 4. Document Templates (upsert by countryCode + titleEn)
+  let templatesCreated = 0, templatesSkipped = 0;
+  for (const t of toolkitData.documentTemplateData) {
+    const existing = await db.select({ id: documentTemplates.id }).from(documentTemplates)
+      .where(and(
+        eq(documentTemplates.countryCode, t.countryCode),
+        eq(documentTemplates.titleEn, t.titleEn)
+      ))
+      .limit(1);
+    if (existing.length > 0) {
+      templatesSkipped++;
+    } else {
+      await db.insert(documentTemplates).values({
+        countryCode: t.countryCode,
+        documentType: t.documentType,
+        titleEn: t.titleEn,
+        titleZh: t.titleZh,
+        descriptionEn: t.descriptionEn,
+        descriptionZh: t.descriptionZh,
+        fileUrl: t.fileUrl,
+        fileName: t.fileName,
+        fileSize: t.fileSize,
+        mimeType: t.mimeType,
+        version: t.version,
+        source: t.source,
+      });
+      templatesCreated++;
+    }
+  }
+  console.log(`[Seed] Document Templates: ${templatesCreated} created, ${templatesSkipped} skipped`);
+
+  // 5. Income Tax Rules (upsert by countryCode + taxYear + filingStatus)
+  let taxCreated = 0, taxSkipped = 0;
+  for (const r of incomeTaxRulesData) {
+    const existing = await db.select({ id: incomeTaxRules.id }).from(incomeTaxRules)
+      .where(and(
+        eq(incomeTaxRules.countryCode, r.countryCode),
+        eq(incomeTaxRules.taxYear, r.taxYear),
+        eq(incomeTaxRules.filingStatus, r.filingStatus)
+      ))
+      .limit(1);
+    if (existing.length > 0) {
+      taxSkipped++;
+    } else {
+      await db.insert(incomeTaxRules).values({
+        countryCode: r.countryCode,
+        taxYear: r.taxYear,
+        filingStatus: r.filingStatus,
+        currency: r.currency,
+        standardDeductionAnnual: r.standardDeductionAnnual,
+        taxBrackets: r.taxBrackets,
+        socialSecurityDeductible: r.socialSecurityDeductible,
+        notes: r.notes,
+        source: r.source,
+      });
+      taxCreated++;
+    }
+  }
+  console.log(`[Seed] Income Tax Rules: ${taxCreated} created, ${taxSkipped} skipped`);
+
+  console.log('[Seed] Toolkit data sync completed.');
+}
+
 // ─── Main Entry Point ────────────────────────────────────────────────────────
 
 export async function seedMigration() {
@@ -583,6 +744,9 @@ export async function seedMigration() {
   await seedSocialInsuranceData(db);
   await seedAIProviderConfigs(db);
   await seedCountryGuides(db);
+
+  // Seed toolkit data (benefits, compliance, salary benchmarks, templates, tax rules)
+  await seedToolkitData(db);
 
   // Seed business migration data (customers, employees, contacts)
   // Data already imported to production — no longer needed on startup
