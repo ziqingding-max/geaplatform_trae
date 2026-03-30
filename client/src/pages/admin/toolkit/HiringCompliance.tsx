@@ -72,16 +72,16 @@ export default function HiringCompliance() {
     : [];
 
   return (
-    <Layout title={t("compliance.title")}>
+    <Layout title={t("toolkit_compliance.title")}>
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <ShieldCheck className="h-6 w-6 text-primary" />
-              {t("compliance.title")}
+              {t("toolkit_compliance.title")}
             </h1>
-            <p className="text-muted-foreground mt-1">{t("compliance.subtitle")}</p>
+            <p className="text-muted-foreground mt-1">{t("toolkit_compliance.subtitle")}</p>
           </div>
           {complianceData && selectedCountry ? (
             <AddToProposalButton

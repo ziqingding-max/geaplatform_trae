@@ -1,15 +1,18 @@
 /**
  * Auto-Migration: Ensures the PostgreSQL database schema matches the Drizzle schema.
  *
- * This script runs at server startup and adds any columns that exist in the
- * Drizzle schema but are missing from the actual PostgreSQL tables.
+ * This script runs at server startup and:
+ * 1. Creates any missing tables (e.g. Headhunter Toolkit tables)
+ * 2. Adds any columns that exist in the Drizzle schema but are missing from actual tables
  *
  * Handles:
  * - invoices.creditNoteDisposition
  * - Phase 1 AOR alignment: new columns on contractor_adjustments & contractor_milestones
+ * - Headhunter Toolkit: CREATE TABLE IF NOT EXISTS for global_benefits,
+ *   hiring_compliance, document_templates, salary_benchmarks
  *
  * This is a lightweight alternative to full Drizzle Kit migrations,
- * suitable for adding columns that don't require complex data backfill.
+ * suitable for adding columns/tables that don't require complex data backfill.
  *
  * For NOT NULL columns that are new, we ADD COLUMN with a DEFAULT,
  * then run backfill queries to populate existing rows.
@@ -23,6 +26,112 @@ interface ColumnMigration {
   type: string;
   defaultValue?: string;
 }
+
+/**
+ * ── CREATE TABLE IF NOT EXISTS ──────────────────────────────────────────────
+ * SQL statements for tables that may not yet exist in the production database.
+ * Each statement is idempotent (IF NOT EXISTS) so it is safe to run on every startup.
+ *
+ * These cover the Headhunter Toolkit tables added in the schema but never
+ * generated as Drizzle Kit migration SQL files.
+ */
+const REQUIRED_TABLES: string[] = [
+  // ── salary_benchmarks ──
+  `CREATE TABLE IF NOT EXISTS "salary_benchmarks" (
+    "id" SERIAL PRIMARY KEY,
+    "countryCode" VARCHAR(3) NOT NULL,
+    "jobCategory" VARCHAR(100) NOT NULL,
+    "jobTitle" VARCHAR(200) NOT NULL,
+    "seniorityLevel" TEXT NOT NULL,
+    "salaryP25" TEXT NOT NULL,
+    "salaryP50" TEXT NOT NULL,
+    "salaryP75" TEXT NOT NULL,
+    "currency" VARCHAR(3) NOT NULL,
+    "dataYear" INTEGER NOT NULL,
+    "source" TEXT,
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // ── global_benefits ──
+  `CREATE TABLE IF NOT EXISTS "global_benefits" (
+    "id" SERIAL PRIMARY KEY,
+    "countryCode" VARCHAR(3) NOT NULL,
+    "benefitType" TEXT NOT NULL,
+    "category" TEXT NOT NULL,
+    "nameEn" VARCHAR(200) NOT NULL,
+    "nameZh" VARCHAR(200) NOT NULL,
+    "descriptionEn" TEXT NOT NULL,
+    "descriptionZh" TEXT NOT NULL,
+    "costIndication" TEXT,
+    "pitchCardEn" TEXT,
+    "pitchCardZh" TEXT,
+    "source" TEXT NOT NULL DEFAULT 'ai_generated',
+    "lastVerifiedAt" TIMESTAMPTZ,
+    "isActive" BOOLEAN NOT NULL DEFAULT TRUE,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // ── hiring_compliance ──
+  `CREATE TABLE IF NOT EXISTS "hiring_compliance" (
+    "id" SERIAL PRIMARY KEY,
+    "countryCode" VARCHAR(3) NOT NULL UNIQUE,
+    "probationRulesEn" TEXT,
+    "probationRulesZh" TEXT,
+    "noticePeriodRulesEn" TEXT,
+    "noticePeriodRulesZh" TEXT,
+    "backgroundCheckRulesEn" TEXT,
+    "backgroundCheckRulesZh" TEXT,
+    "severanceRulesEn" TEXT,
+    "severanceRulesZh" TEXT,
+    "nonCompeteRulesEn" TEXT,
+    "nonCompeteRulesZh" TEXT,
+    "workPermitRulesEn" TEXT,
+    "workPermitRulesZh" TEXT,
+    "additionalNotesEn" TEXT,
+    "additionalNotesZh" TEXT,
+    "source" TEXT NOT NULL DEFAULT 'ai_generated',
+    "lastVerifiedAt" TIMESTAMPTZ,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
+  // ── document_templates ──
+  `CREATE TABLE IF NOT EXISTS "document_templates" (
+    "id" SERIAL PRIMARY KEY,
+    "countryCode" VARCHAR(3) NOT NULL,
+    "documentType" TEXT NOT NULL,
+    "titleEn" VARCHAR(300) NOT NULL,
+    "titleZh" VARCHAR(300) NOT NULL,
+    "descriptionEn" TEXT,
+    "descriptionZh" TEXT,
+    "fileUrl" TEXT NOT NULL,
+    "fileName" VARCHAR(500) NOT NULL,
+    "fileSize" INTEGER,
+    "mimeType" VARCHAR(100),
+    "version" VARCHAR(20) DEFAULT '1.0',
+    "source" TEXT NOT NULL DEFAULT 'ai_generated',
+    "lastVerifiedAt" TIMESTAMPTZ,
+    "isActive" BOOLEAN NOT NULL DEFAULT TRUE,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+];
+
+/**
+ * Index creation statements for the toolkit tables.
+ * Uses IF NOT EXISTS to be idempotent.
+ */
+const REQUIRED_INDEXES: string[] = [
+  `CREATE INDEX IF NOT EXISTS "sb_country_idx" ON "salary_benchmarks" ("countryCode")`,
+  `CREATE INDEX IF NOT EXISTS "sb_job_title_idx" ON "salary_benchmarks" ("jobTitle")`,
+  `CREATE INDEX IF NOT EXISTS "gb_country_idx" ON "global_benefits" ("countryCode")`,
+  `CREATE INDEX IF NOT EXISTS "gb_type_idx" ON "global_benefits" ("benefitType")`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "hc_country_idx" ON "hiring_compliance" ("countryCode")`,
+  `CREATE INDEX IF NOT EXISTS "dt_country_idx" ON "document_templates" ("countryCode")`,
+  `CREATE INDEX IF NOT EXISTS "dt_type_idx" ON "document_templates" ("documentType")`,
+];
 
 /**
  * List of columns that should exist but may be missing from the database.
@@ -342,6 +451,35 @@ export async function runAutoMigrations(): Promise<void> {
     return;
   }
 
+  // ── Step 1: Create missing tables ──
+  for (const createSql of REQUIRED_TABLES) {
+    try {
+      await sql.unsafe(createSql);
+    } catch (err: any) {
+      if (err?.message?.includes("already exists")) {
+        // Table already exists, safe to ignore
+      } else {
+        console.error("[AutoMigrate] Failed to create table:", err?.message || err);
+      }
+    }
+  }
+
+  // ── Step 2: Create missing indexes ──
+  for (const indexSql of REQUIRED_INDEXES) {
+    try {
+      await sql.unsafe(indexSql);
+    } catch (err: any) {
+      if (err?.message?.includes("already exists")) {
+        // Index already exists, safe to ignore
+      } else {
+        console.error("[AutoMigrate] Failed to create index:", err?.message || err);
+      }
+    }
+  }
+
+  console.log("[AutoMigrate] Table & index check complete");
+
+  // ── Step 3: Add missing columns ──
   let columnsAdded = 0;
 
   for (const migration of REQUIRED_COLUMNS) {
