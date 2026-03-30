@@ -11,15 +11,17 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Loader2, Calculator, Info } from "lucide-react";
+import { Loader2, Calculator, Info, ShoppingCart, Check } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency } from "@/lib/format";
 import Layout from "@/components/Layout";
+import { useProposalCart } from "@/contexts/ProposalCartContext";
 
 type CalcMode = "gross_to_net" | "net_to_gross";
 
 export default function AdminCostSimulator() {
   const { t } = useI18n();
+  const { addItem, isInCart, toggleDrawer } = useProposalCart();
   const [countryCode, setCountryCode] = useState<string>("");
   const [regionCode, setRegionCode] = useState<string>("");
   const [inputAmount, setInputAmount] = useState<string>("");
@@ -269,6 +271,43 @@ export default function AdminCostSimulator() {
                     </div>
                   </div>
                 )}
+
+                {/* Add to Proposal Button */}
+                <div className="border-t pt-4">
+                  <Button
+                    variant={isInCart("cost_simulator", countryCode) ? "outline" : "default"}
+                    className="w-full"
+                    onClick={() => {
+                      addItem({
+                        type: "cost_simulator",
+                        countryCode,
+                        countryName: selectedCountry?.countryName || countryCode,
+                        label: `${selectedCountry?.countryName || countryCode} — ${calcMode === "gross_to_net" ? "Gross→Net" : "Net→Gross"} ${formatCurrency(currency, result.salary)}`,
+                        metadata: {
+                          mode: result.mode,
+                          calcMode,
+                          salary: result.salary,
+                          totalCost: result.totalCost,
+                          totalEmployer: result.totalEmployer,
+                          totalEmployee: result.totalEmployee,
+                          incomeTax: result.incomeTax,
+                          netPay: result.netPay,
+                          currency,
+                          items: result.items,
+                          taxDetails: result.taxDetails,
+                          regionCode: regionCode || undefined,
+                        },
+                      });
+                      toggleDrawer();
+                    }}
+                  >
+                    {isInCart("cost_simulator", countryCode) ? (
+                      <><Check className="mr-2 h-4 w-4" />{t("cost_simulator.added_to_proposal")}</>
+                    ) : (
+                      <><ShoppingCart className="mr-2 h-4 w-4" />{t("cost_simulator.add_to_proposal")}</>
+                    )}
+                  </Button>
+                </div>
 
                 {/* Disclaimer */}
                 <div className="bg-muted/50 p-3 rounded-lg flex gap-2 text-xs text-muted-foreground">

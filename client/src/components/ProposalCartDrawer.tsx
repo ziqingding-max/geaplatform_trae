@@ -21,6 +21,7 @@ const TYPE_ICONS: Record<string, string> = {
   salary: "📊",
   start_date: "📅",
   templates: "📄",
+  cost_simulator: "🧮",
 };
 
 const TYPE_LABELS_EN: Record<string, string> = {
@@ -29,6 +30,7 @@ const TYPE_LABELS_EN: Record<string, string> = {
   salary: "Salary Benchmark",
   start_date: "Start Date",
   templates: "Templates",
+  cost_simulator: "Cost Breakdown",
 };
 
 const TYPE_LABELS_ZH: Record<string, string> = {
@@ -37,6 +39,7 @@ const TYPE_LABELS_ZH: Record<string, string> = {
   salary: "薪酬基准",
   start_date: "入职日",
   templates: "文档模版",
+  cost_simulator: "成本明细",
 };
 
 export function ProposalCartDrawer() {
