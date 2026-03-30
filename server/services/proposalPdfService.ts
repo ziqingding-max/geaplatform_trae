@@ -2,7 +2,7 @@
  * Proposal PDF Service
  *
  * Generates a combined "Headhunter Toolkit Proposal" PDF by aggregating
- * data from multiple toolkit modules (benefits, compliance, salary, start-date, templates).
+ * data from multiple toolkit modules (benefits, compliance, salary, start-date, templates, cost_simulator).
  *
  * Reuses the existing htmlPdfService infrastructure (Puppeteer + branded templates).
  */
@@ -57,8 +57,22 @@ export interface ProposalTemplateItem {
   fileName?: string | null;
 }
 
+export interface ProposalCostSimulatorItem {
+  mode: "gross_to_net" | "net_to_gross";
+  currency: string;
+  grossSalary: number;
+  netPay: number;
+  employeeSocialInsurance: number;
+  incomeTax: number;
+  employerContributions: number;
+  totalEmploymentCost: number;
+  effectiveTaxRate?: number;
+  employerBreakdown?: Array<{ name: string; amount: number }>;
+  employeeBreakdown?: Array<{ name: string; amount: number }>;
+}
+
 export interface ProposalSection {
-  type: "benefits" | "compliance" | "salary" | "start_date" | "templates";
+  type: "benefits" | "compliance" | "salary" | "start_date" | "templates" | "cost_simulator";
   country: string;
   countryCode?: string;
   data: any[];
@@ -155,6 +169,13 @@ const BASE_CSS = `
   .badge-statutory { background: #dcfce7; color: #166534; }
   .badge-customary { background: #dbeafe; color: #1e40af; }
   .disclaimer { margin-top: 6mm; padding: 3mm; background: ${BRAND.bg}; border-left: 2pt solid ${BRAND.gold}; font-size: 8pt; color: ${BRAND.muted}; }
+  .cost-summary { background: ${BRAND.bg}; border: 1pt solid ${BRAND.border}; border-radius: 2mm; padding: 4mm; margin: 4mm 0; }
+  .cost-summary-row { display: flex; justify-content: space-between; padding: 1.5mm 2mm; }
+  .cost-summary-row.total { border-top: 1pt solid ${BRAND.primary}; margin-top: 2mm; padding-top: 3mm; font-weight: 700; color: ${BRAND.primary}; font-size: 11pt; }
+  .cost-summary-label { color: ${BRAND.text}; }
+  .cost-summary-value { font-weight: 600; }
+  .about-section { margin-bottom: 6mm; }
+  .about-section p { font-size: 9.5pt; line-height: 1.7; margin-bottom: 3mm; color: ${BRAND.text}; }
 `;
 
 // ─── Chromium Launcher ────────────────────────────────────────────────────────
@@ -229,14 +250,51 @@ async function mergePdfs(pdfBuffers: Buffer[]): Promise<Buffer> {
   return Buffer.from(await merged.save());
 }
 
+// ─── Company Introduction Page ───────────────────────────────────────────────
+
+function renderCompanyIntroPage(locale: string): string {
+  const isZh = locale === "zh";
+  return `<div class="page">
+    <h2>${isZh ? "关于 CGL Group" : "About CGL Group"}</h2>
+    <div class="about-section">
+      <p>${isZh
+        ? "CGL Group 的核心业务是国际猎头服务（CGL），专注于服务中国经济增长中的创新型初创企业和正在转型的传统企业。我们基于对行业人才市场的深刻理解，提供战略性人才咨询、人才地图绘制，帮助企业招募核心高管团队。同时，我们还设计具有竞争力的薪酬方案，并提供CEO及高管领导力辅导与入职支持服务。"
+        : "CGL Group's core business is international executive search (CGL), with a focus on serving innovative startups and traditional enterprises undergoing transformation in China's growing economy. We provide strategic talent advisory, talent mapping, and help enterprises recruit core executive teams based on our deep understanding of industry talent markets. We also design competitive compensation packages and deliver CEO and executive leadership coaching and onboarding support."
+      }</p>
+    </div>
+
+    <h2>${isZh ? "关于 GEA (Global Employment Advisors)" : "About GEA (Global Employment Advisors)"}</h2>
+    <div class="about-section">
+      <p>${isZh
+        ? "作为 CGL 的海外业务子品牌，GEA 帮助中国企业在新兴市场中实现全生命周期的管理——从市场准入到落地实施，从业务发展到组织重构——提供全面的、端到端的人力资源服务与解决方案。"
+        : "As CGL's overseas business sub-brand, GEA helps Chinese enterprises navigate emerging markets across the full lifecycle — from Access to Implementation, from Development to Reorganization — providing comprehensive, end-to-end human resources services and solutions."
+      }</p>
+      <p>${isZh
+        ? "我们不仅针对不同行业——如新能源、智能制造、食品饮料、医疗健康、消费电子和具身智能——设计差异化解决方案，还为同一行业中具有不同海外扩张战略重点的客户提供定制化服务。"
+        : "We design differentiated solutions tailored not only to different industries — such as new energy, smart manufacturing, food &amp; beverage, healthcare, consumer electronics, and embodied AI — but also to clients within the same industry who have distinct strategic priorities for their overseas expansion."
+      }</p>
+      <p>${isZh
+        ? "从针对单一目的地的轻量级市场进入，到设有统一结算中心的区域枢纽模式，我们提供最适合中国企业出海灵活多元需求的定制化解决方案。"
+        : "From lightweight market entry targeting a single destination to regional hub models with unified settlement centers, we deliver customized solutions that best fit the flexible and diversified needs of Chinese enterprises going global."
+      }</p>
+    </div>
+
+    <h3>${isZh ? "我们的核心服务" : "Our Core Services"}</h3>
+    <table>
+      <tr><th>${isZh ? "服务" : "Service"}</th><th>${isZh ? "说明" : "Description"}</th></tr>
+      <tr><td><strong>EOR</strong></td><td>${isZh ? "名义雇主服务 — 合规雇佣全球员工，无需设立海外实体" : "Employer of Record — Compliantly hire global employees without establishing overseas entities"}</td></tr>
+      <tr><td><strong>PEO</strong></td><td>${isZh ? "专业雇主组织 — 为已有海外实体的企业提供人力资源外包服务" : "Professional Employer Organization — HR outsourcing for companies with existing overseas entities"}</td></tr>
+      <tr><td><strong>Payroll</strong></td><td>${isZh ? "全球薪酬管理 — 多国薪资计算、发放与合规申报" : "Global Payroll Management — Multi-country salary calculation, disbursement, and compliance filing"}</td></tr>
+      <tr><td><strong>AOR</strong></td><td>${isZh ? "承包商代理 — 合规管理海外独立承包商" : "Agent of Record — Compliantly manage overseas independent contractors"}</td></tr>
+      <tr><td><strong>Recruitment</strong></td><td>${isZh ? "海外招聘 — 基于本地市场洞察的高端人才搜寻与猎聘" : "Overseas Recruitment — Premium talent search and headhunting based on local market insights"}</td></tr>
+    </table>
+  </div>`;
+}
+
 // ─── Section Renderers ────────────────────────────────────────────────────────
 
 function renderBenefitsSection(country: string, items: ProposalBenefitItem[], locale: string): string {
   const isZh = locale === "zh";
-  // Items already have category field; group by checking if there's a benefitType or use category
-  // In proposal data, items come with category field from the DB
-  // We need to separate statutory vs customary based on the original benefitType
-  // Since the router passes the raw DB rows, we check for a 'benefitType' property
   const statutory = items.filter((i: any) => i.benefitType === "statutory" || i.category === "social_security" || i.category === "pension" || i.category === "paid_leave" || i.category === "parental");
   const customary = items.filter((i: any) => i.benefitType === "customary" || (i.benefitType !== "statutory" && !statutory.includes(i)));
 
@@ -326,6 +384,62 @@ function renderTemplatesSection(country: string, items: ProposalTemplateItem[], 
   return html;
 }
 
+function renderCostSimulatorSection(country: string, items: ProposalCostSimulatorItem[], locale: string): string {
+  const isZh = locale === "zh";
+  const item = items[0];
+  if (!item) return "";
+
+  const fmt = (n: number) => item.currency + " " + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const modeLabel = item.mode === "gross_to_net"
+    ? (isZh ? "正算：税前 → 税后" : "Gross to Net")
+    : (isZh ? "倒算：税后 → 税前" : "Net to Gross");
+
+  let html = `<h2>${isZh ? `${country} — 雇佣成本模拟` : `${country} — Employment Cost Simulation`}</h2>`;
+  html += `<p class="section-intro">${isZh ? `计算模式：${modeLabel}` : `Calculation Mode: ${modeLabel}`}</p>`;
+
+  // Summary card
+  html += `<div class="cost-summary">`;
+  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "月度总薪资 (Gross)" : "Monthly Gross Salary"}</span><span class="cost-summary-value">${fmt(item.grossSalary)}</span></div>`;
+  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "个人社保缴费" : "Employee Social Insurance"}</span><span class="cost-summary-value">- ${fmt(item.employeeSocialInsurance)}</span></div>`;
+  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "个人所得税（估算）" : "Income Tax (Est.)"}</span><span class="cost-summary-value">- ${fmt(item.incomeTax)}</span></div>`;
+  html += `<div class="cost-summary-row" style="border-top:0.5pt solid ${BRAND.border};padding-top:2mm;margin-top:1mm;"><span class="cost-summary-label"><strong>${isZh ? "实发工资 (Net Pay)" : "Net Pay"}</strong></span><span class="cost-summary-value"><strong>${fmt(item.netPay)}</strong></span></div>`;
+  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "雇主社保缴费" : "Employer Contributions"}</span><span class="cost-summary-value">+ ${fmt(item.employerContributions)}</span></div>`;
+  html += `<div class="cost-summary-row total"><span class="cost-summary-label">${isZh ? "雇主总成本" : "Total Employment Cost"}</span><span class="cost-summary-value">${fmt(item.totalEmploymentCost)}</span></div>`;
+  if (item.effectiveTaxRate != null) {
+    html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "有效税率" : "Effective Tax Rate"}</span><span class="cost-summary-value">${item.effectiveTaxRate.toFixed(1)}%</span></div>`;
+  }
+  html += `</div>`;
+
+  // Employer breakdown table
+  if (item.employerBreakdown && item.employerBreakdown.length > 0) {
+    html += `<h3>${isZh ? "雇主缴费明细" : "Employer Contribution Breakdown"}</h3>`;
+    html += `<table><tr><th>${isZh ? "项目" : "Item"}</th><th style="text-align:right;">${isZh ? "金额" : "Amount"}</th></tr>`;
+    for (const b of item.employerBreakdown) {
+      html += `<tr><td>${b.name}</td><td style="text-align:right;">${fmt(b.amount)}</td></tr>`;
+    }
+    html += `<tr style="background:${BRAND.tableHeader};font-weight:600;"><td>${isZh ? "合计" : "Total"}</td><td style="text-align:right;">${fmt(item.employerContributions)}</td></tr>`;
+    html += `</table>`;
+  }
+
+  // Employee deduction breakdown table
+  if (item.employeeBreakdown && item.employeeBreakdown.length > 0) {
+    html += `<h3>${isZh ? "个人扣除明细" : "Employee Deduction Breakdown"}</h3>`;
+    html += `<table><tr><th>${isZh ? "项目" : "Item"}</th><th style="text-align:right;">${isZh ? "金额" : "Amount"}</th></tr>`;
+    for (const b of item.employeeBreakdown) {
+      html += `<tr><td>${b.name}</td><td style="text-align:right;">${fmt(b.amount)}</td></tr>`;
+    }
+    html += `<tr style="background:${BRAND.tableHeader};font-weight:600;"><td>${isZh ? "合计" : "Total"}</td><td style="text-align:right;">${fmt(item.employeeSocialInsurance)}</td></tr>`;
+    html += `</table>`;
+  }
+
+  html += `<div class="disclaimer">${isZh
+    ? "此为基于现行法定规定的估算值。个人所得税按标准个人申报身份计算，未考虑额外扣除项。实际金额可能有所不同。"
+    : "This is an estimation based on current statutory regulations. Income tax is calculated using standard individual filing status without additional deductions. Actual amounts may vary."
+  }</div>`;
+
+  return html;
+}
+
 // ─── Main Generator ───────────────────────────────────────────────────────────
 
 export async function generateProposalPdf(data: ProposalData): Promise<Buffer> {
@@ -379,17 +493,24 @@ export async function generateProposalPdf(data: ProposalData): Promise<Buffer> {
   let contentPages = "";
 
   // Table of Contents
-  let tocItems = data.sections.map((s, i) => {
-    const typeLabels: Record<string, { en: string; zh: string }> = {
-      benefits: { en: "Benefits Overview", zh: "福利概览" },
-      compliance: { en: "Hiring Compliance", zh: "招聘合规" },
-      salary: { en: "Salary Benchmarks", zh: "薪酬基准" },
-      start_date: { en: "Start Date Prediction", zh: "入职日预测" },
-      templates: { en: "Document Templates", zh: "文档模版" },
-    };
+  const typeLabels: Record<string, { en: string; zh: string }> = {
+    benefits: { en: "Benefits Overview", zh: "福利概览" },
+    compliance: { en: "Hiring Compliance", zh: "招聘合规" },
+    salary: { en: "Salary Benchmarks", zh: "薪酬基准" },
+    start_date: { en: "Start Date Prediction", zh: "入职日预测" },
+    templates: { en: "Document Templates", zh: "文档模版" },
+    cost_simulator: { en: "Employment Cost Simulation", zh: "雇佣成本模拟" },
+  };
+
+  // TOC includes company intro as first item
+  let tocItems = `<div style="display:flex;justify-content:space-between;padding:1.5mm 0;border-bottom:0.3pt dotted ${BRAND.border};">
+    <span><strong>1.</strong> ${isZh ? "关于 CGL Group & GEA" : "About CGL Group & GEA"}</span>
+  </div>`;
+
+  tocItems += data.sections.map((s, i) => {
     const label = isZh ? typeLabels[s.type]?.zh : typeLabels[s.type]?.en;
     return `<div style="display:flex;justify-content:space-between;padding:1.5mm 0;border-bottom:0.3pt dotted ${BRAND.border};">
-      <span><strong>${i + 1}.</strong> ${s.country} — ${label || s.type}</span>
+      <span><strong>${i + 2}.</strong> ${s.country} — ${label || s.type}</span>
     </div>`;
   }).join("");
 
@@ -397,6 +518,9 @@ export async function generateProposalPdf(data: ProposalData): Promise<Buffer> {
     <h2>${isZh ? "目录" : "Table of Contents"}</h2>
     <div style="margin-top:4mm;">${tocItems}</div>
   </div>`;
+
+  // Company Introduction Page (after TOC, before data sections)
+  contentPages += renderCompanyIntroPage(locale);
 
   // Section pages
   for (const section of data.sections) {
@@ -416,6 +540,9 @@ export async function generateProposalPdf(data: ProposalData): Promise<Buffer> {
         break;
       case "templates":
         sectionHtml = renderTemplatesSection(section.country, section.data, locale);
+        break;
+      case "cost_simulator":
+        sectionHtml = renderCostSimulatorSection(section.country, section.data, locale);
         break;
     }
     if (sectionHtml) {

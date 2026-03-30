@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { ProposalCartProvider } from "./contexts/ProposalCartContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
 import Employees from "./pages/Employees";
@@ -330,10 +331,12 @@ function App() {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
-        <TooltipProvider>
-          <Toaster position="top-right" richColors closeButton expand visibleToasts={8} gap={8} />
-          <Router />
-        </TooltipProvider>
+        <ProposalCartProvider>
+          <TooltipProvider>
+            <Toaster position="top-right" richColors closeButton expand visibleToasts={8} gap={8} />
+            <Router />
+          </TooltipProvider>
+        </ProposalCartProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

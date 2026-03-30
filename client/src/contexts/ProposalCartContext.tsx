@@ -6,7 +6,7 @@
  */
 import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
 
-export type CartItemType = "benefits" | "compliance" | "salary" | "start_date" | "templates";
+export type CartItemType = "benefits" | "compliance" | "salary" | "start_date" | "templates" | "cost_simulator";
 
 export interface CartItem {
   id: string; // unique key: `${type}-${countryCode}`
@@ -15,6 +15,8 @@ export interface CartItem {
   countryName: string;
   label: string; // human-readable label for display
   addedAt: Date;
+  /** Optional metadata for dynamic data (e.g., cost simulator results) */
+  metadata?: Record<string, any>;
 }
 
 interface ProposalCartContextValue {
@@ -39,7 +41,12 @@ export function ProposalCartProvider({ children }: { children: React.ReactNode }
     (item: Omit<CartItem, "id" | "addedAt">) => {
       const id = `${item.type}-${item.countryCode}`;
       setItems((prev) => {
-        // Prevent duplicates
+        // For cost_simulator, replace existing entry (data may change)
+        if (item.type === "cost_simulator") {
+          const filtered = prev.filter((i) => i.id !== id);
+          return [...filtered, { ...item, id, addedAt: new Date() }];
+        }
+        // Prevent duplicates for other types
         if (prev.some((i) => i.id === id)) return prev;
         return [...prev, { ...item, id, addedAt: new Date() }];
       });

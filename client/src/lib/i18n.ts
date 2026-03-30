@@ -484,6 +484,8 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "cost_simulator.effective_tax_rate": "Effective Tax Rate",
     "cost_simulator.employee_breakdown_title": "Employee Deduction Breakdown",
     "cost_simulator.disclaimer_enhanced": "This is an estimation based on current statutory regulations. Income tax is calculated using standard individual filing status without additional deductions. Actual amounts may vary.",
+    "cost_simulator.add_to_proposal": "Add to Proposal",
+    "cost_simulator.added_to_proposal": "Added to Proposal",
 
     // ── Start Date Predictor ──
     "start_date.title": "Global Start Date Predictor",
@@ -2835,6 +2837,8 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "cost_simulator.effective_tax_rate": "有效税率",
     "cost_simulator.employee_breakdown_title": "个人扣除明细",
     "cost_simulator.disclaimer_enhanced": "此为基于现行法定规定的估算值。个人所得税按标准个人申报身份计算，未考虑额外扣除项。实际金额可能有所不同。",
+    "cost_simulator.add_to_proposal": "加入提案",
+    "cost_simulator.added_to_proposal": "已加入提案",
 
     // ── 入职日预测 ──
     "start_date.title": "全球入职日预测器",
