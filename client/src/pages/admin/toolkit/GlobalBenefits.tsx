@@ -68,7 +68,7 @@ export default function GlobalBenefits() {
               <TableCell className="font-medium">
                 {language === "zh" ? b.nameZh : b.nameEn}
               </TableCell>
-              <TableCell className="text-sm text-muted-foreground max-w-md">
+              <TableCell className="text-sm text-muted-foreground max-w-md break-words whitespace-pre-wrap">
                 {language === "zh" ? b.descriptionZh : b.descriptionEn}
               </TableCell>
               <TableCell>

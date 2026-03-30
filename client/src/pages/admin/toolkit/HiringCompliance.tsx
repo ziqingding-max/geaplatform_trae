@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, Plus, Info, AlertTriangle, FileText } from "lucide-react";
+import { ShieldCheck, Plus, AlertTriangle, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { AddToProposalButton } from "@/components/AddToProposalButton";
 
@@ -152,18 +152,7 @@ export default function HiringCompliance() {
           </Card>
         )}
 
-        {/* Source Info */}
-        {complianceData && (
-          <div className="bg-muted/50 p-3 rounded-lg flex gap-2 text-xs text-muted-foreground">
-            <Info className="w-4 h-4 flex-shrink-0" />
-            <div className="space-y-1">
-              <p>{t("compliance.source")}: <Badge variant="outline" className="text-xs ml-1">{(complianceData as any).source || "ai_generated"}</Badge></p>
-              {(complianceData as any).lastVerifiedAt && (
-                <p>{t("compliance.last_verified")}: {new Date((complianceData as any).lastVerifiedAt).toLocaleDateString()}</p>
-              )}
-            </div>
-          </div>
-        )}
+
       </div>
     </Layout>
   );
