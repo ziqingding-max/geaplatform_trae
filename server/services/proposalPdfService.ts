@@ -328,8 +328,8 @@ function renderCompanyIntroPage(locale: string): string {
         : "From lightweight market entry targeting a single destination to regional hub models with unified settlement centers, we deliver customized solutions that best fit the flexible and diversified needs of Chinese enterprises going global."
       }</p>
     </div>
-
-    <h3>${isZh ? "我们的核心服务" : "Our Core Services"}</h3>
+  </div><div class="page">
+    <h2>${isZh ? "我们的核心服务" : "Our Core Services"}</h2>
     <table>
       <tr><th>${isZh ? "服务" : "Service"}</th><th>${isZh ? "说明" : "Description"}</th></tr>
       <tr><td><strong>EOR</strong><br/><span style="font-size:8pt;color:${BRAND.muted};">${isZh ? "名义雇主" : "Employer of Record"}</span></td><td>${isZh
