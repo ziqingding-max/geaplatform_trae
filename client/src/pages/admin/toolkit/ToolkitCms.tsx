@@ -583,12 +583,12 @@ function TemplatesTab() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Select value={countryCode} onValueChange={setCountryCode}>
+        <Select value={countryCode || "__all__"} onValueChange={(v) => setCountryCode(v === "__all__" ? "" : v)}>
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder={t("toolkit_cms.all_countries")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">{t("toolkit_cms.all_countries")}</SelectItem>
+            <SelectItem value="__all__">{t("toolkit_cms.all_countries")}</SelectItem>
             {countries?.map((c: any) => (
               <SelectItem key={c.countryCode} value={c.countryCode}>{c.countryName}</SelectItem>
             ))}

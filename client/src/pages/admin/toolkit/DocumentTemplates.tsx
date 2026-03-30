@@ -113,12 +113,12 @@ export default function DocumentTemplates() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("templates.country_label")}</label>
-                <Select value={countryCode} onValueChange={setCountryCode}>
+                <Select value={countryCode || "__all__"} onValueChange={(v) => setCountryCode(v === "__all__" ? "" : v)}>
                   <SelectTrigger>
                     <SelectValue placeholder={t("templates.country_placeholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t("templates.country_placeholder")}</SelectItem>
+                    <SelectItem value="__all__">{t("templates.country_placeholder")}</SelectItem>
                     {countries?.map((c: any) => (
                       <SelectItem key={c.countryCode} value={c.countryCode}>{c.countryName}</SelectItem>
                     ))}
@@ -127,12 +127,12 @@ export default function DocumentTemplates() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("templates.type_label")}</label>
-                <Select value={documentType} onValueChange={setDocumentType}>
+                <Select value={documentType || "__all__"} onValueChange={(v) => setDocumentType(v === "__all__" ? "" : v)}>
                   <SelectTrigger>
                     <SelectValue placeholder={t("templates.type_placeholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t("templates.type_placeholder")}</SelectItem>
+                    <SelectItem value="__all__">{t("templates.type_placeholder")}</SelectItem>
                     <SelectItem value="employment_contract">{DOC_TYPE_ICONS.employment_contract} {t("templates.type_employment_contract")}</SelectItem>
                     <SelectItem value="offer_letter">{DOC_TYPE_ICONS.offer_letter} {t("templates.type_offer_letter")}</SelectItem>
                     <SelectItem value="nda">{DOC_TYPE_ICONS.nda} {t("templates.type_nda")}</SelectItem>

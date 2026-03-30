@@ -104,12 +104,12 @@ export default function SalaryBenchmark() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("salary_benchmark.job_category")}</label>
-                <Select value={jobCategory} onValueChange={setJobCategory}>
+                <Select value={jobCategory || "__all__"} onValueChange={(v) => setJobCategory(v === "__all__" ? "" : v)}>
                   <SelectTrigger>
                     <SelectValue placeholder={t("salary_benchmark.all")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t("salary_benchmark.all")}</SelectItem>
+                    <SelectItem value="__all__">{t("salary_benchmark.all")}</SelectItem>
                     {jobCategories.map((jc: string) => (
                       <SelectItem key={jc} value={jc}>{jc}</SelectItem>
                     ))}
@@ -118,12 +118,12 @@ export default function SalaryBenchmark() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t("salary_benchmark.seniority")}</label>
-                <Select value={seniorityLevel} onValueChange={setSeniorityLevel}>
+                <Select value={seniorityLevel || "__all__"} onValueChange={(v) => setSeniorityLevel(v === "__all__" ? "" : v)}>
                   <SelectTrigger>
                     <SelectValue placeholder={t("salary_benchmark.all")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">{t("salary_benchmark.all")}</SelectItem>
+                    <SelectItem value="__all__">{t("salary_benchmark.all")}</SelectItem>
                     {seniorityLevels.map((sl: string) => (
                       <SelectItem key={sl} value={sl}>{sl}</SelectItem>
                     ))}
