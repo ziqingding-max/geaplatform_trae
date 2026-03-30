@@ -671,8 +671,9 @@ export const toolkitEnhancedRouter = router({
       z.object({
         sections: z.array(
           z.object({
-            type: z.enum(["benefits", "compliance", "salary", "start_date", "templates"]),
+            type: z.enum(["benefits", "compliance", "salary", "start_date", "templates", "cost_simulator"]),
             countryCode: z.string(),
+            metadata: z.record(z.any()).optional(),
           })
         ),
         locale: z.enum(["en", "zh"]).optional().default("en"),
@@ -837,6 +838,18 @@ export const toolkitEnhancedRouter = router({
                 fileName: r.fileName,
               })),
             });
+            break;
+          }
+          case "cost_simulator": {
+            // Cost simulator data is passed directly from the frontend via metadata
+            if (section.metadata) {
+              proposalSections.push({
+                type: "cost_simulator",
+                country: countryName,
+                countryCode: section.countryCode,
+                data: [section.metadata],
+              });
+            }
             break;
           }
         }

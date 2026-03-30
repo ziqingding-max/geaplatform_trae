@@ -62,6 +62,7 @@ export function ProposalCartDrawer() {
         sections: items.map((item) => ({
           type: item.type,
           countryCode: item.countryCode,
+          metadata: item.metadata,
         })),
         locale: locale === "zh" ? "zh" : "en",
         clientName: clientName || undefined,
