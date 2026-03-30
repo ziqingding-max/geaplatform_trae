@@ -14,6 +14,7 @@ import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
 import { useI18n } from "../lib/i18n";
 import { trpc } from "../lib/trpc";
+import { toast } from "sonner";
 
 const TYPE_ICONS: Record<string, string> = {
   benefits: "🎁",
@@ -85,8 +86,20 @@ export function ProposalCartDrawer() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch (error) {
+
+      toast.success(
+        locale === "zh"
+          ? `PDF 提案已生成（${itemCount} 项）`
+          : `PDF Proposal generated (${itemCount} items)`
+      );
+    } catch (error: any) {
       console.error("Failed to generate proposal:", error);
+      const errMsg = error?.message || (locale === "zh" ? "未知错误" : "Unknown error");
+      toast.error(
+        locale === "zh"
+          ? `提案生成失败：${errMsg}`
+          : `Proposal generation failed: ${errMsg}`
+      );
     } finally {
       setIsGenerating(false);
     }

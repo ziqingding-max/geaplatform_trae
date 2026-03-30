@@ -58,17 +58,43 @@ export interface ProposalTemplateItem {
 }
 
 export interface ProposalCostSimulatorItem {
-  mode: "gross_to_net" | "net_to_gross";
+  mode: string; // "forward" | "reverse" | "gross_to_net" | "net_to_gross"
+  calcMode?: string; // "gross_to_net" | "net_to_gross"
   currency: string;
-  grossSalary: number;
-  netPay: number;
-  employeeSocialInsurance: number;
-  incomeTax: number;
-  employerContributions: number;
-  totalEmploymentCost: number;
+  // Frontend sends `salary`, backend expected `grossSalary` — support both
+  grossSalary?: number;
+  salary?: number;
+  netPay: number | string;
+  // Frontend sends `totalEmployee`, backend expected `employeeSocialInsurance` — support both
+  employeeSocialInsurance?: number | string;
+  totalEmployee?: number | string;
+  incomeTax: number | string;
+  // Frontend sends `totalEmployer`, backend expected `employerContributions` — support both
+  employerContributions?: number | string;
+  totalEmployer?: number | string;
+  // Frontend sends `totalCost`, backend expected `totalEmploymentCost` — support both
+  totalEmploymentCost?: number | string;
+  totalCost?: number | string;
   effectiveTaxRate?: number;
+  // Frontend sends `items` (ContributionItem[]), backend expected `employerBreakdown`/`employeeBreakdown`
   employerBreakdown?: Array<{ name: string; amount: number }>;
   employeeBreakdown?: Array<{ name: string; amount: number }>;
+  items?: Array<{
+    itemNameEn: string;
+    itemNameZh?: string;
+    employerContribution: string | number;
+    employeeContribution: string | number;
+  }>;
+  taxDetails?: {
+    effectiveTaxRate: string;
+    annualGross?: number;
+    standardDeduction?: number;
+    annualEmployeeSS?: number;
+    annualTaxableIncome?: number;
+    annualTax?: number;
+    brackets?: Array<{ min: number; max: number; rate: string; taxableAmount: number; tax: number }>;
+  };
+  regionCode?: string;
 }
 
 export interface ProposalSection {
@@ -386,49 +412,115 @@ function renderTemplatesSection(country: string, items: ProposalTemplateItem[], 
 
 function renderCostSimulatorSection(country: string, items: ProposalCostSimulatorItem[], locale: string): string {
   const isZh = locale === "zh";
-  const item = items[0];
-  if (!item) return "";
+  const raw = items[0];
+  if (!raw) return "";
 
-  const fmt = (n: number) => item.currency + " " + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const modeLabel = item.mode === "gross_to_net"
+  // ── Normalize fields: frontend sends different names than what the old renderer expected ──
+  const toNum = (v: any): number => {
+    if (v == null) return 0;
+    const n = typeof v === "string" ? parseFloat(v) : v;
+    return isNaN(n) ? 0 : n;
+  };
+
+  const grossSalary = toNum(raw.grossSalary ?? raw.salary);
+  const netPay = toNum(raw.netPay);
+  const employeeSS = toNum(raw.employeeSocialInsurance ?? raw.totalEmployee);
+  const incomeTax = toNum(raw.incomeTax);
+  const employerContrib = toNum(raw.employerContributions ?? raw.totalEmployer);
+  const totalCost = toNum(raw.totalEmploymentCost ?? raw.totalCost);
+  const currency = raw.currency || "USD";
+
+  // Determine mode label
+  const calcMode = raw.calcMode || raw.mode || "gross_to_net";
+  const isGrossToNet = calcMode === "gross_to_net" || calcMode === "forward";
+  const modeLabel = isGrossToNet
     ? (isZh ? "正算：税前 → 税后" : "Gross to Net")
     : (isZh ? "倒算：税后 → 税前" : "Net to Gross");
+
+  // Effective tax rate
+  let effectiveTaxRateStr = "";
+  if (raw.effectiveTaxRate != null) {
+    effectiveTaxRateStr = toNum(raw.effectiveTaxRate).toFixed(1) + "%";
+  } else if (raw.taxDetails?.effectiveTaxRate) {
+    effectiveTaxRateStr = raw.taxDetails.effectiveTaxRate;
+  }
+
+  const fmt = (n: number) => currency + " " + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   let html = `<h2>${isZh ? `${country} — 雇佣成本模拟` : `${country} — Employment Cost Simulation`}</h2>`;
   html += `<p class="section-intro">${isZh ? `计算模式：${modeLabel}` : `Calculation Mode: ${modeLabel}`}</p>`;
 
   // Summary card
   html += `<div class="cost-summary">`;
-  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "月度总薪资 (Gross)" : "Monthly Gross Salary"}</span><span class="cost-summary-value">${fmt(item.grossSalary)}</span></div>`;
-  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "个人社保缴费" : "Employee Social Insurance"}</span><span class="cost-summary-value">- ${fmt(item.employeeSocialInsurance)}</span></div>`;
-  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "个人所得税（估算）" : "Income Tax (Est.)"}</span><span class="cost-summary-value">- ${fmt(item.incomeTax)}</span></div>`;
-  html += `<div class="cost-summary-row" style="border-top:0.5pt solid ${BRAND.border};padding-top:2mm;margin-top:1mm;"><span class="cost-summary-label"><strong>${isZh ? "实发工资 (Net Pay)" : "Net Pay"}</strong></span><span class="cost-summary-value"><strong>${fmt(item.netPay)}</strong></span></div>`;
-  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "雇主社保缴费" : "Employer Contributions"}</span><span class="cost-summary-value">+ ${fmt(item.employerContributions)}</span></div>`;
-  html += `<div class="cost-summary-row total"><span class="cost-summary-label">${isZh ? "雇主总成本" : "Total Employment Cost"}</span><span class="cost-summary-value">${fmt(item.totalEmploymentCost)}</span></div>`;
-  if (item.effectiveTaxRate != null) {
-    html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "有效税率" : "Effective Tax Rate"}</span><span class="cost-summary-value">${item.effectiveTaxRate.toFixed(1)}%</span></div>`;
+  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "月度总薪资 (Gross)" : "Monthly Gross Salary"}</span><span class="cost-summary-value">${fmt(grossSalary)}</span></div>`;
+  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "个人社保缴费" : "Employee Social Insurance"}</span><span class="cost-summary-value">- ${fmt(employeeSS)}</span></div>`;
+  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "个人所得税（估算）" : "Income Tax (Est.)"}</span><span class="cost-summary-value">- ${fmt(incomeTax)}</span></div>`;
+  html += `<div class="cost-summary-row" style="border-top:0.5pt solid ${BRAND.border};padding-top:2mm;margin-top:1mm;"><span class="cost-summary-label"><strong>${isZh ? "实发工资 (Net Pay)" : "Net Pay"}</strong></span><span class="cost-summary-value"><strong>${fmt(netPay)}</strong></span></div>`;
+  html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "雇主社保缴费" : "Employer Contributions"}</span><span class="cost-summary-value">+ ${fmt(employerContrib)}</span></div>`;
+  html += `<div class="cost-summary-row total"><span class="cost-summary-label">${isZh ? "雇主总成本" : "Total Employment Cost"}</span><span class="cost-summary-value">${fmt(totalCost)}</span></div>`;
+  if (effectiveTaxRateStr) {
+    html += `<div class="cost-summary-row"><span class="cost-summary-label">${isZh ? "有效税率" : "Effective Tax Rate"}</span><span class="cost-summary-value">${effectiveTaxRateStr}</span></div>`;
   }
   html += `</div>`;
 
+  // Build breakdown tables from either new format (employerBreakdown) or frontend format (items)
+  let employerRows: Array<{ name: string; amount: number }> = [];
+  let employeeRows: Array<{ name: string; amount: number }> = [];
+
+  if (raw.employerBreakdown && raw.employerBreakdown.length > 0) {
+    employerRows = raw.employerBreakdown;
+  } else if (raw.items && raw.items.length > 0) {
+    // Convert ContributionItem[] to breakdown format
+    for (const ci of raw.items) {
+      const empAmt = toNum(ci.employerContribution);
+      if (empAmt > 0) {
+        employerRows.push({ name: (isZh && ci.itemNameZh) ? ci.itemNameZh : ci.itemNameEn, amount: empAmt });
+      }
+    }
+  }
+
+  if (raw.employeeBreakdown && raw.employeeBreakdown.length > 0) {
+    employeeRows = raw.employeeBreakdown;
+  } else if (raw.items && raw.items.length > 0) {
+    for (const ci of raw.items) {
+      const eeAmt = toNum(ci.employeeContribution);
+      if (eeAmt > 0) {
+        employeeRows.push({ name: (isZh && ci.itemNameZh) ? ci.itemNameZh : ci.itemNameEn, amount: eeAmt });
+      }
+    }
+  }
+
   // Employer breakdown table
-  if (item.employerBreakdown && item.employerBreakdown.length > 0) {
+  if (employerRows.length > 0) {
     html += `<h3>${isZh ? "雇主缴费明细" : "Employer Contribution Breakdown"}</h3>`;
     html += `<table><tr><th>${isZh ? "项目" : "Item"}</th><th style="text-align:right;">${isZh ? "金额" : "Amount"}</th></tr>`;
-    for (const b of item.employerBreakdown) {
+    for (const b of employerRows) {
       html += `<tr><td>${b.name}</td><td style="text-align:right;">${fmt(b.amount)}</td></tr>`;
     }
-    html += `<tr style="background:${BRAND.tableHeader};font-weight:600;"><td>${isZh ? "合计" : "Total"}</td><td style="text-align:right;">${fmt(item.employerContributions)}</td></tr>`;
+    html += `<tr style="background:${BRAND.tableHeader};font-weight:600;"><td>${isZh ? "合计" : "Total"}</td><td style="text-align:right;">${fmt(employerContrib)}</td></tr>`;
     html += `</table>`;
   }
 
   // Employee deduction breakdown table
-  if (item.employeeBreakdown && item.employeeBreakdown.length > 0) {
+  if (employeeRows.length > 0) {
     html += `<h3>${isZh ? "个人扣除明细" : "Employee Deduction Breakdown"}</h3>`;
     html += `<table><tr><th>${isZh ? "项目" : "Item"}</th><th style="text-align:right;">${isZh ? "金额" : "Amount"}</th></tr>`;
-    for (const b of item.employeeBreakdown) {
+    for (const b of employeeRows) {
       html += `<tr><td>${b.name}</td><td style="text-align:right;">${fmt(b.amount)}</td></tr>`;
     }
-    html += `<tr style="background:${BRAND.tableHeader};font-weight:600;"><td>${isZh ? "合计" : "Total"}</td><td style="text-align:right;">${fmt(item.employeeSocialInsurance)}</td></tr>`;
+    html += `<tr style="background:${BRAND.tableHeader};font-weight:600;"><td>${isZh ? "合计" : "Total"}</td><td style="text-align:right;">${fmt(employeeSS)}</td></tr>`;
+    html += `</table>`;
+  }
+
+  // Tax bracket details
+  if (raw.taxDetails?.brackets && raw.taxDetails.brackets.length > 0 && incomeTax > 0) {
+    html += `<h3>${isZh ? "个税计算明细" : "Income Tax Bracket Details"}</h3>`;
+    html += `<table><tr><th>${isZh ? "级距" : "Bracket"}</th><th style="text-align:right;">${isZh ? "税率" : "Rate"}</th><th style="text-align:right;">${isZh ? "应税金额" : "Taxable Amount"}</th><th style="text-align:right;">${isZh ? "税额" : "Tax"}</th></tr>`;
+    for (const br of raw.taxDetails.brackets) {
+      if (br.taxableAmount > 0) {
+        html += `<tr><td>${fmt(br.min)} — ${br.max === Infinity || br.max > 1e12 ? "∞" : fmt(br.max)}</td><td style="text-align:right;">${br.rate}</td><td style="text-align:right;">${fmt(br.taxableAmount)}</td><td style="text-align:right;">${fmt(br.tax)}</td></tr>`;
+      }
+    }
     html += `</table>`;
   }
 
