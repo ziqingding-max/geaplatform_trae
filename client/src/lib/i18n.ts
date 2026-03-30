@@ -541,8 +541,8 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "benchmark.annual_salary": "Annual Salary",
 
     // ── Hiring Compliance ──
-    "compliance.title": "Hiring Compliance Cheat Sheet",
-    "compliance.subtitle": "Quick reference for hiring regulations, probation rules, and termination requirements.",
+    "toolkit_compliance.title": "Hiring Compliance Cheat Sheet",
+    "toolkit_compliance.subtitle": "Quick reference for hiring regulations, probation rules, and termination requirements.",
     "compliance.country_label": "Country/Region",
     "compliance.country_placeholder": "Select country",
     "compliance.probation": "Probation Period Rules",
@@ -2879,8 +2879,8 @@ const portalTranslations: Record<Locale, Record<string, string>> = {
     "benchmark.annual_salary": "年薪",
 
     // ── 招聘合规 ──
-    "compliance.title": "招聘合规速查",
-    "compliance.subtitle": "快速查阅各国招聘法规、试用期规则和解雇要求。",
+    "toolkit_compliance.title": "招聘合规速查",
+    "toolkit_compliance.subtitle": "快速查阅各国招聘法规、试用期规则和解雇要求。",
     "compliance.country_label": "国家/地区",
     "compliance.country_placeholder": "选择国家",
     "compliance.probation": "试用期规则",
