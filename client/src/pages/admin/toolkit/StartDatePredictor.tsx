@@ -82,7 +82,7 @@ export default function StartDatePredictor() {
 
   return (
     <Layout title={t("start_date.title")}>
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="p-6 max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
