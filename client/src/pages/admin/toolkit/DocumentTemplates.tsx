@@ -63,11 +63,26 @@ export default function DocumentTemplates() {
     return acc;
   }, {} as Record<string, any[]>);
 
-  const handleDownload = (tpl: any) => {
-    if (tpl.fileUrl) {
-      window.open(tpl.fileUrl, "_blank");
-    } else {
+  const handleDownload = async (tpl: any) => {
+    if (!tpl.fileUrl) {
       toast.error(t("templates.no_data"));
+      return;
+    }
+    try {
+      const response = await fetch(tpl.fileUrl);
+      if (!response.ok) throw new Error("Download failed");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = tpl.fileName || `${tpl.titleEn || "template"}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      // Fallback: open in new tab
+      window.open(tpl.fileUrl, "_blank");
     }
   };
 
@@ -179,7 +194,6 @@ export default function DocumentTemplates() {
                       <TableHead>{t("templates.type_label")}</TableHead>
                       <TableHead>{t("templates.file_size")}</TableHead>
                       <TableHead>{t("templates.version")}</TableHead>
-                      <TableHead>{t("templates.source") || "Source"}</TableHead>
                       <TableHead className="w-[100px]">{t("templates.download")}</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -204,11 +218,6 @@ export default function DocumentTemplates() {
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {tpl.version || "1.0"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={tpl.source === "gea_official" ? "default" : "outline"} className="text-xs">
-                            {tpl.source || "ai_generated"}
-                          </Badge>
                         </TableCell>
                         <TableCell>
                           <Button
