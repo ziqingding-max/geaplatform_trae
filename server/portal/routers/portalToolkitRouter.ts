@@ -25,7 +25,7 @@ export const portalToolkitRouter = portalRouter({
       .where(eq(countriesConfig.isActive, true));
   }),
 
-  // Cost Calculation
+  // Forward Cost Calculation: Gross → Net + Employer Cost
   calculateCost: protectedPortalProcedure
     .input(
       z.object({
@@ -35,11 +35,28 @@ export const portalToolkitRouter = portalRouter({
       })
     )
     .mutation(async ({ input }) => {
-      // Use 2025 as default year for now
       return await calculationService.calculateSocialInsurance({
         countryCode: input.countryCode,
         year: 2025,
         salary: input.salary,
+        regionCode: input.regionCode,
+      });
+    }),
+
+  // Reverse Cost Calculation: Net Pay → Gross + Employer Cost
+  calculateCostReverse: protectedPortalProcedure
+    .input(
+      z.object({
+        countryCode: z.string(),
+        netPay: z.number().positive("Net pay must be positive"),
+        regionCode: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return await calculationService.calculateReverseFromNetPay({
+        countryCode: input.countryCode,
+        year: 2025,
+        netPay: input.netPay,
         regionCode: input.regionCode,
       });
     }),
@@ -76,7 +93,6 @@ export const portalToolkitRouter = portalRouter({
       .where(eq(countryGuideChapters.status, "published"))
       .groupBy(countryGuideChapters.countryCode);
 
-    // Get country details for those with guides
     const allCountries = await db
       .select({
         countryCode: countriesConfig.countryCode,

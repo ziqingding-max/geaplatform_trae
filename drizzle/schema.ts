@@ -2121,7 +2121,45 @@ export type DocumentTemplate = typeof documentTemplates.$inferSelect;
 export type InsertDocumentTemplate = typeof documentTemplates.$inferInsert;
 
 // ============================================================================
-// 22. AOR SERVICES & WORKER PORTAL
+// 22. INCOME TAX RULES (for Cost Simulator forward/reverse calculation)
+// ============================================================================
+
+export const incomeTaxRules = pgTable(
+  "income_tax_rules",
+  {
+    id: serial("id").primaryKey(),
+    countryCode: varchar("countryCode", { length: 3 }).notNull(),
+    taxYear: integer("taxYear").notNull(),
+    filingStatus: varchar("filingStatus", { length: 50 }).default("individual").notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    /** Annual standard deduction / personal allowance (in local currency) */
+    standardDeductionAnnual: text("standardDeductionAnnual").default("0").notNull(),
+    /**
+     * JSON array of progressive tax brackets.
+     * Each bracket: { min: number, max: number, rate: number }
+     * rate is a decimal (e.g. 0.10 = 10%)
+     * max = 999999999 for the top bracket
+     */
+    taxBrackets: jsonb("taxBrackets").notNull(),
+    /** Whether employee social security is deducted before calculating taxable income */
+    socialSecurityDeductible: boolean("socialSecurityDeductible").default(true).notNull(),
+    notes: text("notes"),
+    source: text("source").default("ai_generated").notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true, mode: "date" }).defaultNow().$onUpdate(() => new Date()).notNull(),
+  },
+  (table) => ({
+    itrCountryYearIdx: uniqueIndex("itr_country_year_idx").on(table.countryCode, table.taxYear, table.filingStatus),
+    itrCountryIdx: index("itr_country_idx").on(table.countryCode),
+  })
+);
+
+export type IncomeTaxRule = typeof incomeTaxRules.$inferSelect;
+export type InsertIncomeTaxRule = typeof incomeTaxRules.$inferInsert;
+
+// ============================================================================
+// 23. AOR SERVICES & WORKER PORTAL
 // ============================================================================
 
 export {

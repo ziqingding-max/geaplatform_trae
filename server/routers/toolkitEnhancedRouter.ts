@@ -582,24 +582,84 @@ export const toolkitEnhancedRouter = router({
   // 6. SHARED: Countries list for toolkit dropdowns
   // ═══════════════════════════════════════════════════════════════════════════
 
-  /** List all active countries with key metadata — used by all toolkit pages */
-  getActiveCountries: userProcedure.query(async () => {
-    const db = requireDb();
-    return await db
-      .select({
-        countryCode: countriesConfig.countryCode,
-        countryName: countriesConfig.countryName,
-        localCurrency: countriesConfig.localCurrency,
-        noticePeriodDays: countriesConfig.noticePeriodDays,
-        probationPeriodDays: countriesConfig.probationPeriodDays,
-        workingDaysPerWeek: countriesConfig.workingDaysPerWeek,
-        statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
-        isActive: countriesConfig.isActive,
-      })
-      .from(countriesConfig)
-      .where(eq(countriesConfig.isActive, true))
-      .orderBy(asc(countriesConfig.countryName));
-  }),
+  /**
+   * List active countries that have toolkit data.
+   * Optionally filter by toolkit module — only returns countries
+   * that have at least one record in the relevant table.
+   * When no module is specified, returns countries that have data
+   * in ANY of the toolkit tables.
+   */
+  getActiveCountries: userProcedure
+    .input(
+      z.object({
+        module: z
+          .enum(["benefits", "compliance", "salary", "templates", "all"])
+          .optional()
+          .default("all"),
+      }).optional()
+    )
+    .query(async ({ input }) => {
+      const db = requireDb();
+      const mod = input?.module || "all";
+
+      // Collect country codes that have data in the requested module(s)
+      const countryCodeSets: Set<string>[] = [];
+
+      if (mod === "all" || mod === "benefits") {
+        const rows = await db
+          .selectDistinct({ cc: globalBenefits.countryCode })
+          .from(globalBenefits)
+          .where(eq(globalBenefits.isActive, true));
+        countryCodeSets.push(new Set(rows.map((r) => r.cc)));
+      }
+      if (mod === "all" || mod === "compliance") {
+        const rows = await db
+          .selectDistinct({ cc: hiringCompliance.countryCode })
+          .from(hiringCompliance);
+        countryCodeSets.push(new Set(rows.map((r) => r.cc)));
+      }
+      if (mod === "all" || mod === "salary") {
+        const rows = await db
+          .selectDistinct({ cc: salaryBenchmarks.countryCode })
+          .from(salaryBenchmarks);
+        countryCodeSets.push(new Set(rows.map((r) => r.cc)));
+      }
+      if (mod === "all" || mod === "templates") {
+        const rows = await db
+          .selectDistinct({ cc: documentTemplates.countryCode })
+          .from(documentTemplates)
+          .where(eq(documentTemplates.isActive, true));
+        countryCodeSets.push(new Set(rows.map((r) => r.cc)));
+      }
+
+      // Union all sets
+      const allCodes = new Set<string>();
+      for (const s of countryCodeSets) {
+        for (const code of s) allCodes.add(code);
+      }
+
+      if (allCodes.size === 0) return [];
+
+      return await db
+        .select({
+          countryCode: countriesConfig.countryCode,
+          countryName: countriesConfig.countryName,
+          localCurrency: countriesConfig.localCurrency,
+          noticePeriodDays: countriesConfig.noticePeriodDays,
+          probationPeriodDays: countriesConfig.probationPeriodDays,
+          workingDaysPerWeek: countriesConfig.workingDaysPerWeek,
+          statutoryAnnualLeave: countriesConfig.statutoryAnnualLeave,
+          isActive: countriesConfig.isActive,
+        })
+        .from(countriesConfig)
+        .where(
+          and(
+            eq(countriesConfig.isActive, true),
+            inArray(countriesConfig.countryCode, Array.from(allCodes))
+          )
+        )
+        .orderBy(asc(countriesConfig.countryName));
+    }),
 
   // ═══════════════════════════════════════════════════════════════════════════
   // 7. PROPOSAL: Generate combined PDF from cart items
