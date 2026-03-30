@@ -169,13 +169,18 @@ async function fetchIncomeTaxRules(countryCode: string, year: number) {
   if (!db) throw new Error("Database connection failed");
 
   // Try exact year first
-  let taxRule = await db.query.incomeTaxRules.findFirst({
-    where: and(
-      eq(incomeTaxRules.countryCode, countryCode),
-      eq(incomeTaxRules.taxYear, year),
-      eq(incomeTaxRules.isActive, true)
-    ),
-  });
+  const exactMatch = await db
+    .select()
+    .from(incomeTaxRules)
+    .where(
+      and(
+        eq(incomeTaxRules.countryCode, countryCode),
+        eq(incomeTaxRules.taxYear, year),
+        eq(incomeTaxRules.isActive, true)
+      )
+    )
+    .limit(1);
+  let taxRule = exactMatch[0] || null;
 
   // Fallback to most recent year
   if (!taxRule) {
