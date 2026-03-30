@@ -7,9 +7,8 @@
  * Reuses the existing htmlPdfService infrastructure (Puppeteer + branded templates).
  */
 import puppeteer from "puppeteer-core";
-import { existsSync, readFileSync } from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import { existsSync } from "fs";
+import { GEA_LOGO_HORIZONTAL_GREEN_BASE64 } from "./proposalLogoData";
 import { execSync } from "child_process";
 import { PDFDocument } from "pdf-lib";
 
@@ -159,11 +158,7 @@ const BASE_CSS = `
     position: absolute; top: 0; left: 0; width: 8mm; height: 100%;
     background: linear-gradient(180deg, ${BRAND.primary} 0%, ${BRAND.primaryLight} 100%);
   }
-  .cover-corner {
-    position: absolute; top: 0; right: 0; width: 40mm; height: 40mm;
-    background: linear-gradient(135deg, ${BRAND.gold} 0%, transparent 70%);
-    opacity: 0.3;
-  }
+
   .cover-body {
     flex: 1; display: flex; flex-direction: column; justify-content: center;
     padding: 30mm 24mm 30mm 24mm; margin-left: 8mm;
@@ -209,24 +204,7 @@ const BASE_CSS = `
   .about-section p { font-size: 9.5pt; line-height: 1.7; margin-bottom: 3mm; color: ${BRAND.text}; }
 `;
 
-// ─── Logo Helper ─────────────────────────────────────────────────────────────
 
-function loadLogoBase64(): string {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  const candidates = [
-    path.resolve(__dirname, "../assets/gea-logo-horizontal-green.png"),
-    path.resolve(__dirname, "../../server/assets/gea-logo-horizontal-green.png"),
-    path.resolve(process.cwd(), "server/assets/gea-logo-horizontal-green.png"),
-  ];
-  for (const p of candidates) {
-    if (existsSync(p)) {
-      const buf = readFileSync(p);
-      return `data:image/png;base64,${buf.toString("base64")}`;
-    }
-  }
-  return "";
-}
 
 // ─── Chromium Launcher ────────────────────────────────────────────────────────
 
@@ -593,8 +571,8 @@ export async function generateProposalPdf(data: ProposalData): Promise<Buffer> {
       <span class="cover-meta-value">${m.value}</span>
     </div>`).join("");
 
-  // Load logo as base64 for reliable Puppeteer rendering
-  const logoDataUri = loadLogoBase64();
+  // Use pre-embedded base64 logo for reliable rendering in all environments (dev & Docker)
+  const logoDataUri = GEA_LOGO_HORIZONTAL_GREEN_BASE64;
   const logoHtml = logoDataUri
     ? `<div class="cover-logo"><img src="${logoDataUri}" alt="GEA" /></div>`
     : `<div class="cover-logo-fallback">GEA</div>`;
@@ -609,7 +587,6 @@ export async function generateProposalPdf(data: ProposalData): Promise<Buffer> {
 <body>
   <div class="page cover">
     <div class="cover-sidebar"></div>
-    <div class="cover-corner"></div>
     <div class="cover-body">
       ${logoHtml}
       <div class="cover-divider"></div>
