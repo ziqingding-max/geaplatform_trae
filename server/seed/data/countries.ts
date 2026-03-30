@@ -23,6 +23,8 @@ export const countriesData: CountryConfig[] = [
   { countryCode: "BD", countryName: "Bangladesh", localCurrency: "BDT", standardRateCurrency: "USD", isActive: true },
   { countryCode: "LK", countryName: "Sri Lanka", localCurrency: "LKR", standardRateCurrency: "USD", isActive: true },
   { countryCode: "KH", countryName: "Cambodia", localCurrency: "KHR", standardRateCurrency: "USD", isActive: true },
+  { countryCode: "MM", countryName: "Myanmar", localCurrency: "MMK", standardRateCurrency: "USD", isActive: true },
+  { countryCode: "LA", countryName: "Laos", localCurrency: "LAK", standardRateCurrency: "USD", isActive: true },
 
   // Americas
   { countryCode: "US", countryName: "United States", localCurrency: "USD", standardRateCurrency: "USD", isActive: true },
@@ -57,8 +59,17 @@ export const countriesData: CountryConfig[] = [
   { countryCode: "RO", countryName: "Romania", localCurrency: "RON", standardRateCurrency: "EUR", isActive: true },
   { countryCode: "GR", countryName: "Greece", localCurrency: "EUR", standardRateCurrency: "EUR", isActive: true },
   { countryCode: "TR", countryName: "Turkey", localCurrency: "TRY", standardRateCurrency: "USD", isActive: true },
+
+  // Middle East
   { countryCode: "AE", countryName: "United Arab Emirates", localCurrency: "AED", standardRateCurrency: "USD", isActive: true },
   { countryCode: "SA", countryName: "Saudi Arabia", localCurrency: "SAR", standardRateCurrency: "USD", isActive: true },
+  { countryCode: "QA", countryName: "Qatar", localCurrency: "QAR", standardRateCurrency: "USD", isActive: true },
+  { countryCode: "BH", countryName: "Bahrain", localCurrency: "BHD", standardRateCurrency: "USD", isActive: true },
+  { countryCode: "KW", countryName: "Kuwait", localCurrency: "KWD", standardRateCurrency: "USD", isActive: true },
+  { countryCode: "OM", countryName: "Oman", localCurrency: "OMR", standardRateCurrency: "USD", isActive: true },
+  { countryCode: "JO", countryName: "Jordan", localCurrency: "JOD", standardRateCurrency: "USD", isActive: true },
+
+  // Africa
   { countryCode: "ZA", countryName: "South Africa", localCurrency: "ZAR", standardRateCurrency: "USD", isActive: true },
   { countryCode: "EG", countryName: "Egypt", localCurrency: "EGP", standardRateCurrency: "USD", isActive: true },
   { countryCode: "IL", countryName: "Israel", localCurrency: "ILS", standardRateCurrency: "USD", isActive: true },
