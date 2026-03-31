@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FolderOpen, Download, FileText, Plus, Info, Search } from "lucide-react";
+import { FolderOpen, Download, FileText, Plus, Info, Search, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { AddToProposalButton } from "@/components/AddToProposalButton";
@@ -32,6 +32,7 @@ export default function DocumentTemplates() {
   const [countryCode, setCountryCode] = useState("");
   const [documentType, setDocumentType] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
 
   const { data: countries } = trpc.toolkitEnhanced.getActiveCountries.useQuery();
   const { data: templates, isLoading } = trpc.toolkitEnhanced.getDocumentTemplates.useQuery(
@@ -41,6 +42,8 @@ export default function DocumentTemplates() {
     },
     { enabled: true }
   );
+
+  const downloadMutation = trpc.toolkitEnhanced.downloadTemplate.useMutation();
 
   const selectedCountry = countries?.find((c: any) => c.countryCode === countryCode);
 
@@ -68,21 +71,31 @@ export default function DocumentTemplates() {
       toast.error(t("templates.no_data"));
       return;
     }
+    setDownloadingId(tpl.id);
     try {
-      const response = await fetch(tpl.fileUrl);
-      if (!response.ok) throw new Error("Download failed");
-      const blob = await response.blob();
+      // Use backend proxy to avoid CORS issues with S3 CDN
+      const result = await downloadMutation.mutateAsync({ id: tpl.id });
+      const byteChars = atob(result.content);
+      const byteNumbers = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) {
+        byteNumbers[i] = byteChars.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: result.mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = tpl.fileName || `${tpl.titleEn || "template"}.docx`;
+      a.download = result.fileName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      toast.success(t("templates.download_success") || "Download started");
     } catch (err) {
-      // Fallback: open in new tab
-      window.open(tpl.fileUrl, "_blank");
+      console.error("Download failed:", err);
+      toast.error(t("templates.download_failed") || "Download failed, please try again");
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -224,9 +237,13 @@ export default function DocumentTemplates() {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDownload(tpl)}
-                            disabled={!tpl.fileUrl}
+                            disabled={!tpl.fileUrl || downloadingId === tpl.id}
                           >
-                            <Download className="h-4 w-4" />
+                            {downloadingId === tpl.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
                           </Button>
                         </TableCell>
                       </TableRow>
