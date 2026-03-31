@@ -287,7 +287,8 @@ export async function seedAllToolkitData() {
 }
 
 // ── Standalone execution ────────────────────────────────────────────────────
-if (require.main === module || process.argv[1]?.endsWith("seedToolkitData.ts")) {
+const isMainModule = process.argv[1]?.endsWith("seedToolkitData.ts") || process.argv[1]?.endsWith("seedToolkitData.js");
+if (isMainModule) {
   getConnection();
   seedAllToolkitData()
     .then(() => {

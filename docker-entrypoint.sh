@@ -46,5 +46,15 @@ for sql_file in /app/drizzle/0*.sql; do
   fi
 done
 
-echo "[Entrypoint] Migrations complete. Starting application..."
+echo "[Entrypoint] Migrations complete."
+
+# Run toolkit data seed (idempotent: uses DELETE + INSERT)
+if [ -f /app/dist/seedToolkitData.js ]; then
+  echo "[Entrypoint] Seeding toolkit data..."
+  node dist/seedToolkitData.js && echo "[Entrypoint] Toolkit data seeded successfully." || echo "[Entrypoint] Warning: Toolkit seed failed, continuing startup..."
+else
+  echo "[Entrypoint] No seed script found, skipping."
+fi
+
+echo "[Entrypoint] Starting application..."
 exec node dist/index.js
