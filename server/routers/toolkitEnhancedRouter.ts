@@ -414,6 +414,32 @@ export const toolkitEnhancedRouter = router({
       return { success: true };
     }),
 
+  /** Download a template file via backend proxy (avoids CORS issues with S3 CDN) */
+  downloadTemplate: userProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = requireDb();
+      const tpl = await db.query.documentTemplates.findFirst({
+        where: eq(documentTemplates.id, input.id),
+      });
+      if (!tpl || !tpl.fileUrl) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Template file not found" });
+      }
+      try {
+        const response = await fetch(tpl.fileUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const buffer = Buffer.from(await response.arrayBuffer());
+        return {
+          content: buffer.toString("base64"),
+          fileName: tpl.fileName || `${tpl.countryCode}_Template.pdf`,
+          mimeType: tpl.mimeType || "application/pdf",
+        };
+      } catch (err) {
+        console.error("Failed to download template:", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Failed to download template file" });
+      }
+    }),
+
   // ═══════════════════════════════════════════════════════════════════════════
   // 4. START DATE PREDICTOR (mutation — frontend uses useMutation)
   // ═══════════════════════════════════════════════════════════════════════════
