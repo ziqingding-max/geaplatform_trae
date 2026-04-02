@@ -102,7 +102,54 @@ function OverallConfidenceBanner({ parsedResult, t }: { parsedResult: any; t: (k
   );
 }
 
-/* ========== Bill Form Fields ========== */
+/* ========== Amount Mismatch Banner (AI mode) ========== */
+function AmountMismatchBanner({ parsedResult, items, bill, t }: {
+  parsedResult: any; items: LineItem[]; bill: any; t: (k: string) => string;
+}) {
+  if (!parsedResult?.parsed) return null;
+  const hasItems = items.length > 0;
+  if (!hasItems) return null;
+
+  const p = parsedResult.parsed;
+  const aiTotal = parseFloat(p.totalAmount?.toString() || "0");
+  const aiSubtotal = parseFloat(p.subtotal?.toString() || "0");
+  const calcSubtotal = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0);
+  const calcTotal = calcSubtotal + (parseFloat(bill.tax) || 0);
+
+  const subtotalDiff = Math.abs(aiSubtotal - calcSubtotal);
+  const totalDiff = Math.abs(aiTotal - calcTotal);
+  const hasSubtotalMismatch = aiSubtotal > 0 && subtotalDiff > 0.01;
+  const hasTotalMismatch = aiTotal > 0 && totalDiff > 0.01;
+
+  if (!hasSubtotalMismatch && !hasTotalMismatch) return null;
+
+  return (
+    <div className="flex items-start gap-3 p-3 rounded-lg border bg-amber-50 border-amber-200">
+      <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-amber-800">{t("vendorBills.review.amountMismatchWarning")}</p>
+        {hasSubtotalMismatch && (
+          <p className="text-xs text-amber-700">
+            {t("vendorBills.review.subtotalMismatchDesc")
+              .replace("{aiSubtotal}", aiSubtotal.toFixed(2))
+              .replace("{calcSubtotal}", calcSubtotal.toFixed(2))
+              .replace("{diff}", subtotalDiff.toFixed(2))}
+          </p>
+        )}
+        {hasTotalMismatch && (
+          <p className="text-xs text-amber-700">
+            {t("vendorBills.review.amountMismatchDesc")
+              .replace("{aiTotal}", aiTotal.toFixed(2))
+              .replace("{calcTotal}", calcTotal.toFixed(2))
+              .replace("{diff}", totalDiff.toFixed(2))}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ========== Bill Form Fields =========== */
 function BillFormFields({ bill, onChange, vendors, items, t }: {
   bill: any; onChange: (b: any) => void; vendors: any[]; items?: LineItem[]; t: (k: string) => string;
 }) {
@@ -403,10 +450,20 @@ function LineItemsEditor({ items, onChange, t, showConfidence = false }: {
 }
 
 /* ========== Payment Info Card ========== */
-function PaymentInfoCard({ payment, onChange, onRemove, t }: {
-  payment: any; onChange: (p: any) => void; onRemove: () => void; t: (k: string) => string;
+function PaymentInfoCard({ payment, onChange, onRemove, onAdd, t }: {
+  payment: any; onChange: (p: any) => void; onRemove: () => void; onAdd?: () => void; t: (k: string) => string;
 }) {
-  if (!payment) return null;
+  if (!payment) {
+    // Show "Add Payment Info" button when no payment exists
+    if (onAdd) {
+      return (
+        <Button variant="outline" size="sm" onClick={onAdd}>
+          <Plus className="w-3.5 h-3.5 mr-1" /> {t("vendorBills.payment.title")}
+        </Button>
+      );
+    }
+    return null;
+  }
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -777,6 +834,17 @@ export default function AnalyzeBill() {
 
     if (!hasItems && !bill.totalAmount) { toast.error(t("vendorBills.toast.totalRequired")); return; }
 
+    // Build paymentInfo only when both paidDate and paidAmount are provided
+    const validPayment = payment && payment.paidDate && payment.paidAmount
+      ? {
+          paidDate: payment.paidDate,
+          paidAmount: payment.paidAmount,
+          bankName: payment.bankName || "",
+          bankReference: payment.bankReference || "",
+          bankFee: payment.bankFee || "0",
+        }
+      : undefined;
+
     try {
       if (parsedResult) {
         // AI mode: use applyMultiFileParse
@@ -786,8 +854,8 @@ export default function AnalyzeBill() {
           category: bill.category,
           billType: bill.billType || "operational",
           billDate: bill.billDate,
-          dueDate: bill.dueDate,
-          billMonth: bill.billMonth,
+          dueDate: bill.dueDate || undefined,
+          billMonth: bill.billMonth || undefined,
           currency: bill.currency,
           subtotal: finalSubtotal,
           tax: bill.tax || "0",
@@ -809,18 +877,12 @@ export default function AnalyzeBill() {
             allocatedAmount: a.allocatedAmount?.toString(),
             description: a.reason || "",
           })),
-          paymentInfo: payment ? {
-            paidDate: payment.paidDate,
-            paidAmount: payment.paidAmount,
-            bankName: payment.bankName || "",
-            bankReference: payment.bankReference || "",
-            bankFee: payment.bankFee || "0",
-          } : undefined,
+          paymentInfo: validPayment,
           receiptFileUrl: parsedResult?.files?.[0]?.fileUrl || undefined,
           receiptFileKey: parsedResult?.files?.[0]?.fileKey || undefined,
         });
       } else {
-        // Manual mode: use vendorBills.create
+        // Manual mode: use vendorBills.create (with payment support)
         await createMutation.mutateAsync({
           vendorId: parseInt(bill.vendorId),
           billNumber: bill.billNumber,
@@ -828,12 +890,18 @@ export default function AnalyzeBill() {
           billType: bill.billType || "operational",
           billDate: bill.billDate || new Date().toISOString().slice(0, 10),
           dueDate: bill.dueDate || undefined,
+          paidDate: validPayment?.paidDate || undefined,
           billMonth: bill.billMonth || undefined,
           currency: bill.currency,
           subtotal: finalSubtotal || finalTotal,
           tax: bill.tax || "0",
           totalAmount: finalTotal,
           description: bill.description || "",
+          status: validPayment ? "paid" : "draft",
+          paidAmount: validPayment?.paidAmount || undefined,
+          bankReference: validPayment?.bankReference || undefined,
+          bankName: validPayment?.bankName || undefined,
+          bankFee: validPayment?.bankFee || undefined,
           items: items.length > 0 ? items.map((item) => ({
             description: item.description,
             quantity: item.quantity || "1",
@@ -918,11 +986,20 @@ export default function AnalyzeBill() {
               </div>
             )}
 
+            {/* Amount Mismatch Warning (AI mode) */}
+            <AmountMismatchBanner parsedResult={parsedResult} items={items} bill={bill} t={t} />
+
             {/* Bill Details */}
             <BillFormFields bill={bill} onChange={setBill} vendors={vendors} items={items} t={t} />
 
-            {/* Payment Info (AI detected) */}
-            <PaymentInfoCard payment={payment} onChange={setPayment} onRemove={() => setPayment(null)} t={t} />
+            {/* Payment Info (AI detected or manually added) */}
+            <PaymentInfoCard
+              payment={payment}
+              onChange={setPayment}
+              onRemove={() => setPayment(null)}
+              onAdd={() => setPayment({ paidDate: "", paidAmount: "", bankName: "", bankReference: "", bankFee: "0" })}
+              t={t}
+            />
 
             {/* Line Items */}
             <LineItemsEditor items={items} onChange={setItems} t={t} showConfidence={!!parsedResult} />
