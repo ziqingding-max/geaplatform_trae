@@ -677,8 +677,8 @@ GRACEFUL DEGRADATION: If a document is unreadable or partially parseable, still 
         paymentInfo: z.object({
           paidDate: z.string(),
           paidAmount: z.string(),
-          bankReference: z.string(),
-          bankName: z.string(),
+          bankReference: z.string().optional().default(""),
+          bankName: z.string().optional().default(""),
           bankFee: z.string().default("0"),
         }).optional(),
         // Line items
@@ -709,12 +709,12 @@ GRACEFUL DEGRADATION: If a document is unreadable or partially parseable, still 
     .mutation(async ({ input, ctx }) => {
       const { items, allocations, paymentInfo, ...billData } = input;
 
-      // Create the vendor bill
+      // Create the vendor bill — keep date fields as text strings (DB columns are text type)
       const billValues: any = {
         ...billData,
-        billDate: new Date(billData.billDate),
-        dueDate: billData.dueDate ? new Date(billData.dueDate) : undefined,
-        billMonth: billData.billMonth ? new Date(`${billData.billMonth}-01`) : undefined,
+        billDate: billData.billDate,
+        dueDate: billData.dueDate || undefined,
+        billMonth: billData.billMonth ? `${billData.billMonth}-01` : undefined,
         submittedBy: ctx.user.id,
         submittedAt: new Date(),
         status: paymentInfo ? "paid" : "pending_approval",
@@ -722,7 +722,7 @@ GRACEFUL DEGRADATION: If a document is unreadable or partially parseable, still 
 
       // If payment info provided, add it
       if (paymentInfo) {
-        billValues.paidDate = new Date(paymentInfo.paidDate);
+        billValues.paidDate = paymentInfo.paidDate;
         billValues.paidAmount = paymentInfo.paidAmount;
         billValues.bankReference = paymentInfo.bankReference;
         billValues.bankName = paymentInfo.bankName;
@@ -777,17 +777,17 @@ GRACEFUL DEGRADATION: If a document is unreadable or partially parseable, still 
       if (paymentInfo && parseFloat(paymentInfo.bankFee) > 0) {
         const bankFeeBill: any = {
           vendorId: input.vendorId,
-          billNumber: `FEE-${paymentInfo.bankReference}`,
-          billDate: new Date(paymentInfo.paidDate),
+          billNumber: `FEE-${paymentInfo.bankReference || billData.billNumber}`,
+          billDate: paymentInfo.paidDate,
           currency: "USD",
           subtotal: paymentInfo.bankFee,
           tax: "0",
           totalAmount: paymentInfo.bankFee,
           paidAmount: paymentInfo.bankFee,
           status: "paid",
-          paidDate: new Date(paymentInfo.paidDate),
-          category: "bank_charges",
-          description: `Bank wire fee for ${billData.billNumber} via ${paymentInfo.bankName}`,
+          paidDate: paymentInfo.paidDate,
+          category: "other",
+          description: `Bank wire fee for ${billData.billNumber} via ${paymentInfo.bankName || "bank"}`,
           bankReference: paymentInfo.bankReference,
           bankName: paymentInfo.bankName,
           submittedBy: ctx.user.id,
