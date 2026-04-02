@@ -6,7 +6,8 @@
 import Layout from "@/components/Layout";
 import { formatMonth, formatAmount, countryName } from "@/lib/format";
 import { trpc } from "@/lib/trpc";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
+import MultiFileUploadArea, { type AttachmentItem } from "@/components/MultiFileUploadArea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -115,9 +116,8 @@ export default function Reimbursements() {
     description: "",
     amount: "",
     effectiveMonth: defaultMonth,
-    receiptFileUrl: "",
-    receiptFileKey: "",
   });
+  const [formAttachments, setFormAttachments] = useState<AttachmentItem[]>([]);
 
   const createMutation = trpc.reimbursements.create.useMutation({
     onSuccess: () => {
@@ -162,34 +162,12 @@ export default function Reimbursements() {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const uploadReceiptMutation = trpc.reimbursements.uploadReceipt.useMutation({
-    onSuccess: (data) => {
-      setFormData((prev) => ({ ...prev, receiptFileUrl: data.url, receiptFileKey: data.fileKey }));
-      toast.success(t("reimbursements.toast.uploadSuccess"));
-    },
-    onError: (err: any) => toast.error(err.message),
-  });
+  const uploadReceiptMutation = trpc.reimbursements.uploadReceipt.useMutation();
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error(t("reimbursements.toast.fileTooLarge"));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
-      uploadReceiptMutation.mutate({
-        fileBase64: base64,
-        fileName: file.name,
-        mimeType: file.type || "application/pdf",
-      });
-    };
-    reader.readAsDataURL(file);
-  };
+  const handleUploadFile = useCallback(async (params: { fileBase64: string; fileName: string; mimeType: string }) => {
+    const result = await uploadReceiptMutation.mutateAsync(params);
+    return { url: result.url, fileKey: result.fileKey };
+  }, [uploadReceiptMutation]);
 
   const items = useMemo(() => {
     let list = data?.data || [];
@@ -216,7 +194,7 @@ export default function Reimbursements() {
       toast.error(t("reimbursements.toast.missingFields"));
       return;
     }
-    if (!formData.receiptFileUrl) {
+    if (formAttachments.length === 0) {
       toast.error(t("reimbursements.toast.missingReceipt"));
       return;
     }
@@ -226,8 +204,7 @@ export default function Reimbursements() {
       description: formData.description || undefined,
       amount: formData.amount,
       effectiveMonth: formData.effectiveMonth,
-      receiptFileUrl: formData.receiptFileUrl || undefined,
-      receiptFileKey: formData.receiptFileKey || undefined,
+      attachments: formAttachments,
     });
   }
 
@@ -239,8 +216,7 @@ export default function Reimbursements() {
         category: formData.category as any,
         description: formData.description || undefined,
         amount: formData.amount,
-        receiptFileUrl: formData.receiptFileUrl || null,
-        receiptFileKey: formData.receiptFileKey || null,
+        attachments: formAttachments,
       },
     });
   }
@@ -264,9 +240,8 @@ export default function Reimbursements() {
         description: item.description || "",
         amount: item.amount || "",
         effectiveMonth: effMonth,
-        receiptFileUrl: item.receiptFileUrl || "",
-        receiptFileKey: item.receiptFileKey || "",
       });
+      setFormAttachments(item.attachments || []);
       setShowCreate(true);
     } catch (e) {
       console.error("Error editing reimbursement:", e);
@@ -287,56 +262,13 @@ export default function Reimbursements() {
       description: "",
       amount: "",
       effectiveMonth: defaultMonth,
-      receiptFileUrl: "",
-      receiptFileKey: "",
     });
+    setFormAttachments([]);
     setEditingId(null);
     setShowCreate(false);
   }
 
-  // Receipt Upload UI Component
-  const ReceiptUploadSection = () => (
-    <div className="space-y-2">
-      <Label className="flex items-center gap-1">
-        <Paperclip className="w-3.5 h-3.5" />
-        {t("reimbursements.dialog.field.receipt")} <span className="text-destructive">*</span>
-      </Label>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*,application/pdf"
-        className="hidden"
-        onChange={handleFileUpload}
-      />
-      {formData.receiptFileUrl ? (
-        <div className="flex items-center gap-2 p-2 bg-emerald-50 border border-emerald-200 rounded-md text-sm">
-          <FileText className="w-4 h-4 text-emerald-600" />
-          <span className="flex-1 truncate text-emerald-700">Receipt Uploaded</span>
-          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => window.open(formData.receiptFileUrl, "_blank")}>
-            <Eye className="w-3.5 h-3.5 mr-1" /> View
-          </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setFormData((f) => ({ ...f, receiptFileUrl: "", receiptFileKey: "" }))}>
-            <X className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-      ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploadReceiptMutation.isPending}
-        >
-          {uploadReceiptMutation.isPending ? (
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-          ) : (
-            <Upload className="w-4 h-4 mr-2" />
-          )}
-          {t("reimbursements.dialog.action.uploadReceipt")}
-        </Button>
-      )}
-    </div>
-  );
+  // ReceiptUploadSection removed — replaced by MultiFileUploadArea
 
   return (
     <Layout breadcrumb={["GEA", t("nav.operations"), t("nav.reimbursements")]}>
@@ -472,7 +404,19 @@ export default function Reimbursements() {
                       />
                     </div>
 
-                    <ReceiptUploadSection />
+                    <MultiFileUploadArea
+                      attachments={formAttachments}
+                      onChange={setFormAttachments}
+                      onUpload={handleUploadFile}
+                      label={`${t("reimbursements.dialog.field.receipt")} *`}
+                      hint={t("reimbursements.receipt.hint")}
+                      uploadText={t("reimbursements.dialog.action.uploadReceipt")}
+                      uploadingText="Uploading..."
+                      viewText="View"
+                      maxFilesText={t("reimbursements.receipt.maxFiles")}
+                      fileTooLargeText={t("reimbursements.toast.fileTooLarge")}
+                      uploadFailedText={t("reimbursements.receipt.uploadFailed")}
+                    />
 
                     {formData.effectiveMonth && (
                       <PayrollCycleIndicator month={formData.effectiveMonth} label="Reimbursements" />
@@ -615,7 +559,15 @@ export default function Reimbursements() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            {item.receiptFileUrl ? (
+                            {(item.attachments && item.attachments.length > 0) ? (
+                              <div className="flex flex-col gap-0.5">
+                                {item.attachments.map((att: any, idx: number) => (
+                                  <Button key={idx} variant="ghost" size="sm" className="h-6 px-2 text-xs justify-start" onClick={() => window.open(att.url, "_blank")}>
+                                    <Paperclip className="w-3 h-3 mr-1" /> {att.fileName || `File ${idx + 1}`}
+                                  </Button>
+                                ))}
+                              </div>
+                            ) : item.receiptFileUrl ? (
                               <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => window.open(item.receiptFileUrl!, "_blank")}>
                                 <Paperclip className="w-3 h-3 mr-1" /> View
                               </Button>
@@ -761,12 +713,22 @@ export default function Reimbursements() {
                 </div>
               )}
 
-              {viewItem.receiptFileUrl && (
+              {((viewItem.attachments && viewItem.attachments.length > 0) || viewItem.receiptFileUrl) && (
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">{t("reimbursements.dialog.field.receipt")}</Label>
-                  <Button variant="outline" size="sm" className="h-7 px-3 text-xs" onClick={() => window.open(viewItem.receiptFileUrl!, '_blank')}>
-                    <Paperclip className="w-3 h-3 mr-1" /> View Receipt
-                  </Button>
+                  {viewItem.attachments && viewItem.attachments.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      {viewItem.attachments.map((att: any, idx: number) => (
+                        <Button key={idx} variant="outline" size="sm" className="h-7 px-3 text-xs justify-start" onClick={() => window.open(att.url, '_blank')}>
+                          <Paperclip className="w-3 h-3 mr-1" /> {att.fileName || `File ${idx + 1}`}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : viewItem.receiptFileUrl ? (
+                    <Button variant="outline" size="sm" className="h-7 px-3 text-xs" onClick={() => window.open(viewItem.receiptFileUrl!, '_blank')}>
+                      <Paperclip className="w-3 h-3 mr-1" /> View Receipt
+                    </Button>
+                  ) : null}
                 </div>
               )}
               

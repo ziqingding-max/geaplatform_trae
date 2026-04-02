@@ -5,7 +5,8 @@
  * Supports both EOR (employees) and AOR (contractors) with unified worker selector.
  * Adjustments can only be edited/deleted when in 'submitted' status (before monthly lock).
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import MultiFileUploadArea, { type AttachmentItem } from "@/components/MultiFileUploadArea";
 import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { Card, CardContent } from "@/components/ui/card";
@@ -84,8 +85,6 @@ interface AdjustmentForm {
   amount: string;
   effectiveMonth: string;
   description: string;
-  receiptFileUrl: string;
-  receiptFileKey: string;
   recurrenceType: "one_time" | "monthly" | "permanent";
   recurrenceEndMonth: string;
 }
@@ -99,8 +98,6 @@ const emptyForm: AdjustmentForm = {
   amount: "",
   effectiveMonth: new Date().toISOString().slice(0, 7),
   description: "",
-  receiptFileUrl: "",
-  receiptFileKey: "",
   recurrenceType: "one_time",
   recurrenceEndMonth: "",
 };
@@ -122,7 +119,7 @@ export default function PortalAdjustments() {
   const [rejectWorkerType, setRejectWorkerType] = useState<"employee" | "contractor">("employee");
   const [rejectReason, setRejectReason] = useState("");
   const [form, setForm] = useState<AdjustmentForm>({ ...emptyForm });
-  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [formAttachments, setFormAttachments] = useState<AttachmentItem[]>([]);
 
   const utils = portalTrpc.useUtils();
 
@@ -137,6 +134,7 @@ export default function PortalAdjustments() {
       toast.success(t("portal_adjustments.toast.create_success"));
       setShowCreate(false);
       setForm({ ...emptyForm });
+      setFormAttachments([]);
       utils.adjustments.list.invalidate();
     },
     onError: (err: any) => toast.error(err.message),
@@ -147,6 +145,7 @@ export default function PortalAdjustments() {
       toast.success(t("portal_adjustments.toast.update_success"));
       setEditingId(null);
       setForm({ ...emptyForm });
+      setFormAttachments([]);
       utils.adjustments.list.invalidate();
     },
     onError: (err: any) => toast.error(err.message),
@@ -179,17 +178,12 @@ export default function PortalAdjustments() {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const uploadReceiptMutation = portalTrpc.adjustments.uploadReceipt.useMutation({
-    onSuccess: (data) => {
-      setForm((prev) => ({ ...prev, receiptFileUrl: data.url, receiptFileKey: data.fileKey }));
-      setUploadingReceipt(false);
-      toast.success(t("portal_adjustments.toast.receipt_upload_success"));
-    },
-    onError: (err: any) => {
-      setUploadingReceipt(false);
-      toast.error(err.message);
-    },
-  });
+  const uploadReceiptMutation = portalTrpc.adjustments.uploadReceipt.useMutation();
+
+  const handleUploadFile = useCallback(async (params: { fileBase64: string; fileName: string; mimeType: string }) => {
+    const result = await uploadReceiptMutation.mutateAsync(params);
+    return { url: result.url, fileKey: result.fileKey };
+  }, [uploadReceiptMutation]);
 
   const stopRecurringMutation = portalTrpc.adjustments.stopRecurring.useMutation({
     onSuccess: () => {
@@ -202,26 +196,6 @@ export default function PortalAdjustments() {
   const items = Array.isArray(data?.items) ? data.items : [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
-
-  function handleReceiptUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error(t("portal_adjustments.toast.file_size_error"));
-      return;
-    }
-    setUploadingReceipt(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
-      uploadReceiptMutation.mutate({
-        fileBase64: base64,
-        fileName: file.name,
-        mimeType: file.type || "application/pdf",
-      });
-    };
-    reader.readAsDataURL(file);
-  }
 
   function handleCreate() {
     if (!form.workerId || !form.workerType || !form.adjustmentType || !form.amount || !form.effectiveMonth) {
@@ -240,8 +214,7 @@ export default function PortalAdjustments() {
       currency: form.workerCurrency,
       effectiveMonth: form.effectiveMonth,
       description: form.description || undefined,
-      receiptFileUrl: form.receiptFileUrl || undefined,
-      receiptFileKey: form.receiptFileKey || undefined,
+      attachments: formAttachments,
       recurrenceType: form.recurrenceType,
       recurrenceEndMonth: form.recurrenceType === "monthly" ? form.recurrenceEndMonth || undefined : undefined,
     });
@@ -254,8 +227,7 @@ export default function PortalAdjustments() {
       workerType: editingWorkerType,
       amount: form.amount || undefined,
       description: form.description || undefined,
-      receiptFileUrl: form.receiptFileUrl || undefined,
-      receiptFileKey: form.receiptFileKey || undefined,
+      attachments: formAttachments,
     });
   }
 
@@ -271,11 +243,10 @@ export default function PortalAdjustments() {
       amount: adj.amount,
       effectiveMonth: adj.effectiveMonth ? adj.effectiveMonth.slice(0, 7) : "",
       description: adj.description || "",
-      receiptFileUrl: adj.receiptFileUrl || "",
-      receiptFileKey: "",
       recurrenceType: adj.recurrenceType || "one_time",
       recurrenceEndMonth: adj.recurrenceEndMonth ? adj.recurrenceEndMonth.slice(0, 7) : "",
     });
+    setFormAttachments(adj.attachments || []);
   }
 
   function handleStopRecurring(adj: any) {
@@ -431,7 +402,15 @@ export default function PortalAdjustments() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {adj.receiptFileUrl ? (
+                        {(adj.attachments && adj.attachments.length > 0) ? (
+                          <div className="flex flex-col gap-0.5">
+                            {adj.attachments.map((att: any, idx: number) => (
+                              <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs flex items-center gap-1">
+                                <ExternalLink className="w-3 h-3" /> {att.fileName || `File ${idx + 1}`}
+                              </a>
+                            ))}
+                          </div>
+                        ) : adj.receiptFileUrl ? (
                           <a href={adj.receiptFileUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                             <ExternalLink className="w-4 h-4" />
                           </a>
@@ -513,7 +492,7 @@ export default function PortalAdjustments() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={isFormOpen} onOpenChange={(open) => {
-        if (!open) { setShowCreate(false); setEditingId(null); setForm({ ...emptyForm }); }
+        if (!open) { setShowCreate(false); setEditingId(null); setForm({ ...emptyForm }); setFormAttachments([]); }
       }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -624,33 +603,22 @@ export default function PortalAdjustments() {
               <Label>{t("portal_adjustments.form.description_label")}</Label>
               <Textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder={t("portal_adjustments.form.description_label") + "..."} rows={2} />
             </div>
-            <div className="space-y-2">
-              <Label>{t("portal_adjustments.form.receipt_label")}</Label>
-              {form.receiptFileUrl ? (
-                <div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30">
-                  <Receipt className="w-4 h-4 text-emerald-600" />
-                  <a href={form.receiptFileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate flex-1">
-                    {t("adjustments.receipt.existing")}
-                  </a>
-                  <Button variant="ghost" size="sm" onClick={() => setForm((f) => ({ ...f, receiptFileUrl: "", receiptFileKey: "" }))}>
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </div>
-              ) : (
-                <label className="cursor-pointer">
-                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={handleReceiptUpload} />
-                  <Button variant="outline" size="sm" disabled={uploadingReceipt} asChild>
-                    <span>
-                      {uploadingReceipt ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-                      {uploadingReceipt ? "Uploading..." : t("adjustments.receipt.upload")}
-                    </span>
-                  </Button>
-                </label>
-              )}
-            </div>
+            <MultiFileUploadArea
+              attachments={formAttachments}
+              onChange={setFormAttachments}
+              onUpload={handleUploadFile}
+              label={t("portal_adjustments.form.receipt_label")}
+              hint={t("portal_adjustments.form.receipt_hint")}
+              uploadText={t("portal_adjustments.form.upload_receipt_button")}
+              uploadingText={t("portal_adjustments.form.uploading_receipt")}
+              viewText={t("portal_adjustments.form.view_receipt")}
+              maxFilesText={t("portal_adjustments.form.receipt_maxFiles")}
+              fileTooLargeText={t("portal_adjustments.toast.file_size_error")}
+              uploadFailedText={t("portal_adjustments.form.receipt_uploadFailed")}
+            />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowCreate(false); setEditingId(null); setForm({ ...emptyForm }); }}>
+            <Button variant="outline" onClick={() => { setShowCreate(false); setEditingId(null); setForm({ ...emptyForm }); setFormAttachments([]); }}>
               {t("common.cancel") || "Cancel"}
             </Button>
             <Button

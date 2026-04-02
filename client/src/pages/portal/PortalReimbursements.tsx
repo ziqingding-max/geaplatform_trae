@@ -4,7 +4,8 @@
  * Dedicated page for expense reimbursement claims.
  * Supports create, edit, delete, and client approve/reject workflow.
  */
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import MultiFileUploadArea, { type AttachmentItem } from "@/components/MultiFileUploadArea";
 import PortalLayout from "@/components/PortalLayout";
 import { portalTrpc } from "@/lib/portalTrpc";
 import { usePortalAuth } from "@/hooks/usePortalAuth";
@@ -57,8 +58,6 @@ interface ReimbursementForm {
   currency: string;
   effectiveMonth: string;
   description: string;
-  receiptFileUrl: string;
-  receiptFileKey: string;
 }
 
 const emptyForm: ReimbursementForm = {
@@ -68,8 +67,6 @@ const emptyForm: ReimbursementForm = {
   currency: "USD",
   effectiveMonth: new Date().toISOString().slice(0, 7),
   description: "",
-  receiptFileUrl: "",
-  receiptFileKey: "",
 };
 
 export default function PortalReimbursements() {
@@ -107,7 +104,7 @@ export default function PortalReimbursements() {
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [form, setForm] = useState<ReimbursementForm>({ ...emptyForm });
-  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [formAttachments, setFormAttachments] = useState<AttachmentItem[]>([]);
 
   const utils = portalTrpc.useUtils();
 
@@ -125,6 +122,7 @@ export default function PortalReimbursements() {
       toast.success(t("portal_reimbursements.toast.claim_submitted"));
       setShowCreate(false);
       setForm({ ...emptyForm });
+      setFormAttachments([]);
       utils.reimbursements.list.invalidate();
     },
     onError: (err: any) => toast.error(err.message),
@@ -135,6 +133,7 @@ export default function PortalReimbursements() {
       toast.success(t("portal_reimbursements.toast.updated"));
       setEditingId(null);
       setForm({ ...emptyForm });
+      setFormAttachments([]);
       utils.reimbursements.list.invalidate();
     },
     onError: (err: any) => toast.error(err.message),
@@ -167,48 +166,23 @@ export default function PortalReimbursements() {
     onError: (err: any) => toast.error(err.message),
   });
 
-  const uploadReceiptMutation = portalTrpc.reimbursements.uploadReceipt.useMutation({
-    onSuccess: (data) => {
-      setForm((prev) => ({ ...prev, receiptFileUrl: data.url, receiptFileKey: data.fileKey }));
-      setUploadingReceipt(false);
-      toast.success(t("portal_reimbursements.toast.receipt_uploaded"));
-    },
-    onError: (err: any) => {
-      setUploadingReceipt(false);
-      toast.error(err.message);
-    },
-  });
+  const uploadReceiptMutation = portalTrpc.reimbursements.uploadReceipt.useMutation();
+
+  const handleUploadFile = useCallback(async (params: { fileBase64: string; fileName: string; mimeType: string }) => {
+    const result = await uploadReceiptMutation.mutateAsync(params);
+    return { url: result.url, fileKey: result.fileKey };
+  }, [uploadReceiptMutation]);
 
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / pageSize);
-
-  function handleReceiptUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error(t("portal_reimbursements.toast.error.file_size_limit"));
-      return;
-    }
-    setUploadingReceipt(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = (reader.result as string).split(",")[1];
-      uploadReceiptMutation.mutate({
-        fileBase64: base64,
-        fileName: file.name,
-        mimeType: file.type || "application/pdf",
-      });
-    };
-    reader.readAsDataURL(file);
-  }
 
   function handleCreate() {
     if (!form.employeeId || !form.category || !form.amount || !form.effectiveMonth) {
       toast.error(t("portal_reimbursements.toast.error.required_fields"));
       return;
     }
-    if (!form.receiptFileUrl) {
+    if (formAttachments.length === 0) {
       toast.error(t("portal_reimbursements.toast.error.receipt_required"));
       return;
     }
@@ -219,8 +193,7 @@ export default function PortalReimbursements() {
       currency: form.currency,
       effectiveMonth: form.effectiveMonth,
       description: form.description || undefined,
-      receiptFileUrl: form.receiptFileUrl,
-      receiptFileKey: form.receiptFileKey || undefined,
+      attachments: formAttachments,
     });
   }
 
@@ -230,8 +203,7 @@ export default function PortalReimbursements() {
       id: editingId,
       amount: form.amount || undefined,
       description: form.description || undefined,
-      receiptFileUrl: form.receiptFileUrl || undefined,
-      receiptFileKey: form.receiptFileKey || undefined,
+      attachments: formAttachments,
     });
   }
 
@@ -244,9 +216,8 @@ export default function PortalReimbursements() {
       currency: reimb.currency,
       effectiveMonth: reimb.effectiveMonth ? reimb.effectiveMonth.slice(0, 7) : "",
       description: reimb.description || "",
-      receiptFileUrl: reimb.receiptFileUrl || "",
-      receiptFileKey: "",
     });
+    setFormAttachments(reimb.attachments || []);
   }
 
   const isFormOpen = showCreate || editingId !== null;
@@ -369,7 +340,15 @@ export default function PortalReimbursements() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {reimb.receiptFileUrl ? (
+                        {(reimb.attachments && reimb.attachments.length > 0) ? (
+                          <div className="flex flex-col gap-0.5">
+                            {reimb.attachments.map((att: any, idx: number) => (
+                              <a key={idx} href={att.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-xs flex items-center gap-1">
+                                <ExternalLink className="w-3 h-3" /> {att.fileName || `File ${idx + 1}`}
+                              </a>
+                            ))}
+                          </div>
+                        ) : reimb.receiptFileUrl ? (
                           <a href={reimb.receiptFileUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                             <ExternalLink className="w-4 h-4" />
                           </a>
@@ -443,7 +422,7 @@ export default function PortalReimbursements() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={isFormOpen} onOpenChange={(open) => {
-        if (!open) { setShowCreate(false); setEditingId(null); setForm({ ...emptyForm }); }
+        if (!open) { setShowCreate(false); setEditingId(null); setForm({ ...emptyForm }); setFormAttachments([]); }
       }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -508,33 +487,22 @@ export default function PortalReimbursements() {
               <Label>{t("portal_reimbursements.table.header.description")}</Label>
               <Textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder={t("portal_reimbursements.placeholder.describe_expense")} rows={2} />
             </div>
-            <div className="space-y-2">
-              <Label>{t("portal_reimbursements.form.label.receipt")} <span className="text-destructive">*</span></Label>
-              {form.receiptFileUrl ? (
-                <div className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30">
-                  <Receipt className="w-4 h-4 text-emerald-600" />
-                  <a href={form.receiptFileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline truncate flex-1">
-                    {t("portal_reimbursements.button.view_receipt")}
-                  </a>
-                  <Button variant="ghost" size="sm" onClick={() => setForm((f) => ({ ...f, receiptFileUrl: "", receiptFileKey: "" }))}>
-                    <Trash2 className="w-3 h-3" />
-                  </Button>
-                </div>
-              ) : (
-                <label className="cursor-pointer">
-                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={handleReceiptUpload} />
-                  <Button variant="outline" size="sm" disabled={uploadingReceipt} asChild>
-                    <span>
-                      {uploadingReceipt ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-                      {uploadingReceipt ? t("portal_reimbursements.button.uploading") : t("portal_reimbursements.button.upload_receipt")}
-                    </span>
-                  </Button>
-                </label>
-              )}
-            </div>
+            <MultiFileUploadArea
+              attachments={formAttachments}
+              onChange={setFormAttachments}
+              onUpload={handleUploadFile}
+              label={`${t("portal_reimbursements.form.label.receipt")} *`}
+              hint={t("portal_reimbursements.button.receipt_hint")}
+              uploadText={t("portal_reimbursements.button.upload_receipt")}
+              uploadingText={t("portal_reimbursements.button.uploading")}
+              viewText={t("portal_reimbursements.button.view_receipt")}
+              maxFilesText={t("portal_reimbursements.button.receipt_maxFiles")}
+              fileTooLargeText={t("portal_reimbursements.toast.error.file_size_limit")}
+              uploadFailedText={t("portal_reimbursements.button.receipt_uploadFailed")}
+            />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowCreate(false); setEditingId(null); setForm({ ...emptyForm }); }}>
+            <Button variant="outline" onClick={() => { setShowCreate(false); setEditingId(null); setForm({ ...emptyForm }); setFormAttachments([]); }}>
               {t("common.cancel")}
             </Button>
             <Button

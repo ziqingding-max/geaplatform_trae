@@ -26,6 +26,7 @@ import {
 } from "../../../drizzle/schema";
 import { storagePut } from "../../storage";
 import { enforceCutoff, checkCutoffPassed } from "../../utils/cutoff";
+import { attachmentsSchema, resolveAttachments } from "../../utils/attachments";
 
 export const portalAdjustmentsRouter = portalRouter({
   /**
@@ -90,10 +91,12 @@ export const portalAdjustmentsRouter = portalRouter({
           .orderBy(sql`${adjustments.updatedAt} DESC`);
 
         for (const item of eorItems) {
+          const resolvedAttachments = await resolveAttachments(item as any);
           allItems.push({
             ...item,
             workerType: "employee" as const,
             workerLabel: "EOR",
+            attachments: resolvedAttachments,
             // Keep backward compat fields
             employeeFirstName: item.workerFirstName,
             employeeLastName: item.workerLastName,
@@ -142,11 +145,17 @@ export const portalAdjustmentsRouter = portalRouter({
           .orderBy(sql`${contractorAdjustments.updatedAt} DESC`);
 
         for (const item of aorItems) {
+          const resolvedAttachments = await resolveAttachments({
+            attachments: (item as any).attachments,
+            attachmentUrl: item.receiptFileUrl,
+            attachmentFileKey: (item as any).attachmentFileKey,
+          });
           allItems.push({
             ...item,
             category: null,
             workerType: "contractor" as const,
             workerLabel: "AOR",
+            attachments: resolvedAttachments,
             employeeFirstName: item.workerFirstName,
             employeeLastName: item.workerLastName,
           });
@@ -185,6 +194,7 @@ export const portalAdjustmentsRouter = portalRouter({
         description: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
+        attachments: attachmentsSchema,
         // Recurring adjustment fields
         recurrenceType: z.enum(["one_time", "monthly", "permanent"]).default("one_time"),
         recurrenceEndMonth: z.string().optional(), // YYYY-MM or YYYY-MM-01, required for monthly
@@ -268,6 +278,9 @@ export const portalAdjustmentsRouter = portalRouter({
           description: input.description || null,
           receiptFileUrl: input.receiptFileUrl || null,
           receiptFileKey: input.receiptFileKey || null,
+          attachments: input.attachments && input.attachments.length > 0
+            ? input.attachments
+            : (input.receiptFileUrl ? [{ url: input.receiptFileUrl, fileKey: input.receiptFileKey || "", fileName: "receipt" }] : null),
           status: "submitted",
           // Recurring fields
           recurrenceType: input.recurrenceType,
@@ -309,6 +322,9 @@ export const portalAdjustmentsRouter = portalRouter({
           effectiveMonth: normalizedMonth,
           attachmentUrl: input.receiptFileUrl && input.receiptFileUrl.trim() ? input.receiptFileUrl.trim() : null,
           attachmentFileKey: input.receiptFileKey && input.receiptFileKey.trim() ? input.receiptFileKey.trim() : null,
+          attachments: input.attachments && input.attachments.length > 0
+            ? input.attachments
+            : (input.receiptFileUrl && input.receiptFileUrl.trim() ? [{ url: input.receiptFileUrl.trim(), fileKey: (input.receiptFileKey || "").trim(), fileName: "receipt" }] : null),
           status: "submitted",
           // Recurring fields
           recurrenceType: input.recurrenceType,
@@ -334,6 +350,7 @@ export const portalAdjustmentsRouter = portalRouter({
         description: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
+        attachments: attachmentsSchema.nullable().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -355,6 +372,7 @@ export const portalAdjustmentsRouter = portalRouter({
         if (input.description !== undefined) updates.description = input.description;
         if (input.receiptFileUrl !== undefined) updates.attachmentUrl = input.receiptFileUrl;
         if (input.receiptFileKey !== undefined) updates.attachmentFileKey = input.receiptFileKey;
+        if (input.attachments !== undefined) updates.attachments = input.attachments;
 
         if (Object.keys(updates).length > 0) {
           await db.update(contractorAdjustments).set(updates).where(eq(contractorAdjustments.id, input.id));
@@ -373,6 +391,7 @@ export const portalAdjustmentsRouter = portalRouter({
         if (input.description !== undefined) updates.description = input.description;
         if (input.receiptFileUrl !== undefined) updates.receiptFileUrl = input.receiptFileUrl;
         if (input.receiptFileKey !== undefined) updates.receiptFileKey = input.receiptFileKey;
+        if (input.attachments !== undefined) updates.attachments = input.attachments;
 
         if (Object.keys(updates).length > 0) {
           await db.update(adjustments).set(updates).where(eq(adjustments.id, input.id));

@@ -20,6 +20,7 @@ import { getDb } from "../../services/db/connection";
 import { reimbursements } from "../../../drizzle/schema";
 import { eq, and, desc, count } from "drizzle-orm";
 import { storagePut } from "../../storage";
+import { attachmentsSchema, resolveAttachments } from "../../utils/attachments";
 
 export const workerReimbursementsRouter = workerRouter({
   /**
@@ -53,7 +54,7 @@ export const workerReimbursementsRouter = workerRouter({
         .from(reimbursements)
         .where(whereCondition);
 
-      const items = await db
+      const rawItems = await db
         .select({
           id: reimbursements.id,
           category: reimbursements.category,
@@ -61,6 +62,8 @@ export const workerReimbursementsRouter = workerRouter({
           amount: reimbursements.amount,
           currency: reimbursements.currency,
           receiptFileUrl: reimbursements.receiptFileUrl,
+          receiptFileKey: reimbursements.receiptFileKey,
+          attachments: reimbursements.attachments,
           status: reimbursements.status,
           effectiveMonth: reimbursements.effectiveMonth,
           clientRejectionReason: reimbursements.clientRejectionReason,
@@ -72,6 +75,12 @@ export const workerReimbursementsRouter = workerRouter({
         .limit(input.pageSize)
         .offset(offset)
         .orderBy(desc(reimbursements.createdAt));
+
+      // Resolve attachments (new multi-file field + legacy single-file fallback)
+      const items = await Promise.all(rawItems.map(async (item) => {
+        const resolvedAttachments = await resolveAttachments(item as any);
+        return { ...item, attachments: resolvedAttachments };
+      }));
 
       return {
         items,
@@ -121,8 +130,9 @@ export const workerReimbursementsRouter = workerRouter({
         description: z.string().optional(),
         amount: z.string(), // Decimal as string
         currency: z.string().length(3).default("USD"),
-        receiptFileUrl: z.string(), // Now required
+        receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
+        attachments: attachmentsSchema,
         effectiveMonth: z.string(), // YYYY-MM-01
       })
     )
@@ -137,6 +147,19 @@ export const workerReimbursementsRouter = workerRouter({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Employee profile is incomplete" });
       }
 
+      // Require at least one attachment (receipt required)
+      const hasAttachments = (input.attachments && input.attachments.length > 0) || !!input.receiptFileUrl;
+      if (!hasAttachments) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Receipt is required for reimbursement claims" });
+      }
+
+      // Build attachments: prefer new multi-file field, fall back to legacy single-file
+      const attachments = input.attachments && input.attachments.length > 0
+        ? input.attachments
+        : (input.receiptFileUrl
+          ? [{ url: input.receiptFileUrl, fileKey: input.receiptFileKey || "", fileName: "receipt" }]
+          : null);
+
       await db.insert(reimbursements).values({
         employeeId,
         customerId,
@@ -144,8 +167,9 @@ export const workerReimbursementsRouter = workerRouter({
         description: input.description || null,
         amount: input.amount,
         currency: input.currency,
-        receiptFileUrl: input.receiptFileUrl,
+        receiptFileUrl: input.receiptFileUrl || null,
         receiptFileKey: input.receiptFileKey || null,
+        attachments,
         status: "submitted",
         submittedBy: ctx.workerUser.id,
         effectiveMonth: input.effectiveMonth,
