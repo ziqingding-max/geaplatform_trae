@@ -98,6 +98,11 @@ export const vendorBillsRouter = router({
         internalNotes: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
+        // Payment fields (optional, for recording payment info at creation)
+        paidAmount: z.string().optional(),
+        bankReference: z.string().optional(),
+        bankName: z.string().optional(),
+        bankFee: z.string().optional(),
         // Settlement fields (optional at creation, typically filled when marking as paid)
         settlementCurrency: z.string().optional(),
         settlementAmount: z.string().optional(),
@@ -116,13 +121,13 @@ export const vendorBillsRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Vendor not found" });
       }
 
-      // Convert date strings
+      // Keep date fields as text strings (DB columns are text type)
       const billValues: any = {
         ...billData,
-        billDate: new Date(billData.billDate),
-        dueDate: billData.dueDate ? new Date(billData.dueDate) : undefined,
-        paidDate: billData.paidDate ? new Date(billData.paidDate) : undefined,
-        billMonth: billData.billMonth ? new Date(`${billData.billMonth}-01`) : undefined,
+        billDate: billData.billDate,
+        dueDate: billData.dueDate || undefined,
+        paidDate: billData.paidDate || undefined,
+        billMonth: billData.billMonth ? `${billData.billMonth}-01` : undefined,
         submittedBy: ctx.user.id,
         submittedAt: new Date(),
       };
@@ -200,14 +205,14 @@ export const vendorBillsRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Vendor bill not found" });
       }
 
-      // Convert date strings
+      // Keep date fields as text strings (DB columns are text type)
       const updateValues: any = { ...data };
-      if (data.billDate) updateValues.billDate = new Date(data.billDate);
-      if (data.dueDate) updateValues.dueDate = new Date(data.dueDate);
+      if (data.billDate) updateValues.billDate = data.billDate;
+      if (data.dueDate) updateValues.dueDate = data.dueDate;
       if (data.dueDate === null) updateValues.dueDate = null;
-      if (data.paidDate) updateValues.paidDate = new Date(data.paidDate);
+      if (data.paidDate) updateValues.paidDate = data.paidDate;
       if (data.paidDate === null) updateValues.paidDate = null;
-      if (data.billMonth) updateValues.billMonth = new Date(`${data.billMonth}-01`);
+      if (data.billMonth) updateValues.billMonth = `${data.billMonth}-01`;
       if (data.billMonth === null) updateValues.billMonth = null;
       if (data.settlementDate) updateValues.settlementDate = data.settlementDate;
       if (data.settlementDate === null) updateValues.settlementDate = null;
