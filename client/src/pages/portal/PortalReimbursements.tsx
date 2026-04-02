@@ -492,13 +492,13 @@ export default function PortalReimbursements() {
               onChange={setFormAttachments}
               onUpload={handleUploadFile}
               label={`${t("portal_reimbursements.form.label.receipt")} *`}
-              hint={t("portal_reimbursements.form.receipt_hint")}
+              hint={t("portal_reimbursements.button.receipt_hint")}
               uploadText={t("portal_reimbursements.button.upload_receipt")}
               uploadingText={t("portal_reimbursements.button.uploading")}
               viewText={t("portal_reimbursements.button.view_receipt")}
-              maxFilesText={t("portal_reimbursements.form.receipt_maxFiles")}
+              maxFilesText={t("portal_reimbursements.button.receipt_maxFiles")}
               fileTooLargeText={t("portal_reimbursements.toast.error.file_size_limit")}
-              uploadFailedText={t("portal_reimbursements.form.receipt_uploadFailed")}
+              uploadFailedText={t("portal_reimbursements.button.receipt_uploadFailed")}
             />
           </div>
           <DialogFooter>
