@@ -975,7 +975,7 @@ export default function Adjustments() {
         {/* Edit Dialog */}
         <Dialog open={editOpen} onOpenChange={(open) => {
           setEditOpen(open);
-          if (!open) { setEditReceiptFile(null); }
+          if (!open) { setEditAttachments([]); }
         }}>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
