@@ -66,7 +66,7 @@ function calcBusinessDays(start: string, end: string): number {
 
 export default function Leave() {
   const { t, lang } = useI18n();
-  const { canEditOps, canExport } = usePermissions();
+  const { canEditOps, canExport, isAdmin } = usePermissions();
   const [viewTab, setViewTab] = useState<string>("active");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [monthFilter, setMonthFilter] = useState<string>("all");
@@ -763,6 +763,17 @@ export default function Leave() {
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </Button>
                                   </>
+                                )}
+                                {isAdmin && leave.status === "admin_approved" && (
+                                  <Button
+                                    variant="ghost" size="icon"
+                                    className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => handleDelete(leave.id)}
+                                    disabled={deleteMutation.isPending}
+                                    title="Admin: Delete approved record"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
                                 )}
                                 <Button
                                   variant="ghost" size="icon"

@@ -62,7 +62,7 @@ const CATEGORIES = [
 
 export default function Reimbursements() {
   const { t, lang } = useI18n();
-  const { canEditOps, canExport } = usePermissions();
+  const { canEditOps, canExport, isAdmin } = usePermissions();
   const [viewTab, setViewTab] = useState<string>("active");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -664,6 +664,17 @@ export default function Reimbursements() {
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </Button>
                                 </>
+                              )}
+                              {isAdmin && item.status === "admin_approved" && (
+                                <Button
+                                  variant="ghost" size="icon"
+                                  className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => handleDelete(item.id)}
+                                  disabled={deleteMutation.isPending}
+                                  title="Admin: Delete approved record"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
                               )}
                               <Button
                                 variant="ghost" size="icon"
