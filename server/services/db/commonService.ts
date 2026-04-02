@@ -307,10 +307,17 @@ export async function listSalesActivities(leadId: number) {
 export async function createLeadChangeLog(data: InsertLeadChangeLog) {
   const db = await getDb();
   if (!db) return;
-  // Use raw SQL to exclude 'id' column from INSERT statement.
-  // PostgreSQL serial columns should not receive explicit NULL values.
-  const now = new Date();
-  await db.execute(sql`INSERT INTO lead_change_logs ("leadId", "userId", "userName", "changeType", "fieldName", "oldValue", "newValue", "description", "createdAt") VALUES (${data.leadId}, ${data.userId ?? null}, ${data.userName ?? null}, ${data.changeType}, ${data.fieldName ?? null}, ${data.oldValue ?? null}, ${data.newValue ?? null}, ${data.description ?? null}, ${now})`);
+  // Use Drizzle ORM insert — serial 'id' is auto-excluded, 'createdAt' uses defaultNow()
+  await db.insert(leadChangeLogs).values({
+    leadId: data.leadId,
+    userId: data.userId ?? null,
+    userName: data.userName ?? null,
+    changeType: data.changeType,
+    fieldName: data.fieldName ?? null,
+    oldValue: data.oldValue ?? null,
+    newValue: data.newValue ?? null,
+    description: data.description ?? null,
+  });
 }
 
 export async function listLeadChangeLogs(leadId: number) {

@@ -1378,7 +1378,7 @@ function EditLeadDialog({
         industry: formData.industry.trim() === "" ? undefined : formData.industry,
         source: formData.source.trim() === "" ? undefined : formData.source,
         assignedTo: formData.assignedTo,
-        estimatedEmployees: formData.estimatedEmployees,
+        estimatedEmployees: formData.estimatedEmployees ?? undefined,
         estimatedRevenue: formData.estimatedRevenue.trim() === "" ? undefined : formData.estimatedRevenue,
         notes: formData.notes.trim() === "" ? undefined : formData.notes,
         expectedCloseDate: formData.expectedCloseDate.trim() === "" ? null : formData.expectedCloseDate,

@@ -159,7 +159,7 @@ export const salesRouter = router({
           contactPhone: z.string().optional(),
           country: z.string().optional(),
           industry: z.string().optional(),
-          estimatedEmployees: z.number().optional(),
+          estimatedEmployees: z.number().nullable().optional(),
           estimatedRevenue: z.string().optional(),
           currency: z.string().optional(),
           source: z.string().optional(),
