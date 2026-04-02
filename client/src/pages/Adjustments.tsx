@@ -88,7 +88,7 @@ const CATEGORIES = [
 
 export default function Adjustments() {
   const { t, lang } = useI18n();
-  const { canEditOps, canExport } = usePermissions();
+  const { canEditOps, canExport, isAdmin } = usePermissions();
   const [viewTab, setViewTab] = useState<string>("active");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -1033,6 +1033,15 @@ export default function Adjustments() {
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
                               </>
+                            )}
+                            {isAdmin && adj.status === "admin_approved" && (
+                              <Button
+                                variant="ghost" size="icon" className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => handleDelete(adj)}
+                                title="Admin: Delete approved record"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
                             )}
                             {canEditOps && adj.isRecurringTemplate && (
                               <Button
