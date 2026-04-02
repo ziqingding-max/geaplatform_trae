@@ -526,9 +526,11 @@ export const adjustments = pgTable(
     description: text("description"),
     amount: text("amount").notNull(),
     currency: varchar("currency", { length: 3 }).default("USD").notNull(), // Auto-filled from employee's country
-    // For reimbursements: receipt
+    // For reimbursements: receipt (legacy single-file fields, kept for backward compatibility)
     receiptFileUrl: text("receiptFileUrl"),
     receiptFileKey: varchar("receiptFileKey", { length: 500 }),
+    // Multi-file attachments (new): array of {url, fileKey, fileName, fileSize}
+    attachments: jsonb("attachments").$type<Array<{url: string; fileKey: string; fileName: string; fileSize?: number}>>(),
     // Status workflow: submitted → client_approved/client_rejected → admin_approved/admin_rejected → locked
     status: text("status", { enum: [
       "submitted",
@@ -1035,9 +1037,11 @@ export const reimbursements = pgTable(
     description: text("description"),
     amount: text("amount").notNull(),
     currency: varchar("currency", { length: 3 }).default("USD").notNull(),
-    // Receipt / supporting document
+    // Receipt / supporting document (legacy single-file fields, kept for backward compatibility)
     receiptFileUrl: text("receiptFileUrl"),
     receiptFileKey: varchar("receiptFileKey", { length: 500 }),
+    // Multi-file attachments (new): array of {url, fileKey, fileName, fileSize}
+    attachments: jsonb("attachments").$type<Array<{url: string; fileKey: string; fileName: string; fileSize?: number}>>(),
     // Status workflow: submitted → client_approved/client_rejected → admin_approved/admin_rejected → locked
     status: text("status", { enum: [
       "submitted",

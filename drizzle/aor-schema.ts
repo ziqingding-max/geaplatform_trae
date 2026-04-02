@@ -235,9 +235,11 @@ export const contractorAdjustments = pgTable(
     amount: text("amount").notNull(),
     currency: varchar("currency", { length: 3 }).notNull(),
     
-    // Receipt/attachment
+    // Receipt/attachment (legacy single-file fields, kept for backward compatibility)
     attachmentUrl: text("attachmentUrl"),
     attachmentFileKey: varchar("attachmentFileKey", { length: 500 }),
+    // Multi-file attachments (new): array of {url, fileKey, fileName, fileSize}
+    attachments: jsonb("attachments").$type<Array<{url: string; fileKey: string; fileName: string; fileSize?: number}>>(),
     
     // Status workflow: submitted → client_approved/client_rejected → admin_approved/admin_rejected → locked
     status: text("status", { enum: [
