@@ -19,6 +19,7 @@ import { getDb } from "../../db";
 import { reimbursements, employees, payrollRuns, payrollItems } from "../../../drizzle/schema";
 import { storagePut } from "../../storage";
 import { enforceCutoff } from "../../utils/cutoff";
+import { attachmentsSchema, resolveAttachments } from "../../utils/attachments";
 
 export const portalReimbursementsRouter = portalRouter({
   /**
@@ -88,8 +89,14 @@ export const portalReimbursementsRouter = portalRouter({
         .limit(input.pageSize)
         .offset((input.page - 1) * input.pageSize);
 
+      // Resolve attachments (new multi-file field + legacy single-file fallback)
+      const processedItems = await Promise.all(items.map(async (item) => {
+        const resolvedAttachments = await resolveAttachments(item as any);
+        return { ...item, attachments: resolvedAttachments };
+      }));
+
       return {
-        items,
+        items: processedItems,
         total: totalResult?.count ?? 0,
       };
     }),
@@ -111,6 +118,7 @@ export const portalReimbursementsRouter = portalRouter({
         description: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
+        attachments: attachmentsSchema,
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -128,8 +136,9 @@ export const portalReimbursementsRouter = portalRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Employee not found" });
       }
 
-      // Require receipt for reimbursements
-      if (!input.receiptFileUrl) {
+      // Require at least one attachment (receipt required)
+      const hasAttachments = (input.attachments && input.attachments.length > 0) || !!input.receiptFileUrl;
+      if (!hasAttachments) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Receipt is required for reimbursement claims" });
       }
 
@@ -167,6 +176,13 @@ export const portalReimbursementsRouter = portalRouter({
       // Use employee's salary currency
       const currency = emp.salaryCurrency || input.currency;
 
+      // Build attachments: prefer new multi-file field, fall back to legacy single-file
+      const attachments = input.attachments && input.attachments.length > 0
+        ? input.attachments
+        : (input.receiptFileUrl
+          ? [{ url: input.receiptFileUrl, fileKey: input.receiptFileKey || "", fileName: "receipt" }]
+          : null);
+
       await db.insert(reimbursements).values({
         employeeId: input.employeeId,
         customerId: cid,
@@ -177,6 +193,7 @@ export const portalReimbursementsRouter = portalRouter({
         description: input.description || null,
         receiptFileUrl: input.receiptFileUrl || null,
         receiptFileKey: input.receiptFileKey || null,
+        attachments,
         status: "submitted",
         submittedBy: ctx.portalUser.contactId,
       });
@@ -195,6 +212,7 @@ export const portalReimbursementsRouter = portalRouter({
         description: z.string().optional(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
+        attachments: attachmentsSchema.nullable().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -220,6 +238,7 @@ export const portalReimbursementsRouter = portalRouter({
       if (input.description !== undefined) updates.description = input.description;
       if (input.receiptFileUrl !== undefined) updates.receiptFileUrl = input.receiptFileUrl;
       if (input.receiptFileKey !== undefined) updates.receiptFileKey = input.receiptFileKey;
+      if (input.attachments !== undefined) updates.attachments = input.attachments;
 
       if (Object.keys(updates).length > 0) {
         await db.update(reimbursements).set(updates).where(eq(reimbursements.id, input.id));

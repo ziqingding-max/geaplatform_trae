@@ -14,6 +14,7 @@ import {
 } from "../db";
 import { enforceCutoff, checkCutoffPassed, getAdjustmentPayrollMonth } from "../utils/cutoff";
 import { storagePut, storageGet } from "../storage";
+import { attachmentsSchema, resolveAttachments } from "../utils/attachments";
 
 export const adjustmentsRouter = router({
   list: userProcedure
@@ -40,17 +41,24 @@ export const adjustmentsRouter = router({
         effectiveMonth: input.effectiveMonth,
       });
 
-      // Map to signed URLs for viewing receipts
+      // Resolve attachments (new multi-file field + legacy single-file fallback)
       const processedItems = await Promise.all(items.map(async (item) => {
-        if (item.receiptFileKey) {
+        const resolvedAttachments = await resolveAttachments(item as any);
+
+        // Also keep legacy receiptFileUrl for backward compat with old frontend code
+        let receiptFileUrl = (item as any).receiptFileUrl;
+        if ((item as any).receiptFileKey && !resolvedAttachments.length) {
           try {
-            const { url } = await storageGet(item.receiptFileKey);
-            return { ...item, receiptFileUrl: url };
+            const { url } = await storageGet((item as any).receiptFileKey);
+            receiptFileUrl = url;
           } catch (e) {
-            return item;
+            // keep original
           }
+        } else if (resolvedAttachments.length > 0) {
+          receiptFileUrl = resolvedAttachments[0].url;
         }
-        return item;
+
+        return { ...item, receiptFileUrl, attachments: resolvedAttachments };
       }));
 
       return { data: processedItems, total };
@@ -77,6 +85,7 @@ export const adjustmentsRouter = router({
         effectiveMonth: z.string(), // YYYY-MM or YYYY-MM-01
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
+        attachments: attachmentsSchema,
         // Recurring adjustment fields
         recurrenceType: z.enum(["one_time", "monthly", "permanent"]).default("one_time"),
         recurrenceEndMonth: z.string().optional(), // YYYY-MM or YYYY-MM-01, required for monthly
@@ -144,6 +153,13 @@ export const adjustmentsRouter = router({
         throw new TRPCError({ code: 'BAD_REQUEST', message: "Permanent adjustments should not have an end month" });
       }
 
+      // Build attachments: prefer new multi-file field, fall back to legacy single-file
+      const attachments = input.attachments && input.attachments.length > 0
+        ? input.attachments
+        : (input.receiptFileUrl
+          ? [{ url: input.receiptFileUrl, fileKey: input.receiptFileKey || "", fileName: "receipt" }]
+          : null);
+
       const result = await createAdjustment({
         employeeId: input.employeeId,
         customerId,
@@ -155,6 +171,7 @@ export const adjustmentsRouter = router({
         effectiveMonth: normalizedMonth, // Store as YYYY-MM-01 string (text column)
         receiptFileUrl: input.receiptFileUrl,
         receiptFileKey: input.receiptFileKey,
+        attachments,
         status: "submitted",
         submittedBy: ctx.user.id,
         // Recurring fields
@@ -194,6 +211,7 @@ export const adjustmentsRouter = router({
           effectiveMonth: z.string().optional(),
           receiptFileUrl: z.string().optional().nullable(),
           receiptFileKey: z.string().optional().nullable(),
+          attachments: attachmentsSchema.nullable().optional(),
           // Recurring adjustment fields
           recurrenceType: z.enum(["one_time", "monthly", "permanent"]).optional(),
           recurrenceEndMonth: z.string().optional().nullable(),

@@ -12,6 +12,7 @@ import {
   getEmployeeById,
 } from "../db";
 import { storagePut, storageGet, storageDownload } from "../storage";
+import { attachmentsSchema, resolveAttachments } from "../utils/attachments";
 
 export const reimbursementsRouter = router({
   list: userProcedure
@@ -38,18 +39,24 @@ export const reimbursementsRouter = router({
         effectiveMonth: input.effectiveMonth,
       });
 
-      // Map to signed URLs for viewing receipts
-      // Note: We also provide a separate download endpoint for proxying if signed URLs fail
+      // Resolve attachments (new multi-file field + legacy single-file fallback)
       const processedItems = await Promise.all(items.map(async (item) => {
-        if (item.receiptFileKey) {
+        const resolvedAttachments = await resolveAttachments(item as any);
+
+        // Also keep legacy receiptFileUrl for backward compat
+        let receiptFileUrl = (item as any).receiptFileUrl;
+        if (resolvedAttachments.length > 0) {
+          receiptFileUrl = resolvedAttachments[0].url;
+        } else if ((item as any).receiptFileKey) {
           try {
-            const { url } = await storageGet(item.receiptFileKey);
-            return { ...item, receiptFileUrl: url };
+            const { url } = await storageGet((item as any).receiptFileKey);
+            receiptFileUrl = url;
           } catch (e) {
-            return item;
+            // keep original
           }
         }
-        return item;
+
+        return { ...item, receiptFileUrl, attachments: resolvedAttachments };
       }));
       
       return { data: processedItems, total };
@@ -95,6 +102,7 @@ export const reimbursementsRouter = router({
         effectiveMonth: z.string(),
         receiptFileUrl: z.string().optional(),
         receiptFileKey: z.string().optional(),
+        attachments: attachmentsSchema,
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -107,9 +115,18 @@ export const reimbursementsRouter = router({
       const currency = employee.salaryCurrency || "USD";
       const customerId = employee.customerId;
 
-      if (!input.receiptFileUrl) {
+      // Require at least one attachment (receipt required)
+      const hasAttachments = (input.attachments && input.attachments.length > 0) || !!input.receiptFileUrl;
+      if (!hasAttachments) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: "Reimbursement claims require a receipt attachment." });
       }
+
+      // Build attachments: prefer new multi-file field, fall back to legacy single-file
+      const attachments = input.attachments && input.attachments.length > 0
+        ? input.attachments
+        : (input.receiptFileUrl
+          ? [{ url: input.receiptFileUrl, fileKey: input.receiptFileKey || "", fileName: "receipt" }]
+          : null);
 
       const result = await createReimbursement({
         employeeId: input.employeeId,
@@ -121,6 +138,7 @@ export const reimbursementsRouter = router({
         effectiveMonth: normalizedMonth,
         receiptFileUrl: input.receiptFileUrl,
         receiptFileKey: input.receiptFileKey,
+        attachments,
         status: "submitted",
         submittedBy: ctx.user.id,
       });
@@ -149,6 +167,7 @@ export const reimbursementsRouter = router({
           amount: z.string().optional(),
           receiptFileUrl: z.string().optional().nullable(),
           receiptFileKey: z.string().optional().nullable(),
+          attachments: attachmentsSchema.nullable().optional(),
         }),
       })
     )
