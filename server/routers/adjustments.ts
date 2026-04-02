@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { operationsManagerProcedure, userProcedure } from "../procedures";
+import { isAdmin } from "../../shared/roles";
 import {
   createAdjustment,
   listAdjustments,
@@ -274,6 +275,11 @@ export const adjustmentsRouter = router({
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Adjustment not found" });
       if (existing.status === "locked") throw new TRPCError({ code: 'BAD_REQUEST', message: "Cannot delete a locked adjustment" });
 
+      // Only admin can delete admin_approved adjustments
+      if (existing.status === "admin_approved" && !isAdmin(ctx.user.role)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: "Only admin can delete admin-approved adjustments" });
+      }
+
       // Enforce cutoff
       await enforceCutoff(existing.effectiveMonth!, ctx.user.role, "delete adjustment");
 
@@ -284,6 +290,7 @@ export const adjustmentsRouter = router({
         action: "delete",
         entityType: "adjustment",
         entityId: input.id,
+        changes: JSON.stringify({ deletedStatus: existing.status, amount: existing.amount, employeeId: existing.employeeId }),
       });
 
       return { success: true };

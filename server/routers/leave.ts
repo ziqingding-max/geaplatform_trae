@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { router } from "../_core/trpc";
 import { operationsManagerProcedure, userProcedure } from "../procedures";
+import { isAdmin } from "../../shared/roles";
 import {
   createLeaveRecord,
   listLeaveRecords,
@@ -486,10 +487,14 @@ export const leaveRouter = router({
   delete: operationsManagerProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input, ctx }) => {
-      // Only allow deleting pending/submitted leave
       const existing = await getLeaveRecordById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Leave record not found" });
       if (existing.status === "locked") throw new TRPCError({ code: 'BAD_REQUEST', message: "Cannot delete a locked leave record" });
+
+      // Only admin can delete admin_approved leave records
+      if (existing.status === "admin_approved" && !isAdmin(ctx.user.role)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: "Only admin can delete admin-approved leave records" });
+      }
 
       // Enforce cutoff based on END DATE month
       const endDate = String(existing.endDate);
@@ -508,6 +513,7 @@ export const leaveRouter = router({
         action: "delete",
         entityType: "leave_record",
         entityId: input.id,
+        changes: JSON.stringify({ deletedStatus: existing.status, days: existing.days, employeeId: existing.employeeId, leaveTypeId: existing.leaveTypeId }),
       });
 
       return { success: true };
@@ -520,6 +526,11 @@ export const leaveRouter = router({
       const existing = await getLeaveRecordById(input.id);
       if (!existing) throw new TRPCError({ code: 'BAD_REQUEST', message: "Leave record not found" });
       if (existing.status === "locked") throw new TRPCError({ code: 'BAD_REQUEST', message: "Cannot cancel a locked leave record" });
+
+      // Only admin can cancel admin_approved leave records
+      if (existing.status === "admin_approved" && !isAdmin(ctx.user.role)) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: "Only admin can cancel admin-approved leave records" });
+      }
 
       // Enforce cutoff based on END DATE month
       const endDate = String(existing.endDate);
@@ -539,6 +550,7 @@ export const leaveRouter = router({
         action: "cancel",
         entityType: "leave_record",
         entityId: input.id,
+        changes: JSON.stringify({ deletedStatus: existing.status, days: existing.days, employeeId: existing.employeeId, leaveTypeId: existing.leaveTypeId }),
       });
 
       return { success: true };
