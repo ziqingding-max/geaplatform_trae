@@ -453,7 +453,7 @@ export const portalLeaveRouter = portalRouter({
       await db.update(leaveRecords).set({
         status: "client_approved",
         clientApprovedBy: ctx.portalUser.contactId,
-        clientApprovedAt: new Date(),
+        clientApprovedAt: new Date().toISOString(),
       }).where(eq(leaveRecords.id, input.id));
 
       return { success: true };
@@ -489,7 +489,7 @@ export const portalLeaveRouter = portalRouter({
       await db.update(leaveRecords).set({
         status: "client_rejected",
         clientApprovedBy: ctx.portalUser.contactId,
-        clientApprovedAt: new Date(),
+        clientApprovedAt: new Date().toISOString(),
         clientRejectionReason: input.reason || null,
       }).where(eq(leaveRecords.id, input.id));
 

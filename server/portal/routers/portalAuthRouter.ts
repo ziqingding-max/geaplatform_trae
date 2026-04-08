@@ -128,7 +128,7 @@ export const portalAuthRouter = portalRouter({
       // Update last login
       await db
         .update(customerContacts)
-        .set({ lastLoginAt: new Date() })
+        .set({ lastLoginAt: new Date().toISOString() })
         .where(eq(customerContacts.id, contact.id));
 
       return {
@@ -247,7 +247,7 @@ export const portalAuthRouter = portalRouter({
           hasPortalAccess: true,
           inviteToken: null, // Clear invite token after use
           inviteExpiresAt: null,
-          lastLoginAt: new Date(),
+          lastLoginAt: new Date().toISOString(),
         })
         .where(eq(customerContacts.id, contact.id));
 

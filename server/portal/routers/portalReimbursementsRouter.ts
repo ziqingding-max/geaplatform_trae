@@ -300,7 +300,7 @@ export const portalReimbursementsRouter = portalRouter({
       await db.update(reimbursements).set({
         status: "client_approved",
         clientApprovedBy: ctx.portalUser.contactId,
-        clientApprovedAt: new Date(),
+        clientApprovedAt: new Date().toISOString(),
       }).where(eq(reimbursements.id, input.id));
 
       return { success: true };
@@ -335,7 +335,7 @@ export const portalReimbursementsRouter = portalRouter({
       await db.update(reimbursements).set({
         status: "client_rejected",
         clientApprovedBy: ctx.portalUser.contactId,
-        clientApprovedAt: new Date(),
+        clientApprovedAt: new Date().toISOString(),
         clientRejectionReason: input.reason || null,
       }).where(eq(reimbursements.id, input.id));
 

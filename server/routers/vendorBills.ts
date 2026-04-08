@@ -129,7 +129,7 @@ export const vendorBillsRouter = router({
         paidDate: billData.paidDate || undefined,
         billMonth: billData.billMonth ? `${billData.billMonth}-01` : undefined,
         submittedBy: ctx.user.id,
-        submittedAt: new Date(),
+        submittedAt: new Date().toISOString(),
       };
 
       const insertId = await createVendorBill(billValues);

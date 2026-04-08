@@ -238,7 +238,7 @@ export const quotationRouter = router({
       // B6: Maintain sentAt/sentBy when transitioning to "sent"
       const updateData: Record<string, any> = {
         status: input.status,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       };
       if (input.status === "sent") {
         updateData.sentAt = new Date();
@@ -252,7 +252,7 @@ export const quotationRouter = router({
       // B4: When accepting a quotation, auto-expire all other non-terminal quotations for the same lead
       if (input.status === "accepted" && current.leadId) {
         await db.update(quotations)
-          .set({ status: "expired", updatedAt: new Date() })
+          .set({ status: "expired", updatedAt: new Date().toISOString() })
           .where(
             and(
               eq(quotations.leadId, current.leadId),

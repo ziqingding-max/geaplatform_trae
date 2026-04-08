@@ -123,7 +123,9 @@ function parseDates(obj: any, dateFields: string[]) {
   const newObj = { ...obj };
   for (const field of dateFields) {
     if (newObj[field]) {
-      newObj[field] = new Date(newObj[field]);
+      // Keep as ISO string to avoid postgres.js ERR_INVALID_ARG_TYPE with Date objects
+      // See: https://github.com/drizzle-team/drizzle-orm/issues/3108
+      newObj[field] = new Date(newObj[field]).toISOString();
     }
   }
   return newObj;
@@ -152,7 +154,7 @@ async function seedSystemData(db: any) {
             payrollCycle: formatted.payrollCycle,
             standardEorRate: formatted.standardEorRate,
             isActive: formatted.isActive,
-            updatedAt: new Date(),
+            updatedAt: new Date().toISOString(),
           },
         });
       count++;
@@ -287,7 +289,7 @@ async function seedAIProviderConfigs(db: any) {
           apiKeyEnv: p.apiKeyEnv,
           isEnabled: p.isEnabled,
           priority: p.priority,
-          updatedAt: new Date()
+          updatedAt: new Date().toISOString()
         }
       });
   }
@@ -338,7 +340,7 @@ async function seedCountryGuides(db: any) {
               sortOrder: ch.sortOrder,
               version: ch.version || '2026-Q1',
               status: ch.status || 'published',
-              updatedAt: new Date(),
+              updatedAt: new Date().toISOString(),
             })
             .where(eq(countryGuideChapters.id, existing.id));
           updated++;
@@ -414,7 +416,7 @@ async function seedBusinessMigrationData(db: any) {
         depositMultiplier: c.depositMultiplier || 2,
         billingEntityId: billingEntityId,
         notes: c.notes || undefined,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       }).where(eq(customers.id, customerId));
     } else {
       const result = await db.insert(customers).values({
@@ -531,7 +533,7 @@ async function seedBusinessMigrationData(db: any) {
         estimatedEmployerCost: String(e.estimatedEmployerCost || '0'),
         requiresVisa: e.requiresVisa || false,
         visaStatus: (e.visaStatus || 'not_required') as any,
-        updatedAt: new Date(),
+        updatedAt: new Date().toISOString(),
       }).where(eq(employees.id, employeeId));
     } else {
       await db.insert(employees).values({

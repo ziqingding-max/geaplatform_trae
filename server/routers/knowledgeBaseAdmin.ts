@@ -314,7 +314,7 @@ export const knowledgeBaseAdminRouter = router({
             authorityScore: authority.score,
             authorityLevel: authority.level,
             authorityReason: authority.reason,
-            aiReviewedAt: new Date(),
+            aiReviewedAt: new Date().toISOString(),
             updatedBy: ctx.user.id,
           })
           .where(eq(knowledgeSources.id, input.id));
@@ -333,7 +333,7 @@ export const knowledgeBaseAdminRouter = router({
         authorityScore: authority.score,
         authorityLevel: authority.level,
         authorityReason: authority.reason,
-        aiReviewedAt: new Date(),
+        aiReviewedAt: new Date().toISOString(),
         updatedBy: ctx.user.id,
       });
       return { success: true, id: Number((result as any).insertId ?? 0), authority };
@@ -364,7 +364,7 @@ export const knowledgeBaseAdminRouter = router({
           authorityScore: authority.score,
           authorityLevel: authority.level,
           authorityReason: authority.reason,
-          aiReviewedAt: new Date(),
+          aiReviewedAt: new Date().toISOString(),
         })
         .where(eq(knowledgeSources.id, source.id));
 
@@ -434,7 +434,7 @@ export const knowledgeBaseAdminRouter = router({
         })
       );
 
-      await db.update(knowledgeSources).set({ lastFetchedAt: new Date() }).where(eq(knowledgeSources.id, source.id));
+      await db.update(knowledgeSources).set({ lastFetchedAt: new Date().toISOString() }).where(eq(knowledgeSources.id, source.id));
 
       return { success: true, created: drafts.length };
     }),
@@ -479,7 +479,7 @@ export const knowledgeBaseAdminRouter = router({
         .set({
           status: input.action === "publish" ? "published" : "rejected",
           reviewedBy: ctx.user.id,
-          reviewedAt: new Date(),
+          reviewedAt: new Date().toISOString(),
           publishedAt: input.action === "publish" ? new Date() : item.publishedAt,
           reviewNote: input.note || null,
         })

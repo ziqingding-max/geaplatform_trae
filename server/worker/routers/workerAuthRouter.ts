@@ -126,7 +126,7 @@ export const workerAuthRouter = workerRouter({
       // Update last login
       await db
         .update(workerUsers)
-        .set({ lastLoginAt: new Date() })
+        .set({ lastLoginAt: new Date().toISOString() })
         .where(eq(workerUsers.id, user.id));
 
       return {
@@ -281,7 +281,7 @@ export const workerAuthRouter = workerRouter({
           inviteExpiresAt: null,
           isEmailVerified: true,
           isActive: true,
-          lastLoginAt: new Date(),
+          lastLoginAt: new Date().toISOString(),
         })
         .where(eq(workerUsers.id, user.id));
 

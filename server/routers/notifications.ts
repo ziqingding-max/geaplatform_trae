@@ -110,7 +110,7 @@ export const notificationsRouter = router({
           target: systemSettings.key,
           set: {
             value: JSON.stringify(rules),
-            updatedAt: new Date(),
+            updatedAt: new Date().toISOString(),
           },
         });
 
@@ -162,7 +162,7 @@ export const notificationsRouter = router({
 
       await db
         .update(notifications)
-        .set({ isRead: true, readAt: new Date() })
+        .set({ isRead: true, readAt: new Date().toISOString() })
         .where(eq(notifications.id, input.id));
         
       return { success: true };
@@ -179,7 +179,7 @@ export const notificationsRouter = router({
     
     await db
       .update(notifications)
-      .set({ isRead: true, readAt: new Date() })
+      .set({ isRead: true, readAt: new Date().toISOString() })
       .where(
         and(
           eq(notifications.targetPortal, "admin"),

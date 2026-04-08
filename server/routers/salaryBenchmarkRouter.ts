@@ -59,7 +59,7 @@ export const salaryBenchmarkRouter = router({
         
         if (input.id) {
             await db.update(salaryBenchmarks)
-                .set({ ...input, updatedAt: new Date() })
+                .set({ ...input, updatedAt: new Date().toISOString() })
                 .where(eq(salaryBenchmarks.id, input.id));
             return { id: input.id };
         } else {

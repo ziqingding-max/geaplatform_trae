@@ -194,7 +194,7 @@ export const portalMilestonesRouter = portalRouter({
         .set({
           status: "client_approved" as any,
           clientApprovedBy: ctx.portalUser.contactId,
-          clientApprovedAt: new Date(),
+          clientApprovedAt: new Date().toISOString(),
         })
         .where(eq(contractorMilestones.id, input.id));
 
@@ -245,7 +245,7 @@ export const portalMilestonesRouter = portalRouter({
         .set({
           status: "client_rejected" as any,
           clientApprovedBy: ctx.portalUser.contactId,
-          clientApprovedAt: new Date(),
+          clientApprovedAt: new Date().toISOString(),
         })
         .where(eq(contractorMilestones.id, input.id));
       return { success: true };

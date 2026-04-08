@@ -336,8 +336,8 @@ export const quotationService = {
       validUntil: input.validUntil || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
       status: "draft",
       createdBy: input.createdBy,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }).returning({ id: quotations.id });
 
     try {
@@ -434,7 +434,7 @@ export const quotationService = {
       currency: quotationCurrency,
       snapshotData: calculatedItems,
       validUntil: input.validUntil,
-      updatedAt: new Date()
+      updatedAt: new Date().toISOString()
     }).where(eq(quotations.id, input.id));
 
     try {
@@ -497,8 +497,8 @@ export const quotationService = {
       validUntil: input.validUntil || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
       status: "draft",
       createdBy: input.createdBy,
-      createdAt: new Date(),
-      updatedAt: new Date()
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     }).returning({ id: quotations.id });
 
     // 7. Generate PDF (non-blocking)
@@ -559,7 +559,7 @@ export const quotationService = {
       currency: quotationCurrency,
       snapshotData,
       validUntil: input.validUntil,
-      updatedAt: new Date()
+      updatedAt: new Date().toISOString()
     }).where(eq(quotations.id, input.id));
 
     // 6. Regenerate PDF (non-blocking)

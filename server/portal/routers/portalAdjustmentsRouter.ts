@@ -464,7 +464,7 @@ export const portalAdjustmentsRouter = portalRouter({
         await db.update(contractorAdjustments).set({
           status: "client_approved" as any,
           clientApprovedBy: ctx.portalUser.contactId,
-          clientApprovedAt: new Date(),
+          clientApprovedAt: new Date().toISOString(),
         }).where(eq(contractorAdjustments.id, input.id));
       } else {
         const [adj] = await db
@@ -478,7 +478,7 @@ export const portalAdjustmentsRouter = portalRouter({
         await db.update(adjustments).set({
           status: "client_approved",
           clientApprovedBy: ctx.portalUser.contactId,
-          clientApprovedAt: new Date(),
+          clientApprovedAt: new Date().toISOString(),
         }).where(eq(adjustments.id, input.id));
       }
 
@@ -511,7 +511,7 @@ export const portalAdjustmentsRouter = portalRouter({
         await db.update(contractorAdjustments).set({
           status: "client_rejected" as any,
           clientApprovedBy: ctx.portalUser.contactId,
-          clientApprovedAt: new Date(),
+          clientApprovedAt: new Date().toISOString(),
           clientRejectionReason: input.reason || null,
         }).where(eq(contractorAdjustments.id, input.id));
       } else {
@@ -526,7 +526,7 @@ export const portalAdjustmentsRouter = portalRouter({
         await db.update(adjustments).set({
           status: "client_rejected",
           clientApprovedBy: ctx.portalUser.contactId,
-          clientApprovedAt: new Date(),
+          clientApprovedAt: new Date().toISOString(),
           clientRejectionReason: input.reason || null,
         }).where(eq(adjustments.id, input.id));
       }

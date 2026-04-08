@@ -86,7 +86,7 @@ export const countryGuideRouter = router({
           .update(countryGuideChapters)
           .set({
             ...input,
-            updatedAt: new Date(),
+            updatedAt: new Date().toISOString(),
           })
           .where(eq(countryGuideChapters.id, input.id));
         return { id: input.id };
@@ -124,7 +124,7 @@ export const countryGuideRouter = router({
 
       await db
         .update(countryGuideChapters)
-        .set({ status: input.status, updatedAt: new Date() })
+        .set({ status: input.status, updatedAt: new Date().toISOString() })
         .where(eq(countryGuideChapters.id, input.id));
       return { success: true };
     }),
@@ -143,7 +143,7 @@ export const countryGuideRouter = router({
 
       const result = await db
         .update(countryGuideChapters)
-        .set({ status: input.status, updatedAt: new Date() })
+        .set({ status: input.status, updatedAt: new Date().toISOString() })
         .where(eq(countryGuideChapters.countryCode, input.countryCode));
       return { success: true };
     }),

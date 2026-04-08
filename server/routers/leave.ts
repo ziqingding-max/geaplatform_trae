@@ -571,7 +571,7 @@ export const leaveRouter = router({
       await updateLeaveRecord(input.id, {
         status: "admin_approved",
         adminApprovedBy: ctx.user.id,
-        adminApprovedAt: new Date(),
+        adminApprovedAt: new Date().toISOString(),
       } as any);
 
       await logAuditAction({
@@ -603,7 +603,7 @@ export const leaveRouter = router({
       await updateLeaveRecord(input.id, {
         status: "admin_rejected",
         adminApprovedBy: ctx.user.id,
-        adminApprovedAt: new Date(),
+        adminApprovedAt: new Date().toISOString(),
         adminRejectionReason: input.reason || null,
       } as any);
 
@@ -641,7 +641,7 @@ export const leaveRouter = router({
         await updateLeaveRecord(id, {
           status: "admin_approved",
           adminApprovedBy: ctx.user.id,
-          adminApprovedAt: new Date(),
+          adminApprovedAt: new Date().toISOString(),
         } as any);
 
         await logAuditAction({

@@ -48,7 +48,7 @@ export const workerNotificationsRouter = workerRouter({
 
       await db
         .update(notifications)
-        .set({ isRead: true, readAt: new Date() })
+        .set({ isRead: true, readAt: new Date().toISOString() })
         .where(
           and(
             eq(notifications.id, input.id),
@@ -70,7 +70,7 @@ export const workerNotificationsRouter = workerRouter({
 
       await db
         .update(notifications)
-        .set({ isRead: true, readAt: new Date() })
+        .set({ isRead: true, readAt: new Date().toISOString() })
         .where(
           and(
             eq(notifications.targetPortal, "worker"),
