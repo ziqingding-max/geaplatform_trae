@@ -5,9 +5,13 @@
  * Each file is uploaded individually via a provided upload mutation.
  * Displays existing attachments as a list with view/remove actions.
  * Compatible with both admin and portal pages.
+ *
+ * FIX: The hidden <input type="file"> is rendered via React Portal to document.body
+ * to avoid Radix Dialog's focus-trap / pointer-events blocking the native file picker.
  */
 
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Paperclip, Upload, FileText, X, Eye, Loader2 } from "lucide-react";
@@ -178,15 +182,24 @@ export default function MultiFileUploadArea({
         </div>
       )}
 
+      {/*
+       * Hidden file input — rendered via Portal to document.body to bypass
+       * Radix Dialog's focus-trap and pointer-events blocking.
+       * This is the standard community fix for file inputs inside Radix modals.
+       */}
+      {createPortal(
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={accept}
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />,
+        document.body
+      )}
+
       {/* Upload button */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept={accept}
-        multiple
-        onChange={handleFileSelect}
-        className="hidden"
-      />
       {canAddMore && (
         <Button
           variant="outline"

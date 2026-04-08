@@ -354,6 +354,7 @@ export const employees = pgTable(
     employmentType: text("employmentType", { enum: ["fixed_term", "long_term"] }).default("long_term").notNull(),
     startDate: text("startDate").notNull(),
     endDate: text("endDate"),
+    probationPeriodDays: integer("probationPeriodDays").default(0).notNull(), // Probationary period in days (e.g. 90)
     // Status: full lifecycle
     status: text("status", { enum: [
       "pending_review",
@@ -986,6 +987,7 @@ export const onboardingInvites = pgTable(
     startDate: text("startDate"),
     endDate: text("endDate"),
     employmentType: varchar("employmentType", { length: 50 }),
+    probationPeriodDays: integer("probationPeriodDays"), // Probationary period in days (nullable for invites)
     // EOR compensation
     baseSalary: text("baseSalary"),
     salaryCurrency: varchar("salaryCurrency", { length: 3 }),
