@@ -201,6 +201,7 @@ function EmployeeList() {
     employmentType: "long_term" as "fixed_term" | "long_term",
     startDate: "",
     endDate: "",
+    probationPeriodDays: 90,
     baseSalary: "",
     salaryCurrency: "",
     estimatedEmployerCost: "",
@@ -296,6 +297,7 @@ function EmployeeList() {
     if (!formData.country) errs.country = true;
     if (!formData.jobTitle.trim()) errs.jobTitle = true;
     if (!formData.startDate) errs.startDate = true;
+    if (formData.probationPeriodDays === undefined || formData.probationPeriodDays === null || formData.probationPeriodDays < 0) errs.probationPeriodDays = true;
     if (!formData.baseSalary) errs.baseSalary = true;
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -529,6 +531,19 @@ function EmployeeList() {
                     <div className="space-y-2">
                       <Label>{t("employees.create.form.endDate")}</Label>
                       <DatePicker value={formData.endDate} onChange={(d) => setFormData({ ...formData, endDate: d })} />
+                    </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>{t("employees.create.form.probationPeriodDays")} <span className="text-red-500">*</span></Label>
+                      <Input type="number" min={0} step={1} className={errCls("probationPeriodDays")} value={formData.probationPeriodDays} onChange={(e) => { setFormData({ ...formData, probationPeriodDays: parseInt(e.target.value) || 0 }); setErrors({ ...errors, probationPeriodDays: false }); }} placeholder="90" />
+                      {errors.probationPeriodDays && <p className="text-xs text-red-500">{t("common.required")}</p>}
+                    </div>
+                    {formData.startDate && formData.probationPeriodDays > 0 && (
+                    <div className="space-y-2">
+                      <Label>{t("employees.detail.probationEndDate")}</Label>
+                      <Input disabled value={(() => { const d = new Date(formData.startDate); d.setDate(d.getDate() + formData.probationPeriodDays); return formatDate(d.toISOString().split("T")[0]); })()} className="bg-muted" />
                     </div>
                     )}
                   </div>
@@ -1061,6 +1076,7 @@ function EmployeeDetail({ id }: { id: number }) {
       estimatedEmployerCost: employee.estimatedEmployerCost || "",
       startDate: formatDateISO(employee.startDate),
       endDate: formatDateISO(employee.endDate),
+      probationPeriodDays: employee.probationPeriodDays ?? 0,
       requiresVisa: employee.requiresVisa || false,
       visaStatus: employee.visaStatus || "not_required",
       visaExpiryDate: formatDateISO(employee.visaExpiryDate),
@@ -1311,6 +1327,10 @@ function EmployeeDetail({ id }: { id: number }) {
                 <InfoRow icon={<Clock className="w-3.5 h-3.5" />} label={t("employees.detail.employmentType")} value={employee.employmentType?.replace(/_/g, " ")} />
                 <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label={t("employees.detail.startDate")} value={formatDate(employee.startDate)} />
                 <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label={t("employees.detail.endDate")} value={formatDate(employee.endDate)} />
+                <InfoRow icon={<Shield className="w-3.5 h-3.5" />} label={t("employees.detail.probationPeriodDays")} value={employee.probationPeriodDays ? `${employee.probationPeriodDays} days` : "N/A"} />
+                {employee.probationPeriodDays > 0 && employee.startDate && (
+                  <InfoRow icon={<Calendar className="w-3.5 h-3.5" />} label={t("employees.detail.probationEndDate")} value={(() => { const d = new Date(employee.startDate); d.setDate(d.getDate() + employee.probationPeriodDays); return formatDate(d.toISOString().split("T")[0]); })() } />
+                )}
                 <div className="border-t pt-3 mt-3">
                   <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{t("employees.create.sections.compensation")}</div>
                   <InfoRow icon={<DollarSign className="w-3.5 h-3.5" />} label={t("employees.detail.baseSalary")} value={formatCurrencyAmount(employee.baseSalary, employee.salaryCurrency, { showCurrency: true })} />
@@ -1892,6 +1912,18 @@ function EmployeeDetail({ id }: { id: number }) {
                     <Label>{t("employees.create.form.endDate")}</Label>
                     <DatePicker value={editForm.endDate} onChange={(d) => setEditForm({ ...editForm, endDate: d })} />
                   </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>{t("employees.create.form.probationPeriodDays")}</Label>
+                    <Input type="number" min={0} step={1} value={editForm.probationPeriodDays ?? 0} onChange={(e) => setEditForm({ ...editForm, probationPeriodDays: parseInt(e.target.value) || 0 })} placeholder="90" />
+                  </div>
+                  {editForm.startDate && (editForm.probationPeriodDays ?? 0) > 0 && (
+                    <div className="space-y-2">
+                      <Label>{t("employees.detail.probationEndDate")}</Label>
+                      <Input disabled value={(() => { const d = new Date(editForm.startDate); d.setDate(d.getDate() + (editForm.probationPeriodDays ?? 0)); return formatDate(d.toISOString().split("T")[0]); })()} className="bg-muted" />
+                    </div>
                   )}
                 </div>
               </fieldset>

@@ -228,6 +228,16 @@ export default function WorkerProfile() {
                   <Input value={formatDate(f("endDate"))} disabled className="bg-muted" />
                 </div>
               )}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Probationary Period</Label>
+                <Input value={f("probationPeriodDays") ? `${f("probationPeriodDays")} days` : "N/A"} disabled className="bg-muted" />
+              </div>
+              {Number(f("probationPeriodDays")) > 0 && f("startDate") && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Probation End Date</Label>
+                  <Input value={(() => { const d = new Date(f("startDate") as string); d.setDate(d.getDate() + Number(f("probationPeriodDays"))); return formatDate(d.toISOString().split("T")[0]); })()} disabled className="bg-muted" />
+                </div>
+              )}
             </div>
             {f("jobDescription") && (
               <div className="mt-4 space-y-2">

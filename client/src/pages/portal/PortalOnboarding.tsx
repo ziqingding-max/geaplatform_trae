@@ -154,6 +154,7 @@ interface OnboardingFormData {
   employmentType: string;
   startDate: string;
   endDate: string;
+  probationPeriodDays: number;
   baseSalary: string;
   salaryCurrency: string;
   requiresVisa: boolean;
@@ -195,6 +196,7 @@ const initialFormData: OnboardingFormData = {
   employmentType: "long_term",
   startDate: "",
   endDate: "",
+  probationPeriodDays: 90,
   baseSalary: "",
   salaryCurrency: "USD",
   requiresVisa: false,
@@ -518,6 +520,7 @@ export default function PortalOnboarding() {
           employmentType: (formData.employmentType as any) || "long_term",
           startDate: formData.startDate,
           endDate: formData.endDate || undefined,
+          probationPeriodDays: formData.probationPeriodDays,
           baseSalary: formData.baseSalary,
           salaryCurrency: formData.salaryCurrency || "USD",
           requiresVisa: needsVisa || formData.requiresVisa || formData.serviceType === "visa_eor",
@@ -556,6 +559,7 @@ export default function PortalOnboarding() {
       startDate: formData.startDate || undefined,
       endDate: formData.endDate || undefined,
       employmentType: formData.employmentType || undefined,
+      probationPeriodDays: formData.probationPeriodDays || undefined,
       baseSalary: formData.baseSalary || undefined,
       salaryCurrency: formData.salaryCurrency || undefined,
       paymentFrequency: formData.paymentFrequency || undefined,
@@ -801,6 +805,20 @@ export default function PortalOnboarding() {
             <DatePicker value={formData.endDate} onChange={(v: string) => updateField("endDate", v)} placeholder="Select end date" />
             {fieldErrors.endDate && <p className="text-xs text-destructive mt-1">{fieldErrors.endDate}</p>}
           </div>
+        </div>
+      )}
+      {!isAor && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t("employees.create.form.probationPeriodDays")} <span className="text-destructive">*</span></Label>
+            <Input type="number" min={0} step={1} value={formData.probationPeriodDays} onChange={(e) => updateField("probationPeriodDays", parseInt(e.target.value) || 0)} placeholder="90" className="h-10 rounded-xl" />
+          </div>
+          {formData.startDate && formData.probationPeriodDays > 0 && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">{t("employees.detail.probationEndDate")}</Label>
+              <Input disabled value={(() => { const d = new Date(formData.startDate); d.setDate(d.getDate() + formData.probationPeriodDays); return d.toLocaleDateString(); })()} className="h-10 rounded-xl bg-muted" />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1081,6 +1099,20 @@ export default function PortalOnboarding() {
           </div>
         )}
       </div>
+      {!isAor && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">{t("employees.create.form.probationPeriodDays")} <span className="text-destructive">*</span></Label>
+            <Input type="number" min={0} step={1} value={formData.probationPeriodDays} onChange={(e) => updateField("probationPeriodDays", parseInt(e.target.value) || 0)} placeholder="90" className="h-10 rounded-xl" />
+          </div>
+          {formData.startDate && formData.probationPeriodDays > 0 && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">{t("employees.detail.probationEndDate")}</Label>
+              <Input disabled value={(() => { const d = new Date(formData.startDate); d.setDate(d.getDate() + formData.probationPeriodDays); return d.toLocaleDateString(); })()} className="h-10 rounded-xl bg-muted" />
+            </div>
+          )}
+        </div>
+      )}
       <div className="border-t border-border/40 pt-4">
         <h4 className="text-sm font-semibold mb-4 flex items-center gap-2">
           <DollarSign className="w-4 h-4 text-primary" />
@@ -1253,6 +1285,16 @@ export default function PortalOnboarding() {
                 <span className="text-muted-foreground">{t("common.type")}:</span>{" "}
                 <span className="font-medium">{formData.employmentType === "long_term" ? t("portal_onboarding.employment_type.permanent") : t("portal_onboarding.employment_type.fixed_term")}</span>
               </div>
+              <div>
+                <span className="text-muted-foreground">Probationary Period:</span>{" "}
+                <span className="font-medium">{formData.probationPeriodDays > 0 ? `${formData.probationPeriodDays} days` : "N/A"}</span>
+              </div>
+              {formData.probationPeriodDays > 0 && formData.startDate && (
+                <div>
+                  <span className="text-muted-foreground">Probation End Date:</span>{" "}
+                  <span className="font-medium">{(() => { const d = new Date(formData.startDate); d.setDate(d.getDate() + formData.probationPeriodDays); return d.toLocaleDateString(); })()}</span>
+                </div>
+              )}
             </>
           )}
         </div>

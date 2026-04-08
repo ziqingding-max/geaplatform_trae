@@ -83,6 +83,7 @@ export const workerProfileRouter = workerRouter({
           department: employees.department,
           startDate: employees.startDate,
           endDate: employees.endDate,
+          probationPeriodDays: employees.probationPeriodDays,
           status: employees.status,
           salaryCurrency: employees.salaryCurrency,
           bankDetails: employees.bankDetails,

@@ -314,6 +314,10 @@ export default function PortalEmployeeDetail() {
                       } hint={t("portal_employees.employment.typeHint")} />
                       <InfoField icon={Calendar} label={t("portal_employees.employment.startDate")} value={employee.startDate ? formatDate(employee.startDate) : undefined} hint={t("portal_employees.employment.startDateHint")} />
                       <InfoField icon={Calendar} label={t("portal_employees.employment.endDate")} value={employee.endDate ? formatDate(employee.endDate) : undefined} hint={t("portal_employees.employment.endDateHint")} />
+                      <InfoField icon={Shield} label="Probationary Period" value={employee.probationPeriodDays ? `${employee.probationPeriodDays} days` : "N/A"} hint="Duration of the probationary period" />
+                      {employee.probationPeriodDays > 0 && employee.startDate && (
+                        <InfoField icon={Calendar} label="Probation End Date" value={(() => { const d = new Date(employee.startDate); d.setDate(d.getDate() + employee.probationPeriodDays); return formatDate(d.toISOString().split("T")[0]); })()} hint="Calculated end date of probation" />
+                      )}
                       <InfoField icon={MapPin} label={t("portal_employees.employment.employmentCountry")} value={countryName(employee.country)} hint={t("portal_employees.employment.employmentCountryHint")} />
                       <InfoField icon={Briefcase} label={t("portal_employees.employment.department")} value={employee.department} hint={t("portal_employees.employment.departmentHint")} />
                       <InfoField icon={Briefcase} label={t("portal_employees.employment.jobTitle")} value={employee.jobTitle} hint={t("portal_employees.employment.jobTitleHint")} />

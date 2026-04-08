@@ -525,6 +525,23 @@ export default function PortalSelfOnboarding() {
                     <Textarea rows={3} value={formData.jobDescription} onChange={(e) => updateField("jobDescription", e.target.value)} placeholder={t("employees.create.form.jobDescriptionPlaceholder")} />
                   )}
                 </div>
+                {/* Probationary Period — read-only from employer */}
+                {employerFieldsLocked && invite?.probationPeriodDays != null && invite.probationPeriodDays > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Probationary Period</Label>
+                      <div className="flex items-center h-10 px-3 bg-muted/30 rounded-md border text-sm">{invite.probationPeriodDays} days</div>
+                    </div>
+                    {invite.startDate && (
+                      <div className="space-y-2">
+                        <Label>Probation End Date</Label>
+                        <div className="flex items-center h-10 px-3 bg-muted/30 rounded-md border text-sm">
+                          {(() => { const d = new Date(invite.startDate); d.setDate(d.getDate() + invite.probationPeriodDays); return d.toLocaleDateString(); })()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
               </div>
             )}
