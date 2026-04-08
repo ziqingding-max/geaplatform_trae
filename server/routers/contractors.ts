@@ -627,7 +627,7 @@ export const contractorsRouter = router({
           .set({ 
             status: "approved", 
             approvedBy: ctx.user.id, 
-            approvedAt: new Date() 
+            approvedAt: new Date().toISOString() 
           })
           .where(eq(contractorInvoices.id, input.id));
 

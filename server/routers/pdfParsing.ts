@@ -716,7 +716,7 @@ GRACEFUL DEGRADATION: If a document is unreadable or partially parseable, still 
         dueDate: billData.dueDate || undefined,
         billMonth: billData.billMonth ? `${billData.billMonth}-01` : undefined,
         submittedBy: ctx.user.id,
-        submittedAt: new Date(),
+        submittedAt: new Date().toISOString(),
         status: paymentInfo ? "paid" : "pending_approval",
       };
 
@@ -791,7 +791,7 @@ GRACEFUL DEGRADATION: If a document is unreadable or partially parseable, still 
           bankReference: paymentInfo.bankReference,
           bankName: paymentInfo.bankName,
           submittedBy: ctx.user.id,
-          submittedAt: new Date(),
+          submittedAt: new Date().toISOString(),
         };
         await createVendorBill(bankFeeBill);
       }
@@ -960,7 +960,7 @@ Be precise with numbers. If a field is not found, use null.`,
         dueDate: billData.dueDate ? new Date(billData.dueDate) : undefined,
         billMonth: billData.billMonth ? new Date(`${billData.billMonth}-01`) : undefined,
         submittedBy: ctx.user.id,
-        submittedAt: new Date(),
+        submittedAt: new Date().toISOString(),
         status: "pending_approval",
       };
 

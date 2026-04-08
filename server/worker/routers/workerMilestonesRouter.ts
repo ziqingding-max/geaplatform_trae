@@ -168,7 +168,7 @@ export const workerMilestonesRouter = workerRouter({
           deliverableFileName: input.deliverableFileName,
           submissionNote: input.submissionNote || null,
           submittedBy: ctx.workerUser.id,
-          completedAt: new Date(),
+          completedAt: new Date().toISOString(),
           effectiveMonth,
         })
         .where(eq(contractorMilestones.id, input.id));

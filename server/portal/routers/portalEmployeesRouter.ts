@@ -919,7 +919,7 @@ export const portalEmployeesRouter = portalRouter({
           .set({
             status: "completed",
             contractorId,
-            completedAt: new Date(),
+            completedAt: new Date().toISOString(),
           })
           .where(eq(onboardingInvites.id, invite.id));
 
@@ -984,7 +984,7 @@ export const portalEmployeesRouter = portalRouter({
           .set({
             status: "completed",
             employeeId,
-            completedAt: new Date(),
+            completedAt: new Date().toISOString(),
           })
           .where(eq(onboardingInvites.id, invite.id));
 

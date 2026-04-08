@@ -234,7 +234,7 @@ export const reimbursementsRouter = router({
       await updateReimbursement(input.id, {
         status: "admin_approved",
         adminApprovedBy: ctx.user.id,
-        adminApprovedAt: new Date(),
+        adminApprovedAt: new Date().toISOString(),
       } as any);
 
       await logAuditAction({
@@ -266,7 +266,7 @@ export const reimbursementsRouter = router({
       await updateReimbursement(input.id, {
         status: "admin_rejected",
         adminApprovedBy: ctx.user.id,
-        adminApprovedAt: new Date(),
+        adminApprovedAt: new Date().toISOString(),
         adminRejectionReason: input.reason || null,
       } as any);
 

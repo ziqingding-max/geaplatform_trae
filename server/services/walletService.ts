@@ -42,7 +42,7 @@ export class WalletService {
       })
       .onConflictDoUpdate({
         target: [customerWallets.customerId, customerWallets.currency],
-        set: { updatedAt: new Date() }, // Dummy update to return existing
+        set: { updatedAt: new Date().toISOString() }, // Dummy update to return existing
       })
       .returning();
 
@@ -253,7 +253,7 @@ export class WalletService {
       })
       .onConflictDoUpdate({
         target: [customerFrozenWallets.customerId, customerFrozenWallets.currency],
-        set: { updatedAt: new Date() },
+        set: { updatedAt: new Date().toISOString() },
       })
       .returning();
 

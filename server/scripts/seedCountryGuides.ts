@@ -56,7 +56,7 @@ async function seedCountryGuides() {
           sortOrder: chapter.sortOrder,
           version: chapter.version || "2026-Q1",
           status: chapter.status || "published",
-          updatedAt: new Date(),
+          updatedAt: new Date().toISOString(),
         })
         .where(eq(countryGuideChapters.id, existing.id));
       imported++;
