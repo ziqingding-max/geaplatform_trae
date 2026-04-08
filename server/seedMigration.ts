@@ -21,7 +21,7 @@ import {
   countryGuideChapters, countrySocialInsuranceItems, aiProviderConfigs,
   globalBenefits, hiringCompliance, salaryBenchmarks, documentTemplates, incomeTaxRules
 } from '../drizzle/schema';
-import { eq, and, not, inArray, desc, lte } from 'drizzle-orm';
+import { eq, and, not, inArray, desc, lte, sql } from 'drizzle-orm';
 import { socialInsuranceRules } from './seed/data/socialInsuranceRules';
 import toolkitData from './scripts/seedHeadhunterToolkit';
 import { incomeTaxRulesData } from './scripts/seedIncomeTaxRules';
@@ -123,7 +123,12 @@ function parseDates(obj: any, dateFields: string[]) {
   const newObj = { ...obj };
   for (const field of dateFields) {
     if (newObj[field]) {
-      newObj[field] = new Date(newObj[field]);
+      // Use sql`` template tag to bypass drizzle-orm's mapToDriverValue.
+      // In some Docker/Alpine environments, drizzle's Date-to-string conversion
+      // fails with ERR_INVALID_ARG_TYPE. Using sql`` sends the value directly
+      // to PostgreSQL, which handles the cast natively.
+      const isoStr = typeof newObj[field] === 'string' ? newObj[field] : new Date(newObj[field]).toISOString();
+      newObj[field] = sql`${isoStr}::timestamptz`;
     }
   }
   return newObj;
@@ -152,7 +157,7 @@ async function seedSystemData(db: any) {
             payrollCycle: formatted.payrollCycle,
             standardEorRate: formatted.standardEorRate,
             isActive: formatted.isActive,
-            updatedAt: new Date(),
+            updatedAt: sql`now()`,
           },
         });
       count++;
@@ -287,7 +292,7 @@ async function seedAIProviderConfigs(db: any) {
           apiKeyEnv: p.apiKeyEnv,
           isEnabled: p.isEnabled,
           priority: p.priority,
-          updatedAt: new Date()
+          updatedAt: sql`now()`
         }
       });
   }
@@ -338,7 +343,7 @@ async function seedCountryGuides(db: any) {
               sortOrder: ch.sortOrder,
               version: ch.version || '2026-Q1',
               status: ch.status || 'published',
-              updatedAt: new Date(),
+              updatedAt: sql`now()`,
             })
             .where(eq(countryGuideChapters.id, existing.id));
           updated++;
@@ -414,7 +419,7 @@ async function seedBusinessMigrationData(db: any) {
         depositMultiplier: c.depositMultiplier || 2,
         billingEntityId: billingEntityId,
         notes: c.notes || undefined,
-        updatedAt: new Date(),
+        updatedAt: sql`now()`,
       }).where(eq(customers.id, customerId));
     } else {
       const result = await db.insert(customers).values({
@@ -531,7 +536,7 @@ async function seedBusinessMigrationData(db: any) {
         estimatedEmployerCost: String(e.estimatedEmployerCost || '0'),
         requiresVisa: e.requiresVisa || false,
         visaStatus: (e.visaStatus || 'not_required') as any,
-        updatedAt: new Date(),
+        updatedAt: sql`now()`,
       }).where(eq(employees.id, employeeId));
     } else {
       await db.insert(employees).values({
