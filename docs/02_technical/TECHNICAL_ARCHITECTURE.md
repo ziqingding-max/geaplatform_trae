@@ -74,5 +74,5 @@
 
 ## 4. 部署架构 (Deployment)
 *   **Container**: Dockerized (Frontend + Backend in one or separate containers).
-*   **Process**: Node.js process managed by Docker/PM2.
+*   **Process**: Node.js process managed by Docker (`node dist/index.js`).
 *   **Static Assets**: Vite build output served by Nginx or Express static middleware.
