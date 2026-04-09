@@ -1,76 +1,72 @@
-# GEA EOR SaaS Admin
+# GEA Platform
 
-**Global Employment Advisors (GEA)** 是一套企业级 Employer of Record (EOR) 全球雇佣管理系统，支持从客户签约、员工入职、多国薪酬处理到发票结算的端到端数字化解决方案。
-系统采用 **TypeScript 全栈架构**，支持中英双语，覆盖 126 个国家和地区。
+GEA Platform 是一个全球化的名义雇主 (EOR) 和代理记录 (AOR) 平台。本系统通过三个独立的门户连接客户、员工/承包商和内部运营团队，提供从入职、薪酬计算、费用报销到合规管理的端到端解决方案。
 
-> **管理后台**: [admin.geahr.com](https://admin.geahr.com)
-> **客户门户**: [app.geahr.com](https://app.geahr.com)
-> **员工门户**: [worker.geahr.com](https://worker.geahr.com)
+## 🎯 3 小时快速上手指南
 
----
+为了让新加入的开发人员能够快速理解系统并启动到生产环境，请严格按照以下顺序阅读和操作：
 
-## 📂 文档导航 (Documentation Map)
+### 第一步：理解业务逻辑与架构 (1 小时)
+在编写任何代码之前，**必须**先阅读以下两份核心文档。它们是系统的单点真相 (SSOT)：
+1. **[核心业务逻辑与状态流转 (CORE_BUSINESS_LOGIC.md)](./docs/01_business/CORE_BUSINESS_LOGIC.md)**
+   - 详细解释了 Employee (EOR) 与 Contractor (AOR) 的核心区别。
+   - 包含了所有业务实体的状态机（入职、离职、发票、请假等）。
+   - 解释了月度运营时间线和 Cron Job 的执行顺序。
+2. **[技术架构与目录结构 (TECHNICAL_ARCHITECTURE.md)](./docs/02_technical/TECHNICAL_ARCHITECTURE.md)**
+   - 解释了 Admin、Portal、Worker 三端架构。
+   - 介绍了 PostgreSQL 16 + Drizzle ORM 的数据层设计。
 
-本项目采用 **三层文档治理架构**，请根据您的角色阅读相应文档。
+### 第二步：本地开发环境启动 (1 小时)
+1. 确保本地已安装 **Node.js 22** 和 **Docker**。
+2. 复制环境变量文件：`cp .env.example .env`
+3. 启动本地 PostgreSQL 数据库：`docker-compose up -d`
+4. 安装依赖：`npm install` (或 `pnpm install`)
+5. 执行数据库迁移：`npm run db:push`
+6. 启动开发服务器：`npm run dev`
+   - Admin 端: `http://localhost:5000`
+   - Portal 端: `http://app.localhost:5000`
+   - Worker 端: `http://worker.localhost:5000`
 
-### 🟢 第一层：业务与合规 (For Business Stakeholders)
-*适用于产品经理、业务分析师、合规专员*
-*   **[核心业务逻辑 (Core Business Logic)](docs/01_business/CORE_BUSINESS_LOGIC.md)**: 全局业务大图，实体关系，核心流程。**必读**。
-*   **[资金与合规 V2 (Finance Spec V2)](docs/01_business/FINANCE_COMPLIANCE_SPEC_V2.md)**: 全新的双钱包系统、AOR 聚合支付、押金释放与发票合规流程。
-*   **[劳动者分类规则 (Worker Classification)](docs/01_business/WORKER_CLASSIFICATION_RULES.md)**: EOR vs AOR 的合规边界与校验规则。
-
-### 🔵 第二层：技术架构 (For Engineers)
-*适用于开发工程师、架构师、QA*
-*   **[技术架构 (Technical Architecture)](docs/02_technical/TECHNICAL_ARCHITECTURE.md)**: 技术栈、目录结构、代码规范、部署架构。
-*   **[数据库指南 (Database Guide)](docs/02_technical/DATABASE_SCHEMA_GUIDE.md)**: Schema 设计、迁移流程、关键表结构。
-*   **[测试策略 (Testing Strategy)](docs/02_technical/TESTING_STRATEGY.md)**: 单元测试、E2E 测试、CI/CD 流程。
-
-### 🟣 第三层：AI 协作 (For AI Agents)
-*适用于 AI 辅助编程、自动化脚本*
-*   **[AI Agent 指南 (AGENTS.md)](AGENTS.md)**: AI 协作的上下文、规则与红线。
-
----
-
-## 🚀 快速开始 (Quick Start)
-
-### 环境要求
-*   Node.js 18+ (推荐 22.x LTS)
-*   pnpm 9.x
-*   PostgreSQL 16+ (生产环境推荐使用 Docker 部署)
-
-### 安装与启动
-```bash
-# 1. 克隆仓库
-git clone https://github.com/ziqingding-max/geaplatform_trae.git
-cd geaplatform_trae
-
-# 2. 安装依赖
-pnpm install
-
-# 3. 配置环境变量
-cp .env.example .env
-
-# 4. 数据库迁移
-pnpm db:push
-
-# 5. 启动开发服务器 (前后端)
-pnpm dev
-```
+### 第三步：生产环境部署 (1 小时)
+请参考 **[部署指南 (DEPLOYMENT_GUIDE.md)](./docs/02_technical/DEPLOYMENT_GUIDE.md)**。
+- 生产环境目前部署在腾讯云。
+- 部署分为“首次服务器初始化”和“日常 CI/CD 滚动更新”两个阶段。
 
 ---
 
-## 🛠️ 技术栈概览
+## 📚 文档导航地图
 
-| 层级 | 技术 | 说明 |
-|------|------|------|
-| **前端** | React 19, Vite, Tailwind v4, Shadcn/UI | SPA 架构，响应式设计 |
-| **后端** | Node.js, Express, tRPC | 类型安全的 API 层 |
-| **数据库** | PostgreSQL, Drizzle ORM | 高并发，事务安全，Schema-First |
-| **测试** | Vitest, Custom E2E Scripts | 全链路质量保证 |
-| **AI** | 阿里云 DashScope | 智能路由与任务处理 |
+为了保持根目录的整洁，所有详细文档均已归类到 `docs/` 目录下。
+
+### 业务文档 (`docs/01_business/`)
+- `CORE_BUSINESS_LOGIC.md`: 核心业务逻辑与状态流转 (SSOT)
+- `PRODUCT.md`: 产品功能清单与路线图
+- `WALLET-SYSTEM-SPEC-CN.md`: 钱包与资金系统详细规格
+
+### 技术文档 (`docs/02_technical/`)
+- `TECHNICAL_ARCHITECTURE.md`: 技术架构与目录结构
+- `CONVENTIONS.md`: 代码规范与开发公约
+- `DEPLOYMENT_GUIDE.md`: 生产环境部署指南
+- `TESTING_STRATEGY.md`: 测试策略 (Jest 30 + ts-jest)
+
+### 归档文档 (`docs/00_archive/`)
+- 包含历史重构方案、旧版部署指南和临时笔记。
 
 ---
 
-## ⚖️ 许可证
-本项目为 **GEA (Global Employment Advisors)** 专有软件。
-未经授权不得复制、分发或修改。
+## 🛠 技术栈概览
+
+- **前端**: React 18, Wouter, Tailwind CSS, shadcn/ui, React Query
+- **后端**: Node.js 22, Express, tRPC
+- **数据库**: PostgreSQL 16, Drizzle ORM
+- **测试**: Jest 30, ts-jest
+- **部署**: Docker, Nginx, PM2
+
+---
+
+## ⚠️ 开发红线与约束
+
+作为核心开发团队的一员，请严格遵守以下红线（详见 `docs/PROJECT-INSTRUCTIONS.md`）：
+1. **文档即单点真相 (SSOT)**：修改业务逻辑前，必须先更新 `CORE_BUSINESS_LOGIC.md`。
+2. **绝对禁止测试数据污染**：所有测试必须在 `afterAll` 中调用 `TestCleanup` 清理数据。
+3. **标准五步开发流**：Schema -> DB Query/Service -> tRPC Procedure -> Frontend UI -> Tests。
