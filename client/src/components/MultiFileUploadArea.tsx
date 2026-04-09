@@ -6,12 +6,15 @@
  * Displays existing attachments as a list with view/remove actions.
  * Compatible with both admin and portal pages.
  *
- * FIX: The hidden <input type="file"> is rendered via React Portal to document.body
- * to avoid Radix Dialog's focus-trap / pointer-events blocking the native file picker.
+ * NOTE: The hidden <input type="file"> is rendered INLINE (not via createPortal).
+ * Rendering it via Portal to document.body breaks file selection inside Radix Dialog
+ * because Radix's modal focus-trap sets pointer-events:none on elements outside
+ * Dialog.Content and uses DOM .contains() for focus containment checks.
+ * Since the input is hidden (className="hidden"), it has no visual impact and
+ * does not need to be portaled. See: https://github.com/radix-ui/primitives/issues/922
  */
 
-import { useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useRef, useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Paperclip, Upload, FileText, X, Eye, Loader2 } from "lucide-react";
@@ -74,7 +77,7 @@ export default function MultiFileUploadArea({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -122,7 +125,7 @@ export default function MultiFileUploadArea({
       onChange([...attachments, ...newAttachments]);
     }
     setIsUploading(false);
-  };
+  }, [attachments, onChange, onUpload, maxFilesText, fileTooLargeText, uploadFailedText]);
 
   const handleRemove = (index: number) => {
     const updated = [...attachments];
@@ -183,21 +186,21 @@ export default function MultiFileUploadArea({
       )}
 
       {/*
-       * Hidden file input — rendered via Portal to document.body to bypass
-       * Radix Dialog's focus-trap and pointer-events blocking.
-       * This is the standard community fix for file inputs inside Radix modals.
+       * Hidden file input — rendered INLINE within the component.
+       * Do NOT use createPortal here. Radix Dialog (modal) sets pointer-events:none
+       * on elements outside Dialog.Content and traps focus via DOM .contains().
+       * A portaled input would be outside the Dialog DOM tree, causing the change
+       * event to be blocked or the input to become inert after file selection.
+       * Since the input is hidden, it has no visual/layout impact when inline.
        */}
-      {createPortal(
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={accept}
-          multiple
-          onChange={handleFileSelect}
-          className="hidden"
-        />,
-        document.body
-      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={accept}
+        multiple
+        onChange={handleFileSelect}
+        className="hidden"
+      />
 
       {/* Upload button */}
       {canAddMore && (

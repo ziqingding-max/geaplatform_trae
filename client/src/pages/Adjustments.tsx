@@ -289,7 +289,9 @@ export default function Adjustments() {
           amount: formData.amount,
           currency: autoCurrency,
           date: date,
+          attachments: createAttachments.length > 0 ? createAttachments : undefined,
           attachmentUrl: createAttachments.length > 0 ? createAttachments[0].url : undefined,
+          attachmentFileKey: createAttachments.length > 0 ? createAttachments[0].fileKey : undefined,
           recurrenceType: formData.recurrenceType,
           recurrenceEndMonth: formData.recurrenceType === "monthly" ? formData.recurrenceEndMonth || undefined : undefined,
         });
@@ -308,7 +310,9 @@ export default function Adjustments() {
       if (isEmployee) {
         effMonth = adj.effectiveMonth ? new Date(adj.effectiveMonth).toISOString().slice(0, 7) : defaultMonth;
       } else {
-        effMonth = adj.date ? new Date(adj.date).toISOString().slice(0, 7) : defaultMonth;
+        // Contractor: effectiveMonth is mapped from the combined data (originally from DB effectiveMonth field)
+        const conMonth = adj.effectiveMonth || adj.date;
+        effMonth = conMonth ? new Date(conMonth).toISOString().slice(0, 7) : defaultMonth;
       }
     } catch (e) {
       console.error("Invalid date in adjustment:", e);
@@ -361,6 +365,7 @@ export default function Adjustments() {
             description: editFormData.description || editFormData.category,
             amount: editFormData.amount,
             effectiveMonth: date,
+            attachments: editAttachments,
           }
         });
       }
