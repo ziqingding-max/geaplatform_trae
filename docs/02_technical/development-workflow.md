@@ -13,8 +13,8 @@
 | API | tRPC 11 + SuperJSON | `server/routers/`, `server/portal/routers/`, `server/worker/routers/` |
 | 后端 | Node.js 22 + Express 4 | `server/_core/` |
 | ORM | Drizzle ORM | `drizzle/schema.ts`, `server/db.ts` |
-| 数据库 | SQLite | `drizzle/migrations/` |
-| 测试 | Vitest | `server/*.test.ts` |
+| 数据库 | PostgreSQL 16 | `drizzle/migrations/` |
+| 测试 | Jest 30 | `server/*.test.ts` |
 
 ---
 
@@ -30,7 +30,7 @@
 
 **第四步：前端 UI。** 在 `client/src/pages/` 中创建页面组件，通过 `trpc.*.useQuery / useMutation` 调用后端。使用 Shadcn/UI 组件保持一致性，并通过 `useI18n` 钩子和 `t('key')` 模式实现国际化。在 `client/src/App.tsx` 中注册路由。
 
-**第五步：测试。** 在 `server/*.test.ts` 中编写 Vitest 测试用例，覆盖正常路径、错误路径和权限检查。所有测试文件必须包含 `afterAll` 清理逻辑。
+**第五步：测试。** 在 `server/*.test.ts` 中编写 Jest 测试用例，覆盖正常路径、错误路径和权限检查。所有测试文件必须包含 `afterAll` 清理逻辑。
 
 ---
 
@@ -64,7 +64,7 @@
 
 | 层级 | 类型 | 工具 | 执行频率 |
 |:---|:---|:---|:---|
-| L1 | 单元测试 / 集成测试 | Vitest (`pnpm test`) | 每次代码变更后 |
+| L1 | 单元测试 / 集成测试 | Jest (`pnpm test`) | 每次代码变更后 |
 | L2 | 类型检查 | TypeScript (`npx tsc --noEmit`) | 每次代码变更后 |
 | L3 | 服务健康检查 | 手动检查 | 每次重启后 |
 | L4 | 浏览器冒烟测试 | 手动验证 | 每次交付前 |

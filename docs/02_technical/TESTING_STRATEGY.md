@@ -3,7 +3,7 @@
 ## 1. 测试分层 (Testing Pyramid)
 
 ### 1.1 单元测试 (Unit Tests)
-*   **工具**: `vitest`
+*   **工具**: `Jest 30`
 *   **范围**:
     *   纯函数工具 (`lib/format.ts` 等)。
     *   复杂的业务计算逻辑 (如薪资计算、汇率换算)。
@@ -11,7 +11,7 @@
 *   **运行**: `pnpm test`
 
 ### 1. Integration Tests (集成测试)
-*   **工具**: `vitest`
+*   **工具**: `Jest 30`
 *   **范围**:
     *   TRPC API 端点逻辑。
     *   数据库交互 (Service Layer)。

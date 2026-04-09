@@ -1,6 +1,6 @@
 # EOR SaaS Admin — 数据字典 (Data Object Dictionary)
 
-> **版本**: v1.1 | **更新日期**: 2026-03-04 | **数据库**: SQLite | **ORM**: Drizzle ORM with @libsql/client
+> **版本**: v1.2 | **更新日期**: 2026-04-09 | **数据库**: PostgreSQL 16 | **ORM**: Drizzle ORM with node-postgres
 
 本文档定义了系统中所有数据表的结构、字段含义、枚举值域以及表间关系。
 
@@ -160,7 +160,7 @@ Worker Portal 是为雇员和合同工设计的自助服务平台，提供以下
 
 | 变量名 | 示例值 | 说明 |
 |---|---|---|
-| `DATABASE_URL` | `file:/app/data/production.db` | **[必需]** SQLite 数据库文件路径 |
+| `DATABASE_URL` | `postgresql://user:password@localhost:5432/geaplatform` | **[必需]** PostgreSQL 数据库连接字符串 |
 | `JWT_SECRET` | `a-very-secret-and-long-string` | **[必需]** JWT 签名密钥 |
 | `ADMIN_BOOTSTRAP_EMAIL` | `admin@example.com` | **[必需]** 初始管理员邮箱 |
 | `ADMIN_BOOTSTRAP_NAME` | `Admin User` | **[必需]** 初始管理员姓名 |

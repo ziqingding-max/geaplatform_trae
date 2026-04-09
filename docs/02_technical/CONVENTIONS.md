@@ -307,7 +307,7 @@ Authentication is handled via **JWT + bcrypt + HttpOnly Cookie**. This is a unif
 - The initial admin user is created at startup using `ADMIN_BOOTSTRAP_EMAIL` and `ADMIN_BOOTSTRAP_PASSWORD`.
 
 ### Database
-The database is **SQLite**, accessed via `@libsql/client` with `drizzle-orm/libsql` as the ORM. The `drizzle.config.ts` specifies `dialect: "sqlite"`. In production, the database file is located at `/app/data/production.db` within the Docker container.
+The database is **PostgreSQL 16**, accessed via `postgres` with `drizzle-orm/node-postgres` as the ORM. The `drizzle.config.ts` specifies `dialect: "postgresql"`. In production, the database is hosted in a separate Docker container or managed cloud service.
 
 ### Deployment
  The entire system is self-hosted on **Alibaba Cloud Malaysia (ap-southeast-3)** using **Docker Compose, Nginx, and Certbot for SSL**. It is fully independent and does not rely on any external platform services. The public-facing domains are:

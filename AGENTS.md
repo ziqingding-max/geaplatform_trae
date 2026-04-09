@@ -73,7 +73,7 @@ You **MUST** read the relevant documentation before writing code.
 ### Essential Commands
 ```bash
 pnpm dev              # Start dev server
-pnpm test             # Run Vitest unit/integration tests
+pnpm test             # Run Jest unit/integration tests
 pnpm db:push          # Sync Schema to DB
 ```
 

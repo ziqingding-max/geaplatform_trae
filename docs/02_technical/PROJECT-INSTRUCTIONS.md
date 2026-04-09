@@ -18,7 +18,7 @@ GEA EOR SaaS 系统的技术背景信息：
 
 技术栈核心：
 - 认证: JWT + bcrypt + HttpOnly Cookie。Admin (HS256), Portal/Worker (Invite Registration)。
-- 数据库: SQLite (通过 @libsql/client 和 drizzle-orm/libsql)。
+- 数据库: PostgreSQL 16 (通过 postgres 和 drizzle-orm/node-postgres)。
 - 文件存储: 阿里云 OSS (通过 @aws-sdk/client-s3 S3-compatible API)。
 - AI: 阿里云 DashScope (qwen-turbo, qwen-max)，通过 aiGatewayService.ts 路由。
 - i18n: Zustand-based i18n store (client/src/lib/i18n.ts)，使用 useI18n() hook 和 t("key") 模式。
@@ -33,7 +33,7 @@ GEA EOR SaaS 系统的技术背景信息：
 - DASHSCOPE_API_KEY
 
 项目规模:
-- 数据库: 48 张表
+- 数据库: 65 张表
 - 后端 Routers: Admin (31), Portal (12), Worker (7)
 - 前端 Pages: Admin (25), Portal (23), Worker (8)
 
@@ -42,7 +42,7 @@ GEA EOR SaaS 系统的技术背景信息：
 【AI Agent 必读规范】
 1. 新任务开始时，必须先阅读项目根目录的 AGENTS.md，按照其中的阅读顺序了解系统架构、编码规范和业务规则。
 2. 如果已安装 gea-eor-knowledge Skill，按照 Skill 中的指引加载对应的参考文档。
-3. 所有代码变更必须包含 Vitest 测试，测试必须使用 TestCleanup 清理数据。
+3. 所有代码变更必须包含 Jest 测试，测试必须使用 TestCleanup 清理数据。
 4. 保存 checkpoint 前必须运行 post-test audit（见 docs/TESTING.md Section 10），确保数据库无测试数据残留。
 5. 所有用户界面文本必须添加中英文双语翻译 (client/src/lib/i18n.ts)。
 6. 重大功能变更后，必须同步更新 AGENTS.md 和相关文档（见 docs/DOC-UPDATE-GUIDE.md）。
