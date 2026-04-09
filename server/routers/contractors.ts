@@ -39,6 +39,7 @@ import { eq } from "drizzle-orm";
 import { ContractorInvoiceGenerationService } from "../services/contractorInvoiceGenerationService";
 import { provisionWorkerUser, resendWorkerInvite } from "../services/workerProvisioningService";
 import { sanitizeTextFields } from "../utils/sanitizeText";
+import { attachmentsSchema, resolveAttachments } from "../utils/attachments";
 
 export const contractorsRouter = router({
   getApprovers: userProcedure.query(async () => {
@@ -416,7 +417,19 @@ export const contractorsRouter = router({
       }))
       .query(async ({ input }) => {
         // @ts-ignore
-        return await listAllContractorAdjustments(input);
+        const items = await listAllContractorAdjustments(input);
+        // Resolve attachments for each item (re-sign URLs from fileKeys)
+        const resolved = await Promise.all(
+          items.map(async (item: any) => {
+            const resolvedAttachments = await resolveAttachments({
+              attachments: item.attachments,
+              attachmentUrl: item.attachmentUrl,
+              attachmentFileKey: item.attachmentFileKey,
+            });
+            return { ...item, attachments: resolvedAttachments };
+          })
+        );
+        return resolved;
       }),
 
     create: operationsManagerProcedure
@@ -428,6 +441,8 @@ export const contractorsRouter = router({
         currency: z.string(),
         date: z.string(),
         attachmentUrl: z.string().optional(),
+        attachmentFileKey: z.string().optional(),
+        attachments: attachmentsSchema,
         // Recurring adjustment fields
         recurrenceType: z.enum(["one_time", "monthly", "permanent"]).default("one_time"),
         recurrenceEndMonth: z.string().optional(), // YYYY-MM or YYYY-MM-01, required for monthly
@@ -459,13 +474,20 @@ export const contractorsRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: "Permanent adjustments should not have an end month" });
         }
 
+        // Build attachments: prefer new multi-file array, fall back to legacy single-file
+        const finalAttachments = input.attachments && input.attachments.length > 0
+          ? input.attachments
+          : (input.attachmentUrl ? [{ url: input.attachmentUrl, fileKey: input.attachmentFileKey || "", fileName: "receipt" }] : null);
+
         const result = await createContractorAdjustment({
           contractorId: input.contractorId,
           type: input.type,
           description: input.description,
           amount: input.amount,
           currency,
-          attachmentUrl: input.attachmentUrl || null,
+          attachmentUrl: input.attachmentUrl || (input.attachments?.[0]?.url ?? null),
+          attachmentFileKey: input.attachmentFileKey || (input.attachments?.[0]?.fileKey ?? null),
+          attachments: finalAttachments,
           customerId: contractor.customerId,
           effectiveMonth,
           status: "submitted" as any,
@@ -487,6 +509,9 @@ export const contractorsRouter = router({
           amount: z.string().optional(),
           effectiveMonth: z.string().optional(),
           status: z.enum(["submitted", "client_approved", "client_rejected", "admin_approved", "admin_rejected", "locked"]).optional(),
+          attachmentUrl: z.string().optional().nullable(),
+          attachmentFileKey: z.string().optional().nullable(),
+          attachments: attachmentsSchema.nullable(),
           // Recurring adjustment fields
           recurrenceType: z.enum(["one_time", "monthly", "permanent"]).optional(),
           recurrenceEndMonth: z.string().optional().nullable(),
@@ -494,6 +519,19 @@ export const contractorsRouter = router({
       }))
       .mutation(async ({ input }) => {
         const updateData: any = { ...input.data };
+
+        // Handle attachment fields: sync legacy scalar fields with new array
+        if (input.data.attachments !== undefined) {
+          updateData.attachments = input.data.attachments;
+          // Also update legacy scalar fields for backward compatibility
+          if (input.data.attachments && input.data.attachments.length > 0) {
+            updateData.attachmentUrl = input.data.attachments[0].url;
+            updateData.attachmentFileKey = input.data.attachments[0].fileKey;
+          } else {
+            updateData.attachmentUrl = null;
+            updateData.attachmentFileKey = null;
+          }
+        }
 
         // Handle recurrence field updates
         if (input.data.recurrenceType !== undefined) {

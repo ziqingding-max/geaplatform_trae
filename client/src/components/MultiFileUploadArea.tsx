@@ -8,9 +8,12 @@
  *
  * FIX: The hidden <input type="file"> is rendered via React Portal to document.body
  * to avoid Radix Dialog's focus-trap / pointer-events blocking the native file picker.
+ *
+ * FIX 2: handleFileSelect is stored in a ref and kept in sync via useEffect to avoid
+ * stale closure issues when the Portal-rendered input captures an outdated handler.
  */
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -74,7 +77,12 @@ export default function MultiFileUploadArea({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * Core file selection handler.
+   * Defined as a regular function so it always captures the latest
+   * props (attachments, onChange, onUpload) from the enclosing scope.
+   */
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -122,7 +130,16 @@ export default function MultiFileUploadArea({
       onChange([...attachments, ...newAttachments]);
     }
     setIsUploading(false);
-  };
+  }, [attachments, onChange, onUpload, maxFilesText, fileTooLargeText, uploadFailedText]);
+
+  /**
+   * Stable ref that always points to the latest handleFileSelect.
+   * The Portal-rendered <input> uses this ref so it never calls a stale closure.
+   */
+  const handleFileSelectRef = useRef(handleFileSelect);
+  useEffect(() => {
+    handleFileSelectRef.current = handleFileSelect;
+  }, [handleFileSelect]);
 
   const handleRemove = (index: number) => {
     const updated = [...attachments];
@@ -185,7 +202,7 @@ export default function MultiFileUploadArea({
       {/*
        * Hidden file input — rendered via Portal to document.body to bypass
        * Radix Dialog's focus-trap and pointer-events blocking.
-       * This is the standard community fix for file inputs inside Radix modals.
+       * Uses a stable ref wrapper to avoid stale closure issues.
        */}
       {createPortal(
         <input
@@ -193,7 +210,7 @@ export default function MultiFileUploadArea({
           type="file"
           accept={accept}
           multiple
-          onChange={handleFileSelect}
+          onChange={(e) => handleFileSelectRef.current(e)}
           className="hidden"
         />,
         document.body
